@@ -1,0 +1,76 @@
+/* yuzi-phone/style.css */
+
+:root {
+    --yuzi-phone-z-index: 34000;
+    --yuzi-phone-primary: #3b82f6;
+    --yuzi-phone-secondary: #8b5cf6;
+    --yuzi-phone-bg: rgba(17, 24, 39, 0.92);
+    --yuzi-phone-border: rgba(255, 255, 255, 0.16);
+    --yuzi-phone-text: #f8fafc;
+    --yuzi-phone-muted: rgba(248, 250, 252, 0.72);
+}
+
+#yuzi-phone-toggle {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: var(--yuzi-phone-z-index);
+    border: 0;
+    border-radius: 12px;
+    padding: 10px 14px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--yuzi-phone-primary), var(--yuzi-phone-secondary));
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+#yuzi-phone-root {
+    position: fixed;
+    right: 20px;
+    bottom: 72px;
+    width: min(360px, calc(100vw - 24px));
+    max-height: min(640px, calc(100vh - 110px));
+    z-index: var(--yuzi-phone-z-index);
+    display: none;
+}
+
+#yuzi-phone-root.is-visible {
+    display: block;
+}
+
+.yuzi-phone-shell {
+    border-radius: 20px;
+    border: 1px solid var(--yuzi-phone-border);
+    background: var(--yuzi-phone-bg);
+    backdrop-filter: blur(12px);
+    color: var(--yuzi-phone-text);
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+}
+
+.yuzi-phone-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--yuzi-phone-border);
+}
+
+.yuzi-phone-title {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.yuzi-phone-badge {
+    font-size: 12px;
+    color: var(--yuzi-phone-muted);
+}
+
+.yuzi-phone-body {
+    padding: 14px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--yuzi-phone-muted);
+}
