@@ -95,7 +95,7 @@
     background-size: cover, auto;
     background-position: center, center;
     background-repeat: no-repeat, no-repeat;
-    box-shadow: 0 8px 20px rgba(0, 122, 255, 0.28);
+    box-shadow: none;
     overflow: hidden;
     transition: border-radius 0.18s ease, box-shadow 0.18s ease, transform 0.16s ease;
 }
@@ -132,7 +132,7 @@
 }
 
 .yuzi-phone-root .yuzi-phone-toggle.active {
-    box-shadow: 0 10px 24px rgba(0, 122, 255, 0.42);
+    box-shadow: none;
 }
 
 .yuzi-phone-root .yuzi-phone-toggle-icon {

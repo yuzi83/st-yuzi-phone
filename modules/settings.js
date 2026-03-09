@@ -106,13 +106,48 @@ export function getPhoneSettings() {
     return settings || clone(defaultSettings);
 }
 
+let saveSettingsDebounceTimer = null;
+
+function schedulePersistSettings(ctx) {
+    if (!ctx || typeof ctx.saveSettingsDebounced !== 'function') return;
+
+    if (saveSettingsDebounceTimer !== null) {
+        window.clearTimeout(saveSettingsDebounceTimer);
+    }
+
+    saveSettingsDebounceTimer = window.setTimeout(() => {
+        saveSettingsDebounceTimer = null;
+        try {
+            ctx.saveSettingsDebounced?.();
+        } catch (e) {
+            console.warn('[玉子手机] saveSettingsDebounced 调用失败:', e);
+        }
+    }, 120);
+}
+
+export function flushPhoneSettingsSave() {
+    const ctx = getContext();
+    if (!ctx || typeof ctx.saveSettingsDebounced !== 'function') return;
+
+    if (saveSettingsDebounceTimer !== null) {
+        window.clearTimeout(saveSettingsDebounceTimer);
+        saveSettingsDebounceTimer = null;
+    }
+
+    try {
+        ctx.saveSettingsDebounced?.();
+    } catch (e) {
+        console.warn('[玉子手机] flush saveSettingsDebounced 调用失败:', e);
+    }
+}
+
 export function savePhoneSetting(key, value) {
     const ctx = getContext();
     const settings = ensureNamespace();
     if (!ctx?.extensionSettings || !settings) return;
 
     settings[key] = value;
-    ctx.saveSettingsDebounced?.();
+    schedulePersistSettings(ctx);
 }
 
 export function savePhoneSettingsPatch(patch = {}) {
@@ -121,7 +156,7 @@ export function savePhoneSettingsPatch(patch = {}) {
     if (!ctx?.extensionSettings || !settings) return;
 
     Object.assign(settings, patch);
-    ctx.saveSettingsDebounced?.();
+    schedulePersistSettings(ctx);
 }
 
 export function isMobileDevice() {

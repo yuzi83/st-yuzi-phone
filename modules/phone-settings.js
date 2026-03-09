@@ -38,12 +38,20 @@ import {
     validatePhoneBeautifyTemplate,
     savePhoneBeautifyUserTemplate,
 } from './phone-beautify-templates.js';
+import { createDebouncedTask } from './runtime-manager.js';
 
 const DB_PRESETS_SETTING_KEY = 'dbConfigPresets';
 const DB_ACTIVE_PRESET_SETTING_KEY = 'activeDbConfigPreset';
 const TEMPLATE_DRAFT_STORE_KEY = '__YUZI_PHONE_TEMPLATE_DRAFT_PATCHES';
 const TEMPLATE_DRAFT_EVENT_UPDATED = 'yuzi-phone-style-draft-updated';
 const TEMPLATE_DRAFT_EVENT_CLEARED = 'yuzi-phone-style-draft-cleared';
+
+const STORAGE_BUDGETS = Object.freeze({
+    backgroundImageBytes: 2 * 1024 * 1024,
+    toggleCoverBytes: 1 * 1024 * 1024,
+    appIconBytes: 512 * 1024,
+    appIconsTotalBytes: 4 * 1024 * 1024,
+});
 
 export function renderSettings(container) {
     const state = {
@@ -832,25 +840,37 @@ export function renderSettings(container) {
             window.dispatchEvent(new CustomEvent('yuzi-phone-toggle-style-updated'));
         };
 
-        const setSizeValue = (raw, withToast = false) => {
+        const saveToggleSizeDebounced = createDebouncedTask((next) => {
+            savePhoneSetting('phoneToggleStyleSize', next);
+            emitToggleStyleUpdated();
+        }, 180);
+
+        const setSizeValue = (raw, withToast = false, immediate = false) => {
             const next = clampNumber(raw, 32, 72, 44);
             if (sizeRange) sizeRange.value = String(next);
             if (sizeInput) sizeInput.value = String(next);
-            savePhoneSetting('phoneToggleStyleSize', next);
-            emitToggleStyleUpdated();
+
+            if (immediate) {
+                saveToggleSizeDebounced.cancel?.();
+                savePhoneSetting('phoneToggleStyleSize', next);
+                emitToggleStyleUpdated();
+            } else {
+                saveToggleSizeDebounced(next);
+            }
+
             if (withToast) showToast(container, `按钮大小已调整为 ${next}px`);
         };
 
         sizeRange?.addEventListener('input', () => {
-            setSizeValue(sizeRange.value, false);
+            setSizeValue(sizeRange.value, false, false);
         });
 
         sizeInput?.addEventListener('input', () => {
-            setSizeValue(sizeInput.value, false);
+            setSizeValue(sizeInput.value, false, false);
         });
 
         sizeInput?.addEventListener('change', () => {
-            setSizeValue(sizeInput.value, true);
+            setSizeValue(sizeInput.value, true, true);
         });
 
         shapeRadios.forEach((radio) => {
@@ -867,6 +887,11 @@ export function renderSettings(container) {
                 const safeDataUrl = String(dataUrl || '').trim();
                 if (!safeDataUrl) {
                     showToast(container, '封面读取失败：空数据', true);
+                    return;
+                }
+
+                if (estimateBase64Bytes(safeDataUrl) > STORAGE_BUDGETS.toggleCoverBytes) {
+                    showToast(container, `按钮封面过大（>${Math.round(STORAGE_BUDGETS.toggleCoverBytes / 1024 / 1024)}MB）`, true);
                     return;
                 }
 
@@ -1644,11 +1669,19 @@ function setupBgUpload(container) {
 
     container.querySelector('#phone-upload-bg')?.addEventListener('click', () => {
         pickImageFile(dataUrl => {
+            if (estimateBase64Bytes(dataUrl) > STORAGE_BUDGETS.backgroundImageBytes) {
+                showToast(container, '背景图压缩后仍过大，请选择更小图片', true);
+                return;
+            }
+
             savePhoneSetting('backgroundImage', dataUrl);
             preview.innerHTML = `<img src="${escapeHtmlAttr(dataUrl)}" class="phone-bg-thumb">`;
             showToast(container, '背景已更新');
         }, {
             maxSizeMB: 12,
+            maxWidth: 1920,
+            maxHeight: 1920,
+            quality: 0.8,
             onError: (msg) => showToast(container, msg || '背景图片上传失败', true),
         });
     });
@@ -1704,13 +1737,30 @@ function renderIconUploadList(listEl) {
             const row = btn.closest('.phone-icon-upload-row');
             const key = row.dataset.iconKey;
             pickImageFile(dataUrl => {
+                if (estimateBase64Bytes(dataUrl) > STORAGE_BUDGETS.appIconBytes) {
+                    showToast(listEl, '单个图标过大，请改用更小图片', true);
+                    return;
+                }
+
                 const icons = getPhoneSettings().appIcons || {};
-                icons[key] = dataUrl;
-                savePhoneSetting('appIcons', icons);
+                const nextIcons = {
+                    ...icons,
+                    [key]: dataUrl,
+                };
+
+                if (estimateIconsStorageBytes(nextIcons) > STORAGE_BUDGETS.appIconsTotalBytes) {
+                    showToast(listEl, '图标总占用超限，请先清理部分自定义图标', true);
+                    return;
+                }
+
+                savePhoneSetting('appIcons', nextIcons);
                 renderIconUploadList(listEl);
                 showToast(listEl, '图标已更新');
             }, {
                 maxSizeMB: 8,
+                maxWidth: 1024,
+                maxHeight: 1024,
+                quality: 0.78,
                 onError: (msg) => showToast(listEl, msg || '图标上传失败', true),
             });
         });
@@ -1807,12 +1857,17 @@ function setupIconLayoutSettings(container) {
         const input = container.querySelector(item.id);
         if (!input) return;
 
-        input.addEventListener('input', () => {
-            const value = clampNumber(input.value, item.min, item.max, item.fallback);
+        const debouncedSave = createDebouncedTask((raw) => {
+            const value = clampNumber(raw, item.min, item.max, item.fallback);
             savePhoneSetting(item.key, value);
+        }, 220);
+
+        input.addEventListener('input', () => {
+            debouncedSave(input.value);
         });
 
         input.addEventListener('change', () => {
+            debouncedSave.flush?.();
             const value = clampNumber(input.value, item.min, item.max, item.fallback);
             input.value = String(value);
             savePhoneSetting(item.key, value);
@@ -1960,6 +2015,9 @@ function clampNumber(value, min, max, fallback) {
 function pickImageFile(callback, options = {}) {
     const maxSizeMB = Number.isFinite(Number(options.maxSizeMB)) ? Number(options.maxSizeMB) : 8;
     const onError = typeof options.onError === 'function' ? options.onError : null;
+    const maxWidth = Number.isFinite(Number(options.maxWidth)) ? Number(options.maxWidth) : 1440;
+    const maxHeight = Number.isFinite(Number(options.maxHeight)) ? Number(options.maxHeight) : 1440;
+    const quality = Number.isFinite(Number(options.quality)) ? Number(options.quality) : 0.82;
 
     const input = document.createElement('input');
     input.type = 'file';
@@ -1971,7 +2029,47 @@ function pickImageFile(callback, options = {}) {
         try { input.remove(); } catch {}
     };
 
-    input.addEventListener('change', () => {
+    const fileToDataUrl = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('图片读取失败'));
+        reader.readAsDataURL(file);
+    });
+
+    const loadImage = (dataUrl) => new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('图片解析失败'));
+        img.src = dataUrl;
+    });
+
+    const compressDataUrl = async (rawDataUrl) => {
+        const img = await loadImage(rawDataUrl);
+        const srcW = Number(img.naturalWidth || img.width || 0);
+        const srcH = Number(img.naturalHeight || img.height || 0);
+        if (srcW <= 0 || srcH <= 0) return rawDataUrl;
+
+        const ratio = Math.min(1, maxWidth / srcW, maxHeight / srcH);
+        const targetW = Math.max(1, Math.round(srcW * ratio));
+        const targetH = Math.max(1, Math.round(srcH * ratio));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d', { alpha: true });
+        if (!ctx) return rawDataUrl;
+
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+
+        const tryWebp = canvas.toDataURL('image/webp', Math.max(0.5, Math.min(0.92, quality)));
+        if (typeof tryWebp === 'string' && tryWebp.startsWith('data:image/webp')) {
+            return tryWebp;
+        }
+
+        return canvas.toDataURL('image/jpeg', Math.max(0.5, Math.min(0.9, quality)));
+    };
+
+    input.addEventListener('change', async () => {
         const file = input.files?.[0];
         if (!file) {
             cleanup();
@@ -1985,25 +2083,57 @@ function pickImageFile(callback, options = {}) {
         }
 
         const maxBytes = Math.max(1, maxSizeMB) * 1024 * 1024;
-        if (Number(file.size) > maxBytes) {
-            onError?.(`图片过大（>${maxSizeMB}MB），请压缩后重试`);
+        if (Number(file.size) > maxBytes * 1.8) {
+            onError?.(`图片过大（>${(maxSizeMB * 1.8).toFixed(1)}MB），请压缩后重试`);
             cleanup();
             return;
         }
 
-        const reader = new FileReader();
-        reader.onload = () => {
-            callback(reader.result);
+        try {
+            const rawDataUrl = await fileToDataUrl(file);
+            if (!rawDataUrl) {
+                onError?.('图片读取失败');
+                cleanup();
+                return;
+            }
+
+            const compressed = await compressDataUrl(rawDataUrl);
+            const best = estimateBase64Bytes(compressed) <= estimateBase64Bytes(rawDataUrl)
+                ? compressed
+                : rawDataUrl;
+
+            if (estimateBase64Bytes(best) > maxBytes) {
+                onError?.(`图片压缩后仍超过 ${maxSizeMB}MB，请换更小图片`);
+                cleanup();
+                return;
+            }
+
+            callback(best);
+        } catch (e) {
+            onError?.(e?.message || '图片处理失败');
+        } finally {
             cleanup();
-        };
-        reader.onerror = () => {
-            onError?.('图片读取失败');
-            cleanup();
-        };
-        reader.readAsDataURL(file);
+        }
     });
 
     input.click();
+}
+
+function estimateBase64Bytes(dataUrl) {
+    const text = String(dataUrl || '');
+    const idx = text.indexOf(',');
+    const b64 = idx >= 0 ? text.slice(idx + 1) : text;
+    if (!b64) return 0;
+    return Math.floor(b64.length * 0.75);
+}
+
+function estimateIconsStorageBytes(icons) {
+    if (!icons || typeof icons !== 'object') return 0;
+    let total = 0;
+    Object.values(icons).forEach((value) => {
+        total += estimateBase64Bytes(String(value || ''));
+    });
+    return total;
 }
 
 function downloadTextFile(filename, text, mimeType = 'text/plain') {

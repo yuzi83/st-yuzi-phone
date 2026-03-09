@@ -5,7 +5,7 @@
  */
 
 import { PHONE_ICONS } from './modules/phone-home.js';
-import { onPhoneActivated } from './modules/phone-core.js';
+import { onPhoneActivated, onPhoneDeactivated, destroyPhoneRuntime } from './modules/phone-core.js';
 import {
     getPhoneSettings,
     savePhoneSetting,
@@ -13,6 +13,7 @@ import {
     getDefaultPhoneTogglePosition,
     isMobileDevice,
     constrainPosition,
+    flushPhoneSettingsSave,
 } from './modules/settings.js';
 import { createPhoneSettingsPanel } from './modules/settings-panel.js';
 
@@ -221,6 +222,8 @@ function togglePhone(show) {
 
     if (nextShow) {
         onPhoneActivated();
+    } else {
+        onPhoneDeactivated();
     }
 }
 
@@ -276,10 +279,11 @@ function setPhoneEnabledWithUI(enabled) {
 
 export function destroy() {
     try {
-        // phone-core 暂无显式 destroy 导出，后续在核心模块补齐统一清理能力
+        destroyPhoneRuntime();
         document.getElementById(DOM_IDS.toggle)?.remove();
         document.getElementById(DOM_IDS.container)?.remove();
         document.getElementById(DOM_IDS.root)?.remove();
+        flushPhoneSettingsSave();
         console.log('[玉子手机] 扩展已卸载');
     } catch (e) {
         console.error('[玉子手机] 卸载错误:', e);

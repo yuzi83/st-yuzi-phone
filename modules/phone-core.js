@@ -7,6 +7,7 @@
 import { PHONE_ICONS } from './phone-home.js';
 import { initPhoneShellDrag, initPhoneShellResize } from './window.js';
 import { getPhoneSettings, savePhoneSetting, savePhoneSettingsPatch } from './settings.js';
+import { createRuntimeScope, scheduleIdleTask } from './runtime-manager.js';
 
 export { getPhoneSettings, savePhoneSetting, savePhoneSettingsPatch } from './settings.js';
 
@@ -591,6 +592,9 @@ export function clearManualTableSelectionViaApi() {
  * 调试：检查 API 是否可用
  */
 export function debugCheckAPI() {
+    // 默认关闭调试日志，需显式设置 window.__YUZI_PHONE_DEBUG = true。
+    if (!window.__YUZI_PHONE_DEBUG) return;
+
     const api = getDB();
     if (!api) {
         console.log('[玉子的手机] AutoCardUpdaterAPI 不可用（数据库脚本未加载）');
@@ -613,6 +617,13 @@ let currentRoute = 'home';
 let routeHistory = [];
 let phoneContainer = null;
 let onRouteChangeCallbacks = [];
+const phoneRuntime = createRuntimeScope('phone-core');
+let isPhoneUiInitialized = false;
+let statusClockTimerId = null;
+let routeRenderRegistered = false;
+let dataWatcherTimerId = null;
+let visibilityCleanup = null;
+let idleApiDebugCancel = null;
 
 const PHONE_SCROLL_ROOT_SELECTOR = '.phone-app-body, .phone-app-grid';
 const PHONE_SCROLL_GUARD_BOUND_ATTR = 'phoneScrollGuardBound';
@@ -1056,14 +1067,28 @@ export function initPhoneUI() {
     `);
 
     updateStatusBarTime();
-    setInterval(updateStatusBarTime, 30000);
+    if (statusClockTimerId !== null) {
+        phoneRuntime.clearInterval(statusClockTimerId);
+    }
+    statusClockTimerId = phoneRuntime.setInterval(updateStatusBarTime, 30000);
 
-    onRouteChange((route, opts) => {
-        renderRoute(route, opts);
-    });
+    if (!routeRenderRegistered) {
+        onRouteChange((route, opts) => {
+            renderRoute(route, opts);
+        });
+        routeRenderRegistered = true;
+    }
 
-    // 调试输出
-    debugCheckAPI();
+    if (idleApiDebugCancel) {
+        idleApiDebugCancel();
+        idleApiDebugCancel = null;
+    }
+
+    // 调试输出降级到空闲期，避免阻塞首屏交互。
+    idleApiDebugCancel = scheduleIdleTask(() => {
+        debugCheckAPI();
+        idleApiDebugCancel = null;
+    }, { timeout: 1200 });
 
     // 启动数据监控
     startDataWatcherForNotifications();
@@ -1071,10 +1096,23 @@ export function initPhoneUI() {
     renderRoute('home');
 
     // 初始化拖拽（通过 notch 和 status-bar 拖动整个手机）+ 右侧/右下角缩放
-    setTimeout(() => {
+    phoneRuntime.setTimeout(() => {
+        if (!phoneContainer?.isConnected) return;
         initPhoneShellDrag();
         initPhoneShellResize();
     }, 100);
+
+    if (!visibilityCleanup) {
+        visibilityCleanup = phoneRuntime.addEventListener(document, 'visibilitychange', () => {
+            if (document.hidden) {
+                stopDataWatcherForNotifications();
+            } else if (isPhoneUiInitialized) {
+                startDataWatcherForNotifications();
+            }
+        });
+    }
+
+    isPhoneUiInitialized = true;
 }
 
 function updateStatusBarTime() {
@@ -1114,7 +1152,9 @@ async function renderRoute(route, opts = {}) {
         renderFusion(page);
     }
 
-    setTimeout(() => {
+    phoneRuntime.setTimeout(() => {
+        if (!screen.isConnected) return;
+
         screen.appendChild(page);
         bindPhoneScrollGuards(page);
         hardenPhoneInteractionDefaults(page);
@@ -1123,14 +1163,14 @@ async function renderRoute(route, opts = {}) {
             oldContent.classList.add(exitClass);
             oldContent.setAttribute('inert', '');
             oldContent.style.pointerEvents = 'none';
-            setTimeout(() => {
+            phoneRuntime.setTimeout(() => {
                 if (!oldContent.isConnected) return;
                 oldContent.setAttribute('aria-hidden', 'true');
                 oldContent.remove();
             }, EXIT_ANIM_MS);
         }
 
-        requestAnimationFrame(() => {
+        phoneRuntime.requestAnimationFrame(() => {
             logRouteScrollDebugSnapshot(route, page);
             page.classList.remove('phone-page-enter', 'phone-page-enter-back');
             page.classList.add('phone-page-active');
@@ -1144,7 +1184,20 @@ export function onPhoneActivated() {
     if (!phoneContainer) {
         initPhoneUI();
     } else {
+        if (statusClockTimerId === null) {
+            updateStatusBarTime();
+            statusClockTimerId = phoneRuntime.setInterval(updateStatusBarTime, 30000);
+        }
+        startDataWatcherForNotifications();
         renderRoute(currentRoute);
+    }
+}
+
+export function onPhoneDeactivated() {
+    stopDataWatcherForNotifications();
+    if (statusClockTimerId !== null) {
+        phoneRuntime.clearInterval(statusClockTimerId);
+        statusClockTimerId = null;
     }
 }
 
@@ -1168,28 +1221,50 @@ function updateBadgeUI(sheetKey) {
     void sheetKey;
 }
 
-function startDataWatcherForNotifications() {
-    // 轮询检查是否有新数据
-    setInterval(() => {
+function getNotificationWatcherInterval() {
+    if (document.hidden) return 15000;
+    return 3500;
+}
+
+function stopDataWatcherForNotifications() {
+    if (dataWatcherTimerId !== null) {
+        phoneRuntime.clearInterval(dataWatcherTimerId);
+        dataWatcherTimerId = null;
+    }
+}
+
+function runDataWatcherTick() {
+    try {
         const rawData = getTableData();
         if (!rawData) return;
-        
+
         const currentData = processTableData(rawData) || {};
-        // Note: processTableData keys are table names, not sheetKey!
         for (const tableName in currentData) {
             const table = currentData[tableName];
             const currentCount = table.rows.length;
             const prevCount = lastTableRowsCount[tableName];
-            
+
             if (prevCount !== undefined && currentCount > prevCount) {
-                // 有新数据，触发通知
                 const newRowsCount = currentCount - prevCount;
-                const lastRow = table.rows[table.rows.length - 1]; // 假设新增在最后
+                const lastRow = table.rows[table.rows.length - 1];
                 triggerPushNotification(tableName, table.key, lastRow, newRowsCount);
             }
             lastTableRowsCount[tableName] = currentCount;
         }
-    }, 2000);
+    } catch (e) {
+        console.warn('[玉子的手机] 通知轮询异常:', e);
+    }
+}
+
+function startDataWatcherForNotifications() {
+    if (dataWatcherTimerId !== null) return;
+
+    // 首次轻量同步，避免开启瞬间误触发。
+    runDataWatcherTick();
+
+    dataWatcherTimerId = phoneRuntime.setInterval(() => {
+        runDataWatcherTick();
+    }, getNotificationWatcherInterval());
 }
 
 function triggerPushNotification(tableName, sheetKey, lastRow, newCount) {
@@ -1228,21 +1303,45 @@ function triggerPushNotification(tableName, sheetKey, lastRow, newCount) {
 
     notif.addEventListener('click', () => {
         notif.classList.remove('show');
-        setTimeout(() => notif.remove(), 300);
+        phoneRuntime.setTimeout(() => notif.remove(), 300);
         clearUnreadBadge(sheetKey);
         navigateTo(`app:${sheetKey}`);
     });
 
     container.appendChild(notif);
-    
-    requestAnimationFrame(() => {
+
+    phoneRuntime.requestAnimationFrame(() => {
         notif.classList.add('show');
     });
 
-    setTimeout(() => {
+    phoneRuntime.setTimeout(() => {
         if (notif.parentNode) {
             notif.classList.remove('show');
-            setTimeout(() => notif.remove(), 300);
+            phoneRuntime.setTimeout(() => notif.remove(), 300);
         }
     }, 4000);
+}
+
+export function destroyPhoneRuntime() {
+    stopDataWatcherForNotifications();
+
+    if (idleApiDebugCancel) {
+        idleApiDebugCancel();
+        idleApiDebugCancel = null;
+    }
+
+    if (visibilityCleanup) {
+        visibilityCleanup();
+        visibilityCleanup = null;
+    }
+
+    phoneRuntime.dispose();
+
+    isPhoneUiInitialized = false;
+    statusClockTimerId = null;
+    routeRenderRegistered = false;
+    lastTableRowsCount = {};
+    routeHistory = [];
+    onRouteChangeCallbacks = [];
+    phoneContainer = null;
 }

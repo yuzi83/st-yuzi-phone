@@ -18,6 +18,7 @@ import {
 } from './phone-core.js';
 import { PHONE_ICONS } from './phone-home.js';
 import { detectSpecialTemplateForTable, detectGenericTemplateForTable } from './phone-beautify-templates.js';
+import { createStorageManager, getSessionStorageNamespace } from './storage-manager.js';
 
 const SPECIAL_SCOPE_CLASS = 'phone-special-template-scope';
 const TEMPLATE_DRAFT_STORE_KEY = '__YUZI_PHONE_TEMPLATE_DRAFT_PATCHES';
@@ -368,6 +369,46 @@ const STORAGE_KEYS = {
     specialChoices: 'yzp_special_choices_v1',
     specialChoicesLegacy: 'tamako_phone_special_choices_v1',
 };
+
+const choiceStore = createStorageManager({
+    maxEntries: 900,
+    maxBytes: 1024 * 1024,
+    defaultTTL: 1000 * 60 * 60 * 24 * 30,
+});
+
+const choiceStoreSessionNs = getSessionStorageNamespace('specialChoices');
+const choiceStorePersistentNs = 'specialChoices:global';
+let choiceStoreMigrated = false;
+
+function ensureChoiceStoreMigrated() {
+    if (choiceStoreMigrated) return;
+    choiceStoreMigrated = true;
+
+    try {
+        const modern = localStorage.getItem(STORAGE_KEYS.specialChoices);
+        const legacy = localStorage.getItem(STORAGE_KEYS.specialChoicesLegacy);
+        const source = modern || legacy;
+        if (!source) return;
+
+        const map = JSON.parse(source);
+        if (!map || typeof map !== 'object') return;
+
+        Object.entries(map).forEach(([choiceId, idx]) => {
+            if (!choiceId) return;
+            if (!Number.isInteger(idx)) return;
+            choiceStore.set(choiceStorePersistentNs, choiceId, idx, {
+                ttl: 1000 * 60 * 60 * 24 * 30,
+            });
+        });
+
+        // 迁移成功后删除旧大对象，避免持续膨胀。
+        localStorage.removeItem(STORAGE_KEYS.specialChoices);
+        localStorage.removeItem(STORAGE_KEYS.specialChoicesLegacy);
+        choiceStore.maintenance();
+    } catch {
+        // ignore
+    }
+}
 
 const DEFAULT_SPECIAL_FIELD_BINDINGS_BY_TYPE = Object.freeze({
     message: {
@@ -2344,17 +2385,15 @@ function renderInPhoneMediaPreview(title, content) {
 
 function getSavedChoice(choiceId) {
     try {
-        let json = localStorage.getItem(STORAGE_KEYS.specialChoices);
-        if (!json) {
-            const legacy = localStorage.getItem(STORAGE_KEYS.specialChoicesLegacy);
-            if (legacy) {
-                localStorage.setItem(STORAGE_KEYS.specialChoices, legacy);
-                json = legacy;
-            }
-        }
-        const map = json ? JSON.parse(json) : {};
-        const v = map[choiceId];
-        return Number.isInteger(v) ? v : undefined;
+        ensureChoiceStoreMigrated();
+        const sid = String(choiceId || '').trim();
+        if (!sid) return undefined;
+
+        const sessionValue = choiceStore.get(choiceStoreSessionNs, sid);
+        if (Number.isInteger(sessionValue)) return sessionValue;
+
+        const persistentValue = choiceStore.get(choiceStorePersistentNs, sid);
+        return Number.isInteger(persistentValue) ? persistentValue : undefined;
     } catch {
         return undefined;
     }
@@ -2362,10 +2401,17 @@ function getSavedChoice(choiceId) {
 
 function setSavedChoice(choiceId, index) {
     try {
-        const json = localStorage.getItem(STORAGE_KEYS.specialChoices);
-        const map = json ? JSON.parse(json) : {};
-        map[choiceId] = index;
-        localStorage.setItem(STORAGE_KEYS.specialChoices, JSON.stringify(map));
+        ensureChoiceStoreMigrated();
+        const sid = String(choiceId || '').trim();
+        if (!sid || !Number.isInteger(index)) return;
+
+        choiceStore.set(choiceStoreSessionNs, sid, index, {
+            ttl: 1000 * 60 * 60 * 24 * 3,
+        });
+        choiceStore.set(choiceStorePersistentNs, sid, index, {
+            ttl: 1000 * 60 * 60 * 24 * 30,
+        });
+        choiceStore.maintenance();
     } catch {
         // ignore
     }
@@ -2373,10 +2419,11 @@ function setSavedChoice(choiceId, index) {
 
 function clearSavedChoice(choiceId) {
     try {
-        const json = localStorage.getItem(STORAGE_KEYS.specialChoices);
-        const map = json ? JSON.parse(json) : {};
-        delete map[choiceId];
-        localStorage.setItem(STORAGE_KEYS.specialChoices, JSON.stringify(map));
+        ensureChoiceStoreMigrated();
+        const sid = String(choiceId || '').trim();
+        if (!sid) return;
+        choiceStore.remove(choiceStoreSessionNs, sid);
+        choiceStore.remove(choiceStorePersistentNs, sid);
     } catch {
         // ignore
     }

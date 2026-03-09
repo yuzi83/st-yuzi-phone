@@ -361,7 +361,7 @@
 .phone-dock {
     --phone-dock-icon-size-default: clamp(42px, 15vw, 56px);
     --phone-dock-icon-size-resolved: var(--phone-dock-icon-size, var(--phone-dock-icon-size-default));
-    --phone-dock-icon-radius: clamp(10px, 3.6vw, 14px);
+    --phone-dock-icon-radius: var(--phone-app-icon-radius, 14px);
     --phone-dock-icon-font-size: clamp(18px, calc(var(--phone-dock-icon-size-resolved) * 0.44), 24px);
 
     display: grid;

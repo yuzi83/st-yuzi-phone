@@ -204,19 +204,30 @@ export function renderHomeScreen(container) {
                 }
             }
 
-            app.addEventListener('click', () => {
-                app.querySelector('.phone-app-icon').classList.add('phone-app-tap');
-                setTimeout(() => navigateTo(`app:${key}`), 150);
-            });
             grid.appendChild(app);
             renderedCount++;
         });
 
-        if (renderedCount === 0) {
-            grid.innerHTML = `<div class="phone-empty-msg">暂无可展示的表格数据<br><small>请先在数据库中加载模板并开始对话</small></div>`;
-        }
-    } else {
-        grid.innerHTML = `<div class="phone-empty-msg">暂无表格数据<br><small>请先在数据库中加载模板并开始对话</small></div>`;
+    }
+
+    if (grid instanceof HTMLElement) {
+        grid.addEventListener('click', (e) => {
+            const target = e.target instanceof Element ? e.target : null;
+            if (!target) return;
+            const appEl = target.closest('.phone-app-item');
+            if (!(appEl instanceof HTMLElement) || !grid.contains(appEl)) return;
+
+            const sheetKey = String(appEl.dataset.sheetKey || '').trim();
+            if (!sheetKey) return;
+
+            const icon = appEl.querySelector('.phone-app-icon');
+            if (icon instanceof HTMLElement) {
+                icon.classList.add('phone-app-tap');
+            }
+            setTimeout(() => {
+                navigateTo(`app:${sheetKey}`);
+            }, 150);
+        }, { passive: true });
     }
 
     // Dock 栏
@@ -253,8 +264,25 @@ export function renderHomeScreen(container) {
             <div class="phone-app-icon phone-dock-icon">${iconHtml}</div>
             <span class="phone-app-label">${app.name}</span>
         `;
-        el.addEventListener('click', () => {
-            const iconEl = el.querySelector('.phone-app-icon');
+        el.dataset.dockAppId = app.id;
+        dock.appendChild(el);
+    });
+
+    if (dock instanceof HTMLElement) {
+        dock.addEventListener('click', (e) => {
+            const target = e.target instanceof Element ? e.target : null;
+            if (!target) return;
+
+            const itemEl = target.closest('.phone-dock-item');
+            if (!(itemEl instanceof HTMLElement) || !dock.contains(itemEl)) return;
+
+            const appId = String(itemEl.dataset.dockAppId || '').trim();
+            if (!appId) return;
+
+            const app = dockApps.find(it => String(it.id) === appId);
+            if (!app) return;
+
+            const iconEl = itemEl.querySelector('.phone-app-icon');
             if (iconEl) {
                 iconEl.classList.add('phone-app-tap');
                 setTimeout(() => iconEl.classList.remove('phone-app-tap'), 180);
@@ -262,9 +290,8 @@ export function renderHomeScreen(container) {
             setTimeout(() => {
                 handleDockAction(app, container);
             }, 150);
-        });
-        dock.appendChild(el);
-    });
+        }, { passive: true });
+    }
 }
 
 function clampNumber(value, min, max, fallback) {
