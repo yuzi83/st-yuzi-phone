@@ -1,0 +1,178 @@
+/* ========================================
+   Phone 字段导航列表与详情页（iOS 风格）
+   ======================================== */
+
+.phone-app-page:not(.phone-generic-template-scope) .phone-nav-list {
+    display: flex;
+    flex-direction: column;
+    background: rgba(40, 40, 40, 0.6);
+    border-radius: 14px;
+    overflow: hidden;
+    /* iOS list grouping effect */
+}
+
+.phone-app-page:not(.phone-generic-template-scope) .phone-nav-list-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.95);
+    padding: 14px 16px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease;
+    box-sizing: border-box;
+}
+.phone-app-page:not(.phone-generic-template-scope) .phone-nav-list-item:last-child {
+    border-bottom: none;
+}
+
+.phone-app-page:not(.phone-generic-template-scope) .phone-nav-list-item:hover,
+.phone-app-page:not(.phone-generic-template-scope) .phone-nav-list-item:active {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.phone-app-page:not(.phone-generic-template-scope) .phone-nav-list-main {
+    font-size: 14px;
+    font-weight: 500;
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.phone-app-page:not(.phone-generic-template-scope) .phone-nav-list-side {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.phone-app-page:not(.phone-generic-template-scope) .phone-nav-list-meta {
+    font-size: 13px;
+    color: rgba(235, 235, 245, 0.6);
+}
+
+.phone-app-page:not(.phone-generic-template-scope) .phone-nav-list-arrow {
+    font-size: 16px;
+    line-height: 1;
+    color: rgba(235, 235, 245, 0.3);
+}
+
+.phone-nav-subheader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 8px 0 12px;
+    padding: 0 4px;
+}
+
+.phone-nav-sub-back {
+    border: none;
+    background: transparent;
+    color: #0A84FF;
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: opacity 0.15s;
+}
+
+.phone-nav-sub-back:hover {
+    opacity: 0.7;
+}
+
+.phone-nav-subtitle {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    max-width: 55%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 详情项列表也是类似的组 */
+.phone-field-detail-list {
+    display: flex;
+    flex-direction: column;
+    background: rgba(40, 40, 40, 0.6);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.phone-field-detail-item {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.phone-field-detail-item:last-child {
+    border-bottom: none;
+}
+
+.phone-field-detail-index {
+    font-size: 11px;
+    color: #0A84FF;
+    font-weight: 500;
+}
+
+.phone-field-detail-value {
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.5;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.phone-app-page:not(.phone-generic-template-scope) .phone-row-detail-card {
+    display: flex;
+    flex-direction: column;
+    background: rgba(40, 40, 40, 0.6);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.phone-app-page:not(.phone-generic-template-scope) .phone-row-detail-kv {
+    display: flex;
+    flex-direction: row; /* iOS 常用的左右布局 */
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.phone-app-page:not(.phone-generic-template-scope) .phone-row-detail-kv:last-child {
+    border-bottom: none;
+}
+
+.phone-app-page:not(.phone-generic-template-scope) .phone-row-detail-key {
+    font-size: 14px;
+    font-weight: 500;
+    color: #0A84FF;
+    min-width: 60px;
+    margin-right: 12px;
+}
+
+.phone-app-page:not(.phone-generic-template-scope) .phone-row-detail-value {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.4;
+    word-break: break-word;
+    white-space: pre-wrap;
+    text-align: right; /* 右对齐以匹配 iOS */
+    flex: 1;
+}
+
+

@@ -1,13 +1,13 @@
 {
-  "display_name": "玉子手机",
-  "loading_order": 120,
-  "requires": [],
-  "optional": [],
-  "js": "index.js",
-  "css": "style.css",
-  "author": "yuzi83",
-  "version": "0.1.0",
-  "homePage": "https://github.com/yuzi83/yuzi-phone",
-  "auto_update": false,
-  "description": "玉子手机：独立的 SillyTavern 手机交互扩展（与玉子市场完全解耦）"
+    "display_name": "Yuzi Phone 玉子手机",
+    "loading_order": 101,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "yuzi83",
+    "version": "1.0.0",
+    "homePage": "https://github.com/yuzi83/st-yuzi-phone",
+    "auto_update": true,
+    "description": "玉子手机独立扩展，支持表格 App 主屏、专属/通用模板渲染、数据库配置桥接与手机界面拖拽缩放"
 }

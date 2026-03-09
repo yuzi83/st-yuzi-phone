@@ -1,0 +1,446 @@
+/* ========================================
+   Phone 通用表格模板层（Template Driven Layer）
+   - 只作用于 .phone-generic-root.phone-generic-template-scope
+   - 覆盖基础层，提供结构开关 + token 化能力
+   ======================================== */
+
+.phone-generic-root.phone-generic-template-scope {
+    /* ===== 兼容桥接（旧 token -> 新 token） ===== */
+    --_gt-page-bg: var(--gtPageBg, transparent);
+    --_gt-body-bg: var(--gtBodyBg, var(--gtCompatTableBg, transparent));
+
+    --_gt-text: var(--gtText, var(--gtCompatText, rgba(255, 255, 255, 0.9)));
+    --_gt-muted-text: var(--gtMutedText, rgba(255, 255, 255, 0.62));
+
+    --_gt-nav-bg: var(--gtNavBg, var(--gtCompatNavBg, rgba(0, 0, 0, 0.4)));
+    --_gt-nav-border: var(--gtNavBorderColor, var(--gtCompatBorder, rgba(255, 255, 255, 0.08)));
+    --_gt-nav-text: var(--gtNavText, var(--_gt-text));
+    --_gt-nav-back-text: var(--gtNavBackText, rgba(100, 180, 255, 0.9));
+
+    --_gt-list-bg: var(--gtListBg, var(--gtCompatTableBg, rgba(255, 255, 255, 0.04)));
+    --_gt-list-border: var(--gtListBorder, var(--gtCompatBorder, rgba(255, 255, 255, 0.12)));
+    --_gt-list-item-bg: var(--gtListItemBg, transparent);
+    --_gt-list-item-hover-bg: var(--gtListItemHoverBg, rgba(255, 255, 255, 0.08));
+    --_gt-list-item-text: var(--gtListItemText, var(--_gt-text));
+
+    --_gt-detail-bg: var(--gtDetailBg, var(--gtCompatTableBg, rgba(255, 255, 255, 0.03)));
+    --_gt-detail-border: var(--gtDetailBorder, var(--gtCompatBorder, rgba(255, 255, 255, 0.1)));
+    --_gt-detail-field-bg: var(--gtDetailFieldBg, transparent);
+    --_gt-detail-field-border: var(--gtDetailFieldBorder, rgba(255, 255, 255, 0.08));
+    --_gt-detail-key-text: var(--gtDetailKeyText, rgba(100, 180, 255, 0.78));
+    --_gt-detail-value-text: var(--gtDetailValueText, var(--_gt-text));
+
+    --_gt-action-btn-bg: var(--gtActionBtnBg, rgba(255, 255, 255, 0.08));
+    --_gt-action-btn-border: var(--gtActionBtnBorder, rgba(255, 255, 255, 0.2));
+    --_gt-action-btn-text: var(--gtActionBtnText, var(--_gt-text));
+
+    --_gt-backdrop: var(--gtBackdropFilter, var(--gtCompatBackdrop, none));
+
+    /* ===== 由结构开关驱动的预设变量 ===== */
+    --_gt-gap-preset-xs: 4px;
+    --_gt-gap-preset-sm: 8px;
+    --_gt-gap-preset-md: 12px;
+    --_gt-gap-preset-lg: 16px;
+
+    --_gt-radius-preset-sm: 8px;
+    --_gt-radius-preset-md: 12px;
+    --_gt-radius-preset-lg: 16px;
+
+    --_gt-shadow-preset-sm: 0 4px 12px rgba(0, 0, 0, 0.12);
+    --_gt-shadow-preset-md: 0 8px 20px rgba(0, 0, 0, 0.16);
+    --_gt-shadow-preset-lg: 0 12px 30px rgba(0, 0, 0, 0.2);
+
+    /* ===== 最终可用变量：token 优先，preset 次之 ===== */
+    --_gt-gap-xs: var(--gtGapXs, var(--_gt-gap-preset-xs));
+    --_gt-gap-sm: var(--gtGapSm, var(--_gt-gap-preset-sm));
+    --_gt-gap-md: var(--gtGapMd, var(--_gt-gap-preset-md));
+    --_gt-gap-lg: var(--gtGapLg, var(--_gt-gap-preset-lg));
+
+    --_gt-radius-sm: var(--gtRadiusSm, var(--_gt-radius-preset-sm));
+    --_gt-radius-md: var(--gtRadiusMd, var(--_gt-radius-preset-md));
+    --_gt-radius-lg: var(--gtRadiusLg, var(--_gt-radius-preset-lg));
+
+    --_gt-shadow-sm: var(--gtShadowSm, var(--_gt-shadow-preset-sm));
+    --_gt-shadow-md: var(--gtShadowMd, var(--_gt-shadow-preset-md));
+    --_gt-shadow-lg: var(--gtShadowLg, var(--_gt-shadow-preset-lg));
+
+    --_gt-action-btn-radius: var(--_gt-radius-sm);
+    --_gt-action-btn-font-size: 12px;
+    --_gt-action-btn-pad-y: 5px;
+    --_gt-action-btn-pad-x: 10px;
+
+    color: var(--_gt-text);
+    background: var(--_gt-page-bg);
+}
+
+/* ===== density ===== */
+.phone-generic-root.phone-generic-template-scope[data-layout-density="compact"] {
+    --_gt-gap-preset-xs: 2px;
+    --_gt-gap-preset-sm: 6px;
+    --_gt-gap-preset-md: 10px;
+    --_gt-gap-preset-lg: 12px;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-density="loose"] {
+    --_gt-gap-preset-xs: 6px;
+    --_gt-gap-preset-sm: 10px;
+    --_gt-gap-preset-md: 14px;
+    --_gt-gap-preset-lg: 20px;
+}
+
+/* ===== radius ===== */
+.phone-generic-root.phone-generic-template-scope[data-layout-radius-level="none"] {
+    --_gt-radius-preset-sm: 0px;
+    --_gt-radius-preset-md: 0px;
+    --_gt-radius-preset-lg: 0px;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-radius-level="sm"] {
+    --_gt-radius-preset-sm: 6px;
+    --_gt-radius-preset-md: 8px;
+    --_gt-radius-preset-lg: 10px;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-radius-level="lg"] {
+    --_gt-radius-preset-sm: 10px;
+    --_gt-radius-preset-md: 14px;
+    --_gt-radius-preset-lg: 18px;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-radius-level="xl"] {
+    --_gt-radius-preset-sm: 12px;
+    --_gt-radius-preset-md: 18px;
+    --_gt-radius-preset-lg: 24px;
+}
+
+/* ===== shadow ===== */
+.phone-generic-root.phone-generic-template-scope[data-layout-shadow-level="none"] {
+    --_gt-shadow-preset-sm: none;
+    --_gt-shadow-preset-md: none;
+    --_gt-shadow-preset-lg: none;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-shadow-level="mid"] {
+    --_gt-shadow-preset-sm: 0 6px 16px rgba(0, 0, 0, 0.16);
+    --_gt-shadow-preset-md: 0 10px 26px rgba(0, 0, 0, 0.2);
+    --_gt-shadow-preset-lg: 0 14px 34px rgba(0, 0, 0, 0.24);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-shadow-level="strong"] {
+    --_gt-shadow-preset-sm: 0 8px 18px rgba(0, 0, 0, 0.2);
+    --_gt-shadow-preset-md: 0 14px 32px rgba(0, 0, 0, 0.28);
+    --_gt-shadow-preset-lg: 0 20px 44px rgba(0, 0, 0, 0.32);
+}
+
+/* ===== 页面与导航 ===== */
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-nav {
+    background: var(--_gt-nav-bg);
+    border-bottom: 1px solid var(--_gt-nav-border);
+    backdrop-filter: var(--_gt-backdrop);
+    -webkit-backdrop-filter: var(--_gt-backdrop);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-nav-title {
+    color: var(--_gt-nav-text);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-nav-back {
+    color: var(--_gt-nav-back-text);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-nav-mode="transparent"] .phone-generic-slot-nav {
+    background: transparent;
+    border-bottom-color: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-nav-mode="solid"] .phone-generic-slot-nav {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-body {
+    background: var(--_gt-body-bg);
+    color: var(--_gt-text);
+    padding: var(--_gt-gap-md);
+    gap: var(--_gt-gap-md);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-page-mode="plain"] .phone-generic-slot-body {
+    padding-left: var(--_gt-gap-sm);
+    padding-right: var(--_gt-gap-sm);
+    box-shadow: none;
+}
+
+/* ===== 列表容器 ===== */
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: var(--_gt-list-bg);
+    border: 1px solid var(--_gt-list-border);
+    border-radius: var(--_gt-radius-md);
+    box-shadow: var(--_gt-shadow-md);
+    overflow: hidden;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-list-container-mode="plain"] .phone-generic-slot-list {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-list-container-mode="table"] .phone-generic-slot-list {
+    border-radius: var(--_gt-radius-sm);
+}
+
+/* ===== 列表条目 ===== */
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-item {
+    border: none;
+    border-bottom: 1px solid var(--_gt-list-border);
+    border-radius: 0;
+    background: var(--_gt-list-item-bg);
+    color: var(--_gt-list-item-text);
+    box-sizing: border-box;
+    padding: calc(var(--_gt-gap-sm) + 2px) var(--_gt-gap-md);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-item:last-child {
+    border-bottom: none;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-show-list-divider="0"] .phone-generic-slot-list-item {
+    border-bottom: none;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-item:hover,
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-item:active {
+    background: var(--_gt-list-item-hover-bg);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-main,
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-meta,
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-arrow {
+    color: var(--_gt-list-item-text);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-list-item-mode="compact"] .phone-generic-slot-list-item {
+    padding: var(--_gt-gap-sm) var(--_gt-gap-sm);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-list-item-mode="compact"] .phone-generic-slot-list-main {
+    font-size: 13px;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-list-item-mode="card"] .phone-generic-slot-list {
+    gap: var(--_gt-gap-sm);
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-list-item-mode="card"] .phone-generic-slot-list-item {
+    border: 1px solid var(--_gt-list-border);
+    border-radius: var(--_gt-radius-md);
+    background: var(--_gt-list-bg);
+    box-shadow: var(--_gt-shadow-sm);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-list-meta-mode="hidden"] .phone-generic-slot-list-meta {
+    display: none;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-list-meta-mode="stacked"] .phone-generic-slot-list-side {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--_gt-gap-xs);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-list-meta-mode="stacked"] .phone-generic-slot-list-meta {
+    font-size: 11px;
+    color: var(--_gt-muted-text);
+}
+
+/* ===== 详情容器 ===== */
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--_gt-gap-sm);
+    background: var(--_gt-detail-bg);
+    border: 1px solid var(--_gt-detail-border);
+    border-radius: var(--_gt-radius-md);
+    box-shadow: var(--_gt-shadow-sm);
+    padding: var(--_gt-gap-sm);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-container-mode="plain"] .phone-generic-slot-detail {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    padding: 0;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-container-mode="table"] .phone-generic-slot-detail {
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-detail-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--_gt-gap-xs);
+    padding: var(--_gt-gap-sm);
+    background: var(--_gt-detail-field-bg);
+    border: 1px solid var(--_gt-detail-field-border);
+    border-radius: var(--_gt-radius-sm);
+    box-shadow: var(--_gt-shadow-sm);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-container-mode="table"] .phone-generic-slot-detail-field {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    border-bottom: 1px solid var(--_gt-detail-field-border);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-container-mode="table"] .phone-generic-slot-detail-field:last-child {
+    border-bottom: none;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-show-detail-divider="0"] .phone-generic-slot-detail-field {
+    border-bottom-color: transparent;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-row-detail-key {
+    color: var(--_gt-detail-key-text);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-row-detail-value,
+.phone-generic-root.phone-generic-template-scope .phone-row-detail-input {
+    color: var(--_gt-detail-value-text);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-row-detail-input {
+    border-color: var(--_gt-detail-field-border);
+    background: var(--_gt-detail-field-bg);
+    border-radius: var(--_gt-radius-sm);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-field-layout="inline"] .phone-generic-slot-detail-field {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-field-layout="inline"] .phone-row-detail-key {
+    min-width: 40%;
+    margin-right: var(--_gt-gap-sm);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-field-layout="inline"] .phone-row-detail-value {
+    text-align: right;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-field-layout="grid-2"] .phone-generic-slot-detail,
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-field-layout="grid-3"] .phone-generic-slot-detail {
+    display: grid;
+    gap: var(--_gt-gap-sm);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-field-layout="grid-2"] .phone-generic-slot-detail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-field-layout="grid-3"] .phone-generic-slot-detail {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-detail-group-mode="flat"] .phone-generic-slot-detail-field {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* ===== 操作区与按钮 ===== */
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-actions {
+    gap: var(--_gt-gap-sm);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-action-bar-mode="hidden"] .phone-generic-slot-actions {
+    display: none !important;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-action-bar-mode="sticky"] .phone-generic-slot-actions {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    padding: var(--_gt-gap-xs) 0;
+    background: linear-gradient(to bottom, var(--_gt-body-bg) 70%, transparent);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-settings-btn,
+.phone-generic-root.phone-generic-template-scope .phone-cell-lock-btn,
+.phone-generic-root.phone-generic-template-scope .phone-row-lock-chip,
+.phone-generic-root.phone-generic-template-scope .phone-row-delete-chip {
+    background: var(--_gt-action-btn-bg);
+    border-color: var(--_gt-action-btn-border);
+    color: var(--_gt-action-btn-text);
+    border-radius: var(--_gt-action-btn-radius);
+    font-size: var(--_gt-action-btn-font-size);
+    padding: var(--_gt-action-btn-pad-y) var(--_gt-action-btn-pad-x);
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-button-shape="pill"] {
+    --_gt-action-btn-radius: 999px;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-button-shape="square"] {
+    --_gt-action-btn-radius: 0px;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-button-size="xs"] {
+    --_gt-action-btn-font-size: 11px;
+    --_gt-action-btn-pad-y: 3px;
+    --_gt-action-btn-pad-x: 8px;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-button-size="md"] {
+    --_gt-action-btn-font-size: 13px;
+    --_gt-action-btn-pad-y: 6px;
+    --_gt-action-btn-pad-x: 12px;
+}
+
+.phone-generic-root.phone-generic-template-scope[data-layout-button-size="lg"] {
+    --_gt-action-btn-font-size: 14px;
+    --_gt-action-btn-pad-y: 8px;
+    --_gt-action-btn-pad-x: 14px;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-table-detail-lock-hint {
+    color: var(--_gt-muted-text);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-empty-msg {
+    color: var(--_gt-muted-text);
+}
+
+@media screen and (max-width: 520px) {
+    .phone-generic-root.phone-generic-template-scope[data-layout-detail-field-layout="grid-3"] .phone-generic-slot-detail {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media screen and (max-width: 420px) {
+    .phone-generic-root.phone-generic-template-scope[data-layout-detail-field-layout="grid-2"] .phone-generic-slot-detail,
+    .phone-generic-root.phone-generic-template-scope[data-layout-detail-field-layout="grid-3"] .phone-generic-slot-detail {
+        grid-template-columns: 1fr;
+    }
+}

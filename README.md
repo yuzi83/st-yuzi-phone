@@ -1,28 +1,114 @@
-# 玉子手机（yuzi-phone）
+# 📱 Yuzi Phone 玉子手机
 
-独立的 SillyTavern 手机交互扩展。
+[![GitHub release](https://img.shields.io/github/v/release/yuzi83/st-yuzi-phone)](https://github.com/yuzi83/st-yuzi-phone/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 定位
-- 与玉子市场完全解耦
-- 独立仓库、独立版本、独立发布
-- 当前为骨架版本，后续逐步迁移手机首页、表格浏览、设置等模块
+SillyTavern 独立手机扩展，提供手机壳 UI、主屏 App、表格查看与配置桥接能力。  
+本仓库为独立发布线，不依赖 `st-tamako-market` 运行。
 
-## 当前骨架内容
-- `manifest.json`：扩展清单
-- `index.js`：初始化入口与基础 UI 挂载
-- `style.css`：最小样式与命名空间
+## ✨ 功能特性
 
-## 安装方式（开发态）
-1. 将本目录放入 SillyTavern 扩展目录。
-2. 在扩展管理中启用“玉子手机”。
-3. 页面右下角会出现“玉子手机”按钮，点击可展开骨架面板。
+- 📱 **独立手机容器**：支持浮动显示、拖拽移动、边角缩放
+- 🏠 **手机主屏 App**：模块化入口与导航切换
+- 📊 **表格查看能力**：支持表格内容浏览与卡片化展示
+- 🔧 **数据库配置桥接**：可读取/写入数据库更新配置（依赖 `AutoCardUpdaterAPI`）
+- 🧩 **模板渲染支持**：专属模板 + 通用模板作用域
+- 💾 **独立设置命名空间**：使用 `extensionSettings.YuziPhone`
+- 🔁 **旧数据一次性迁移**：支持从历史 `TamakoMarket.phone` 与旧本地键迁移
 
-## 后续迁移路线
-1. 迁移 `phone-home`（首页）
-2. 迁移 `phone-table-viewer`（列表与详情）
-3. 迁移 `phone-settings`（设置）
-4. 迁移 `phone-fusion`（模板缝合，可选）
-5. 完成数据层替换，彻底移除历史耦合
+## 📥 安装方法
 
-## 版本
-- 当前：`0.1.0`（骨架初始化）
+### 方法一：URL 安装（推荐）
+
+1. 打开 SillyTavern
+2. 进入 **扩展** → **安装扩展**
+3. 输入仓库地址：`https://github.com/yuzi83/st-yuzi-phone`
+4. 点击安装并重启 SillyTavern
+
+### 方法二：手动安装
+
+1. [下载最新版本](https://github.com/yuzi83/st-yuzi-phone/releases)
+2. 解压到 SillyTavern 的 `data/default-user/extensions/` 目录
+3. 重启 SillyTavern
+
+## 🚀 使用说明
+
+1. 启动后会出现 **玉子手机** 悬浮按钮
+2. 点击按钮打开手机容器
+3. 在手机界面中进入各 App 页面执行查看与配置操作
+
+### 交互说明
+
+- **按钮拖拽**：拖动悬浮按钮改变位置
+- **手机拖拽**：拖动刘海区/状态栏移动容器
+- **手机缩放**：拖动右下缩放柄调整尺寸
+- **位置与尺寸记忆**：自动保存到 `YuziPhone` 设置
+
+## ⚙️ 配置与存储
+
+### 扩展设置命名空间
+
+- 主命名空间：`extensionSettings.YuziPhone`
+- 典型字段：
+  - `enabled`
+  - `phoneToggleX / phoneToggleY`
+  - `phoneContainerX / phoneContainerY`
+  - `phoneContainerWidth / phoneContainerHeight`
+  - `backgroundImage`
+  - `appIcons`
+
+### 本地存储键
+
+- 当前键：`yzp_special_choices_v1`
+- 兼容读取旧键：`tamako_phone_special_choices_v1`（迁移后写回新键）
+
+## 🔁 迁移策略（保留白名单）
+
+为保证历史用户无感迁移，允许以下**一次性迁移读取**：
+
+1. `extensionSettings.TamakoMarket.phone` → 迁移到 `extensionSettings.YuziPhone`
+2. `tamako_phone_special_choices_v1` → 迁移到 `yzp_special_choices_v1`
+
+> 说明：以上仅用于旧数据迁移，不构成运行时依赖。新写入全部落在 `YuziPhone` 与 `yzp_*` 命名空间。
+
+## 🧩 依赖说明
+
+- 运行环境：SillyTavern 扩展系统
+- 外部桥接：`AutoCardUpdaterAPI`（若未加载，对应功能会降级并提示）
+
+## 📁 项目结构
+
+```text
+st-yuzi-phone/
+├── index.js
+├── manifest.json
+├── style.css
+├── README.md
+├── modules/
+│   ├── settings.js
+│   ├── window.js
+│   ├── phone-core.js
+│   ├── phone-home.js
+│   ├── phone-fusion.js
+│   ├── phone-settings.js
+│   ├── phone-table-viewer.js
+│   └── phone-beautify-templates.js
+└── styles/
+    ├── 00-phone-shell.css
+    ├── 01-phone-base.css
+    ├── 02-phone-nav-detail.css
+    ├── 03-phone-special-base.css
+    ├── 04-phone-special-interactions.css
+    └── 05-phone-generic-template.css
+```
+
+## ✅ 独立性约束
+
+- 不引用 `st-tamako-market` 路径
+- 不写入 `TamakoMarket` 新配置
+- 不新增 `tamako-*` 样式作用域
+- 仅保留迁移白名单中的旧键读取
+
+## 📄 License
+
+[MIT License](https://opensource.org/licenses/MIT)
