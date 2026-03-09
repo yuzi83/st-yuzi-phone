@@ -17,6 +17,18 @@ export const defaultSettings = {
     appIcons: {},
     hideTableCountBadge: false,
     hiddenTableApps: {},
+    beautifyTemplateSourceModeSpecial: 'builtin',
+    beautifyTemplateSourceModeGeneric: 'builtin',
+    beautifyActiveTemplateIdsSpecial: {
+        special_message: 'builtin.special.message.v1',
+        special_moments: 'builtin.special.moments.v1',
+        special_forum: 'builtin.special.forum.v1',
+    },
+    beautifyActiveTemplateIdGeneric: 'builtin.generic.table.v1',
+    dockIconSize: 48,
+    phoneToggleStyleSize: 44,
+    phoneToggleStyleShape: 'rounded',
+    phoneToggleCoverImage: null,
 };
 
 function getContext() {
@@ -43,6 +55,25 @@ function ensureNamespace() {
     if (typeof s.appIcons !== 'object' || Array.isArray(s.appIcons) || !s.appIcons) s.appIcons = {};
     if (typeof s.hiddenTableApps !== 'object' || Array.isArray(s.hiddenTableApps) || !s.hiddenTableApps) s.hiddenTableApps = {};
     if (s.enabled === undefined) s.enabled = true;
+
+    const toggleSize = Number(s.phoneToggleStyleSize);
+    s.phoneToggleStyleSize = Number.isFinite(toggleSize)
+        ? Math.max(32, Math.min(72, Math.round(toggleSize)))
+        : defaultSettings.phoneToggleStyleSize;
+
+    const shape = String(s.phoneToggleStyleShape || '').trim();
+    s.phoneToggleStyleShape = (shape === 'circle' || shape === 'rounded')
+        ? shape
+        : defaultSettings.phoneToggleStyleShape;
+
+    if (typeof s.phoneToggleCoverImage !== 'string' || !s.phoneToggleCoverImage.trim()) {
+        s.phoneToggleCoverImage = null;
+    }
+
+    const dockIconSize = Number(s.dockIconSize);
+    s.dockIconSize = Number.isFinite(dockIconSize)
+        ? Math.max(32, Math.min(72, Math.round(dockIconSize)))
+        : defaultSettings.dockIconSize;
 
     return s;
 }

@@ -1,7 +1,7 @@
 // modules/phone/phone-settings.js
 /**
  * 玉子的手机 - 设置 App
- * 一级入口：外观设置 / 数据库配置
+ * 一级入口：外观设置 / 美化模板 / 按钮调节 / 数据库配置
  */
 
 import {
@@ -11,6 +11,7 @@ import {
     navigateBack,
     getPhoneSettings,
     savePhoneSetting,
+    savePhoneSettingsPatch,
     bindPhoneScrollGuards,
     getDbConfigApiAvailability,
     readDbUpdateConfigViaApi,
@@ -25,19 +26,34 @@ import {
     PHONE_TEMPLATE_TYPE_GENERIC,
     PHONE_BEAUTIFY_TEMPLATE_FORMAT,
     PHONE_BEAUTIFY_TEMPLATE_SCHEMA_VERSION,
+    PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
+    PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_RUNTIME,
     getPhoneBeautifyTemplatesByType,
     importPhoneBeautifyPackFromData,
     exportPhoneBeautifyPack,
     deletePhoneBeautifyUserTemplate,
+    getActiveBeautifyTemplateIdsForSpecial,
+    getActiveBeautifyTemplateIdByType,
+    setActiveBeautifyTemplateIdByType,
+    validatePhoneBeautifyTemplate,
+    savePhoneBeautifyUserTemplate,
 } from './phone-beautify-templates.js';
 
 const DB_PRESETS_SETTING_KEY = 'dbConfigPresets';
 const DB_ACTIVE_PRESET_SETTING_KEY = 'activeDbConfigPreset';
+const TEMPLATE_DRAFT_STORE_KEY = '__YUZI_PHONE_TEMPLATE_DRAFT_PATCHES';
+const TEMPLATE_DRAFT_EVENT_UPDATED = 'yuzi-phone-style-draft-updated';
+const TEMPLATE_DRAFT_EVENT_CLEARED = 'yuzi-phone-style-draft-cleared';
 
 export function renderSettings(container) {
     const state = {
-        mode: 'home', // home | appearance | database | beautify
+        mode: 'home', // home | appearance | database | beautify | button_style
         databaseScrollTop: 0,
+        beautifyEditorTemplateId: '',
+        beautifyEditorLoadedTemplateId: '',
+        beautifyEditorText: '',
+        beautifyEditorError: '',
+        beautifyEditorNotice: '',
     };
 
     const readDbSnapshot = () => {
@@ -180,6 +196,8 @@ export function renderSettings(container) {
             renderDatabasePage();
         } else if (state.mode === 'beautify') {
             renderBeautifyTemplatePage();
+        } else if (state.mode === 'button_style') {
+            renderButtonStylePage();
         } else {
             renderHomePage();
         }
@@ -211,16 +229,16 @@ export function renderSettings(container) {
         container.innerHTML = `
             <div class="phone-app-page">
                 <div class="phone-nav-bar">
-                    <button class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
                     <span class="phone-nav-title">设置</span>
-                    <button class="phone-settings-btn" id="phone-top-trigger-update" style="padding:4px 8px; min-height:auto; font-size:12px;">
+                    <button type="button" class="phone-settings-btn" id="phone-top-trigger-update" style="padding:4px 8px; min-height:auto; font-size:12px;">
                         <span>手动更新</span>
                     </button>
                 </div>
                 <div class="phone-app-body phone-settings-scroll">
                     <div class="phone-settings-home-list">
                         <div class="phone-settings-home-item">
-                            <button class="phone-settings-home-trigger" data-entry="appearance">
+                            <button type="button" class="phone-settings-home-trigger" data-entry="appearance">
                                 <span class="phone-settings-home-title">外观设置</span>
                                 <span class="phone-settings-home-side">
                                     <span class="phone-settings-home-arrow">›</span>
@@ -229,7 +247,7 @@ export function renderSettings(container) {
                         </div>
 
                         <div class="phone-settings-home-item">
-                            <button class="phone-settings-home-trigger" data-entry="beautify">
+                            <button type="button" class="phone-settings-home-trigger" data-entry="beautify">
                                 <span class="phone-settings-home-title">美化模板</span>
                                 <span class="phone-settings-home-side">
                                     <span class="phone-settings-home-arrow">›</span>
@@ -238,7 +256,16 @@ export function renderSettings(container) {
                         </div>
 
                         <div class="phone-settings-home-item">
-                            <button class="phone-settings-home-trigger" data-entry="database">
+                            <button type="button" class="phone-settings-home-trigger" data-entry="button_style">
+                                <span class="phone-settings-home-title">按钮调节</span>
+                                <span class="phone-settings-home-side">
+                                    <span class="phone-settings-home-arrow">›</span>
+                                </span>
+                            </button>
+                        </div>
+
+                        <div class="phone-settings-home-item">
+                            <button type="button" class="phone-settings-home-trigger" data-entry="database">
                                 <span class="phone-settings-home-title">数据库配置</span>
                                 <span class="phone-settings-home-side">
                                     <span class="phone-settings-home-arrow">›</span>
@@ -298,7 +325,7 @@ export function renderSettings(container) {
         container.innerHTML = `
             <div class="phone-app-page">
                 <div class="phone-nav-bar">
-                    <button class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
                     <span class="phone-nav-title">外观设置</span>
                 </div>
                 <div class="phone-app-body phone-settings-scroll phone-settings-open">
@@ -309,11 +336,11 @@ export function renderSettings(container) {
                         <div class="phone-settings-inline-row">
                             <span class="phone-settings-label">背景图片</span>
                             <div class="phone-settings-action">
-                                <button class="phone-settings-btn" id="phone-upload-bg">
+                                <button type="button" class="phone-settings-btn" id="phone-upload-bg">
                                     ${PHONE_ICONS.upload}
                                     <span>上传</span>
                                 </button>
-                                <button class="phone-settings-btn phone-settings-btn-danger" id="phone-clear-bg">清除</button>
+                                <button type="button" class="phone-settings-btn phone-settings-btn-danger" id="phone-clear-bg">清除</button>
                             </div>
                         </div>
                         <div id="phone-bg-preview" class="phone-settings-preview"></div>
@@ -339,6 +366,10 @@ export function renderSettings(container) {
                             <label class="phone-settings-field-inline">
                                 <span>图标间距</span>
                                 <input type="number" min="8" max="24" id="phone-app-grid-gap" class="phone-settings-input" value="${escapeHtmlAttr(getLayoutValue('appGridGap', 12))}">
+                            </label>
+                            <label class="phone-settings-field-inline">
+                                <span>Dock 图标大小</span>
+                                <input type="number" min="32" max="72" id="phone-dock-icon-size" class="phone-settings-input" value="${escapeHtmlAttr(getLayoutValue('dockIconSize', 48))}">
                             </label>
                         </div>
                     </section>
@@ -412,7 +443,7 @@ export function renderSettings(container) {
         ].join('');
 
         const tableChecklistHtml = tableEntries.length === 0
-            ? '<div class="phone-empty-msg">暂无可配置表格，请先加载数据库表格数据</div>'
+            ? '<div class="phone-empty-msg"></div>'
             : tableEntries.map((item) => `
                 <label class="phone-db-table-item" data-sheet-key="${escapeHtmlAttr(item.key)}">
                     <span class="phone-db-table-name">${escapeHtml(item.name)}</span>
@@ -432,9 +463,9 @@ export function renderSettings(container) {
         container.innerHTML = `
             <div class="phone-app-page">
                 <div class="phone-nav-bar">
-                    <button class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
                     <span class="phone-nav-title">数据库配置</span>
-                    <button class="phone-settings-btn" id="phone-db-refresh-btn" style="padding:4px 8px; min-height:auto; font-size:12px;">
+                    <button type="button" class="phone-settings-btn" id="phone-db-refresh-btn" style="padding:4px 8px; min-height:auto; font-size:12px;">
                         <span>刷新</span>
                     </button>
                 </div>
@@ -469,9 +500,9 @@ export function renderSettings(container) {
                         </div>
 
                         <div class="phone-settings-action phone-settings-action-wrap">
-                            <button class="phone-settings-btn" id="phone-db-preset-save-btn" ${disabledAttr}>保存为新预设</button>
-                            <button class="phone-settings-btn" id="phone-db-preset-overwrite-btn" ${disabledAttr}>覆盖同名预设</button>
-                            <button class="phone-settings-btn phone-settings-btn-danger" id="phone-db-preset-delete-btn" ${disabledAttr}>删除当前预设</button>
+                            <button type="button" class="phone-settings-btn" id="phone-db-preset-save-btn" ${disabledAttr}>保存为新预设</button>
+                            <button type="button" class="phone-settings-btn" id="phone-db-preset-overwrite-btn" ${disabledAttr}>覆盖同名预设</button>
+                            <button type="button" class="phone-settings-btn phone-settings-btn-danger" id="phone-db-preset-delete-btn" ${disabledAttr}>删除当前预设</button>
                         </div>
 
                         <div class="phone-settings-desc" id="phone-db-preset-current-meta">当前激活：${activePresetName ? escapeHtml(activePresetName) : '未绑定预设'}</div>
@@ -501,8 +532,8 @@ export function renderSettings(container) {
                         </div>
 
                         <div class="phone-settings-action phone-settings-action-wrap">
-                            <button class="phone-settings-btn" id="phone-db-update-config-save-btn" ${disabledAttr}>保存更新配置</button>
-                            <button class="phone-settings-btn" id="phone-db-update-config-reload-btn" ${disabledAttr}>重新读取</button>
+                            <button type="button" class="phone-settings-btn" id="phone-db-update-config-save-btn" ${disabledAttr}>保存更新配置</button>
+                            <button type="button" class="phone-settings-btn" id="phone-db-update-config-reload-btn" ${disabledAttr}>重新读取</button>
                         </div>
                     </section>
 
@@ -517,10 +548,10 @@ export function renderSettings(container) {
                         </div>
 
                         <div class="phone-settings-action phone-settings-action-wrap">
-                            <button class="phone-settings-btn" id="phone-db-manual-check-all-btn" ${tableEntries.length > 0 && apiAvailability.ok ? '' : 'disabled'}>全选</button>
-                            <button class="phone-settings-btn" id="phone-db-manual-invert-btn" ${tableEntries.length > 0 && apiAvailability.ok ? '' : 'disabled'}>反选</button>
-                            <button class="phone-settings-btn" id="phone-db-manual-save-btn" ${tableEntries.length > 0 && apiAvailability.ok ? '' : 'disabled'}>保存选择</button>
-                            <button class="phone-settings-btn phone-settings-btn-danger" id="phone-db-manual-reset-btn" ${tableEntries.length > 0 && apiAvailability.ok ? '' : 'disabled'}>恢复默认全选</button>
+                            <button type="button" class="phone-settings-btn" id="phone-db-manual-check-all-btn" ${tableEntries.length > 0 && apiAvailability.ok ? '' : 'disabled'}>全选</button>
+                            <button type="button" class="phone-settings-btn" id="phone-db-manual-invert-btn" ${tableEntries.length > 0 && apiAvailability.ok ? '' : 'disabled'}>反选</button>
+                            <button type="button" class="phone-settings-btn" id="phone-db-manual-save-btn" ${tableEntries.length > 0 && apiAvailability.ok ? '' : 'disabled'}>保存选择</button>
+                            <button type="button" class="phone-settings-btn phone-settings-btn-danger" id="phone-db-manual-reset-btn" ${tableEntries.length > 0 && apiAvailability.ok ? '' : 'disabled'}>恢复默认全选</button>
                         </div>
                     </section>
                 </div>
@@ -717,19 +748,302 @@ export function renderSettings(container) {
         });
     };
 
-    const renderBeautifyTemplatePage = () => {
-        const specialTemplates = getPhoneBeautifyTemplatesByType(PHONE_TEMPLATE_TYPE_SPECIAL, {
-            includeBuiltin: true,
-            includeUser: true,
-            enabledOnly: false,
-        });
-        const genericTemplates = getPhoneBeautifyTemplatesByType(PHONE_TEMPLATE_TYPE_GENERIC, {
-            includeBuiltin: true,
-            includeUser: true,
-            enabledOnly: false,
+    const renderButtonStylePage = () => {
+        const settings = getPhoneSettings();
+        const currentSize = clampNumber(settings.phoneToggleStyleSize, 32, 72, 44);
+        const currentShape = String(settings.phoneToggleStyleShape || 'rounded') === 'circle' ? 'circle' : 'rounded';
+        const currentCover = typeof settings.phoneToggleCoverImage === 'string' && settings.phoneToggleCoverImage.trim()
+            ? settings.phoneToggleCoverImage.trim()
+            : '';
+
+        container.innerHTML = `
+            <div class="phone-app-page">
+                <div class="phone-nav-bar">
+                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                    <span class="phone-nav-title">按钮调节</span>
+                </div>
+                <div class="phone-app-body phone-settings-scroll phone-settings-open">
+                    <section class="phone-settings-section">
+                        <div class="phone-settings-section-head">
+                            <span class="phone-settings-section-title">按钮大小</span>
+                        </div>
+                        <div class="phone-settings-toggle-size-row">
+                            <input type="range" min="32" max="72" step="1" id="phone-toggle-style-size-range" value="${escapeHtmlAttr(currentSize)}">
+                            <input type="number" min="32" max="72" step="1" id="phone-toggle-style-size-input" class="phone-settings-input" value="${escapeHtmlAttr(currentSize)}">
+                        </div>
+                        <p class="phone-settings-desc">建议范围 36~56，移动端默认 44。</p>
+                    </section>
+
+                    <section class="phone-settings-section">
+                        <div class="phone-settings-section-head">
+                            <span class="phone-settings-section-title">按钮形状</span>
+                        </div>
+                        <div class="phone-toggle-shape-list" id="phone-toggle-shape-list">
+                            <label class="phone-toggle-shape-item">
+                                <span class="phone-toggle-shape-name">长方形</span>
+                                <input type="radio" name="phone-toggle-shape" value="rounded" ${currentShape === 'rounded' ? 'checked' : ''}>
+                            </label>
+                            <label class="phone-toggle-shape-item">
+                                <span class="phone-toggle-shape-name">圆形（仅显示图标）</span>
+                                <input type="radio" name="phone-toggle-shape" value="circle" ${currentShape === 'circle' ? 'checked' : ''}>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="phone-settings-section">
+                        <div class="phone-settings-section-head">
+                            <span class="phone-settings-section-title">按钮封面</span>
+                        </div>
+                        <div class="phone-settings-action">
+                            <button type="button" class="phone-settings-btn" id="phone-toggle-cover-upload-btn">
+                                ${PHONE_ICONS.upload}
+                                <span>上传封面</span>
+                            </button>
+                            <button type="button" class="phone-settings-btn phone-settings-btn-danger" id="phone-toggle-cover-clear-btn" ${currentCover ? '' : 'disabled'}>清除封面</button>
+                        </div>
+                        <div id="phone-toggle-cover-preview" class="phone-settings-preview">
+                            ${currentCover ? `<img src="${escapeHtmlAttr(currentCover)}" class="phone-bg-thumb" alt="按钮封面预览">` : '<div class="phone-empty-msg">未设置封面</div>'}
+                        </div>
+                        <p class="phone-settings-desc">封面采用 cover 裁剪以保持视觉完整性。</p>
+                    </section>
+
+                    <section class="phone-settings-section">
+                        <div class="phone-settings-action">
+                            <button type="button" class="phone-settings-btn" id="phone-toggle-style-reset-btn">恢复默认</button>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        `;
+
+        container.querySelector('.phone-nav-back')?.addEventListener('click', () => {
+            state.mode = 'home';
+            render();
         });
 
-        const allTemplates = [...specialTemplates, ...genericTemplates];
+        const sizeRange = container.querySelector('#phone-toggle-style-size-range');
+        const sizeInput = container.querySelector('#phone-toggle-style-size-input');
+        const shapeRadios = Array.from(container.querySelectorAll('input[name="phone-toggle-shape"]'));
+        const uploadBtn = container.querySelector('#phone-toggle-cover-upload-btn');
+        const clearBtn = container.querySelector('#phone-toggle-cover-clear-btn');
+        const preview = container.querySelector('#phone-toggle-cover-preview');
+
+        const emitToggleStyleUpdated = () => {
+            window.dispatchEvent(new CustomEvent('yuzi-phone-toggle-style-updated'));
+        };
+
+        const setSizeValue = (raw, withToast = false) => {
+            const next = clampNumber(raw, 32, 72, 44);
+            if (sizeRange) sizeRange.value = String(next);
+            if (sizeInput) sizeInput.value = String(next);
+            savePhoneSetting('phoneToggleStyleSize', next);
+            emitToggleStyleUpdated();
+            if (withToast) showToast(container, `按钮大小已调整为 ${next}px`);
+        };
+
+        sizeRange?.addEventListener('input', () => {
+            setSizeValue(sizeRange.value, false);
+        });
+
+        sizeInput?.addEventListener('input', () => {
+            setSizeValue(sizeInput.value, false);
+        });
+
+        sizeInput?.addEventListener('change', () => {
+            setSizeValue(sizeInput.value, true);
+        });
+
+        shapeRadios.forEach((radio) => {
+            radio.addEventListener('change', () => {
+                const nextShape = radio.checked && radio.value === 'circle' ? 'circle' : 'rounded';
+                savePhoneSetting('phoneToggleStyleShape', nextShape);
+                emitToggleStyleUpdated();
+                showToast(container, nextShape === 'circle' ? '按钮已切换为圆形（文字已隐藏）' : '按钮已切换为长方形');
+            });
+        });
+
+        uploadBtn?.addEventListener('click', () => {
+            pickImageFile((dataUrl) => {
+                const safeDataUrl = String(dataUrl || '').trim();
+                if (!safeDataUrl) {
+                    showToast(container, '封面读取失败：空数据', true);
+                    return;
+                }
+
+                savePhoneSetting('phoneToggleCoverImage', safeDataUrl);
+                emitToggleStyleUpdated();
+                if (preview) {
+                    preview.innerHTML = `<img src="${escapeHtmlAttr(safeDataUrl)}" class="phone-bg-thumb" alt="按钮封面预览">`;
+                }
+                if (clearBtn instanceof HTMLButtonElement) {
+                    clearBtn.disabled = false;
+                }
+                showToast(container, '按钮封面已更新');
+            }, {
+                maxSizeMB: 8,
+                onError: (msg) => showToast(container, msg || '按钮封面上传失败', true),
+            });
+        });
+
+        clearBtn?.addEventListener('click', () => {
+            savePhoneSetting('phoneToggleCoverImage', null);
+            emitToggleStyleUpdated();
+            if (preview) {
+                preview.innerHTML = '<div class="phone-empty-msg">未设置封面</div>';
+            }
+            if (clearBtn instanceof HTMLButtonElement) {
+                clearBtn.disabled = true;
+            }
+            showToast(container, '按钮封面已清除');
+        });
+
+        container.querySelector('#phone-toggle-style-reset-btn')?.addEventListener('click', () => {
+            savePhoneSettingsPatch({
+                phoneToggleStyleSize: 44,
+                phoneToggleStyleShape: 'rounded',
+                phoneToggleCoverImage: null,
+            });
+            emitToggleStyleUpdated();
+            showToast(container, '按钮样式已恢复默认');
+            renderButtonStylePage();
+        });
+    };
+
+    const renderBeautifyTemplatePage = () => {
+        const allSpecialTemplates = getPhoneBeautifyTemplatesByType(PHONE_TEMPLATE_TYPE_SPECIAL, {
+            includeBuiltin: true,
+            includeUser: true,
+            enabledOnly: true,
+        });
+        const allGenericTemplates = getPhoneBeautifyTemplatesByType(PHONE_TEMPLATE_TYPE_GENERIC, {
+            includeBuiltin: true,
+            includeUser: true,
+            enabledOnly: true,
+        });
+
+        const allTemplates = [...allSpecialTemplates, ...allGenericTemplates];
+
+        const activeSpecialMap = getActiveBeautifyTemplateIdsForSpecial({ withFallback: true, persist: true });
+        const activeGenericTemplateId = getActiveBeautifyTemplateIdByType(PHONE_TEMPLATE_TYPE_GENERIC, {
+            withFallback: true,
+            persist: true,
+        });
+
+        const getSpecialRendererLabel = (rendererKey) => {
+            const key = String(rendererKey || '');
+            if (key === 'special_message') return '消息记录';
+            if (key === 'special_moments') return '动态';
+            if (key === 'special_forum') return '论坛';
+            return '专属';
+        };
+
+        const getTemplateDraftStore = () => {
+            try {
+                const host = window;
+                if (!host[TEMPLATE_DRAFT_STORE_KEY] || typeof host[TEMPLATE_DRAFT_STORE_KEY] !== 'object') {
+                    host[TEMPLATE_DRAFT_STORE_KEY] = {};
+                }
+                return host[TEMPLATE_DRAFT_STORE_KEY];
+            } catch {
+                return {};
+            }
+        };
+
+        const emitDraftUpdated = (templateId) => {
+            window.dispatchEvent(new CustomEvent(TEMPLATE_DRAFT_EVENT_UPDATED, {
+                detail: {
+                    templateId,
+                    from: 'phone-settings',
+                },
+            }));
+        };
+
+        const emitDraftCleared = (templateId) => {
+            window.dispatchEvent(new CustomEvent(TEMPLATE_DRAFT_EVENT_CLEARED, {
+                detail: {
+                    templateId,
+                    from: 'phone-settings',
+                },
+            }));
+        };
+
+        const getTemplateById = (templateId) => {
+            const safeId = String(templateId || '').trim();
+            if (!safeId) return null;
+            return allTemplates.find(t => t.id === safeId) || null;
+        };
+
+        const ensureEditorStateByTemplate = (template) => {
+            const safeTemplateId = String(template?.id || '').trim();
+            if (!safeTemplateId) return;
+
+            if (state.beautifyEditorTemplateId !== safeTemplateId) {
+                state.beautifyEditorTemplateId = safeTemplateId;
+            }
+
+            if (state.beautifyEditorLoadedTemplateId === safeTemplateId && state.beautifyEditorText) {
+                return;
+            }
+
+            const exported = exportPhoneBeautifyPack({
+                templateIds: [safeTemplateId],
+                exportMode: PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
+            });
+
+            const payload = exported?.pack?.templates?.[0];
+            state.beautifyEditorText = payload
+                ? JSON.stringify(payload, null, 2)
+                : '{}';
+            state.beautifyEditorLoadedTemplateId = safeTemplateId;
+            state.beautifyEditorError = '';
+            state.beautifyEditorNotice = '';
+        };
+
+        const clearEditorState = () => {
+            state.beautifyEditorTemplateId = '';
+            state.beautifyEditorLoadedTemplateId = '';
+            state.beautifyEditorText = '';
+            state.beautifyEditorError = '';
+            state.beautifyEditorNotice = '';
+        };
+
+        const parseEditorTemplateText = () => {
+            const rawText = String(state.beautifyEditorText || '').trim();
+            if (!rawText) {
+                return {
+                    ok: false,
+                    error: 'JSON 不能为空',
+                    template: null,
+                };
+            }
+
+            let parsed = null;
+            try {
+                parsed = JSON.parse(rawText);
+            } catch (e) {
+                return {
+                    ok: false,
+                    error: `JSON 解析失败：${e?.message || '未知错误'}`,
+                    template: null,
+                };
+            }
+
+            const validated = validatePhoneBeautifyTemplate(parsed);
+            if (!validated.ok || !validated.template) {
+                return {
+                    ok: false,
+                    error: validated.errors?.[0] || '模板结构校验失败',
+                    template: null,
+                };
+            }
+
+            return {
+                ok: true,
+                error: '',
+                template: validated.template,
+                warnings: validated.warnings || [],
+            };
+        };
 
         const summarizeMatcher = (matcher) => {
             const src = matcher && typeof matcher === 'object' ? matcher : {};
@@ -752,7 +1066,14 @@ export function renderSettings(container) {
             return chunks.join(' · ') || '未配置明显匹配特征';
         };
 
-        const renderTemplateListHtml = (templates, emptyText) => {
+        const renderTemplateListHtml = (templates, config = {}) => {
+            const {
+                emptyText = '暂无模板',
+                type = PHONE_TEMPLATE_TYPE_SPECIAL,
+                activeSpecialRendererMap = {},
+                activeGenericId = '',
+            } = config;
+
             if (!templates || templates.length === 0) {
                 return `<div class="phone-empty-msg">${escapeHtml(emptyText)}</div>`;
             }
@@ -766,34 +1087,117 @@ export function renderSettings(container) {
                     ? new Date(updatedAt).toLocaleString('zh-CN', { hour12: false })
                     : '未知时间';
 
+                const rendererKey = String(template?.render?.rendererKey || '');
+                const isSpecial = type === PHONE_TEMPLATE_TYPE_SPECIAL;
+                const groupName = isSpecial
+                    ? `phone-beautify-active-special-${rendererKey || 'unknown'}`
+                    : 'phone-beautify-active-generic';
+
+                const checked = isSpecial
+                    ? String(activeSpecialRendererMap[rendererKey] || '') === template.id
+                    : String(activeGenericId || '') === template.id;
+
+                const targetLabel = isSpecial
+                    ? getSpecialRendererLabel(rendererKey)
+                    : '通用表格';
+
+                const editBtn = isBuiltin
+                    ? ''
+                    : `<button type="button" class="phone-settings-btn phone-beautify-edit-one" data-template-id="${escapeHtmlAttr(template.id)}">高级编辑</button>`;
+
                 return `
-                    <div class="phone-beautify-item" data-template-id="${escapeHtmlAttr(template.id)}">
+                    <div class="phone-beautify-item" data-template-id="${escapeHtmlAttr(template.id)}" data-template-type="${escapeHtmlAttr(type)}" data-template-renderer="${escapeHtmlAttr(rendererKey)}">
                         <div class="phone-beautify-item-main">
                             <div class="phone-beautify-item-title-row">
                                 <span class="phone-beautify-item-title">${escapeHtml(template.name)}</span>
                                 <span class="phone-beautify-item-badge ${badgeClass}">${sourceText}</span>
                             </div>
-                            <div class="phone-beautify-item-meta">ID: ${escapeHtml(template.id)} · 更新时间: ${escapeHtml(dateText)}</div>
+                            <div class="phone-beautify-item-meta">ID: ${escapeHtml(template.id)} · 目标: ${escapeHtml(targetLabel)} · 更新时间: ${escapeHtml(dateText)}</div>
                             <div class="phone-beautify-item-matcher">${summarizeMatcher(template.matcher)}</div>
                         </div>
                         <div class="phone-beautify-item-actions">
-                            <button class="phone-settings-btn phone-beautify-export-one" data-template-id="${escapeHtmlAttr(template.id)}">导出</button>
+                            <label class="phone-beautify-pick-radio" title="勾选即启用该模板">
+                                <input type="radio" class="phone-beautify-active-radio" data-template-id="${escapeHtmlAttr(template.id)}" data-template-type="${escapeHtmlAttr(type)}" name="${escapeHtmlAttr(groupName)}" ${checked ? 'checked' : ''}>
+                                <span>启用</span>
+                            </label>
+                            ${editBtn}
+                            <button type="button" class="phone-settings-btn phone-beautify-export-one" data-template-id="${escapeHtmlAttr(template.id)}">导出</button>
                             ${isBuiltin
                                 ? ''
-                                : `<button class="phone-settings-btn phone-settings-btn-danger phone-beautify-delete-one" data-template-id="${escapeHtmlAttr(template.id)}">删除</button>`}
+                                : `<button type="button" class="phone-settings-btn phone-settings-btn-danger phone-beautify-delete-one" data-template-id="${escapeHtmlAttr(template.id)}">删除</button>`}
                         </div>
                     </div>
                 `;
             }).join('');
         };
 
-        const specialListHtml = renderTemplateListHtml(specialTemplates, '暂无专属小剧场模板');
-        const genericListHtml = renderTemplateListHtml(genericTemplates, '暂无通用表格模板');
+        const specialListHtml = renderTemplateListHtml(allSpecialTemplates, {
+            emptyText: '暂无专属小剧场模板',
+            type: PHONE_TEMPLATE_TYPE_SPECIAL,
+            activeSpecialRendererMap: activeSpecialMap,
+            activeGenericId: activeGenericTemplateId,
+        });
+        const genericListHtml = renderTemplateListHtml(allGenericTemplates, {
+            emptyText: '暂无通用表格模板',
+            type: PHONE_TEMPLATE_TYPE_GENERIC,
+            activeSpecialRendererMap: activeSpecialMap,
+            activeGenericId: activeGenericTemplateId,
+        });
+
+        const activeSpecialSummary = ['special_message', 'special_moments', 'special_forum']
+            .map((key) => {
+                const activeId = String(activeSpecialMap[key] || '');
+                if (!activeId) return `${getSpecialRendererLabel(key)}: 未启用`;
+                const hit = allSpecialTemplates.find(t => t.id === activeId);
+                return `${getSpecialRendererLabel(key)}: ${hit?.name || activeId}`;
+            })
+            .join('；');
+        const activeGenericSummary = (() => {
+            if (!activeGenericTemplateId) return '未启用';
+            const hit = allGenericTemplates.find(t => t.id === activeGenericTemplateId);
+            return hit?.name || activeGenericTemplateId;
+        })();
+
+        const currentEditorTemplate = getTemplateById(state.beautifyEditorTemplateId);
+        if (!currentEditorTemplate) {
+            clearEditorState();
+        } else {
+            ensureEditorStateByTemplate(currentEditorTemplate);
+        }
+
+        const editorVisible = !!state.beautifyEditorTemplateId && !!currentEditorTemplate;
+        const editorErrorHtml = state.beautifyEditorError
+            ? `<div class="phone-beautify-editor-status is-error">${escapeHtml(state.beautifyEditorError)}</div>`
+            : '';
+        const editorNoticeHtml = state.beautifyEditorNotice
+            ? `<div class="phone-beautify-editor-status is-ok">${escapeHtml(state.beautifyEditorNotice)}</div>`
+            : '';
+
+        const editorSectionHtml = editorVisible
+            ? `
+                <section class="phone-settings-section" id="phone-beautify-editor-section">
+                    <div class="phone-settings-section-head">
+                        <span class="phone-settings-section-title">高级 JSON 编辑器</span>
+                    </div>
+                    <p class="phone-settings-desc">当前编辑：${escapeHtml(currentEditorTemplate.name)}（${escapeHtml(currentEditorTemplate.id)}）</p>
+                    <p class="phone-settings-desc">说明：预览仅写入内存草稿，不会自动覆盖正式模板。保存后才写入用户模板仓库。</p>
+                    ${editorErrorHtml}
+                    ${editorNoticeHtml}
+                    <textarea id="phone-beautify-editor-json" class="phone-beautify-editor-textarea" spellcheck="false">${escapeHtml(state.beautifyEditorText || '')}</textarea>
+                    <div class="phone-settings-action phone-settings-action-wrap phone-beautify-editor-actions">
+                        <button type="button" class="phone-settings-btn" id="phone-beautify-editor-preview-btn">应用草稿预览</button>
+                        <button type="button" class="phone-settings-btn" id="phone-beautify-editor-clear-preview-btn">清除草稿</button>
+                        <button type="button" class="phone-settings-btn" id="phone-beautify-editor-save-btn">保存模板</button>
+                        <button type="button" class="phone-settings-btn phone-settings-btn-danger" id="phone-beautify-editor-close-btn">关闭编辑器</button>
+                    </div>
+                </section>
+            `
+            : '';
 
         container.innerHTML = `
             <div class="phone-app-page">
                 <div class="phone-nav-bar">
-                    <button class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
                     <span class="phone-nav-title">美化模板</span>
                 </div>
 
@@ -802,18 +1206,21 @@ export function renderSettings(container) {
                         <div class="phone-settings-section-head">
                             <span class="phone-settings-section-title">模板系统</span>
                         </div>
-                        <p class="phone-settings-desc">格式：${escapeHtml(PHONE_BEAUTIFY_TEMPLATE_FORMAT)} · 协议版本：v${escapeHtml(PHONE_BEAUTIFY_TEMPLATE_SCHEMA_VERSION)}。内置模板可导出供参考，需“另存为用户模板”后再修改。</p>
+                        <p class="phone-settings-desc">格式：${escapeHtml(PHONE_BEAUTIFY_TEMPLATE_FORMAT)} · 协议版本：v${escapeHtml(PHONE_BEAUTIFY_TEMPLATE_SCHEMA_VERSION)}。勾选即启用该模板：专属按“消息/动态/论坛”分别启用，通用按“通用表格”启用。</p>
+                        <p class="phone-settings-desc">高级模式：支持“原始 JSON 编辑 + 全场景实时预览草稿 + 字段旁注释导出（annotated）”。</p>
+                        <p class="phone-settings-desc">当前专属启用：${escapeHtml(activeSpecialSummary)}</p>
+                        <p class="phone-settings-desc">当前通用启用：${escapeHtml(activeGenericSummary)}</p>
                     </section>
 
                     <section class="phone-settings-section">
                         <div class="phone-settings-section-head">
                             <span class="phone-settings-section-title">专属小剧场 App 表美化模板</span>
                         </div>
-                        <p class="phone-settings-desc">用于“消息记录表 / 动态表 / 论坛表”等专属场景。支持导入 JSON 模板包、导出本区模板与默认模板。</p>
+                        <p class="phone-settings-desc">用于“消息记录表 / 动态表 / 论坛表”等专属场景。每个子类型可分别启用一个模板。</p>
                         <div class="phone-settings-action phone-settings-action-wrap phone-beautify-toolbar">
-                            <button class="phone-settings-btn" id="phone-beautify-import-special-btn">导入模板</button>
-                            <button class="phone-settings-btn" id="phone-beautify-export-special-btn">导出本区</button>
-                            <button class="phone-settings-btn" id="phone-beautify-export-special-default-btn">导出默认</button>
+                            <button type="button" class="phone-settings-btn" id="phone-beautify-import-special-btn">导入模板</button>
+                            <button type="button" class="phone-settings-btn" id="phone-beautify-export-special-btn">导出本区</button>
+                            <button type="button" class="phone-settings-btn" id="phone-beautify-export-special-default-btn">导出默认</button>
                         </div>
                         <input type="file" id="phone-beautify-import-special-input" accept="application/json,.json" style="display:none">
                         <div class="phone-beautify-list" id="phone-beautify-list-special">${specialListHtml}</div>
@@ -823,21 +1230,23 @@ export function renderSettings(container) {
                         <div class="phone-settings-section-head">
                             <span class="phone-settings-section-title">通用 App 表格样式美化模板</span>
                         </div>
-                        <p class="phone-settings-desc">用于通用表格展示风格。可单独导入与导出，便于社区共享与迭代。</p>
+                        <p class="phone-settings-desc">用于通用表格展示风格。该分区只会启用一个模板。</p>
                         <div class="phone-settings-action phone-settings-action-wrap phone-beautify-toolbar">
-                            <button class="phone-settings-btn" id="phone-beautify-import-generic-btn">导入模板</button>
-                            <button class="phone-settings-btn" id="phone-beautify-export-generic-btn">导出本区</button>
-                            <button class="phone-settings-btn" id="phone-beautify-export-generic-default-btn">导出默认</button>
+                            <button type="button" class="phone-settings-btn" id="phone-beautify-import-generic-btn">导入模板</button>
+                            <button type="button" class="phone-settings-btn" id="phone-beautify-export-generic-btn">导出本区</button>
+                            <button type="button" class="phone-settings-btn" id="phone-beautify-export-generic-default-btn">导出默认</button>
                         </div>
                         <input type="file" id="phone-beautify-import-generic-input" accept="application/json,.json" style="display:none">
                         <div class="phone-beautify-list" id="phone-beautify-list-generic">${genericListHtml}</div>
                     </section>
 
+                    ${editorSectionHtml}
+
                     <section class="phone-settings-section">
                         <div class="phone-settings-section-head">
                             <span class="phone-settings-section-title">模板统计</span>
                         </div>
-                        <p class="phone-settings-desc">当前共 ${allTemplates.length} 个模板（专属 ${specialTemplates.length} / 通用 ${genericTemplates.length}）。</p>
+                        <p class="phone-settings-desc">当前共 ${allTemplates.length} 个模板（专属 ${allSpecialTemplates.length} / 通用 ${allGenericTemplates.length}）。</p>
                     </section>
                 </div>
             </div>
@@ -846,6 +1255,39 @@ export function renderSettings(container) {
         container.querySelector('.phone-nav-back')?.addEventListener('click', () => {
             state.mode = 'home';
             render();
+        });
+
+        const rerenderBeautifyKeepScroll = () => {
+            const body = container.querySelector('.phone-app-body.phone-settings-scroll');
+            const top = body ? Math.max(0, Number(body.scrollTop) || 0) : 0;
+            renderBeautifyTemplatePage();
+            requestAnimationFrame(() => {
+                const nextBody = container.querySelector('.phone-app-body.phone-settings-scroll');
+                if (!nextBody) return;
+                const maxTop = Math.max(0, (nextBody.scrollHeight || 0) - (nextBody.clientHeight || 0));
+                nextBody.scrollTop = Math.min(top, maxTop);
+            });
+        };
+
+        container.querySelectorAll('.phone-beautify-active-radio').forEach((radio) => {
+            const input = radio;
+            if (!(input instanceof HTMLInputElement)) return;
+
+            input.addEventListener('change', () => {
+                if (!input.checked) return;
+
+                const templateId = String(input.dataset.templateId || '').trim();
+                const templateType = String(input.dataset.templateType || '').trim();
+                const result = setActiveBeautifyTemplateIdByType(templateType, templateId);
+                if (!result.success) {
+                    showToast(container, result.message || '启用模板失败', true);
+                    rerenderBeautifyKeepScroll();
+                    return;
+                }
+
+                showToast(container, result.message || '模板已启用');
+                rerenderBeautifyKeepScroll();
+            });
         });
 
         const triggerExport = (options, filename, successTip) => {
@@ -857,7 +1299,8 @@ export function renderSettings(container) {
 
             try {
                 downloadTextFile(filename, JSON.stringify(result.pack, null, 2), 'application/json');
-                showToast(container, `${successTip}（${result.count}项）`);
+                const modeText = result?.pack?.packMeta?.exportMode || PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED;
+                showToast(container, `${successTip}（${result.count}项 / ${modeText}）`);
             } catch (e) {
                 showToast(container, `导出失败：${e?.message || '未知错误'}`, true);
             }
@@ -895,7 +1338,7 @@ export function renderSettings(container) {
                         ? `（含${imported.warnings.length}条警告）`
                         : '';
                     showToast(container, `${labelText}导入成功：${imported.imported}项${warningText}`);
-                    renderBeautifyTemplatePage();
+                    rerenderBeautifyKeepScroll();
                 };
 
                 reader.onerror = () => {
@@ -911,7 +1354,11 @@ export function renderSettings(container) {
 
         container.querySelector('#phone-beautify-export-special-btn')?.addEventListener('click', () => {
             triggerExport(
-                { templateType: PHONE_TEMPLATE_TYPE_SPECIAL, packName: '专属小剧场模板包' },
+                {
+                    templateType: PHONE_TEMPLATE_TYPE_SPECIAL,
+                    packName: '专属小剧场模板包',
+                    exportMode: PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
+                },
                 'yuzi_phone_special_templates.json',
                 '专属模板已导出'
             );
@@ -919,7 +1366,12 @@ export function renderSettings(container) {
 
         container.querySelector('#phone-beautify-export-special-default-btn')?.addEventListener('click', () => {
             triggerExport(
-                { templateType: PHONE_TEMPLATE_TYPE_SPECIAL, builtinOnly: true, packName: '专属默认模板参考包' },
+                {
+                    templateType: PHONE_TEMPLATE_TYPE_SPECIAL,
+                    builtinOnly: true,
+                    packName: '专属默认模板参考包',
+                    exportMode: PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
+                },
                 'yuzi_phone_special_builtin_templates.json',
                 '专属默认模板已导出'
             );
@@ -927,7 +1379,11 @@ export function renderSettings(container) {
 
         container.querySelector('#phone-beautify-export-generic-btn')?.addEventListener('click', () => {
             triggerExport(
-                { templateType: PHONE_TEMPLATE_TYPE_GENERIC, packName: '通用表格模板包' },
+                {
+                    templateType: PHONE_TEMPLATE_TYPE_GENERIC,
+                    packName: '通用表格模板包',
+                    exportMode: PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
+                },
                 'yuzi_phone_generic_templates.json',
                 '通用模板已导出'
             );
@@ -935,7 +1391,12 @@ export function renderSettings(container) {
 
         container.querySelector('#phone-beautify-export-generic-default-btn')?.addEventListener('click', () => {
             triggerExport(
-                { templateType: PHONE_TEMPLATE_TYPE_GENERIC, builtinOnly: true, packName: '通用默认模板参考包' },
+                {
+                    templateType: PHONE_TEMPLATE_TYPE_GENERIC,
+                    builtinOnly: true,
+                    packName: '通用默认模板参考包',
+                    exportMode: PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
+                },
                 'yuzi_phone_generic_builtin_templates.json',
                 '通用默认模板已导出'
             );
@@ -949,6 +1410,7 @@ export function renderSettings(container) {
                 const result = exportPhoneBeautifyPack({
                     templateIds: [templateId],
                     packName: `单模板导出-${templateId}`,
+                    exportMode: PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
                 });
 
                 if (!result.success || result.count <= 0 || !result.pack) {
@@ -959,6 +1421,27 @@ export function renderSettings(container) {
                 const fileName = `yuzi_phone_template_${templateId.replace(/[^a-zA-Z0-9_.-]/g, '_')}.json`;
                 downloadTextFile(fileName, JSON.stringify(result.pack, null, 2), 'application/json');
                 showToast(container, '模板已导出');
+            });
+        });
+
+        container.querySelectorAll('.phone-beautify-edit-one').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const templateId = String(btn.getAttribute('data-template-id') || '').trim();
+                const template = getTemplateById(templateId);
+                if (!template) {
+                    showToast(container, '模板不存在，无法编辑', true);
+                    return;
+                }
+
+                if (template.source === 'builtin') {
+                    showToast(container, '内置模板只读，无法直接编辑', true);
+                    return;
+                }
+
+                ensureEditorStateByTemplate(template);
+                state.beautifyEditorError = '';
+                state.beautifyEditorNotice = '';
+                rerenderBeautifyKeepScroll();
             });
         });
 
@@ -980,9 +1463,126 @@ export function renderSettings(container) {
                     return;
                 }
 
+                if (state.beautifyEditorTemplateId === templateId) {
+                    const draftStore = getTemplateDraftStore();
+                    delete draftStore[templateId];
+                    emitDraftCleared(templateId);
+                    clearEditorState();
+                }
+
                 showToast(container, `模板“${displayName}”已删除`);
-                renderBeautifyTemplatePage();
+                rerenderBeautifyKeepScroll();
             });
+        });
+
+        const editorJsonEl = container.querySelector('#phone-beautify-editor-json');
+        editorJsonEl?.addEventListener('input', () => {
+            state.beautifyEditorText = editorJsonEl.value;
+            state.beautifyEditorError = '';
+            state.beautifyEditorNotice = '';
+        });
+
+        container.querySelector('#phone-beautify-editor-preview-btn')?.addEventListener('click', () => {
+            const templateId = String(state.beautifyEditorTemplateId || '').trim();
+            if (!templateId) {
+                showToast(container, '当前未选择可预览模板', true);
+                return;
+            }
+
+            const parsed = parseEditorTemplateText();
+            if (!parsed.ok) {
+                state.beautifyEditorError = parsed.error || '解析失败';
+                state.beautifyEditorNotice = '';
+                showToast(container, state.beautifyEditorError, true);
+                rerenderBeautifyKeepScroll();
+                return;
+            }
+
+            const draftStore = getTemplateDraftStore();
+            draftStore[templateId] = {
+                render: parsed.template?.render || {},
+            };
+            emitDraftUpdated(templateId);
+
+            const warningText = parsed.warnings?.length ? `（${parsed.warnings[0]}）` : '';
+            state.beautifyEditorError = '';
+            state.beautifyEditorNotice = `草稿预览已应用${warningText}`;
+            showToast(container, '草稿预览已应用');
+            rerenderBeautifyKeepScroll();
+        });
+
+        container.querySelector('#phone-beautify-editor-clear-preview-btn')?.addEventListener('click', () => {
+            const templateId = String(state.beautifyEditorTemplateId || '').trim();
+            if (!templateId) {
+                showToast(container, '当前未选择可清除草稿模板', true);
+                return;
+            }
+
+            const draftStore = getTemplateDraftStore();
+            delete draftStore[templateId];
+            emitDraftCleared(templateId);
+            state.beautifyEditorError = '';
+            state.beautifyEditorNotice = '草稿预览已清除';
+            showToast(container, '草稿预览已清除');
+            rerenderBeautifyKeepScroll();
+        });
+
+        container.querySelector('#phone-beautify-editor-save-btn')?.addEventListener('click', () => {
+            const templateId = String(state.beautifyEditorTemplateId || '').trim();
+            if (!templateId) {
+                showToast(container, '当前未选择可保存模板', true);
+                return;
+            }
+
+            const parsed = parseEditorTemplateText();
+            if (!parsed.ok) {
+                state.beautifyEditorError = parsed.error || '解析失败';
+                state.beautifyEditorNotice = '';
+                showToast(container, state.beautifyEditorError, true);
+                rerenderBeautifyKeepScroll();
+                return;
+            }
+
+            if (String(parsed.template?.id || '').trim() !== templateId) {
+                state.beautifyEditorError = '模板 ID 不可在编辑器中修改，请保持与当前模板一致';
+                state.beautifyEditorNotice = '';
+                showToast(container, state.beautifyEditorError, true);
+                rerenderBeautifyKeepScroll();
+                return;
+            }
+
+            if (String(parsed.template?.source || '').trim() === 'builtin') {
+                state.beautifyEditorError = '内置模板不可直接保存，请先导出后导入为用户模板';
+                state.beautifyEditorNotice = '';
+                showToast(container, state.beautifyEditorError, true);
+                rerenderBeautifyKeepScroll();
+                return;
+            }
+
+            const saved = savePhoneBeautifyUserTemplate(parsed.template, { overwrite: true });
+            if (!saved.success) {
+                const detail = saved.errors?.[0] || saved.message || '保存失败';
+                state.beautifyEditorError = detail;
+                state.beautifyEditorNotice = '';
+                showToast(container, `模板保存失败：${detail}`, true);
+                rerenderBeautifyKeepScroll();
+                return;
+            }
+
+            const draftStore = getTemplateDraftStore();
+            delete draftStore[templateId];
+            emitDraftCleared(templateId);
+
+            state.beautifyEditorError = '';
+            state.beautifyEditorNotice = saved.message || '模板已保存';
+            const warningText = saved.warnings?.length ? `（${saved.warnings[0]}）` : '';
+            showToast(container, `${saved.message || '模板已保存'}${warningText}`);
+            rerenderBeautifyKeepScroll();
+        });
+
+        container.querySelector('#phone-beautify-editor-close-btn')?.addEventListener('click', () => {
+            clearEditorState();
+            rerenderBeautifyKeepScroll();
         });
     };
 
@@ -1039,14 +1639,17 @@ function setupBgUpload(container) {
     const phoneSettings = getPhoneSettings();
     const preview = container.querySelector('#phone-bg-preview');
     if (phoneSettings.backgroundImage) {
-        preview.innerHTML = `<img src="${phoneSettings.backgroundImage}" class="phone-bg-thumb">`;
+        preview.innerHTML = `<img src="${escapeHtmlAttr(phoneSettings.backgroundImage)}" class="phone-bg-thumb">`;
     }
 
     container.querySelector('#phone-upload-bg')?.addEventListener('click', () => {
         pickImageFile(dataUrl => {
             savePhoneSetting('backgroundImage', dataUrl);
-            preview.innerHTML = `<img src="${dataUrl}" class="phone-bg-thumb">`;
+            preview.innerHTML = `<img src="${escapeHtmlAttr(dataUrl)}" class="phone-bg-thumb">`;
             showToast(container, '背景已更新');
+        }, {
+            maxSizeMB: 12,
+            onError: (msg) => showToast(container, msg || '背景图片上传失败', true),
         });
     });
 
@@ -1088,9 +1691,9 @@ function renderIconUploadList(listEl) {
             <div class="phone-icon-upload-row" data-icon-key="${escapeHtmlAttr(item.key)}">
                 <span class="phone-icon-name">${escapeHtml(item.name)}</span>
                 <div class="phone-icon-actions">
-                    ${hasCustom ? `<img src="${hasCustom}" class="phone-icon-thumb">` : '<span class="phone-icon-default">默认</span>'}
-                    <button class="phone-settings-btn phone-icon-upload-btn">${PHONE_ICONS.upload}</button>
-                    ${hasCustom ? `<button class="phone-settings-btn phone-settings-btn-danger phone-icon-clear-btn">清除</button>` : ''}
+                    ${hasCustom ? `<img src="${escapeHtmlAttr(hasCustom)}" class="phone-icon-thumb">` : '<span class="phone-icon-default">默认</span>'}
+                    <button type="button" class="phone-settings-btn phone-icon-upload-btn">${PHONE_ICONS.upload}</button>
+                    ${hasCustom ? `<button type="button" class="phone-settings-btn phone-settings-btn-danger phone-icon-clear-btn">清除</button>` : ''}
                 </div>
             </div>
         `;
@@ -1106,6 +1709,9 @@ function renderIconUploadList(listEl) {
                 savePhoneSetting('appIcons', icons);
                 renderIconUploadList(listEl);
                 showToast(listEl, '图标已更新');
+            }, {
+                maxSizeMB: 8,
+                onError: (msg) => showToast(listEl, msg || '图标上传失败', true),
             });
         });
     });
@@ -1194,6 +1800,7 @@ function setupIconLayoutSettings(container) {
         { id: '#phone-app-icon-size', key: 'appIconSize', min: 40, max: 88, fallback: 60 },
         { id: '#phone-app-icon-radius', key: 'appIconRadius', min: 6, max: 26, fallback: 14 },
         { id: '#phone-app-grid-gap', key: 'appGridGap', min: 8, max: 24, fallback: 12 },
+        { id: '#phone-dock-icon-size', key: 'dockIconSize', min: 32, max: 72, fallback: 48 },
     ];
 
     map.forEach(item => {
@@ -1350,20 +1957,48 @@ function clampNumber(value, min, max, fallback) {
 
 // ===== 工具函数 =====
 
-function pickImageFile(callback) {
+function pickImageFile(callback, options = {}) {
+    const maxSizeMB = Number.isFinite(Number(options.maxSizeMB)) ? Number(options.maxSizeMB) : 8;
+    const onError = typeof options.onError === 'function' ? options.onError : null;
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
     input.style.display = 'none';
     document.body.appendChild(input);
 
+    const cleanup = () => {
+        try { input.remove(); } catch {}
+    };
+
     input.addEventListener('change', () => {
         const file = input.files?.[0];
-        if (!file) return;
+        if (!file) {
+            cleanup();
+            return;
+        }
+
+        if (!String(file.type || '').startsWith('image/')) {
+            onError?.('请选择图片文件');
+            cleanup();
+            return;
+        }
+
+        const maxBytes = Math.max(1, maxSizeMB) * 1024 * 1024;
+        if (Number(file.size) > maxBytes) {
+            onError?.(`图片过大（>${maxSizeMB}MB），请压缩后重试`);
+            cleanup();
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = () => {
             callback(reader.result);
-            input.remove();
+            cleanup();
+        };
+        reader.onerror = () => {
+            onError?.('图片读取失败');
+            cleanup();
         };
         reader.readAsDataURL(file);
     });

@@ -74,19 +74,57 @@
 }
 
 .yuzi-phone-root .yuzi-phone-toggle {
+    --yuzi-phone-toggle-size: 44px;
+    --yuzi-phone-toggle-cover-image: none;
+
     position: fixed;
     z-index: 10000;
-    background: linear-gradient(135deg, #5AC8FA 0%, #007AFF 100%);
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 12px;
+    min-height: var(--yuzi-phone-toggle-size);
+    min-width: max(var(--yuzi-phone-toggle-size), 110px);
     padding: 8px 14px;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     color: #fff;
     cursor: pointer;
-    box-shadow: 0 8px 20px rgba(0, 122, 255, 0.28);
     user-select: none;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    background-image: var(--yuzi-phone-toggle-cover-image), linear-gradient(135deg, #5AC8FA 0%, #007AFF 100%);
+    background-size: cover, auto;
+    background-position: center, center;
+    background-repeat: no-repeat, no-repeat;
+    box-shadow: 0 8px 20px rgba(0, 122, 255, 0.28);
+    overflow: hidden;
+    transition: border-radius 0.18s ease, box-shadow 0.18s ease, transform 0.16s ease;
+}
+
+.yuzi-phone-root .yuzi-phone-toggle::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 18, 36, 0.14);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-has-cover::before {
+    opacity: 1;
+}
+
+.yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-shape-rounded {
+    border-radius: 12px;
+}
+
+.yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-shape-circle {
+    width: var(--yuzi-phone-toggle-size);
+    min-width: var(--yuzi-phone-toggle-size);
+    height: var(--yuzi-phone-toggle-size);
+    min-height: var(--yuzi-phone-toggle-size);
+    padding: 0;
+    border-radius: 999px;
 }
 
 .yuzi-phone-root .yuzi-phone-toggle.dragging {
@@ -98,9 +136,12 @@
 }
 
 .yuzi-phone-root .yuzi-phone-toggle-icon {
+    position: relative;
+    z-index: 1;
     width: 18px;
     height: 18px;
     display: inline-flex;
+    flex-shrink: 0;
 }
 
 .yuzi-phone-root .yuzi-phone-toggle-icon svg {
@@ -109,9 +150,21 @@
 }
 
 .yuzi-phone-root .yuzi-phone-toggle-text {
+    position: relative;
+    z-index: 1;
     font-size: 14px;
     font-weight: 600;
     color: #fff;
+    white-space: nowrap;
+}
+
+.yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-shape-circle .yuzi-phone-toggle-text {
+    display: none;
+}
+
+.yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-cover-only .yuzi-phone-toggle-icon,
+.yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-cover-only .yuzi-phone-toggle-text {
+    display: none;
 }
 
 .yuzi-phone-root .yuzi-phone-toggle-mobile {

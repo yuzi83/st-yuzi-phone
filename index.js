@@ -22,6 +22,44 @@ const DOM_IDS = {
     toggle: 'yuzi-phone-toggle',
 };
 
+function clampNumber(value, min, max, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function escapeCssUrl(url) {
+    return String(url || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n|\r/g, '');
+}
+
+function applyPhoneToggleVisualStyle(btn, settings = getPhoneSettings()) {
+    if (!(btn instanceof HTMLElement)) return;
+
+    const size = clampNumber(settings?.phoneToggleStyleSize, 32, 72, 44);
+    const shapeRaw = String(settings?.phoneToggleStyleShape || 'rounded').trim();
+    const shape = shapeRaw === 'circle' ? 'circle' : 'rounded';
+    const coverRaw = typeof settings?.phoneToggleCoverImage === 'string'
+        ? settings.phoneToggleCoverImage.trim()
+        : '';
+
+    btn.style.setProperty('--yuzi-phone-toggle-size', `${size}px`);
+    btn.style.setProperty('--yuzi-phone-toggle-cover-image', coverRaw ? `url("${escapeCssUrl(coverRaw)}")` : 'none');
+
+    btn.classList.toggle('yuzi-phone-toggle-shape-circle', shape === 'circle');
+    btn.classList.toggle('yuzi-phone-toggle-shape-rounded', shape !== 'circle');
+    btn.classList.toggle('yuzi-phone-toggle-has-cover', !!coverRaw);
+    btn.classList.toggle('yuzi-phone-toggle-cover-only', !!coverRaw);
+}
+
+function syncPhoneToggleVisualStyle() {
+    const btn = document.getElementById(DOM_IDS.toggle);
+    if (!btn) return;
+    applyPhoneToggleVisualStyle(btn, getPhoneSettings());
+}
+
 function createPhoneRoot() {
     let root = document.getElementById(DOM_IDS.root);
     if (root) return root;
@@ -74,7 +112,10 @@ function createPhoneContainer() {
 
 function createPhoneToggleButton() {
     let btn = document.getElementById(DOM_IDS.toggle);
-    if (btn) return btn;
+    if (btn) {
+        applyPhoneToggleVisualStyle(btn, getPhoneSettings());
+        return btn;
+    }
 
     const root = createPhoneRoot();
     const settings = getPhoneSettings();
@@ -83,12 +124,14 @@ function createPhoneToggleButton() {
 
     btn = document.createElement('div');
     btn.id = DOM_IDS.toggle;
-    btn.className = `yuzi-phone-toggle ${isMobile ? 'yuzi-phone-toggle-mobile' : ''}`;
+    btn.className = `yuzi-phone-toggle yuzi-phone-toggle-shape-rounded ${isMobile ? 'yuzi-phone-toggle-mobile' : ''}`;
     btn.innerHTML = `<span class="yuzi-phone-toggle-icon">${PHONE_ICONS.phone}</span><span class="yuzi-phone-toggle-text">玉子手机</span>`;
     btn.title = '拖拽移动 / 点击打开';
 
     btn.style.left = (settings.phoneToggleX ?? defaultPos.x) + 'px';
     btn.style.top = (settings.phoneToggleY ?? defaultPos.y) + 'px';
+
+    applyPhoneToggleVisualStyle(btn, settings);
 
     root.appendChild(btn);
     initPhoneToggleDraggable(btn);
@@ -199,6 +242,10 @@ function setPhoneEnabledWithUI(enabled) {
 }
 
 (function init() {
+    window.addEventListener('yuzi-phone-toggle-style-updated', () => {
+        syncPhoneToggleVisualStyle();
+    });
+
     const onReady = () => {
         try {
             migrateLegacyPhoneSettings();

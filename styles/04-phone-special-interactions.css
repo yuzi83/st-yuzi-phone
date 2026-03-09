@@ -267,8 +267,18 @@
     line-height: var(--sp-line-height-normal);
 }
 
+.phone-special-app.phone-special-template-scope .phone-special-comment-author-row {
+    margin-bottom: 2px;
+}
+
 .phone-special-app.phone-special-template-scope .phone-special-comment-author {
+    display: inline-block;
     font-weight: var(--sp-font-weight-medium);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-comment-text {
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .phone-special-app.phone-special-template-scope .phone-special-reply-actions {

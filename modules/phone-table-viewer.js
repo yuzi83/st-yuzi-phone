@@ -20,6 +20,343 @@ import { PHONE_ICONS } from './phone-home.js';
 import { detectSpecialTemplateForTable, detectGenericTemplateForTable } from './phone-beautify-templates.js';
 
 const SPECIAL_SCOPE_CLASS = 'phone-special-template-scope';
+const TEMPLATE_DRAFT_STORE_KEY = '__YUZI_PHONE_TEMPLATE_DRAFT_PATCHES';
+
+const VIEWER_ANNOTATION_META_KEYS = new Set([
+    '_comment',
+    '_type',
+    '_enum',
+    '_range',
+    '_example',
+    '_risk',
+    '_default',
+]);
+
+function isAnnotatedValueWrapperForViewer(raw) {
+    return !!raw
+        && typeof raw === 'object'
+        && !Array.isArray(raw)
+        && Object.prototype.hasOwnProperty.call(raw, 'value');
+}
+
+function unwrapAnnotatedValueForViewer(raw) {
+    return isAnnotatedValueWrapperForViewer(raw) ? raw.value : raw;
+}
+
+function stripAnnotationStructureForViewer(raw) {
+    const value = unwrapAnnotatedValueForViewer(raw);
+
+    if (Array.isArray(value)) {
+        return value.map(item => stripAnnotationStructureForViewer(item));
+    }
+
+    if (!value || typeof value !== 'object') {
+        return value;
+    }
+
+    const result = {};
+    Object.entries(value).forEach(([key, item]) => {
+        const safeKey = String(key || '');
+        if (safeKey.startsWith('_') && VIEWER_ANNOTATION_META_KEYS.has(safeKey)) return;
+        result[key] = stripAnnotationStructureForViewer(item);
+    });
+
+    return result;
+}
+
+function isPlainObjectForViewer(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function deepMergeForViewer(base, patch) {
+    const left = stripAnnotationStructureForViewer(base);
+    const right = stripAnnotationStructureForViewer(patch);
+
+    if (!isPlainObjectForViewer(left)) {
+        return right;
+    }
+
+    if (!isPlainObjectForViewer(right)) {
+        return left;
+    }
+
+    const result = { ...left };
+    Object.entries(right).forEach(([key, value]) => {
+        if (isPlainObjectForViewer(value) && isPlainObjectForViewer(result[key])) {
+            result[key] = deepMergeForViewer(result[key], value);
+        } else {
+            result[key] = stripAnnotationStructureForViewer(value);
+        }
+    });
+
+    return result;
+}
+
+function getTemplateDraftStoreForViewer() {
+    try {
+        const host = window;
+        if (!host[TEMPLATE_DRAFT_STORE_KEY] || typeof host[TEMPLATE_DRAFT_STORE_KEY] !== 'object') {
+            host[TEMPLATE_DRAFT_STORE_KEY] = {};
+        }
+        return host[TEMPLATE_DRAFT_STORE_KEY];
+    } catch {
+        return {};
+    }
+}
+
+function resolveTemplateWithDraftForViewer(template) {
+    const src = stripAnnotationStructureForViewer(template);
+    if (!src || typeof src !== 'object') return src;
+
+    const templateId = String(src.id || '').trim();
+    if (!templateId) return src;
+
+    const draftStore = getTemplateDraftStoreForViewer();
+    const patch = draftStore?.[templateId];
+    if (!patch || typeof patch !== 'object') {
+        return src;
+    }
+
+    const patchSource = stripAnnotationStructureForViewer(patch);
+    const renderPatch = patchSource?.render && typeof patchSource.render === 'object'
+        ? patchSource.render
+        : patchSource;
+
+    const next = JSON.parse(JSON.stringify(src));
+    const mergedRender = deepMergeForViewer(next.render || {}, renderPatch || {});
+    next.render = mergedRender;
+
+    const advanced = stripAnnotationStructureForViewer(next.render?.advanced || {});
+    const hasLegacyCss = typeof next.render?.customCss === 'string' && next.render.customCss.trim();
+    const enabled = typeof advanced?.customCssEnabled === 'boolean'
+        ? advanced.customCssEnabled
+        : !!hasLegacyCss;
+
+    const candidateCss = String(unwrapAnnotatedValueForViewer(advanced?.customCss ?? next.render?.customCss) || '').trim();
+    next.render.advanced = {
+        customCssEnabled: enabled,
+        customCss: candidateCss,
+    };
+    next.render.customCss = enabled ? candidateCss : '';
+
+    return next;
+}
+
+function buildScopedCustomCss(customCssText, scopeSelector) {
+    const css = String(customCssText || '').trim();
+    const scope = String(scopeSelector || '').trim();
+    if (!css || !scope) return '';
+
+    const skipWhitespace = (text, start) => {
+        let i = start;
+        while (i < text.length && /\s/.test(text[i])) i += 1;
+        return i;
+    };
+
+    const findMatchingBrace = (text, openBraceIndex) => {
+        if (openBraceIndex < 0 || openBraceIndex >= text.length || text[openBraceIndex] !== '{') return -1;
+
+        let depth = 0;
+        let inString = '';
+        let inComment = false;
+
+        for (let i = openBraceIndex; i < text.length; i += 1) {
+            const ch = text[i];
+            const next = text[i + 1];
+
+            if (inComment) {
+                if (ch === '*' && next === '/') {
+                    inComment = false;
+                    i += 1;
+                }
+                continue;
+            }
+
+            if (inString) {
+                if (ch === '\\') {
+                    i += 1;
+                    continue;
+                }
+                if (ch === inString) {
+                    inString = '';
+                }
+                continue;
+            }
+
+            if (ch === '/' && next === '*') {
+                inComment = true;
+                i += 1;
+                continue;
+            }
+
+            if (ch === '"' || ch === '\'') {
+                inString = ch;
+                continue;
+            }
+
+            if (ch === '{') {
+                depth += 1;
+                continue;
+            }
+
+            if (ch === '}') {
+                depth -= 1;
+                if (depth === 0) {
+                    return i;
+                }
+            }
+        }
+
+        return -1;
+    };
+
+    const splitSelectorList = (selectorText) => {
+        const selectors = [];
+        let current = '';
+        let depthParen = 0;
+        let depthBracket = 0;
+        let inString = '';
+
+        for (let i = 0; i < selectorText.length; i += 1) {
+            const ch = selectorText[i];
+
+            if (inString) {
+                current += ch;
+                if (ch === '\\') {
+                    const next = selectorText[i + 1];
+                    if (next) {
+                        current += next;
+                        i += 1;
+                    }
+                    continue;
+                }
+                if (ch === inString) {
+                    inString = '';
+                }
+                continue;
+            }
+
+            if (ch === '"' || ch === '\'') {
+                inString = ch;
+                current += ch;
+                continue;
+            }
+
+            if (ch === '(') depthParen += 1;
+            if (ch === ')') depthParen = Math.max(0, depthParen - 1);
+            if (ch === '[') depthBracket += 1;
+            if (ch === ']') depthBracket = Math.max(0, depthBracket - 1);
+
+            if (ch === ',' && depthParen === 0 && depthBracket === 0) {
+                const part = current.trim();
+                if (part) selectors.push(part);
+                current = '';
+                continue;
+            }
+
+            current += ch;
+        }
+
+        const tail = current.trim();
+        if (tail) selectors.push(tail);
+        return selectors;
+    };
+
+    const scopeSelectorList = (selectorText) => {
+        const list = splitSelectorList(selectorText);
+        if (list.length <= 0) return '';
+
+        const scopedList = list.map((sel) => {
+            if (sel.startsWith(scope)) return sel;
+            if (sel.startsWith(':root')) {
+                return sel.replace(/^:root\b/, scope);
+            }
+            return `${scope} ${sel}`;
+        });
+
+        return scopedList.join(', ');
+    };
+
+    const transformRules = (source) => {
+        let result = '';
+        let cursor = 0;
+
+        while (cursor < source.length) {
+            const ruleStart = skipWhitespace(source, cursor);
+            if (ruleStart >= source.length) break;
+
+            const braceIndex = source.indexOf('{', ruleStart);
+            if (braceIndex < 0) {
+                result += source.slice(ruleStart).trim();
+                break;
+            }
+
+            const prelude = source.slice(ruleStart, braceIndex).trim();
+            const closeIndex = findMatchingBrace(source, braceIndex);
+            if (closeIndex < 0) {
+                break;
+            }
+
+            const blockBody = source.slice(braceIndex + 1, closeIndex);
+
+            if (!prelude) {
+                cursor = closeIndex + 1;
+                continue;
+            }
+
+            if (prelude.startsWith('@')) {
+                const atRule = prelude.toLowerCase();
+                if (atRule.startsWith('@media') || atRule.startsWith('@supports') || atRule.startsWith('@document') || atRule.startsWith('@layer')) {
+                    const nested = transformRules(blockBody);
+                    result += `${prelude} { ${nested} }\n`;
+                } else {
+                    result += `${prelude} { ${blockBody} }\n`;
+                }
+                cursor = closeIndex + 1;
+                continue;
+            }
+
+            const scopedPrelude = scopeSelectorList(prelude);
+            if (scopedPrelude) {
+                result += `${scopedPrelude} { ${blockBody} }\n`;
+            }
+
+            cursor = closeIndex + 1;
+        }
+
+        return result.trim();
+    };
+
+    return transformRules(css);
+}
+
+function bindTemplateDraftPreviewForViewer(container, sheetKey) {
+    if (!(container instanceof HTMLElement)) return;
+
+    const prev = container.__yuziDraftPreviewListeners;
+    if (prev?.onDraftUpdate) {
+        window.removeEventListener('yuzi-phone-style-draft-updated', prev.onDraftUpdate);
+    }
+    if (prev?.onDraftClear) {
+        window.removeEventListener('yuzi-phone-style-draft-cleared', prev.onDraftClear);
+    }
+
+    const rerender = () => {
+        if (!container.isConnected) return;
+        renderTableViewer(container, sheetKey);
+    };
+
+    const onDraftUpdate = () => rerender();
+    const onDraftClear = () => rerender();
+
+    window.addEventListener('yuzi-phone-style-draft-updated', onDraftUpdate);
+    window.addEventListener('yuzi-phone-style-draft-cleared', onDraftClear);
+
+    container.__yuziDraftPreviewListeners = {
+        onDraftUpdate,
+        onDraftClear,
+    };
+}
 
 const SPECIAL_TABLE_TYPES = {
     '消息记录表': 'message',
@@ -180,6 +517,8 @@ const SPECIAL_STYLE_OPTION_TEXT_LIMITS = Object.freeze({
 });
 
 export function renderTableViewer(container, sheetKey) {
+    bindTemplateDraftPreviewForViewer(container, sheetKey);
+
     const rawData = getTableData();
     const sheet = rawData?.[sheetKey];
 
@@ -240,6 +579,7 @@ export function renderTableViewer(container, sheetKey) {
         lockManageMode: false,
         deleteManageMode: false,
         deletingRowIndex: -1,
+        listScrollTop: 0,
     };
 
     const getRuntimeApi = () => {
@@ -388,8 +728,35 @@ export function renderTableViewer(container, sheetKey) {
         renderListPage();
     };
 
+    const renderKeepScroll = () => {
+        const body = container.querySelector('.phone-app-body');
+        const prevTop = body ? Math.max(0, Number(body.scrollTop) || 0) : 0;
+
+        render();
+        requestAnimationFrame(() => {
+            const nextBody = container.querySelector('.phone-app-body');
+            if (!nextBody) return;
+            const maxTop = Math.max(0, (nextBody.scrollHeight || 0) - (nextBody.clientHeight || 0));
+            nextBody.scrollTop = Math.min(prevTop, maxTop);
+        });
+    };
+
+    const captureListScroll = () => {
+        const body = container.querySelector('.phone-app-body');
+        if (!body || state.mode !== 'list') return;
+        state.listScrollTop = Math.max(0, Number(body.scrollTop) || 0);
+    };
+
+    const restoreListScroll = () => {
+        if (state.mode !== 'list') return;
+        const body = container.querySelector('.phone-app-body');
+        if (!body) return;
+        const maxTop = Math.max(0, (body.scrollHeight || 0) - (body.clientHeight || 0));
+        body.scrollTop = Math.min(Math.max(0, Number(state.listScrollTop) || 0), maxTop);
+    };
+
     const getGenericTemplateStylePayload = (viewMode = 'list') => {
-        const template = genericMatch?.template;
+        const template = resolveTemplateWithDraftForViewer(genericMatch?.template);
 
         const defaultLayoutOptions = {
             pageMode: 'framed',
@@ -532,36 +899,9 @@ export function renderTableViewer(container, sheetKey) {
             .join(' ');
 
         const customCss = String(template.render?.customCss || '').trim();
-        let scopedCss = '';
-        if (customCss) {
-            const scopeSelector = `.phone-generic-template-${safeTemplateIdForClass}`;
-            const blocks = customCss
-                .split('}')
-                .map(part => part.trim())
-                .filter(Boolean)
-                .map(part => `${part}}`);
-
-            const scopedBlocks = blocks.map((block) => {
-                const idx = block.indexOf('{');
-                if (idx < 0) return '';
-
-                const selectorPart = block.slice(0, idx).trim();
-                const declPart = block.slice(idx);
-                if (!selectorPart || !declPart) return '';
-
-                const selectors = selectorPart
-                    .split(',')
-                    .map(s => s.trim())
-                    .filter(Boolean)
-                    .map(s => `${scopeSelector} ${s}`)
-                    .join(', ');
-
-                if (!selectors) return '';
-                return `${selectors} ${declPart}`;
-            }).filter(Boolean);
-
-            scopedCss = scopedBlocks.join('\n');
-        }
+        const scopedCss = customCss
+            ? buildScopedCustomCss(customCss, `.phone-generic-template-${safeTemplateIdForClass}`)
+            : '';
 
         return {
             className,
@@ -586,12 +926,12 @@ export function renderTableViewer(container, sheetKey) {
             <div class="phone-app-page phone-generic-root ${genericStylePayload.className}" data-generic-template-id="${escapeHtmlAttr(genericStylePayload.templateId)}" ${genericStylePayload.dataAttrs} style="${genericStylePayload.styleAttr}">
                 ${genericStylePayload.scopedCss ? `<style class="phone-generic-template-inline-style">${genericStylePayload.scopedCss}</style>` : ''}
                 <div class="phone-nav-bar phone-generic-slot-nav">
-                    <button class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
                     <span class="phone-nav-title">${escapeHtml(tableName)}</span>
                     ${rowCount > 0
                         ? `<div class="phone-table-manage-actions phone-generic-slot-actions">
-                            <button class="phone-settings-btn phone-table-lock-manage-btn ${state.lockManageMode ? 'active' : ''}" id="phone-table-lock-manage-btn">${state.lockManageMode ? '完成' : '锁定'}</button>
-                            <button class="phone-settings-btn phone-table-delete-manage-btn ${state.deleteManageMode ? 'active' : ''}" id="phone-table-delete-manage-btn">${state.deleteManageMode ? '完成' : '删除'}</button>
+                            <button type="button" class="phone-settings-btn phone-table-lock-manage-btn ${state.lockManageMode ? 'active' : ''}" id="phone-table-lock-manage-btn">${state.lockManageMode ? '完成' : '锁定'}</button>
+                            <button type="button" class="phone-settings-btn phone-table-delete-manage-btn ${state.deleteManageMode ? 'active' : ''}" id="phone-table-delete-manage-btn">${state.deleteManageMode ? '完成' : '删除'}</button>
                         </div>`
                         : ''}
                 </div>
@@ -608,7 +948,7 @@ export function renderTableViewer(container, sheetKey) {
                                 const deleteDisabled = rowLocked || deletingAny;
 
                                 return `
-                                    <button class="phone-nav-list-item phone-generic-slot-list-item ${rowLocked ? 'is-row-locked' : ''}" data-row-index="${rowIndex}">
+                                    <button type="button" class="phone-nav-list-item phone-generic-slot-list-item ${rowLocked ? 'is-row-locked' : ''}" data-row-index="${rowIndex}">
                                         <span class="phone-nav-list-main phone-generic-slot-list-main">${escapeHtml(entryTitle)}</span>
                                         <span class="phone-nav-list-side phone-generic-slot-list-side">
                                             <span class="phone-nav-list-meta phone-generic-slot-list-meta">${nonEmptyCount} 项</span>
@@ -637,7 +977,7 @@ export function renderTableViewer(container, sheetKey) {
             if (state.lockManageMode) {
                 state.deleteManageMode = false;
             }
-            render();
+            renderKeepScroll();
         });
 
         container.querySelector('#phone-table-delete-manage-btn')?.addEventListener('click', () => {
@@ -645,7 +985,7 @@ export function renderTableViewer(container, sheetKey) {
             if (state.deleteManageMode) {
                 state.lockManageMode = false;
             }
-            render();
+            renderKeepScroll();
         });
 
         const bindToggleRowLock = (el) => {
@@ -663,7 +1003,7 @@ export function renderTableViewer(container, sheetKey) {
                 }
                 state.lockState = getTableLockState(sheetKey);
                 showInlineToast(container, nextLocked ? '条目已锁定' : '条目已解锁');
-                render();
+                renderKeepScroll();
             });
 
             el.addEventListener('keydown', (ev) => {
@@ -690,7 +1030,7 @@ export function renderTableViewer(container, sheetKey) {
                 }
 
                 state.deletingRowIndex = idx;
-                render();
+                renderKeepScroll();
 
                 try {
                     const ok = await deleteRowFromList(idx);
@@ -702,7 +1042,7 @@ export function renderTableViewer(container, sheetKey) {
                 } finally {
                     state.deletingRowIndex = -1;
                     state.lockState = getTableLockState(sheetKey);
-                    render();
+                    renderKeepScroll();
                 }
             });
 
@@ -724,6 +1064,7 @@ export function renderTableViewer(container, sheetKey) {
 
                 if (state.lockManageMode || state.deleteManageMode) return;
 
+                captureListScroll();
                 state.mode = 'detail';
                 state.rowIndex = idx;
                 state.editMode = false;
@@ -793,13 +1134,13 @@ export function renderTableViewer(container, sheetKey) {
             <div class="phone-app-page phone-generic-root ${genericStylePayload.className}" data-generic-template-id="${escapeHtmlAttr(genericStylePayload.templateId)}" ${genericStylePayload.dataAttrs} style="${genericStylePayload.styleAttr}">
                 ${genericStylePayload.scopedCss ? `<style class="phone-generic-template-inline-style">${genericStylePayload.scopedCss}</style>` : ''}
                 <div class="phone-nav-bar phone-generic-slot-nav">
-                    <button class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
                     <span class="phone-nav-title">${escapeHtml(title)}</span>
                 </div>
                 <div class="phone-app-body phone-table-body phone-generic-slot-body">
                     <div class="phone-table-detail-actions phone-generic-slot-actions">
-                        <button class="phone-settings-btn" id="phone-toggle-edit-mode">${state.editMode ? '退出编辑' : '进入编辑'}</button>
-                        <button class="phone-settings-btn" id="phone-save-row" ${state.editMode && !rowLocked ? '' : 'disabled'}>${state.saving ? '保存中...' : '保存'}</button>
+                        <button type="button" class="phone-settings-btn" id="phone-toggle-edit-mode">${state.editMode ? '退出编辑' : '进入编辑'}</button>
+                        <button type="button" class="phone-settings-btn" id="phone-save-row" ${state.editMode && !rowLocked ? '' : 'disabled'}>${state.saving ? '保存中...' : '保存'}</button>
                         <span class="phone-table-detail-lock-hint">字段锁定</span>
                     </div>
                     <div class="phone-row-detail-card phone-generic-slot-detail">
@@ -811,7 +1152,7 @@ export function renderTableViewer(container, sheetKey) {
                                     : `<span class="phone-row-detail-value">${escapeHtml(pair.value || '—')}</span>`
                                 }
                                 <div class="phone-row-detail-tools phone-generic-slot-detail-tools">
-                                    <button class="phone-cell-lock-btn ${pair.cellLocked ? 'locked' : ''}" data-cell-lock="${pair.lockColIndex}" data-cell-raw="${pair.rawColIndex}" ${rowLocked ? 'disabled' : ''}>${pair.cellLocked ? '已锁定' : '锁定'}</button>
+                                    <button type="button" class="phone-cell-lock-btn ${pair.cellLocked ? 'locked' : ''}" data-cell-lock="${pair.lockColIndex}" data-cell-raw="${pair.rawColIndex}" ${rowLocked ? 'disabled' : ''}>${pair.cellLocked ? '已锁定' : '锁定'}</button>
                                 </div>
                             </div>
                         `).join('')}
@@ -828,6 +1169,9 @@ export function renderTableViewer(container, sheetKey) {
             state.editMode = false;
             state.draftValues = {};
             render();
+            requestAnimationFrame(() => {
+                restoreListScroll();
+            });
         });
 
         container.querySelector('#phone-toggle-edit-mode')?.addEventListener('click', () => {
@@ -839,7 +1183,7 @@ export function renderTableViewer(container, sheetKey) {
             if (!state.editMode) {
                 state.draftValues = {};
             }
-            render();
+            renderKeepScroll();
         });
 
         const bindToggleCellLock = (el) => {
@@ -868,7 +1212,7 @@ export function renderTableViewer(container, sheetKey) {
                     delete state.draftValues[rawColIndex];
                 }
                 showInlineToast(container, nextLocked ? '字段已锁定' : '字段已解锁');
-                render();
+                renderKeepScroll();
             });
         };
 
@@ -886,7 +1230,7 @@ export function renderTableViewer(container, sheetKey) {
             if (!state.editMode || state.saving || rowLocked) return;
 
             state.saving = true;
-            render();
+            renderKeepScroll();
 
             try {
                 const latest = getTableData();
@@ -936,7 +1280,7 @@ export function renderTableViewer(container, sheetKey) {
                 showInlineToast(container, `保存异常: ${err?.message || '未知错误'}`);
             } finally {
                 state.saving = false;
-                render();
+                renderKeepScroll();
             }
         });
 
@@ -972,7 +1316,7 @@ function bindWheelBridge(container) {
 }
 
 function createSpecialTemplateStylePayload(templateMatch, specialType, viewMode = 'list') {
-    const template = templateMatch?.template;
+    const template = resolveTemplateWithDraftForViewer(templateMatch?.template);
     const specialTypeSafe = String(specialType || '').trim() || 'message';
 
     const defaultStyleOptions = normalizeSpecialStyleOptionsForViewer({}, specialTypeSafe);
@@ -1044,36 +1388,9 @@ function createSpecialTemplateStylePayload(templateMatch, specialType, viewMode 
         .join(' ');
 
     const customCss = String(template.render?.customCss || '').trim();
-    let scopedCss = '';
-    if (customCss) {
-        const scopeSelector = `.phone-special-template-${safeTemplateIdForClass}`;
-        const blocks = customCss
-            .split('}')
-            .map(part => part.trim())
-            .filter(Boolean)
-            .map(part => `${part}}`);
-
-        const scopedBlocks = blocks.map((block) => {
-            const idx = block.indexOf('{');
-            if (idx < 0) return '';
-
-            const selectorPart = block.slice(0, idx).trim();
-            const declPart = block.slice(idx);
-            if (!selectorPart || !declPart) return '';
-
-            const selectors = selectorPart
-                .split(',')
-                .map(s => s.trim())
-                .filter(Boolean)
-                .map(s => `${scopeSelector} ${s}`)
-                .join(', ');
-
-            if (!selectors) return '';
-            return `${selectors} ${declPart}`;
-        }).filter(Boolean);
-
-        scopedCss = scopedBlocks.join('\n');
-    }
+    const scopedCss = customCss
+        ? buildScopedCustomCss(customCss, `.phone-special-template-${safeTemplateIdForClass}`)
+        : '';
 
     return {
         className,
@@ -1121,16 +1438,29 @@ function renderMessageTable(container, context) {
         renderConversationList();
     };
 
+    const renderKeepScroll = () => {
+        const body = container.querySelector('.phone-app-body');
+        const prevTop = body ? Math.max(0, Number(body.scrollTop) || 0) : 0;
+
+        render();
+        requestAnimationFrame(() => {
+            const nextBody = container.querySelector('.phone-app-body');
+            if (!nextBody) return;
+            const maxTop = Math.max(0, (nextBody.scrollHeight || 0) - (nextBody.clientHeight || 0));
+            nextBody.scrollTop = Math.min(prevTop, maxTop);
+        });
+    };
+
     const closeMediaPreview = () => {
         state.mediaPreview = null;
-        render();
+        renderKeepScroll();
     };
 
     const renderConversationList = () => {
         const stylePayload = createSpecialTemplateStylePayload(templateMatch, type, 'conversation');
         const conversations = buildConversations(rows, readSpecialField, stylePayload.styleOptions);
         const showAvatar = stylePayload.styleOptions.showAvatar !== false;
-        const titleMode = String(stylePayload.styleOptions.conversationTitleMode || 'auto');
+        const titleMode = 'sender';
         const emptyConversationText = String(stylePayload.styleOptions.emptyConversationText || '暂无消息');
         const timeFallbackText = String(stylePayload.styleOptions.timeFallbackText || '刚刚');
 
@@ -1138,7 +1468,7 @@ function renderMessageTable(container, context) {
             <div class="phone-app-page phone-special-app phone-special-message ${stylePayload.className}" ${stylePayload.dataAttrs} style="${stylePayload.styleAttr}">
                 ${stylePayload.scopedCss ? `<style class="phone-special-template-inline-style">${stylePayload.scopedCss}</style>` : ''}
                 <div class="phone-nav-bar">
-                    <button class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
                     <span class="phone-nav-title">${escapeHtml(tableName)}</span>
                 </div>
                 <div class="phone-app-body phone-table-body">
@@ -1148,7 +1478,7 @@ function renderMessageTable(container, context) {
                             ${conversations.map(conv => {
                                 const displayName = resolveConversationDisplayName(conv, titleMode);
                                 return `
-                                    <button class="phone-special-conversation-item" data-conv-id="${escapeHtmlAttr(conv.id)}">
+                                    <button type="button" class="phone-special-conversation-item" data-conv-id="${escapeHtmlAttr(conv.id)}">
                                         ${showAvatar
                                             ? `<span class="phone-special-conversation-avatar" style="background-color:${escapeHtmlAttr(generateColor(displayName))};">${escapeHtml(getAvatarText(displayName))}</span>`
                                             : ''}
@@ -1191,13 +1521,18 @@ function renderMessageTable(container, context) {
         });
         const stylePayload = createSpecialTemplateStylePayload(templateMatch, type, 'detail');
         const emptyDetailText = String(stylePayload.styleOptions.emptyDetailText || '该会话暂无消息');
+        const allConversations = buildConversations(rows, readSpecialField, stylePayload.styleOptions);
+        const currentConversation = allConversations.find((conv) => conv.id === conversationId);
+        const detailTitle = currentConversation
+            ? (currentConversation.latestSender || resolveConversationDisplayName(currentConversation, 'sender') || tableName)
+            : tableName;
 
         container.innerHTML = `
             <div class="phone-app-page phone-special-app phone-special-message ${stylePayload.className}" ${stylePayload.dataAttrs} style="${stylePayload.styleAttr}">
                 ${stylePayload.scopedCss ? `<style class="phone-special-template-inline-style">${stylePayload.scopedCss}</style>` : ''}
                 <div class="phone-nav-bar">
-                    <button class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
-                    <span class="phone-nav-title">${escapeHtml(conversationId || tableName)}</span>
+                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                    <span class="phone-nav-title">${escapeHtml(detailTitle || tableName)}</span>
                 </div>
                 <div class="phone-app-body phone-table-body">
                     <div class="phone-special-message-list">
@@ -1230,7 +1565,7 @@ function renderMessageTable(container, context) {
                 const choiceIndex = Number(optionEl.dataset.choiceIndex);
                 if (!choiceId || Number.isNaN(choiceIndex)) return;
                 setSavedChoice(choiceId, choiceIndex);
-                render();
+                renderKeepScroll();
             });
         });
 
@@ -1239,7 +1574,7 @@ function renderMessageTable(container, context) {
                 const choiceId = String(btn.dataset.choiceId || '');
                 if (!choiceId) return;
                 clearSavedChoice(choiceId);
-                render();
+                renderKeepScroll();
             });
         });
 
@@ -1252,7 +1587,7 @@ function renderMessageTable(container, context) {
                     title,
                     content: desc,
                 };
-                render();
+                renderKeepScroll();
             });
         });
 
@@ -1418,7 +1753,7 @@ function renderFeedTable(container, context) {
 
     const closeMediaPreview = () => {
         state.mediaPreview = null;
-        render();
+        renderKeepScroll();
     };
 
     const render = () => {
@@ -1431,7 +1766,7 @@ function renderFeedTable(container, context) {
             <div class="phone-app-page phone-special-app ${type === 'forum' ? 'phone-special-forum' : 'phone-special-moments'} ${stylePayload.className}" ${stylePayload.dataAttrs} style="${stylePayload.styleAttr}">
                 ${stylePayload.scopedCss ? `<style class="phone-special-template-inline-style">${stylePayload.scopedCss}</style>` : ''}
                 <div class="phone-nav-bar">
-                    <button class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
                     <span class="phone-nav-title">${escapeHtml(tableName)}</span>
                 </div>
                 <div class="phone-app-body phone-table-body">
@@ -1460,7 +1795,7 @@ function renderFeedTable(container, context) {
                 const choiceIndex = Number(optionEl.dataset.choiceIndex);
                 if (!choiceId || Number.isNaN(choiceIndex)) return;
                 setSavedChoice(choiceId, choiceIndex);
-                render();
+                renderKeepScroll();
             });
         });
 
@@ -1469,7 +1804,7 @@ function renderFeedTable(container, context) {
                 const choiceId = String(btn.dataset.choiceId || '');
                 if (!choiceId) return;
                 clearSavedChoice(choiceId);
-                render();
+                renderKeepScroll();
             });
         });
 
@@ -1482,7 +1817,7 @@ function renderFeedTable(container, context) {
                     title,
                     content: desc,
                 };
-                render();
+                renderKeepScroll();
             });
         });
 
@@ -1490,6 +1825,19 @@ function renderFeedTable(container, context) {
         container.querySelector('.phone-special-media-preview-mask')?.addEventListener('click', (e) => {
             if (e.target !== e.currentTarget) return;
             closeMediaPreview();
+        });
+    };
+
+    const renderKeepScroll = () => {
+        const body = container.querySelector('.phone-app-body');
+        const prevTop = body ? Math.max(0, Number(body.scrollTop) || 0) : 0;
+
+        render();
+        requestAnimationFrame(() => {
+            const nextBody = container.querySelector('.phone-app-body');
+            if (!nextBody) return;
+            const maxTop = Math.max(0, (nextBody.scrollHeight || 0) - (nextBody.clientHeight || 0));
+            nextBody.scrollTop = Math.min(prevTop, maxTop);
         });
     };
 
@@ -1628,7 +1976,7 @@ function renderFeedItem({ row, rowIndex, sheetKey, type, readSpecialField, style
             ${statsHtml}
             <div class="phone-special-comments-section">
                 ${comments.length > 0
-                    ? comments.map(c => `<div class="phone-special-comment"><span class="phone-special-comment-author">${escapeHtml(c.author)}:</span> ${escapeHtml(c.text)}</div>`).join('')
+                    ? comments.map(c => `<div class="phone-special-comment"><div class="phone-special-comment-author-row"><span class="phone-special-comment-author">${escapeHtml(c.author)}</span></div><div class="phone-special-comment-text">${escapeHtml(c.text)}</div></div>`).join('')
                     : `<div class="phone-special-comment">${escapeHtml(commentEmptyText)}</div>`
                 }
             </div>
@@ -1657,6 +2005,7 @@ function buildConversations(rows, readSpecialField, styleOptions = {}) {
                 threadSubtitle,
                 lastMessage: content,
                 lastTime: time,
+                latestSender: sender || '',
                 senders: new Set(),
             };
         }
@@ -1679,6 +2028,7 @@ function buildConversations(rows, readSpecialField, styleOptions = {}) {
         if (currentTs >= storedTs) {
             conversations[id].lastMessage = content;
             conversations[id].lastTime = time;
+            conversations[id].latestSender = sender || conversations[id].latestSender || '';
         }
     });
 
@@ -1687,11 +2037,15 @@ function buildConversations(rows, readSpecialField, styleOptions = {}) {
     const sorted = Object.values(conversations)
         .map(conv => {
             const senderList = Array.from(conv.senders || []).filter(Boolean);
-            let titleSender = conv.id;
-            if (senderList.length === 1) {
-                titleSender = senderList[0];
-            } else if (senderList.length > 1) {
-                titleSender = '群聊';
+            let titleSender = conv.latestSender || conv.id;
+            if (!titleSender) {
+                if (senderList.length === 1) {
+                    titleSender = senderList[0];
+                } else if (senderList.length > 1) {
+                    titleSender = '群聊';
+                } else {
+                    titleSender = conv.id;
+                }
             }
 
             return {
@@ -1700,6 +2054,7 @@ function buildConversations(rows, readSpecialField, styleOptions = {}) {
                 threadSubtitle: conv.threadSubtitle,
                 lastMessage: conv.lastMessage,
                 lastTime: conv.lastTime,
+                latestSender: conv.latestSender || '',
                 titleSender,
             };
         })
@@ -1717,14 +2072,14 @@ function resolveConversationDisplayName(conversation, titleMode = 'auto') {
     const mode = String(titleMode || 'auto');
 
     if (mode === 'thread' || mode === 'titleField') {
-        return conv.threadTitle || conv.titleSender || conv.id || '会话';
+        return conv.threadTitle || conv.latestSender || conv.titleSender || conv.id || '会话';
     }
 
     if (mode === 'sender') {
-        return conv.titleSender || conv.threadTitle || conv.id || '会话';
+        return conv.latestSender || conv.titleSender || conv.threadTitle || conv.id || '会话';
     }
 
-    return conv.threadTitle || conv.titleSender || conv.id || '会话';
+    return conv.latestSender || conv.threadTitle || conv.titleSender || conv.id || '会话';
 }
 
 function detectSpecialTableType(tableName) {
@@ -1854,8 +2209,9 @@ function normalizeSpecialStyleOptionsForViewer(rawStyleOptions, type) {
 }
 
 function createSpecialFieldReader({ templateMatch, type, headerMap, sheetKey, tableName }) {
-    const rawFieldBindings = templateMatch?.template?.render?.fieldBindings;
-    const rawStyleOptions = templateMatch?.template?.render?.styleOptions;
+    const resolvedTemplate = resolveTemplateWithDraftForViewer(templateMatch?.template);
+    const rawFieldBindings = resolvedTemplate?.render?.fieldBindings;
+    const rawStyleOptions = resolvedTemplate?.render?.styleOptions;
 
     const fieldBindings = normalizeSpecialFieldBindingsForViewer(rawFieldBindings, type);
     const styleOptions = normalizeSpecialStyleOptionsForViewer(rawStyleOptions, type);
@@ -1936,14 +2292,25 @@ function parseCommentPairs(rawText) {
     const input = String(rawText || '').trim();
     if (!input) return [];
 
-    return input
+    const normalized = input
+        .replace(/([”’"'])\s*([^:：;；,，\n]{1,24})\s*[:：]/g, '$1;$2:')
+        .replace(/；/g, ';');
+
+    return normalized
         .split(';')
         .map(seg => String(seg || '').trim())
         .filter(Boolean)
         .map(seg => {
-            const parts = seg.split(':');
-            const author = String(parts[0] || '匿名').trim() || '匿名';
-            const text = String(parts.slice(1).join(':') || '').trim();
+            const splitIndex = seg.search(/[:：]/);
+            if (splitIndex < 0) {
+                return {
+                    author: '匿名',
+                    text: seg,
+                };
+            }
+
+            const author = String(seg.slice(0, splitIndex) || '匿名').trim() || '匿名';
+            const text = String(seg.slice(splitIndex + 1) || '').trim();
             return { author, text };
         });
 }
@@ -2037,7 +2404,7 @@ function countNonEmptyInRow(row) {
 function getAvatarText(name) {
     const raw = String(name || '').trim();
     if (!raw) return '？';
-    return raw.slice(0, 4);
+    return raw.charAt(0);
 }
 
 function toTimestamp(input) {

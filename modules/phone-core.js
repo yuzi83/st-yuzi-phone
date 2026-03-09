@@ -6,9 +6,9 @@
 
 import { PHONE_ICONS } from './phone-home.js';
 import { initPhoneShellDrag, initPhoneShellResize } from './window.js';
-import { getPhoneSettings, savePhoneSetting } from './settings.js';
+import { getPhoneSettings, savePhoneSetting, savePhoneSettingsPatch } from './settings.js';
 
-export { getPhoneSettings, savePhoneSetting } from './settings.js';
+export { getPhoneSettings, savePhoneSetting, savePhoneSettingsPatch } from './settings.js';
 
 // ===== 数据库桥接层 =====
 // 零侵入：通过 AutoCardUpdaterAPI（数据库脚本暴露的全局 API）访问数据
@@ -620,6 +620,7 @@ const PHONE_SCROLL_EDGE_EPSILON = 1;
 const PHONE_SCROLL_EDITABLE_SELECTOR = 'input, textarea, select, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]';
 const PHONE_SCROLL_DEBUG_GLOBAL_KEY = 'TAMAKO_PHONE_SCROLL_DEBUG';
 const PHONE_SCROLL_DEBUG_CANDIDATE_SELECTOR = '.phone-app-body, .phone-app-grid, .phone-table-body, .phone-nav-list, .phone-row-detail-card, .phone-special-message-list, .phone-special-moments-list, .phone-settings-scroll';
+const PHONE_INTERACTION_GUARD_BOUND_ATTR = 'phoneInteractionGuardBound';
 
 function isPhoneScrollDebugEnabled() {
     return !!window[PHONE_SCROLL_DEBUG_GLOBAL_KEY];
@@ -921,6 +922,88 @@ export function bindPhoneScrollGuards(root) {
     }
 }
 
+function normalizeButtonTypesInScope(scope) {
+    if (!(scope instanceof Element)) return;
+
+    scope.querySelectorAll('button').forEach((btn) => {
+        if (!(btn instanceof HTMLButtonElement)) return;
+
+        const rawType = String(btn.getAttribute('type') || '').trim().toLowerCase();
+        if (!rawType) {
+            btn.setAttribute('type', 'button');
+            return;
+        }
+
+        if (!['button', 'submit', 'reset', 'menu'].includes(rawType)) {
+            btn.setAttribute('type', 'button');
+        }
+    });
+}
+
+function bindPhoneInteractionGuards(rootEl) {
+    if (!(rootEl instanceof HTMLElement)) return;
+
+    if (rootEl.dataset[PHONE_INTERACTION_GUARD_BOUND_ATTR] === '1') {
+        normalizeButtonTypesInScope(rootEl);
+        return;
+    }
+
+    rootEl.dataset[PHONE_INTERACTION_GUARD_BOUND_ATTR] = '1';
+    normalizeButtonTypesInScope(rootEl);
+
+    rootEl.addEventListener('click', (e) => {
+        const target = e.target instanceof Element ? e.target : null;
+        if (!target) return;
+
+        const btn = target.closest('button');
+        if (btn instanceof HTMLButtonElement && rootEl.contains(btn)) {
+            const rawType = String(btn.getAttribute('type') || '').trim().toLowerCase();
+            if (!rawType || !['button', 'submit', 'reset', 'menu'].includes(rawType)) {
+                btn.setAttribute('type', 'button');
+            }
+        }
+
+        const anchor = target.closest('a[href]');
+        if (!(anchor instanceof HTMLAnchorElement) || !rootEl.contains(anchor)) return;
+
+        const href = String(anchor.getAttribute('href') || '').trim();
+        if (!href.startsWith('#')) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+    }, true);
+
+    rootEl.addEventListener('submit', (e) => {
+        if (!(e.target instanceof Element) || !rootEl.contains(e.target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+    }, true);
+}
+
+export function hardenPhoneInteractionDefaults(root) {
+    const scope = root instanceof Element ? root : phoneContainer;
+    if (!scope) return;
+
+    const roots = [];
+    if (scope.matches?.('.phone-page')) {
+        roots.push(scope);
+    }
+
+    scope.querySelectorAll?.('.phone-page').forEach((el) => {
+        roots.push(el);
+    });
+
+    if (roots.length === 0 && scope instanceof HTMLElement) {
+        roots.push(scope);
+    }
+
+    Array.from(new Set(roots)).forEach((el) => {
+        if (el instanceof HTMLElement) {
+            bindPhoneInteractionGuards(el);
+        }
+    });
+}
+
 export function getCurrentRoute() { return currentRoute; }
 
 export function navigateTo(route, opts = {}) {
@@ -1034,6 +1117,7 @@ async function renderRoute(route, opts = {}) {
     setTimeout(() => {
         screen.appendChild(page);
         bindPhoneScrollGuards(page);
+        hardenPhoneInteractionDefaults(page);
 
         if (oldContent instanceof HTMLElement) {
             oldContent.classList.add(exitClass);

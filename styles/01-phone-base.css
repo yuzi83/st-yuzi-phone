@@ -359,12 +359,16 @@
 
 /* --- Dock --- */
 .phone-dock {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: flex-start;
-    align-content: flex-start;
-    gap: min(18px, 4vw);
+    --phone-dock-icon-size-default: clamp(42px, 15vw, 56px);
+    --phone-dock-icon-size-resolved: var(--phone-dock-icon-size, var(--phone-dock-icon-size-default));
+    --phone-dock-icon-radius: clamp(10px, 3.6vw, 14px);
+    --phone-dock-icon-font-size: clamp(18px, calc(var(--phone-dock-icon-size-resolved) * 0.44), 24px);
+
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: start;
+    column-gap: min(18px, 4vw);
+    row-gap: 10px;
     margin: 0 14px 24px;
     padding: 14px min(18px, 4vw);
     background: rgba(255, 255, 255, 0.2);
@@ -378,49 +382,121 @@
     z-index: 1;
     box-sizing: border-box;
 }
+
 .phone-dock-item {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    gap: 4px;
+    gap: 6px;
     cursor: pointer;
-    flex: 1 1 calc(25% - min(18px, 4vw));
     min-width: 0;
-    max-width: none;
+    width: 100%;
 }
+
 .phone-dock-icon {
-    width: clamp(42px, 15vw, 56px);
-    height: clamp(42px, 15vw, 56px);
-    border-radius: clamp(10px, 3.6vw, 14px);
+    width: var(--phone-dock-icon-size-resolved);
+    height: var(--phone-dock-icon-size-resolved);
+    border-radius: var(--phone-dock-icon-radius);
+    overflow: hidden;
 }
+
+.phone-dock-icon .phone-app-icon-img,
+.phone-dock-icon .phone-app-icon-svg,
+.phone-dock-icon .phone-app-icon-svg > svg,
+.phone-dock-icon .phone-dock-text-icon {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--phone-dock-icon-radius);
+}
+
+.phone-dock-icon .phone-app-icon-img {
+    object-fit: cover;
+    display: block;
+}
+
+.phone-dock-icon .phone-app-icon-svg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.phone-dock-icon .phone-app-icon-svg > svg {
+    display: block;
+}
+
+.phone-dock-text-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--phone-dock-text-icon-start, #4DB6AC), var(--phone-dock-text-icon-end, #009688));
+    color: #ffffff;
+    box-sizing: border-box;
+}
+
+.phone-dock-text-icon-glyph-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.phone-dock-text-icon-glyph {
+    font-size: var(--phone-dock-icon-font-size);
+    line-height: 1;
+    font-weight: 700;
+    transform: translateY(-0.5px);
+    font-family: var(--mainFontFamily, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif);
+}
+
 .phone-dock-item .phone-app-label {
     max-width: 100%;
     width: 100%;
     font-size: clamp(10px, 2.8vw, 11px);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 @media screen and (max-width: 430px) {
     .phone-dock {
+        --phone-dock-icon-size-default: clamp(38px, 13vw, 48px);
         gap: clamp(8px, 2.8vw, 12px);
         margin: 0 10px 18px;
         padding: 10px clamp(10px, 3vw, 14px);
         border-radius: 24px;
     }
+}
 
-    .phone-dock-item {
-        flex-basis: calc(25% - clamp(8px, 2.8vw, 12px));
+@media screen and (max-width: 360px) {
+    .phone-dock {
+        --phone-dock-icon-size-default: clamp(34px, 12vw, 42px);
+        --phone-dock-icon-font-size: clamp(16px, calc(var(--phone-dock-icon-size-resolved) * 0.43), 20px);
+        column-gap: clamp(6px, 2.2vw, 10px);
+        row-gap: 8px;
+        margin: 0 8px 16px;
+        padding: 8px clamp(8px, 2.6vw, 10px);
+    }
+
+    .phone-dock-item .phone-app-label {
+        font-size: 10px;
     }
 }
 
 @media screen and (max-width: 320px) {
     .phone-dock {
-        justify-content: center;
+        --phone-dock-icon-size-default: clamp(32px, 11.5vw, 38px);
+        column-gap: 6px;
+        row-gap: 6px;
+        margin: 0 6px 14px;
+        padding: 8px 6px;
+        border-radius: 20px;
     }
 
-    .phone-dock-item {
-        flex: 1 1 calc(50% - clamp(8px, 2.6vw, 12px));
-        max-width: 96px;
+    .phone-dock-item .phone-app-label {
+        font-size: 9.5px;
     }
 }
 
@@ -1371,6 +1447,10 @@
     line-height: 1.45;
 }
 
+.phone-settings-desc-warn {
+    color: rgba(255, 196, 122, 0.95);
+}
+
 .phone-settings-preview {
     margin-top: 2px;
 }
@@ -1650,6 +1730,43 @@
     gap: 8px;
 }
 
+.phone-settings-toggle-size-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 90px;
+    gap: 8px;
+    align-items: center;
+}
+
+.phone-settings-toggle-size-row input[type="range"] {
+    width: 100%;
+}
+
+.phone-toggle-shape-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.phone-toggle-shape-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.phone-toggle-shape-item:last-child {
+    border-bottom: none;
+}
+
+.phone-toggle-shape-name {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.84);
+}
+
 .phone-db-api-status {
     margin-top: 2px;
     border-radius: 8px;
@@ -1706,10 +1823,39 @@
     margin-top: 2px;
 }
 
+.phone-beautify-source-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.phone-beautify-source-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.phone-beautify-source-summary-title {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.phone-beautify-source-summary-value {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.92);
+}
+
 .phone-beautify-list {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding-right: 2px;
 }
 
 .phone-beautify-item {
@@ -1788,6 +1934,71 @@
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.phone-beautify-pick-radio {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.78);
+    user-select: none;
+}
+
+.phone-beautify-pick-radio input {
+    width: 14px;
+    height: 14px;
+    accent-color: #4DB6AC;
+}
+
+.phone-beautify-editor-status {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 11px;
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+.phone-beautify-editor-status.is-error {
+    border-color: rgba(239, 83, 80, 0.38);
+    color: rgba(255, 182, 182, 0.95);
+    background: rgba(239, 83, 80, 0.12);
+}
+
+.phone-beautify-editor-status.is-ok {
+    border-color: rgba(129, 199, 132, 0.35);
+    color: rgba(176, 235, 180, 0.95);
+    background: rgba(129, 199, 132, 0.1);
+}
+
+.phone-beautify-editor-textarea {
+    width: 100%;
+    min-height: 260px;
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(16, 18, 22, 0.55);
+    color: rgba(255, 255, 255, 0.92);
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.phone-beautify-editor-textarea:focus {
+    outline: none;
+    border-color: rgba(77, 182, 172, 0.6);
+    box-shadow: 0 0 0 1px rgba(77, 182, 172, 0.4);
+}
+
+.phone-beautify-editor-actions {
+    margin-top: 10px;
 }
 
 @media screen and (max-width: 520px) {
@@ -1800,6 +2011,14 @@
         max-width: 104px;
     }
 
+    .phone-settings-toggle-size-row {
+        grid-template-columns: 1fr;
+    }
+
+    .phone-beautify-source-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
     .phone-beautify-item {
         flex-direction: column;
         align-items: stretch;
@@ -1807,6 +2026,9 @@
 
     .phone-beautify-item-actions {
         justify-content: flex-end;
+    }
+    .phone-beautify-editor-textarea {
+        min-height: 220px;
     }
 }
 
@@ -2269,6 +2491,18 @@
 .phone-generic-root.phone-generic-template-scope .phone-app-body.phone-table-body {
     background: var(--gtBodyBg, transparent);
     color: var(--gtText, var(--gtCompatText));
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list,
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-detail {
+    flex: 0 0 auto;
+    min-height: 0;
 }
 
 /* --- 表格查看器：块状卡片布局 --- */

@@ -14,11 +14,26 @@ export const PHONE_TEMPLATE_TYPE_SPECIAL = 'special_app_template';
 export const PHONE_TEMPLATE_TYPE_GENERIC = 'generic_table_template';
 
 export const PHONE_BEAUTIFY_TEMPLATE_FORMAT = 'yuzi-phone-style-pack';
-export const PHONE_BEAUTIFY_TEMPLATE_SCHEMA_VERSION = '1.2.0';
+export const PHONE_BEAUTIFY_TEMPLATE_SCHEMA_VERSION = '1.3.0';
 export const PHONE_BEAUTIFY_TEMPLATE_MIN_COMPAT_SCHEMA_VERSION = '1.0.0';
 
 const PHONE_BEAUTIFY_STORE_KEY = 'yuziPhoneBeautifyTemplates';
 const MAX_IMPORTED_TEMPLATES = 80;
+export const PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_RUNTIME = 'runtime';
+export const PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED = 'annotated';
+
+const BEAUTIFY_SOURCE_MODE_SETTING_KEY_SPECIAL = 'beautifyTemplateSourceModeSpecial';
+const BEAUTIFY_SOURCE_MODE_SETTING_KEY_GENERIC = 'beautifyTemplateSourceModeGeneric';
+const BEAUTIFY_SOURCE_MODE_BUILTIN = 'builtin';
+const BEAUTIFY_SOURCE_MODE_USER = 'user';
+const BEAUTIFY_SOURCE_MODE_ALLOWED = new Set([
+    BEAUTIFY_SOURCE_MODE_BUILTIN,
+    BEAUTIFY_SOURCE_MODE_USER,
+]);
+
+const BEAUTIFY_ACTIVE_TEMPLATE_IDS_SETTING_KEY_SPECIAL = 'beautifyActiveTemplateIdsSpecial';
+const BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC = 'beautifyActiveTemplateIdGeneric';
+const SPECIAL_RENDERER_KEYS = new Set(['special_message', 'special_moments', 'special_forum']);
 
 const DEFAULT_SPECIAL_MIN_SCORE = 70;
 const DEFAULT_GENERIC_MIN_SCORE = 55;
@@ -33,6 +48,17 @@ const RENDERER_KEY_TO_SPECIAL_TYPE = Object.freeze({
     special_moments: 'moments',
     special_forum: 'forum',
 });
+
+function inferSpecialRendererKeyByTableName(tableName) {
+    const name = normalizeString(tableName, 80);
+    if (!name) return '';
+
+    if (name.includes('消息') || name.includes('聊天')) return 'special_message';
+    if (name.includes('动态') || name.includes('朋友圈')) return 'special_moments';
+    if (name.includes('论坛') || name.includes('帖子')) return 'special_forum';
+
+    return '';
+}
 
 const ALLOWED_RENDERER_KEYS = new Set([
     ...Object.keys(RENDERER_KEY_TO_SPECIAL_TYPE),
@@ -611,7 +637,7 @@ const BUILTIN_TEMPLATES = Object.freeze([
                 actionBarMode: 'inline',
                 buttonShape: 'rounded',
                 buttonSize: 'md',
-                density: 'comfortable',
+                density: 'normal',
                 shadowLevel: 'soft',
                 radiusLevel: 'lg',
                 showListDivider: false,
@@ -674,8 +700,64 @@ function deepClone(value) {
     return JSON.parse(JSON.stringify(value));
 }
 
+function isAnnotatedValueWrapper(raw) {
+    return !!raw
+        && typeof raw === 'object'
+        && !Array.isArray(raw)
+        && Object.prototype.hasOwnProperty.call(raw, 'value');
+}
+
+function unwrapAnnotatedValue(raw) {
+    if (isAnnotatedValueWrapper(raw)) {
+        return raw.value;
+    }
+    return raw;
+}
+
+const ANNOTATION_META_KEYS = new Set([
+    '_comment',
+    '_type',
+    '_enum',
+    '_range',
+    '_example',
+    '_risk',
+    '_default',
+]);
+
+function stripAnnotationStructure(raw) {
+    const value = unwrapAnnotatedValue(raw);
+
+    if (Array.isArray(value)) {
+        return value.map(item => stripAnnotationStructure(item));
+    }
+
+    if (!value || typeof value !== 'object') {
+        return value;
+    }
+
+    const result = {};
+    Object.entries(value).forEach(([key, item]) => {
+        const safeKey = String(key || '');
+        if (safeKey.startsWith('_') && ANNOTATION_META_KEYS.has(safeKey)) return;
+        result[key] = stripAnnotationStructure(item);
+    });
+
+    return result;
+}
+
+function toAnnotatedValue(rawValue, comment = '') {
+    if (isAnnotatedValueWrapper(rawValue)) {
+        return rawValue;
+    }
+
+    return {
+        value: deepClone(rawValue),
+        _comment: normalizeString(comment, 240),
+    };
+}
+
 function clampNumber(value, min, max, fallback) {
-    const n = Number(value);
+    const n = Number(unwrapAnnotatedValue(value));
     if (!Number.isFinite(n)) return fallback;
     return Math.max(min, Math.min(max, Math.round(n)));
 }
@@ -685,7 +767,7 @@ function nowTs() {
 }
 
 function normalizeString(value, maxLength = 120) {
-    return String(value ?? '').trim().slice(0, maxLength);
+    return String(unwrapAnnotatedValue(value) ?? '').trim().slice(0, maxLength);
 }
 
 function sanitizeId(rawId, fallback = '') {
@@ -696,11 +778,13 @@ function sanitizeId(rawId, fallback = '') {
 }
 
 function uniqueStringArray(raw, maxCount = 32, maxLength = 80) {
-    if (!Array.isArray(raw)) return [];
+    const source = unwrapAnnotatedValue(raw);
+    if (!Array.isArray(source)) return [];
+
     const result = [];
     const seen = new Set();
 
-    raw.forEach((item) => {
+    source.forEach((item) => {
         if (result.length >= maxCount) return;
         const text = normalizeString(item, maxLength);
         if (!text || seen.has(text)) return;
@@ -724,10 +808,13 @@ function defaultRendererKeyByType(templateType) {
 }
 
 function normalizeStyleTokens(raw) {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    const source = unwrapAnnotatedValue(raw);
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
 
     const tokens = {};
-    Object.entries(raw).forEach(([key, value]) => {
+    Object.entries(source).forEach(([key, value]) => {
+        if (String(key || '').startsWith('_')) return;
+
         const safeKey = normalizeString(key, 48).replace(/[^a-zA-Z0-9_-]/g, '');
         if (!safeKey) return;
 
@@ -763,8 +850,9 @@ function normalizeBooleanLike(value, fallback = false) {
 }
 
 function normalizeGenericLayoutOptions(rawLayout) {
-    const src = rawLayout && typeof rawLayout === 'object' && !Array.isArray(rawLayout)
-        ? rawLayout
+    const source = unwrapAnnotatedValue(rawLayout);
+    const src = source && typeof source === 'object' && !Array.isArray(source)
+        ? source
         : {};
 
     return {
@@ -828,9 +916,10 @@ function normalizeSpecialStyleTokens(rawStyleTokens) {
 }
 
 function normalizeFieldBindingCandidates(rawCandidates) {
-    const source = Array.isArray(rawCandidates)
-        ? rawCandidates
-        : (rawCandidates === undefined || rawCandidates === null ? [] : [rawCandidates]);
+    const unwrapped = unwrapAnnotatedValue(rawCandidates);
+    const source = Array.isArray(unwrapped)
+        ? unwrapped
+        : (unwrapped === undefined || unwrapped === null ? [] : [unwrapped]);
 
     const result = [];
     const seen = new Set();
@@ -850,8 +939,9 @@ function normalizeFieldBindingCandidates(rawCandidates) {
 }
 
 function normalizeSpecialFieldBindings(rawFieldBindings, rendererKey) {
-    const src = rawFieldBindings && typeof rawFieldBindings === 'object' && !Array.isArray(rawFieldBindings)
-        ? rawFieldBindings
+    const source = unwrapAnnotatedValue(rawFieldBindings);
+    const src = source && typeof source === 'object' && !Array.isArray(source)
+        ? source
         : {};
 
     const defaults = DEFAULT_SPECIAL_FIELD_BINDINGS_BY_RENDERER[rendererKey]
@@ -879,8 +969,9 @@ function normalizeSpecialStyleOptions(rawStyleOptions, rendererKey) {
         || DEFAULT_SPECIAL_STYLE_OPTIONS_BY_RENDERER.special_message
         || {};
 
-    const src = rawStyleOptions && typeof rawStyleOptions === 'object' && !Array.isArray(rawStyleOptions)
-        ? rawStyleOptions
+    const source = unwrapAnnotatedValue(rawStyleOptions);
+    const src = source && typeof source === 'object' && !Array.isArray(source)
+        ? source
         : {};
 
     const merged = {};
@@ -923,7 +1014,8 @@ function normalizeSpecialStyleOptions(rawStyleOptions, rendererKey) {
 }
 
 function normalizeMatcher(rawMatcher, templateType) {
-    const src = rawMatcher && typeof rawMatcher === 'object' ? rawMatcher : {};
+    const source = unwrapAnnotatedValue(rawMatcher);
+    const src = source && typeof source === 'object' ? source : {};
     const minScoreFallback = templateType === PHONE_TEMPLATE_TYPE_SPECIAL
         ? DEFAULT_SPECIAL_MIN_SCORE
         : DEFAULT_GENERIC_MIN_SCORE;
@@ -938,9 +1030,10 @@ function normalizeMatcher(rawMatcher, templateType) {
 }
 
 function sanitizeCustomCss(rawCss) {
-    if (typeof rawCss !== 'string') return '';
+    const source = unwrapAnnotatedValue(rawCss);
+    if (typeof source !== 'string') return '';
 
-    const text = String(rawCss).trim().slice(0, 12000);
+    const text = String(source).trim().slice(0, 12000);
     if (!text) return '';
 
     const lower = text.toLowerCase();
@@ -960,8 +1053,34 @@ function sanitizeCustomCss(rawCss) {
     return text;
 }
 
+function normalizeRenderAdvanced(rawAdvanced, rawCustomCss) {
+    const source = unwrapAnnotatedValue(rawAdvanced);
+    const src = source && typeof source === 'object' && !Array.isArray(source)
+        ? source
+        : {};
+
+    const legacyCustomCss = sanitizeCustomCss(rawCustomCss);
+    const candidateCss = sanitizeCustomCss(src.customCss);
+    const customCss = candidateCss || legacyCustomCss;
+
+    const hasLegacyCustomCss = !!legacyCustomCss;
+    const customCssEnabled = normalizeBooleanLike(src.customCssEnabled, hasLegacyCustomCss);
+
+    return {
+        customCssEnabled,
+        customCss,
+    };
+}
+
+function normalizeRenderExtraGroup(rawGroup) {
+    const source = unwrapAnnotatedValue(rawGroup);
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
+    return stripAnnotationStructure(source);
+}
+
 function normalizeRender(rawRender, templateType) {
-    const src = rawRender && typeof rawRender === 'object' ? rawRender : {};
+    const source = unwrapAnnotatedValue(rawRender);
+    const src = source && typeof source === 'object' ? source : {};
     const fallbackRenderer = defaultRendererKeyByType(templateType);
 
     const requestedRendererKey = normalizeString(src.rendererKey, 48);
@@ -970,6 +1089,10 @@ function normalizeRender(rawRender, templateType) {
         : fallbackRenderer;
 
     const isGenericRenderer = rendererKey === 'generic_table';
+    const advanced = normalizeRenderAdvanced(src.advanced, src.customCss);
+    const customCss = advanced.customCssEnabled
+        ? sanitizeCustomCss(advanced.customCss)
+        : '';
 
     return {
         rendererKey,
@@ -985,13 +1108,20 @@ function normalizeRender(rawRender, templateType) {
         layoutOptions: isGenericRenderer
             ? normalizeGenericLayoutOptions(src.layoutOptions)
             : {},
-        customCss: sanitizeCustomCss(src.customCss),
+        structureOptions: normalizeRenderExtraGroup(src.structureOptions),
+        typographyOptions: normalizeRenderExtraGroup(src.typographyOptions),
+        motionOptions: normalizeRenderExtraGroup(src.motionOptions),
+        stateOptions: normalizeRenderExtraGroup(src.stateOptions),
+        fieldDecorators: normalizeRenderExtraGroup(src.fieldDecorators),
+        customCss,
+        advanced,
     };
 }
 
 function normalizeTemplateMeta(rawMeta = {}) {
-    const src = rawMeta && typeof rawMeta === 'object' ? rawMeta : {};
-    const updatedAt = Number(src.updatedAt);
+    const source = unwrapAnnotatedValue(rawMeta);
+    const src = source && typeof source === 'object' ? source : {};
+    const updatedAt = Number(unwrapAnnotatedValue(src.updatedAt));
 
     return {
         author: normalizeString(src.author, 60),
@@ -1002,21 +1132,22 @@ function normalizeTemplateMeta(rawMeta = {}) {
 }
 
 function normalizeTemplate(rawTemplate, options = {}) {
-    if (!rawTemplate || typeof rawTemplate !== 'object') return null;
+    const sourceTemplate = unwrapAnnotatedValue(rawTemplate);
+    if (!sourceTemplate || typeof sourceTemplate !== 'object') return null;
 
     const sourceFallback = normalizeString(options.sourceFallback || 'user', 24) || 'user';
-    const templateType = normalizeTemplateType(rawTemplate.templateType, options.templateTypeFallback || PHONE_TEMPLATE_TYPE_GENERIC);
+    const templateType = normalizeTemplateType(sourceTemplate.templateType, options.templateTypeFallback || PHONE_TEMPLATE_TYPE_GENERIC);
 
     const idFallback = options.idFallback || `user.template.${nowTs().toString(36)}`;
     const nameFallback = options.nameFallback || '未命名模板';
 
-    const id = sanitizeId(rawTemplate.id, idFallback);
-    const name = normalizeString(rawTemplate.name, 80) || nameFallback;
+    const id = sanitizeId(sourceTemplate.id, idFallback);
+    const name = normalizeString(sourceTemplate.name, 80) || nameFallback;
 
-    const source = normalizeString(rawTemplate.source, 24) || sourceFallback;
-    const readOnly = !!rawTemplate.readOnly;
-    const exportable = rawTemplate.exportable !== false;
-    const enabled = rawTemplate.enabled !== false;
+    const source = normalizeString(sourceTemplate.source, 24) || sourceFallback;
+    const readOnly = normalizeBooleanLike(sourceTemplate.readOnly, false);
+    const exportable = normalizeBooleanLike(sourceTemplate.exportable, true);
+    const enabled = normalizeBooleanLike(sourceTemplate.enabled, true);
 
     return {
         id,
@@ -1026,9 +1157,9 @@ function normalizeTemplate(rawTemplate, options = {}) {
         readOnly,
         exportable,
         enabled,
-        matcher: normalizeMatcher(rawTemplate.matcher, templateType),
-        render: normalizeRender(rawTemplate.render, templateType),
-        meta: normalizeTemplateMeta(rawTemplate.meta),
+        matcher: normalizeMatcher(sourceTemplate.matcher, templateType),
+        render: normalizeRender(sourceTemplate.render, templateType),
+        meta: normalizeTemplateMeta(sourceTemplate.meta),
     };
 }
 
@@ -1041,13 +1172,14 @@ function getBuiltinTemplateMap() {
 }
 
 function normalizeBindings(rawBindings, validTemplateIdSet) {
-    if (!rawBindings || typeof rawBindings !== 'object' || Array.isArray(rawBindings)) {
+    const source = unwrapAnnotatedValue(rawBindings);
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
         return {};
     }
 
     const bindings = {};
 
-    Object.entries(rawBindings).forEach(([sheetKey, templateId]) => {
+    Object.entries(source).forEach(([sheetKey, templateId]) => {
         const safeSheetKey = normalizeString(sheetKey, 80);
         if (!safeSheetKey) return;
 
@@ -1062,7 +1194,8 @@ function normalizeBindings(rawBindings, validTemplateIdSet) {
 }
 
 function normalizeTemplateStore(rawStore) {
-    const src = rawStore && typeof rawStore === 'object' ? rawStore : {};
+    const source = unwrapAnnotatedValue(rawStore);
+    const src = source && typeof source === 'object' ? source : {};
     const builtinMap = getBuiltinTemplateMap();
 
     const userTemplates = [];
@@ -1093,9 +1226,11 @@ function normalizeTemplateStore(rawStore) {
 
     const validTemplateIdSet = new Set([...builtinMap.keys(), ...userIdSet]);
 
+    const updatedAt = Number(unwrapAnnotatedValue(src.updatedAt));
+
     return {
         schemaVersion: PHONE_BEAUTIFY_TEMPLATE_SCHEMA_VERSION,
-        updatedAt: Number.isFinite(Number(src.updatedAt)) ? Number(src.updatedAt) : nowTs(),
+        updatedAt: Number.isFinite(updatedAt) ? updatedAt : nowTs(),
         templates: userTemplates,
         bindings: normalizeBindings(src.bindings, validTemplateIdSet),
     };
@@ -1145,7 +1280,9 @@ function isSchemaVersionCompatible(rawVersion) {
 
     if (!current || !min || !next) return false;
     if (next[0] !== current[0]) return false;
-    return compareSemver(rawVersion, PHONE_BEAUTIFY_TEMPLATE_MIN_COMPAT_SCHEMA_VERSION) >= 0;
+    if (compareSemver(rawVersion, PHONE_BEAUTIFY_TEMPLATE_MIN_COMPAT_SCHEMA_VERSION) < 0) return false;
+    if (compareSemver(rawVersion, PHONE_BEAUTIFY_TEMPLATE_SCHEMA_VERSION) > 0) return false;
+    return true;
 }
 
 function parsePackInput(input) {
@@ -1278,6 +1415,340 @@ function getTemplateById(templateId) {
     return templates.find(t => t.id === id) || null;
 }
 
+function normalizeBeautifySourceMode(rawMode, fallback = BEAUTIFY_SOURCE_MODE_BUILTIN) {
+    const mode = normalizeString(rawMode, 24).toLowerCase();
+    if (BEAUTIFY_SOURCE_MODE_ALLOWED.has(mode)) return mode;
+    return BEAUTIFY_SOURCE_MODE_ALLOWED.has(fallback) ? fallback : BEAUTIFY_SOURCE_MODE_BUILTIN;
+}
+
+function normalizeSourceModeForTemplateType(templateType, sourceMode) {
+    const safeType = normalizeTemplateType(templateType, '');
+    if (!safeType) return BEAUTIFY_SOURCE_MODE_BUILTIN;
+
+    if (safeType === PHONE_TEMPLATE_TYPE_SPECIAL) {
+        return normalizeBeautifySourceMode(sourceMode, BEAUTIFY_SOURCE_MODE_BUILTIN);
+    }
+
+    if (safeType === PHONE_TEMPLATE_TYPE_GENERIC) {
+        return normalizeBeautifySourceMode(sourceMode, BEAUTIFY_SOURCE_MODE_BUILTIN);
+    }
+
+    return BEAUTIFY_SOURCE_MODE_BUILTIN;
+}
+
+function getSourceModeSettingKey(templateType) {
+    const safeType = normalizeTemplateType(templateType, '');
+    if (safeType === PHONE_TEMPLATE_TYPE_SPECIAL) return BEAUTIFY_SOURCE_MODE_SETTING_KEY_SPECIAL;
+    if (safeType === PHONE_TEMPLATE_TYPE_GENERIC) return BEAUTIFY_SOURCE_MODE_SETTING_KEY_GENERIC;
+    return '';
+}
+
+function normalizeSpecialActiveTemplateIds(rawMap) {
+    const src = rawMap && typeof rawMap === 'object' && !Array.isArray(rawMap)
+        ? rawMap
+        : {};
+
+    const normalized = {};
+    Object.entries(src).forEach(([rendererKey, templateId]) => {
+        const safeRendererKey = normalizeString(rendererKey, 48);
+        if (!SPECIAL_RENDERER_KEYS.has(safeRendererKey)) return;
+
+        const safeTemplateId = sanitizeId(templateId, '');
+        if (!safeTemplateId) return;
+
+        normalized[safeRendererKey] = safeTemplateId;
+    });
+
+    return normalized;
+}
+
+function normalizeGenericActiveTemplateId(rawTemplateId) {
+    return sanitizeId(rawTemplateId, '');
+}
+
+function getSpecialActiveTemplateIdsRaw() {
+    const raw = getPhoneSettings()?.[BEAUTIFY_ACTIVE_TEMPLATE_IDS_SETTING_KEY_SPECIAL];
+    return normalizeSpecialActiveTemplateIds(raw);
+}
+
+function getGenericActiveTemplateIdRaw() {
+    const raw = getPhoneSettings()?.[BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC];
+    return normalizeGenericActiveTemplateId(raw);
+}
+
+function getSpecialTemplatesByRendererKey(rendererKey, options = {}) {
+    const safeRendererKey = normalizeString(rendererKey, 48);
+    if (!SPECIAL_RENDERER_KEYS.has(safeRendererKey)) return [];
+
+    return getPhoneBeautifyTemplatesByType(PHONE_TEMPLATE_TYPE_SPECIAL, {
+        includeBuiltin: options.includeBuiltin !== false,
+        includeUser: options.includeUser !== false,
+        enabledOnly: options.enabledOnly === true,
+    }).filter(t => t?.render?.rendererKey === safeRendererKey);
+}
+
+function getDefaultSpecialTemplateIdByRenderer(rendererKey) {
+    const candidates = getSpecialTemplatesByRendererKey(rendererKey, {
+        includeBuiltin: true,
+        includeUser: false,
+        enabledOnly: true,
+    });
+    return sanitizeId(candidates[0]?.id, '');
+}
+
+function getDefaultGenericTemplateId() {
+    const templates = getPhoneBeautifyTemplatesByType(PHONE_TEMPLATE_TYPE_GENERIC, {
+        includeBuiltin: true,
+        includeUser: false,
+        enabledOnly: true,
+    }).filter(t => t?.render?.rendererKey === 'generic_table');
+
+    return sanitizeId(templates[0]?.id, '');
+}
+
+function ensureValidSpecialActiveTemplateIds(rawMap) {
+    const normalized = normalizeSpecialActiveTemplateIds(rawMap);
+    const result = { ...normalized };
+
+    SPECIAL_RENDERER_KEYS.forEach((rendererKey) => {
+        const currentId = sanitizeId(result[rendererKey], '');
+        if (!currentId) return;
+
+        const exists = getSpecialTemplatesByRendererKey(rendererKey, {
+            includeBuiltin: true,
+            includeUser: true,
+            enabledOnly: true,
+        }).some(t => t.id === currentId);
+
+        if (!exists) {
+            delete result[rendererKey];
+        }
+    });
+
+    return result;
+}
+
+function ensureValidGenericActiveTemplateId(rawTemplateId) {
+    const id = normalizeGenericActiveTemplateId(rawTemplateId);
+    if (!id) return '';
+
+    const exists = getPhoneBeautifyTemplatesByType(PHONE_TEMPLATE_TYPE_GENERIC, {
+        includeBuiltin: true,
+        includeUser: true,
+        enabledOnly: true,
+    }).some(t => t.id === id && t?.render?.rendererKey === 'generic_table');
+
+    return exists ? id : '';
+}
+
+export function getBeautifyTemplateSourceMode(templateType) {
+    const settingKey = getSourceModeSettingKey(templateType);
+    if (!settingKey) return BEAUTIFY_SOURCE_MODE_BUILTIN;
+
+    const raw = getPhoneSettings()?.[settingKey];
+    return normalizeSourceModeForTemplateType(templateType, raw);
+}
+
+export function setBeautifyTemplateSourceMode(templateType, sourceMode) {
+    const settingKey = getSourceModeSettingKey(templateType);
+    if (!settingKey) {
+        return { success: false, message: '模板类型无效' };
+    }
+
+    const normalized = normalizeSourceModeForTemplateType(templateType, sourceMode);
+    savePhoneSetting(settingKey, normalized);
+    return {
+        success: true,
+        mode: normalized,
+        message: normalized === BEAUTIFY_SOURCE_MODE_USER ? '已切换到自定义导入模板' : '已切换到默认模板',
+    };
+}
+
+export function getActiveBeautifyTemplateIdByType(templateType, options = {}) {
+    const safeType = normalizeTemplateType(templateType, '');
+    if (!safeType) return '';
+
+    if (safeType === PHONE_TEMPLATE_TYPE_GENERIC) {
+        const valid = ensureValidGenericActiveTemplateId(getGenericActiveTemplateIdRaw());
+        if (valid) return valid;
+
+        const fallback = options.withFallback === false ? '' : getDefaultGenericTemplateId();
+        if (fallback && options.persist !== false) {
+            savePhoneSetting(BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC, fallback);
+        }
+        return fallback;
+    }
+
+    return '';
+}
+
+export function getActiveBeautifyTemplateIdsForSpecial(options = {}) {
+    const valid = ensureValidSpecialActiveTemplateIds(getSpecialActiveTemplateIdsRaw());
+    const withFallback = options.withFallback !== false;
+
+    if (!withFallback) return valid;
+
+    const merged = { ...valid };
+    let changed = false;
+
+    SPECIAL_RENDERER_KEYS.forEach((rendererKey) => {
+        if (merged[rendererKey]) return;
+        const fallbackId = getDefaultSpecialTemplateIdByRenderer(rendererKey);
+        if (!fallbackId) return;
+        merged[rendererKey] = fallbackId;
+        changed = true;
+    });
+
+    if (changed && options.persist !== false) {
+        savePhoneSetting(BEAUTIFY_ACTIVE_TEMPLATE_IDS_SETTING_KEY_SPECIAL, merged);
+    }
+
+    return merged;
+}
+
+export function setActiveBeautifyTemplateIdByType(templateType, templateId) {
+    const safeType = normalizeTemplateType(templateType, '');
+    const safeTemplateId = sanitizeId(templateId, '');
+    if (!safeType || !safeTemplateId) {
+        return { success: false, message: '模板类型或模板 ID 无效' };
+    }
+
+    const template = getTemplateById(safeTemplateId);
+    if (!template || template.enabled === false) {
+        return { success: false, message: '模板不存在或未启用' };
+    }
+
+    if (template.templateType !== safeType) {
+        return { success: false, message: '模板类型不匹配' };
+    }
+
+    if (safeType === PHONE_TEMPLATE_TYPE_GENERIC) {
+        if (template?.render?.rendererKey !== 'generic_table') {
+            return { success: false, message: '通用模板渲染器无效' };
+        }
+
+        savePhoneSetting(BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC, safeTemplateId);
+        return {
+            success: true,
+            templateId: safeTemplateId,
+            message: '通用模板已启用',
+        };
+    }
+
+    if (safeType === PHONE_TEMPLATE_TYPE_SPECIAL) {
+        const rendererKey = normalizeString(template?.render?.rendererKey, 48);
+        if (!SPECIAL_RENDERER_KEYS.has(rendererKey)) {
+            return { success: false, message: '专属模板渲染器无效' };
+        }
+
+        const currentMap = getActiveBeautifyTemplateIdsForSpecial({ withFallback: false, persist: false });
+        const nextMap = {
+            ...currentMap,
+            [rendererKey]: safeTemplateId,
+        };
+
+        savePhoneSetting(BEAUTIFY_ACTIVE_TEMPLATE_IDS_SETTING_KEY_SPECIAL, nextMap);
+        return {
+            success: true,
+            rendererKey,
+            templateId: safeTemplateId,
+            message: '专属模板已启用',
+        };
+    }
+
+    return { success: false, message: '模板类型无效' };
+}
+
+function getEffectiveTemplatesBySourceMode(templates, sourceMode) {
+    const safeTemplates = Array.isArray(templates) ? templates : [];
+    const mode = normalizeBeautifySourceMode(sourceMode, BEAUTIFY_SOURCE_MODE_BUILTIN);
+
+    const builtin = safeTemplates.filter(t => t?.source === 'builtin');
+    const user = safeTemplates.filter(t => t?.source !== 'builtin');
+
+    if (mode === BEAUTIFY_SOURCE_MODE_USER) {
+        if (user.length > 0) {
+            return {
+                templates: user,
+                fallbackApplied: false,
+                mode: BEAUTIFY_SOURCE_MODE_USER,
+            };
+        }
+
+        return {
+            templates: builtin,
+            fallbackApplied: true,
+            mode: BEAUTIFY_SOURCE_MODE_BUILTIN,
+        };
+    }
+
+    return {
+        templates: builtin,
+        fallbackApplied: false,
+        mode: BEAUTIFY_SOURCE_MODE_BUILTIN,
+    };
+}
+
+export function getBeautifyTemplateSourceModeRuntime(templateType, options = {}) {
+    const mode = getBeautifyTemplateSourceMode(templateType);
+    const templates = getPhoneBeautifyTemplatesByType(templateType, {
+        includeBuiltin: true,
+        includeUser: true,
+        enabledOnly: options.enabledOnly === true,
+    });
+
+    const safeType = normalizeTemplateType(templateType, '');
+
+    if (safeType === PHONE_TEMPLATE_TYPE_SPECIAL) {
+        const activeMap = getActiveBeautifyTemplateIdsForSpecial({ withFallback: true, persist: true });
+        const selected = templates.filter((t) => {
+            const rendererKey = normalizeString(t?.render?.rendererKey, 48);
+            if (!SPECIAL_RENDERER_KEYS.has(rendererKey)) return false;
+            return sanitizeId(activeMap[rendererKey], '') === t.id;
+        });
+
+        if (selected.length > 0) {
+            return {
+                preferredMode: mode,
+                effectiveMode: 'active_template',
+                fallbackApplied: false,
+                hasUserTemplates: templates.some(t => t?.source !== 'builtin'),
+                templates: selected,
+            };
+        }
+    }
+
+    if (safeType === PHONE_TEMPLATE_TYPE_GENERIC) {
+        const activeTemplateId = getActiveBeautifyTemplateIdByType(PHONE_TEMPLATE_TYPE_GENERIC, {
+            withFallback: true,
+            persist: true,
+        });
+
+        const selected = activeTemplateId
+            ? templates.filter(t => t.id === activeTemplateId && t?.render?.rendererKey === 'generic_table')
+            : [];
+
+        if (selected.length > 0) {
+            return {
+                preferredMode: mode,
+                effectiveMode: 'active_template',
+                fallbackApplied: false,
+                hasUserTemplates: templates.some(t => t?.source !== 'builtin'),
+                templates: selected,
+            };
+        }
+    }
+
+    const filtered = getEffectiveTemplatesBySourceMode(templates, mode);
+    return {
+        preferredMode: mode,
+        effectiveMode: filtered.mode,
+        fallbackApplied: filtered.fallbackApplied,
+        hasUserTemplates: templates.some(t => t?.source !== 'builtin'),
+        templates: filtered.templates,
+    };
+}
+
 export function getBuiltinPhoneBeautifyTemplates() {
     return deepClone(BUILTIN_TEMPLATES);
 }
@@ -1373,6 +1844,107 @@ export function validatePhoneBeautifyTemplate(rawTemplate) {
     };
 }
 
+const TEMPLATE_FIELD_COMMENT_MAP = Object.freeze({
+    id: '模板唯一标识，建议保持稳定，避免覆盖冲突。',
+    name: '模板显示名称，用于设置页与导出识别。',
+    templateType: '模板类型：special_app_template 或 generic_table_template。',
+    source: '模板来源：builtin（内置）/ user（用户导入）。',
+    readOnly: '是否只读；内置模板通常为 true。',
+    exportable: '是否允许导出。',
+    enabled: '模板启用状态。',
+    'matcher.tableNameExact': '表名精确匹配列表。',
+    'matcher.tableNameIncludes': '表名包含关键词列表。',
+    'matcher.requiredHeaders': '必须命中的表头列表。',
+    'matcher.optionalHeaders': '可选加分表头列表。',
+    'matcher.minScore': '匹配阈值（0~100）。',
+    'render.rendererKey': '渲染器键：special_message/special_moments/special_forum/generic_table。',
+    'render.customCss': '自定义样式，建议仅在高级模式启用并逐步验证。',
+    'render.advanced.customCssEnabled': '高级模式 customCss 开关；false 时 customCss 不生效。',
+    'render.advanced.customCss': '高级模式 customCss 原始内容。',
+    'meta.author': '模板作者。',
+    'meta.description': '模板说明描述。',
+    'meta.tags': '模板标签数组。',
+    'meta.updatedAt': '模板更新时间时间戳（ms）。',
+});
+
+function getTemplateFieldComment(path = '') {
+    const exact = TEMPLATE_FIELD_COMMENT_MAP[path];
+    if (exact) return exact;
+
+    if (path.startsWith('render.styleTokens.')) {
+        return '样式 Token 值（颜色/尺寸/圆角/阴影等），建议与主题整体一致。';
+    }
+
+    if (path.startsWith('render.styleOptions.')) {
+        return '样式选项字段，通常为枚举/布尔/数值。';
+    }
+
+    if (path.startsWith('render.layoutOptions.')) {
+        return '布局选项字段，控制列表与详情结构。';
+    }
+
+    if (path.startsWith('render.fieldBindings.')) {
+        return '字段映射候选列表，可填写列名或 @const/@now 等标记。';
+    }
+
+    if (path.startsWith('render.structureOptions.')) {
+        return '结构开关配置，用于控制模块显隐与骨架布局。';
+    }
+
+    if (path.startsWith('render.typographyOptions.')) {
+        return '排版配置（字体、字号、行高、字重等）。';
+    }
+
+    if (path.startsWith('render.motionOptions.')) {
+        return '动效配置（时长、缓动、过渡行为等）。';
+    }
+
+    if (path.startsWith('render.stateOptions.')) {
+        return '状态样式配置（hover/active/focus/disabled 等）。';
+    }
+
+    if (path.startsWith('render.fieldDecorators.')) {
+        return '字段修饰配置（角标、徽章、高亮、边框强调等）。';
+    }
+
+    if (path.startsWith('matcher.')) {
+        return '模板匹配策略字段。';
+    }
+
+    return path ? `配置字段：${path}` : '模板根对象';
+}
+
+function shouldWrapAsAnnotatedLeaf(value) {
+    if (value === null || value === undefined) return true;
+    if (Array.isArray(value)) return true;
+    return typeof value !== 'object';
+}
+
+function annotateTemplateNode(rawValue, path = '') {
+    const value = stripAnnotationStructure(rawValue);
+
+    if (shouldWrapAsAnnotatedLeaf(value)) {
+        return toAnnotatedValue(value, getTemplateFieldComment(path));
+    }
+
+    const result = {};
+    Object.entries(value).forEach(([key, child]) => {
+        if (String(key || '').startsWith('_')) return;
+        const nextPath = path ? `${path}.${key}` : key;
+        result[key] = annotateTemplateNode(child, nextPath);
+    });
+
+    return result;
+}
+
+function serializeTemplateForExport(template, exportMode = PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_RUNTIME) {
+    const runtimeTemplate = stripAnnotationStructure(deepClone(template));
+    if (exportMode === PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_RUNTIME) {
+        return runtimeTemplate;
+    }
+    return annotateTemplateNode(runtimeTemplate);
+}
+
 export function exportPhoneBeautifyPack(options = {}) {
     const templateTypeRaw = normalizeString(options.templateType, 48);
     const templateType = templateTypeRaw ? normalizeTemplateType(templateTypeRaw, '') : '';
@@ -1383,6 +1955,11 @@ export function exportPhoneBeautifyPack(options = {}) {
         ? new Set(options.templateIds.map(id => sanitizeId(id, '')).filter(Boolean))
         : null;
 
+    const exportModeRaw = normalizeString(options.exportMode, 24).toLowerCase();
+    const exportMode = exportModeRaw === PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_RUNTIME
+        ? PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_RUNTIME
+        : PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED;
+
     const templates = getAllPhoneBeautifyTemplates({ includeDisabled: true })
         .filter((template) => {
             if (templateType && template.templateType !== templateType) return false;
@@ -1392,7 +1969,7 @@ export function exportPhoneBeautifyPack(options = {}) {
             if (template.exportable === false) return false;
             return true;
         })
-        .map((template) => deepClone(template));
+        .map((template) => serializeTemplateForExport(template, exportMode));
 
     return {
         success: true,
@@ -1404,6 +1981,7 @@ export function exportPhoneBeautifyPack(options = {}) {
                 name: normalizeString(options.packName, 80) || '手机美化模板包',
                 exportedAt: new Date().toISOString(),
                 exporter: 'YuziPhone',
+                exportMode,
                 schemaCompatMin: PHONE_BEAUTIFY_TEMPLATE_MIN_COMPAT_SCHEMA_VERSION,
                 schemaCompatMax: PHONE_BEAUTIFY_TEMPLATE_SCHEMA_VERSION,
             },
@@ -1565,6 +2143,86 @@ export function importPhoneBeautifyPackFromData(input, options = {}) {
     }
 }
 
+export function savePhoneBeautifyUserTemplate(rawTemplate, options = {}) {
+    const overwrite = options.overwrite !== false;
+
+    const validated = validatePhoneBeautifyTemplate(rawTemplate);
+    if (!validated.ok || !validated.template) {
+        return {
+            success: false,
+            warnings: validated.warnings || [],
+            errors: validated.errors?.length > 0 ? validated.errors : ['模板校验失败'],
+            message: validated.errors?.[0] || '模板校验失败',
+            template: null,
+        };
+    }
+
+    const template = deepClone(validated.template);
+    template.source = 'user';
+    template.readOnly = false;
+    template.exportable = true;
+    template.enabled = template.enabled !== false;
+    template.meta = normalizeTemplateMeta(template.meta);
+    template.meta.updatedAt = nowTs();
+
+    const store = readTemplateStore();
+    const userTemplates = deepClone(store.templates || []);
+    const userMap = new Map(userTemplates.map((t, idx) => [t.id, idx]));
+    const builtinIds = new Set(getBuiltinPhoneBeautifyTemplates().map(t => t.id));
+    const usedIds = new Set([
+        ...builtinIds,
+        ...userTemplates.map(t => t.id),
+    ]);
+
+    const warnings = [];
+
+    if (builtinIds.has(template.id)) {
+        const nextId = ensureUniqueTemplateId(`user.edited.${template.id}`, usedIds);
+        warnings.push(`内置模板 ID 不可直接覆盖，已自动转存为 ${nextId}`);
+        template.id = nextId;
+    }
+
+    let replaced = false;
+
+    if (userMap.has(template.id)) {
+        if (overwrite) {
+            const idx = Number(userMap.get(template.id));
+            if (Number.isInteger(idx) && idx >= 0) {
+                userTemplates[idx] = template;
+                replaced = true;
+            } else {
+                userTemplates.push(template);
+            }
+        } else {
+            const nextId = ensureUniqueTemplateId(template.id, usedIds);
+            warnings.push(`模板 ID 冲突，已自动改为 ${nextId}`);
+            template.id = nextId;
+            userTemplates.push(template);
+        }
+    } else {
+        if (usedIds.has(template.id)) {
+            template.id = ensureUniqueTemplateId(template.id, usedIds);
+        } else {
+            usedIds.add(template.id);
+        }
+        userTemplates.push(template);
+    }
+
+    saveTemplateStore({
+        ...store,
+        templates: userTemplates,
+    });
+
+    return {
+        success: true,
+        warnings,
+        errors: [],
+        replaced,
+        template: deepClone(template),
+        message: replaced ? '模板已覆盖保存' : '模板已保存为用户模板',
+    };
+}
+
 export function deletePhoneBeautifyUserTemplate(templateId) {
     const safeId = sanitizeId(templateId, '');
     if (!safeId) {
@@ -1602,11 +2260,11 @@ export function detectSpecialTemplateForTable({ sheetKey, tableName, headers = [
     const safeTableName = normalizeString(tableName, 80);
     const headerSet = normalizeHeadersSet(headers);
 
-    const specialTemplates = getPhoneBeautifyTemplatesByType(PHONE_TEMPLATE_TYPE_SPECIAL, {
-        includeBuiltin: true,
-        includeUser: true,
+    const activeMap = getActiveBeautifyTemplateIdsForSpecial({ withFallback: true, persist: true });
+    const sourceRuntime = getBeautifyTemplateSourceModeRuntime(PHONE_TEMPLATE_TYPE_SPECIAL, {
         enabledOnly: true,
     });
+    const specialTemplates = sourceRuntime.templates;
 
     if (specialTemplates.length <= 0) return null;
 
@@ -1615,10 +2273,12 @@ export function detectSpecialTemplateForTable({ sheetKey, tableName, headers = [
 
     // 人工绑定优先
     const boundTemplateId = sanitizeId(store.bindings?.[safeSheetKey], '');
-    if (boundTemplateId && templateMap.has(boundTemplateId)) {
-        const boundTemplate = templateMap.get(boundTemplateId);
+    if (boundTemplateId) {
+        const boundTemplate = getTemplateById(boundTemplateId);
         const specialType = RENDERER_KEY_TO_SPECIAL_TYPE[boundTemplate?.render?.rendererKey];
-        if (specialType) {
+        if (boundTemplate?.enabled !== false
+            && boundTemplate?.templateType === PHONE_TEMPLATE_TYPE_SPECIAL
+            && specialType) {
             return {
                 sheetKey: safeSheetKey,
                 tableName: safeTableName,
@@ -1626,6 +2286,27 @@ export function detectSpecialTemplateForTable({ sheetKey, tableName, headers = [
                 specialType,
                 score: 999,
                 reason: 'manual_binding',
+            };
+        }
+    }
+
+    // 勾选启用优先：若能从表名识别子类型，直接使用该子类型的启用模板。
+    const hintedRendererKey = inferSpecialRendererKeyByTableName(safeTableName);
+    if (hintedRendererKey) {
+        const activeTemplateId = sanitizeId(activeMap[hintedRendererKey], '');
+        const activeTemplate = activeTemplateId ? templateMap.get(activeTemplateId) : null;
+        const specialType = RENDERER_KEY_TO_SPECIAL_TYPE[activeTemplate?.render?.rendererKey];
+        if (activeTemplate && specialType) {
+            return {
+                sheetKey: safeSheetKey,
+                tableName: safeTableName,
+                template: deepClone(activeTemplate),
+                specialType,
+                score: 999,
+                reason: 'active_template',
+                sourceMode: sourceRuntime.effectiveMode,
+                sourceModePreferred: sourceRuntime.preferredMode,
+                sourceModeFallbackApplied: sourceRuntime.fallbackApplied,
             };
         }
     }
@@ -1672,7 +2353,10 @@ export function detectSpecialTemplateForTable({ sheetKey, tableName, headers = [
         specialType: best.specialType,
         score: best.score,
         threshold: best.threshold,
-        reason: 'matcher',
+        reason: sourceRuntime.fallbackApplied ? 'matcher_builtin_fallback' : 'matcher',
+        sourceMode: sourceRuntime.effectiveMode,
+        sourceModePreferred: sourceRuntime.preferredMode,
+        sourceModeFallbackApplied: sourceRuntime.fallbackApplied,
     };
 }
 
@@ -1683,11 +2367,14 @@ export function detectGenericTemplateForTable({ sheetKey, tableName, headers = [
     const safeTableName = normalizeString(tableName, 80);
     const headerSet = normalizeHeadersSet(headers);
 
-    const genericTemplates = getPhoneBeautifyTemplatesByType(PHONE_TEMPLATE_TYPE_GENERIC, {
-        includeBuiltin: true,
-        includeUser: true,
+    const activeTemplateId = getActiveBeautifyTemplateIdByType(PHONE_TEMPLATE_TYPE_GENERIC, {
+        withFallback: true,
+        persist: true,
+    });
+    const sourceRuntime = getBeautifyTemplateSourceModeRuntime(PHONE_TEMPLATE_TYPE_GENERIC, {
         enabledOnly: true,
     });
+    const genericTemplates = sourceRuntime.templates;
 
     if (genericTemplates.length <= 0) return null;
 
@@ -1696,15 +2383,35 @@ export function detectGenericTemplateForTable({ sheetKey, tableName, headers = [
 
     // 人工绑定优先（若绑定到通用模板）
     const boundTemplateId = sanitizeId(store.bindings?.[safeSheetKey], '');
-    if (boundTemplateId && templateMap.has(boundTemplateId)) {
-        const boundTemplate = templateMap.get(boundTemplateId);
-        if (boundTemplate?.render?.rendererKey === 'generic_table') {
+    if (boundTemplateId) {
+        const boundTemplate = getTemplateById(boundTemplateId);
+        if (boundTemplate?.enabled !== false
+            && boundTemplate?.templateType === PHONE_TEMPLATE_TYPE_GENERIC
+            && boundTemplate?.render?.rendererKey === 'generic_table') {
             return {
                 sheetKey: safeSheetKey,
                 tableName: safeTableName,
                 template: deepClone(boundTemplate),
                 score: 999,
                 reason: 'manual_binding',
+            };
+        }
+    }
+
+    // 勾选启用优先：通用模板分区只启用一个，直接返回。
+    if (activeTemplateId && templateMap.has(activeTemplateId)) {
+        const activeTemplate = templateMap.get(activeTemplateId);
+        if (activeTemplate?.render?.rendererKey === 'generic_table') {
+            return {
+                sheetKey: safeSheetKey,
+                tableName: safeTableName,
+                template: deepClone(activeTemplate),
+                score: 999,
+                threshold: 0,
+                reason: 'active_template',
+                sourceMode: sourceRuntime.effectiveMode,
+                sourceModePreferred: sourceRuntime.preferredMode,
+                sourceModeFallbackApplied: sourceRuntime.fallbackApplied,
             };
         }
     }
@@ -1748,7 +2455,10 @@ export function detectGenericTemplateForTable({ sheetKey, tableName, headers = [
         template: deepClone(best.template),
         score: best.score,
         threshold: best.threshold,
-        reason: 'matcher',
+        reason: sourceRuntime.fallbackApplied ? 'matcher_builtin_fallback' : 'matcher',
+        sourceMode: sourceRuntime.effectiveMode,
+        sourceModePreferred: sourceRuntime.preferredMode,
+        sourceModeFallbackApplied: sourceRuntime.fallbackApplied,
     };
 }
 

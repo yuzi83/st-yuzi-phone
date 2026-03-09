@@ -75,10 +75,10 @@ function getIconForSheet(sheetName) {
 function getTextIcon(letter, colorA, colorB) {
     const text = String(letter || '').trim().charAt(0) || 'A';
     return `
-        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;
-        background:linear-gradient(135deg, ${colorA}, ${colorB});color:#ffffff;font-size:26px;font-weight:700;
-        border-radius:var(--phone-app-icon-radius, 12px);box-sizing:border-box;">
-            ${escapeHtml(text)}
+        <div class="phone-dock-text-icon" style="--phone-dock-text-icon-start:${escapeHtmlAttr(colorA)};--phone-dock-text-icon-end:${escapeHtmlAttr(colorB)};">
+            <span class="phone-dock-text-icon-glyph-wrap">
+                <span class="phone-dock-text-icon-glyph">${escapeHtml(text)}</span>
+            </span>
         </div>
     `;
 }
@@ -87,6 +87,10 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = String(str || '');
     return div.innerHTML;
+}
+
+function escapeHtmlAttr(value) {
+    return escapeHtml(String(value || ''));
 }
 
 function showHomeToast(container, msg, isError = false) {
@@ -142,6 +146,7 @@ export function renderHomeScreen(container) {
     const appIconRadius = clampNumber(phoneSettings.appIconRadius, 6, 26, 14);
     const appGridColumns = clampNumber(phoneSettings.appGridColumns, 3, 6, 4);
     const appGridGap = clampNumber(phoneSettings.appGridGap, 8, 24, 12);
+    const dockIconSize = clampNumber(phoneSettings.dockIconSize, 32, 72, 48);
     const hiddenTableApps = normalizeHiddenTableApps(phoneSettings.hiddenTableApps);
     const hideTableCountBadge = !!phoneSettings.hideTableCountBadge;
 
@@ -151,10 +156,10 @@ export function renderHomeScreen(container) {
         : '';
 
     container.innerHTML = `
-        <div class="phone-home" style="${bgStyle}; --phone-app-icon-size:${appIconSize}px; --phone-app-icon-radius:${appIconRadius}px; --phone-app-grid-columns:${appGridColumns}; --phone-app-grid-gap:${appGridGap}px;">
+        <div class="phone-home" style="${bgStyle}; --phone-app-icon-size:${appIconSize}px; --phone-app-icon-radius:${appIconRadius}px; --phone-app-grid-columns:${appGridColumns}; --phone-app-grid-gap:${appGridGap}px; --phone-dock-icon-size:${dockIconSize}px;">
             <div class="phone-home-overlay"></div>
             <div class="phone-app-grid"></div>
-            <div class="phone-dock"></div>
+            <div class="phone-dock" data-dock-count="4"></div>
         </div>
     `;
 
@@ -240,14 +245,20 @@ export function renderHomeScreen(container) {
             ? `<img src="${customIcon}" class="phone-app-icon-img" alt="${app.name}">`
             : `<div class="phone-app-icon-svg">${app.icon}</div>`;
 
+        const safeAppIdClass = String(app.id || '').replace(/[^a-zA-Z0-9_-]/g, '').replace(/_/g, '-');
+
         const el = document.createElement('div');
-        el.className = 'phone-dock-item';
+        el.className = `phone-dock-item phone-dock-item-${safeAppIdClass}`;
         el.innerHTML = `
             <div class="phone-app-icon phone-dock-icon">${iconHtml}</div>
             <span class="phone-app-label">${app.name}</span>
         `;
         el.addEventListener('click', () => {
-            el.querySelector('.phone-app-icon')?.classList.add('phone-app-tap');
+            const iconEl = el.querySelector('.phone-app-icon');
+            if (iconEl) {
+                iconEl.classList.add('phone-app-tap');
+                setTimeout(() => iconEl.classList.remove('phone-app-tap'), 180);
+            }
             setTimeout(() => {
                 handleDockAction(app, container);
             }, 150);

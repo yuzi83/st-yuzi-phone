@@ -21,7 +21,7 @@ export function renderFusion(container) {
     container.innerHTML = `
         <div class="phone-app-page">
             <div class="phone-nav-bar">
-                <button class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
                 <span class="phone-nav-title">模板缝合</span>
             </div>
             <div class="phone-app-body phone-fusion-body">
@@ -42,7 +42,7 @@ export function renderFusion(container) {
                 </div>
                 <div id="phone-fusion-compare" class="phone-fusion-compare"></div>
                 <div id="phone-fusion-actions" class="phone-fusion-actions" style="display:none;">
-                    <button class="phone-fusion-merge-btn" id="phone-fusion-merge">
+                    <button type="button" class="phone-fusion-merge-btn" id="phone-fusion-merge">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
                         <span>合并选中的表格</span>
                     </button>
