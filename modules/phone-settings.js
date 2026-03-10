@@ -59,11 +59,44 @@ export function renderSettings(container) {
     const state = {
         mode: 'home', // home | appearance | database | beautify | button_style
         databaseScrollTop: 0,
+        appearanceScrollTop: 0,
+        beautifyScrollTop: 0,
+        buttonStyleScrollTop: 0,
         beautifyEditorTemplateId: '',
         beautifyEditorLoadedTemplateId: '',
         beautifyEditorText: '',
         beautifyEditorError: '',
         beautifyEditorNotice: '',
+    };
+
+    // ===== 统一的滚动位置管理辅助函数 =====
+    const SETTINGS_SCROLL_SELECTOR = '.phone-app-body.phone-settings-scroll';
+
+    const captureScroll = (key) => {
+        const body = container.querySelector(SETTINGS_SCROLL_SELECTOR);
+        if (!body) return;
+        state[key] = Math.max(0, Number(body.scrollTop) || 0);
+    };
+
+    const restoreScroll = (key) => {
+        const body = container.querySelector(SETTINGS_SCROLL_SELECTOR);
+        if (!body) return;
+        const maxTop = Math.max(0, (body.scrollHeight || 0) - (body.clientHeight || 0));
+        const targetTop = Math.min(Math.max(0, Number(state[key]) || 0), maxTop);
+        // 使用双重 requestAnimationFrame 确保 DOM 布局完成
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                body.scrollTop = targetTop;
+            });
+        });
+    };
+
+    const createRerenderWithScroll = (key, renderFn) => {
+        return () => {
+            captureScroll(key);
+            renderFn();
+            restoreScroll(key);
+        };
     };
 
     const readDbSnapshot = () => {
@@ -184,20 +217,14 @@ export function renderSettings(container) {
         return true;
     };
 
-    const captureDatabaseScroll = () => {
-        const body = container.querySelector('.phone-app-body.phone-settings-scroll');
-        if (!body) return;
-        state.databaseScrollTop = Math.max(0, Number(body.scrollTop) || 0);
-    };
-
-    const restoreDatabaseScroll = () => {
-        const body = container.querySelector('.phone-app-body.phone-settings-scroll');
-        if (!body) return;
-
-        const maxTop = Math.max(0, (body.scrollHeight || 0) - (body.clientHeight || 0));
-        const nextTop = Math.min(Math.max(0, Number(state.databaseScrollTop) || 0), maxTop);
-        body.scrollTop = nextTop;
-    };
+    const captureDatabaseScroll = () => captureScroll('databaseScrollTop');
+    const restoreDatabaseScroll = () => restoreScroll('databaseScrollTop');
+    const captureAppearanceScroll = () => captureScroll('appearanceScrollTop');
+    const restoreAppearanceScroll = () => restoreScroll('appearanceScrollTop');
+    const captureBeautifyScroll = () => captureScroll('beautifyScrollTop');
+    const restoreBeautifyScroll = () => restoreScroll('beautifyScrollTop');
+    const captureButtonStyleScroll = () => captureScroll('buttonStyleScrollTop');
+    const restoreButtonStyleScroll = () => restoreScroll('buttonStyleScrollTop');
 
     const render = () => {
         if (state.mode === 'appearance') {
@@ -219,9 +246,25 @@ export function renderSettings(container) {
     const rerenderDatabaseKeepScroll = () => {
         captureDatabaseScroll();
         render();
-        requestAnimationFrame(() => {
-            restoreDatabaseScroll();
-        });
+        restoreDatabaseScroll();
+    };
+
+    const rerenderAppearanceKeepScroll = () => {
+        captureAppearanceScroll();
+        render();
+        restoreAppearanceScroll();
+    };
+
+    const rerenderBeautifyKeepScrollGlobal = () => {
+        captureBeautifyScroll();
+        render();
+        restoreBeautifyScroll();
+    };
+
+    const rerenderButtonStyleKeepScroll = () => {
+        captureButtonStyleScroll();
+        render();
+        restoreButtonStyleScroll();
     };
 
     const renderHomePage = () => {
@@ -932,7 +975,7 @@ export function renderSettings(container) {
             });
             emitToggleStyleUpdated();
             showToast(container, '按钮样式已恢复默认');
-            renderButtonStylePage();
+            rerenderButtonStyleKeepScroll();
         });
     };
 
@@ -1285,14 +1328,36 @@ export function renderSettings(container) {
         });
 
         const rerenderBeautifyKeepScroll = () => {
-            const body = container.querySelector('.phone-app-body.phone-settings-scroll');
-            const top = body ? Math.max(0, Number(body.scrollTop) || 0) : 0;
+            // 保存页面级滚动位置
+            captureScroll('beautifyScrollTop');
+            
+            // 保存子容器滚动位置（专属模板列表和通用模板列表）
+            const specialList = container.querySelector('#phone-beautify-list-special');
+            const genericList = container.querySelector('#phone-beautify-list-generic');
+            const specialListScrollTop = specialList ? Math.max(0, Number(specialList.scrollTop) || 0) : 0;
+            const genericListScrollTop = genericList ? Math.max(0, Number(genericList.scrollTop) || 0) : 0;
+            
             renderBeautifyTemplatePage();
+            
+            // 恢复页面级滚动位置
+            restoreScroll('beautifyScrollTop');
+            
+            // 恢复子容器滚动位置（使用双重 rAF 确保 DOM 布局完成）
             requestAnimationFrame(() => {
-                const nextBody = container.querySelector('.phone-app-body.phone-settings-scroll');
-                if (!nextBody) return;
-                const maxTop = Math.max(0, (nextBody.scrollHeight || 0) - (nextBody.clientHeight || 0));
-                nextBody.scrollTop = Math.min(top, maxTop);
+                requestAnimationFrame(() => {
+                    const nextSpecialList = container.querySelector('#phone-beautify-list-special');
+                    const nextGenericList = container.querySelector('#phone-beautify-list-generic');
+                    
+                    if (nextSpecialList) {
+                        const maxSpecialTop = Math.max(0, (nextSpecialList.scrollHeight || 0) - (nextSpecialList.clientHeight || 0));
+                        nextSpecialList.scrollTop = Math.min(specialListScrollTop, maxSpecialTop);
+                    }
+                    
+                    if (nextGenericList) {
+                        const maxGenericTop = Math.max(0, (nextGenericList.scrollHeight || 0) - (nextGenericList.clientHeight || 0));
+                        nextGenericList.scrollTop = Math.min(genericListScrollTop, maxGenericTop);
+                    }
+                });
             });
         };
 

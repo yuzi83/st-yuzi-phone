@@ -787,11 +787,14 @@ export function renderTableViewer(container, sheetKey) {
         const prevTop = body ? Math.max(0, Number(body.scrollTop) || 0) : 0;
 
         render();
+        // 使用双重 requestAnimationFrame 确保 DOM 布局完成
         requestAnimationFrame(() => {
-            const nextBody = container.querySelector('.phone-app-body');
-            if (!nextBody) return;
-            const maxTop = Math.max(0, (nextBody.scrollHeight || 0) - (nextBody.clientHeight || 0));
-            nextBody.scrollTop = Math.min(prevTop, maxTop);
+            requestAnimationFrame(() => {
+                const nextBody = container.querySelector('.phone-app-body');
+                if (!nextBody) return;
+                const maxTop = Math.max(0, (nextBody.scrollHeight || 0) - (nextBody.clientHeight || 0));
+                nextBody.scrollTop = Math.min(prevTop, maxTop);
+            });
         });
     };
 
@@ -806,7 +809,13 @@ export function renderTableViewer(container, sheetKey) {
         const body = container.querySelector('.phone-app-body');
         if (!body) return;
         const maxTop = Math.max(0, (body.scrollHeight || 0) - (body.clientHeight || 0));
-        body.scrollTop = Math.min(Math.max(0, Number(state.listScrollTop) || 0), maxTop);
+        const targetTop = Math.min(Math.max(0, Number(state.listScrollTop) || 0), maxTop);
+        // 使用双重 requestAnimationFrame 确保 DOM 布局完成
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                body.scrollTop = targetTop;
+            });
+        });
     };
 
     const getGenericTemplateStylePayload = (viewMode = 'list') => {
@@ -1223,9 +1232,7 @@ export function renderTableViewer(container, sheetKey) {
             state.editMode = false;
             state.draftValues = {};
             render();
-            requestAnimationFrame(() => {
-                restoreListScroll();
-            });
+            restoreListScroll();
         });
 
         container.querySelector('#phone-toggle-edit-mode')?.addEventListener('click', () => {
@@ -1497,11 +1504,14 @@ function renderMessageTable(container, context) {
         const prevTop = body ? Math.max(0, Number(body.scrollTop) || 0) : 0;
 
         render();
+        // 使用双重 requestAnimationFrame 确保 DOM 布局完成
         requestAnimationFrame(() => {
-            const nextBody = container.querySelector('.phone-app-body');
-            if (!nextBody) return;
-            const maxTop = Math.max(0, (nextBody.scrollHeight || 0) - (nextBody.clientHeight || 0));
-            nextBody.scrollTop = Math.min(prevTop, maxTop);
+            requestAnimationFrame(() => {
+                const nextBody = container.querySelector('.phone-app-body');
+                if (!nextBody) return;
+                const maxTop = Math.max(0, (nextBody.scrollHeight || 0) - (nextBody.clientHeight || 0));
+                nextBody.scrollTop = Math.min(prevTop, maxTop);
+            });
         });
     };
 
@@ -1887,11 +1897,14 @@ function renderFeedTable(container, context) {
         const prevTop = body ? Math.max(0, Number(body.scrollTop) || 0) : 0;
 
         render();
+        // 使用双重 requestAnimationFrame 确保 DOM 布局完成
         requestAnimationFrame(() => {
-            const nextBody = container.querySelector('.phone-app-body');
-            if (!nextBody) return;
-            const maxTop = Math.max(0, (nextBody.scrollHeight || 0) - (nextBody.clientHeight || 0));
-            nextBody.scrollTop = Math.min(prevTop, maxTop);
+            requestAnimationFrame(() => {
+                const nextBody = container.querySelector('.phone-app-body');
+                if (!nextBody) return;
+                const maxTop = Math.max(0, (nextBody.scrollHeight || 0) - (nextBody.clientHeight || 0));
+                nextBody.scrollTop = Math.min(prevTop, maxTop);
+            });
         });
     };
 
