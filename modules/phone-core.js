@@ -617,6 +617,7 @@ let currentRoute = 'home';
 let routeHistory = [];
 let phoneContainer = null;
 let onRouteChangeCallbacks = [];
+const MAX_ROUTE_HISTORY = 30;
 const phoneRuntime = createRuntimeScope('phone-core');
 let isPhoneUiInitialized = false;
 let statusClockTimerId = null;
@@ -905,6 +906,54 @@ function bindScrollGuardToRoot(rootEl) {
             return;
         }
     }, { passive: false });
+
+    rootEl.addEventListener('touchmove', (e) => {
+        if (e.touches.length !== 1) return;
+
+        const touch = e.touches[0];
+        const target = e.target;
+        if (!touch || !target) return;
+
+        const currentY = touch.clientY;
+        if (rootEl.__yuziLastTouchY === undefined) {
+            rootEl.__yuziLastTouchY = currentY;
+            return;
+        }
+
+        const deltaY = rootEl.__yuziLastTouchY - currentY;
+        rootEl.__yuziLastTouchY = currentY;
+
+        if (!Number.isFinite(deltaY) || Math.abs(deltaY) < 0.5) return;
+
+        const editableTarget = isEditableScrollTarget(target);
+        const scrollables = collectScrollableChain(target, rootEl);
+        const canScroll = scrollables.some(el => canElementScrollInDirection(el, deltaY));
+        const fallbackScrolled = !canScroll && !editableTarget
+            ? applyWheelFallbackScroll(target, rootEl, deltaY)
+            : false;
+
+        if (isPhoneScrollDebugEnabled()) {
+            logPhoneScrollDebug(`touchmove deltaY=${deltaY.toFixed(2)} canScroll=${canScroll} fallback=${fallbackScrolled}`, {
+                target: formatElementDebugName(target),
+                root: getElementScrollDebugSnapshot(rootEl),
+            });
+        }
+
+        if (editableTarget) return;
+
+        if (fallbackScrolled) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }, { passive: false });
+
+    rootEl.addEventListener('touchend', () => {
+        rootEl.__yuziLastTouchY = undefined;
+    }, { passive: true });
+
+    rootEl.addEventListener('touchcancel', () => {
+        rootEl.__yuziLastTouchY = undefined;
+    }, { passive: true });
 }
 
 export function bindPhoneScrollGuards(root) {
@@ -1020,6 +1069,9 @@ export function getCurrentRoute() { return currentRoute; }
 export function navigateTo(route, opts = {}) {
     if (currentRoute !== 'home') {
         routeHistory.push(currentRoute);
+        if (routeHistory.length > MAX_ROUTE_HISTORY) {
+            routeHistory = routeHistory.slice(-MAX_ROUTE_HISTORY);
+        }
     }
     currentRoute = route;
     onRouteChangeCallbacks.forEach(cb => cb(route, opts));
@@ -1032,7 +1084,11 @@ export function navigateBack() {
 }
 
 export function onRouteChange(callback) {
+    if (typeof callback !== 'function') return () => {};
     onRouteChangeCallbacks.push(callback);
+    return () => {
+        onRouteChangeCallbacks = onRouteChangeCallbacks.filter(cb => cb !== callback);
+    };
 }
 
 export function getPhoneContainer() {

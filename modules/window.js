@@ -6,8 +6,9 @@
 import { constrainPosition, savePhoneSetting } from './settings.js';
 
 export function initPhoneShellDrag() {
-    const $phone = $('#yuzi-phone-standalone');
-    const shell = $phone.find('.phone-shell')[0];
+    const phoneEl = document.getElementById('yuzi-phone-standalone');
+    if (!phoneEl) return;
+    const shell = phoneEl.querySelector('.phone-shell');
     if (!shell) return;
 
     const notch = shell.querySelector('.phone-notch');
@@ -21,17 +22,17 @@ export function initPhoneShellDrag() {
     function onContextMenu(e) { e.preventDefault(); }
 
     function onPointerDown(e) {
-        if ($phone.hasClass('resizing')) return;
+        if (phoneEl.classList.contains('resizing')) return;
 
         isDragging = true;
         pointerId = e.pointerId;
 
-        const rect = $phone[0].getBoundingClientRect();
+        const rect = phoneEl.getBoundingClientRect();
         offsetX = e.clientX - rect.left;
         offsetY = e.clientY - rect.top;
 
         e.target.setPointerCapture(e.pointerId);
-        $phone.addClass('dragging');
+        phoneEl.classList.add('dragging');
         e.preventDefault();
     }
 
@@ -41,12 +42,12 @@ export function initPhoneShellDrag() {
         const constrained = constrainPosition(
             e.clientX - offsetX,
             e.clientY - offsetY,
-            $phone[0].offsetWidth,
-            $phone[0].offsetHeight,
+            phoneEl.offsetWidth,
+            phoneEl.offsetHeight,
         );
 
-        $phone[0].style.left = constrained.x + 'px';
-        $phone[0].style.top = constrained.y + 'px';
+        phoneEl.style.left = constrained.x + 'px';
+        phoneEl.style.top = constrained.y + 'px';
         e.preventDefault();
     }
 
@@ -55,10 +56,12 @@ export function initPhoneShellDrag() {
 
         isDragging = false;
         try { e.target.releasePointerCapture(e.pointerId); } catch {}
-        $phone.removeClass('dragging');
+        phoneEl.classList.remove('dragging');
 
-        savePhoneSetting('phoneContainerX', parseInt($phone.css('left'), 10));
-        savePhoneSetting('phoneContainerY', parseInt($phone.css('top'), 10));
+        const left = parseInt(phoneEl.style.left, 10);
+        const top = parseInt(phoneEl.style.top, 10);
+        savePhoneSetting('phoneContainerX', Number.isFinite(left) ? left : 0);
+        savePhoneSetting('phoneContainerY', Number.isFinite(top) ? top : 0);
 
         pointerId = null;
     }
@@ -77,11 +80,11 @@ export function initPhoneShellDrag() {
 }
 
 export function initPhoneShellResize() {
-    const $phone = $('#yuzi-phone-standalone');
-    if (!$phone.length) return;
+    const phoneEl = document.getElementById('yuzi-phone-standalone');
+    if (!phoneEl) return;
 
-    $phone.find('.yuzi-phone-resize').each(function() {
-        const handle = this;
+    phoneEl.querySelectorAll('.yuzi-phone-resize').forEach((handle) => {
+        if (!(handle instanceof HTMLElement)) return;
 
         if (handle.dataset.resizeBound === '1') return;
         handle.dataset.resizeBound = '1';
@@ -105,7 +108,7 @@ export function initPhoneShellResize() {
             e.stopPropagation();
 
             dir = handle.getAttribute('data-dir') || '';
-            const rect = $phone[0].getBoundingClientRect();
+            const rect = phoneEl.getBoundingClientRect();
 
             isResizing = true;
             pointerId = e.pointerId;
@@ -117,7 +120,7 @@ export function initPhoneShellResize() {
             startTop = rect.top;
 
             handle.setPointerCapture(e.pointerId);
-            $phone.addClass('resizing');
+            phoneEl.classList.add('resizing');
         }
 
         function onPointerMove(e) {
@@ -143,8 +146,8 @@ export function initPhoneShellResize() {
                 nextHeight = Math.max(minHeight, Math.min(startHeight + deltaY, maxHeight));
             }
 
-            $phone[0].style.width = Math.round(nextWidth) + 'px';
-            $phone[0].style.height = Math.round(nextHeight) + 'px';
+            phoneEl.style.width = Math.round(nextWidth) + 'px';
+            phoneEl.style.height = Math.round(nextHeight) + 'px';
         }
 
         function onPointerUp(e) {
@@ -153,21 +156,19 @@ export function initPhoneShellResize() {
             isResizing = false;
 
             try { handle.releasePointerCapture(e.pointerId); } catch {}
-            $phone.removeClass('resizing');
+            phoneEl.classList.remove('resizing');
 
-            const left = parseInt($phone.css('left'), 10) || 0;
-            const top = parseInt($phone.css('top'), 10) || 0;
-            const constrained = constrainPosition(left, top, $phone[0].offsetWidth, $phone[0].offsetHeight);
+            const left = parseInt(phoneEl.style.left, 10) || 0;
+            const top = parseInt(phoneEl.style.top, 10) || 0;
+            const constrained = constrainPosition(left, top, phoneEl.offsetWidth, phoneEl.offsetHeight);
 
-            $phone.css({
-                left: constrained.x + 'px',
-                top: constrained.y + 'px',
-            });
+            phoneEl.style.left = constrained.x + 'px';
+            phoneEl.style.top = constrained.y + 'px';
 
             savePhoneSetting('phoneContainerX', constrained.x);
             savePhoneSetting('phoneContainerY', constrained.y);
-            savePhoneSetting('phoneContainerWidth', $phone[0].offsetWidth);
-            savePhoneSetting('phoneContainerHeight', $phone[0].offsetHeight);
+            savePhoneSetting('phoneContainerWidth', phoneEl.offsetWidth);
+            savePhoneSetting('phoneContainerHeight', phoneEl.offsetHeight);
 
             pointerId = null;
             dir = '';

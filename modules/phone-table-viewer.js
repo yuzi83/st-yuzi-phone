@@ -19,6 +19,7 @@ import {
 import { PHONE_ICONS } from './phone-home.js';
 import { detectSpecialTemplateForTable, detectGenericTemplateForTable } from './phone-beautify-templates.js';
 import { createStorageManager, getSessionStorageNamespace } from './storage-manager.js';
+import { escapeHtml, escapeHtmlAttr, safeText } from './utils.js';
 
 const SPECIAL_SCOPE_CLASS = 'phone-special-template-scope';
 const TEMPLATE_DRAFT_STORE_KEY = '__YUZI_PHONE_TEMPLATE_DRAFT_PATCHES';
@@ -341,6 +342,9 @@ function bindTemplateDraftPreviewForViewer(container, sheetKey) {
     if (prev?.onDraftClear) {
         window.removeEventListener('yuzi-phone-style-draft-cleared', prev.onDraftClear);
     }
+    if (prev?.observer) {
+        try { prev.observer.disconnect(); } catch {}
+    }
 
     const rerender = () => {
         if (!container.isConnected) return;
@@ -353,9 +357,18 @@ function bindTemplateDraftPreviewForViewer(container, sheetKey) {
     window.addEventListener('yuzi-phone-style-draft-updated', onDraftUpdate);
     window.addEventListener('yuzi-phone-style-draft-cleared', onDraftClear);
 
+    const observer = new MutationObserver(() => {
+        if (container.isConnected) return;
+        window.removeEventListener('yuzi-phone-style-draft-updated', onDraftUpdate);
+        window.removeEventListener('yuzi-phone-style-draft-cleared', onDraftClear);
+        try { observer.disconnect(); } catch {}
+    });
+    observer.observe(container, { childList: true, subtree: true });
+
     container.__yuziDraftPreviewListeners = {
         onDraftUpdate,
         onDraftClear,
+        observer,
     };
 }
 
@@ -2031,7 +2044,8 @@ function buildConversations(rows, readSpecialField, styleOptions = {}) {
     const conversations = {};
 
     rows.forEach((row, rowIndex) => {
-        const id = String(readSpecialField(row, 'threadId', `default_thread_${rowIndex + 1}`) || `default_thread_${rowIndex + 1}`).trim() || `default_thread_${rowIndex + 1}`;
+        const id = String(readSpecialField(row, 'threadId', `default_thread_${rowIndex + 1}`) || `default_thread_${rowIndex + 1}`)
+            .trim() || `default_thread_${rowIndex + 1}`;
 
         const sender = normalizeSenderName(readSpecialField(row, 'sender', ''));
         const content = readSpecialField(row, 'content', '') || '...';
@@ -2481,18 +2495,4 @@ function generateColor(str) {
         color += (`00${value.toString(16)}`).slice(-2);
     }
     return color;
-}
-
-function escapeHtmlAttr(str) {
-    return String(str || '')
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
-
-function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = String(str || '');
-    return div.innerHTML;
 }

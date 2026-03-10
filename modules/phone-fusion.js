@@ -6,6 +6,7 @@
 
 import { navigateBack } from './phone-core.js';
 import { PHONE_ICONS } from './phone-home.js';
+import { escapeHtml, escapeHtmlAttr, safeText } from './utils.js';
 
 let templateA = null;
 let templateB = null;
@@ -245,19 +246,4 @@ function pickJsonFile(callback) {
     });
 
     input.click();
-}
-
-function escapeHtml(str) {
-    return String(str || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
-
-function escapeHtmlAttr(str) {
-    return String(str || '')
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
 }

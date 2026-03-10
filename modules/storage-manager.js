@@ -197,7 +197,9 @@ export function createStorageManager(options = {}) {
             saveIndex(index);
             return true;
         } catch (e) {
-            if (String(e?.name || '') === 'QuotaExceededError') {
+            const errorName = String(e?.name || '').toLowerCase();
+            const isQuotaError = errorName.includes('quota') || errorName.includes('exceeded');
+            if (isQuotaError) {
                 pruneExpired(index);
                 evictByLRU(index, mergedOptions);
                 try {
@@ -208,10 +210,12 @@ export function createStorageManager(options = {}) {
                     evictByLRU(index, mergedOptions);
                     saveIndex(index);
                     return true;
-                } catch {
+                } catch (retryError) {
+                    console.warn('[玉子手机] 存储空间不足，写入失败:', retryError);
                     return false;
                 }
             }
+            console.warn('[玉子手机] 存储写入失败:', e);
             return false;
         }
     };

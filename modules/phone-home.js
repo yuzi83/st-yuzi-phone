@@ -12,6 +12,7 @@ import {
     openVisualizerWithStatus,
     openDatabaseSettingsWithStatus,
 } from './phone-core.js';
+import { clampNumber, escapeHtml, escapeHtmlAttr } from './utils.js';
 
 // ===== SVG 图标库（零 emoji）=====
 
@@ -83,15 +84,6 @@ function getTextIcon(letter, colorA, colorB) {
     `;
 }
 
-function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = String(str || '');
-    return div.innerHTML;
-}
-
-function escapeHtmlAttr(value) {
-    return escapeHtml(String(value || ''));
-}
 
 function showHomeToast(container, msg, isError = false) {
     const existing = container.querySelector('.phone-toast');
@@ -294,11 +286,6 @@ export function renderHomeScreen(container) {
     }
 }
 
-function clampNumber(value, min, max, fallback) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return fallback;
-    return Math.max(min, Math.min(max, Math.round(n)));
-}
 
 function normalizeHiddenTableApps(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};

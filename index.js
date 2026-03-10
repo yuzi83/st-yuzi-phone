@@ -16,18 +16,13 @@ import {
     flushPhoneSettingsSave,
 } from './modules/settings.js';
 import { createPhoneSettingsPanel } from './modules/settings-panel.js';
+import { clampNumber } from './modules/utils.js';
 
 const DOM_IDS = {
     root: 'yuzi-phone-root',
     container: 'yuzi-phone-standalone',
     toggle: 'yuzi-phone-toggle',
 };
-
-function clampNumber(value, min, max, fallback) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return fallback;
-    return Math.max(min, Math.min(max, Math.round(n)));
-}
 
 function escapeCssUrl(url) {
     return String(url || '')

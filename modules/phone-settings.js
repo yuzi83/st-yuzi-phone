@@ -39,6 +39,8 @@ import {
     savePhoneBeautifyUserTemplate,
 } from './phone-beautify-templates.js';
 import { createDebouncedTask } from './runtime-manager.js';
+import { clampNumber, escapeHtml, escapeHtmlAttr } from './utils.js';
+import { cacheSet, cacheGet, cacheRemove, CACHE_STORES } from './cache-manager.js';
 
 const DB_PRESETS_SETTING_KEY = 'dbConfigPresets';
 const DB_ACTIVE_PRESET_SETTING_KEY = 'activeDbConfigPreset';
@@ -1663,12 +1665,20 @@ function setupManualUpdateBtn(container, btnSelector = '#phone-trigger-update', 
 function setupBgUpload(container) {
     const phoneSettings = getPhoneSettings();
     const preview = container.querySelector('#phone-bg-preview');
+    const cachedKey = 'background-image';
+
     if (phoneSettings.backgroundImage) {
         preview.innerHTML = `<img src="${escapeHtmlAttr(phoneSettings.backgroundImage)}" class="phone-bg-thumb">`;
+    } else {
+        cacheGet(CACHE_STORES.images, cachedKey).then((cached) => {
+            if (typeof cached === 'string' && cached) {
+                preview.innerHTML = `<img src="${escapeHtmlAttr(cached)}" class="phone-bg-thumb">`;
+            }
+        }).catch(() => {});
     }
 
     container.querySelector('#phone-upload-bg')?.addEventListener('click', () => {
-        pickImageFile(dataUrl => {
+        pickImageFile(async (dataUrl) => {
             if (estimateBase64Bytes(dataUrl) > STORAGE_BUDGETS.backgroundImageBytes) {
                 showToast(container, '背景图压缩后仍过大，请选择更小图片', true);
                 return;
@@ -1676,6 +1686,7 @@ function setupBgUpload(container) {
 
             savePhoneSetting('backgroundImage', dataUrl);
             preview.innerHTML = `<img src="${escapeHtmlAttr(dataUrl)}" class="phone-bg-thumb">`;
+            cacheSet(CACHE_STORES.images, cachedKey, dataUrl, 1000 * 60 * 60 * 24 * 30).catch(() => {});
             showToast(container, '背景已更新');
         }, {
             maxSizeMB: 12,
@@ -1689,6 +1700,7 @@ function setupBgUpload(container) {
     container.querySelector('#phone-clear-bg')?.addEventListener('click', () => {
         savePhoneSetting('backgroundImage', null);
         preview.innerHTML = '';
+        cacheRemove(CACHE_STORES.images, cachedKey).catch(() => {});
         showToast(container, '背景已清除');
     });
 }
@@ -1736,6 +1748,7 @@ function renderIconUploadList(listEl) {
         btn.addEventListener('click', () => {
             const row = btn.closest('.phone-icon-upload-row');
             const key = row.dataset.iconKey;
+            const cacheKey = `icon:${key}`;
             pickImageFile(dataUrl => {
                 if (estimateBase64Bytes(dataUrl) > STORAGE_BUDGETS.appIconBytes) {
                     showToast(listEl, '单个图标过大，请改用更小图片', true);
@@ -1754,6 +1767,7 @@ function renderIconUploadList(listEl) {
                 }
 
                 savePhoneSetting('appIcons', nextIcons);
+                cacheSet(CACHE_STORES.images, cacheKey, dataUrl, 1000 * 60 * 60 * 24 * 30).catch(() => {});
                 renderIconUploadList(listEl);
                 showToast(listEl, '图标已更新');
             }, {
@@ -1773,6 +1787,7 @@ function renderIconUploadList(listEl) {
             const icons = getPhoneSettings().appIcons || {};
             delete icons[key];
             savePhoneSetting('appIcons', icons);
+            cacheRemove(CACHE_STORES.images, `icon:${key}`).catch(() => {});
             renderIconUploadList(listEl);
             showToast(listEl, '图标已清除');
         });
@@ -2004,11 +2019,6 @@ function areStringSetEqual(a = [], b = []) {
     return a.every(v => rightSet.has(String(v)));
 }
 
-function clampNumber(value, min, max, fallback) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return fallback;
-    return Math.max(min, Math.min(max, Math.round(n)));
-}
 
 // ===== 工具函数 =====
 
@@ -2153,19 +2163,6 @@ function downloadTextFile(filename, text, mimeType = 'text/plain') {
     }
 }
 
-function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = String(str || '');
-    return div.innerHTML;
-}
-
-function escapeHtmlAttr(str) {
-    return String(str || '')
-        .replace(/&/g, '&#38;')
-        .replace(/"/g, '&#34;')
-        .replace(/</g, '&#60;')
-        .replace(/>/g, '&#62;');
-}
 
 function showToast(container, msg, isError = false) {
     const existing = container.querySelector('.phone-toast');
