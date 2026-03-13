@@ -6,8 +6,8 @@
     "js": "index.js",
     "css": "style.css",
     "author": "yuzi83",
-    "version": "1.1.2",
+    "version": "1.2.0",
     "homePage": "https://github.com/yuzi83/st-yuzi-phone",
     "auto_update": true,
-    "description": "玉子手机独立扩展，支持表格 App 主屏、专属/通用模板渲染、数据库配置桥接与手机界面拖拽缩放"
+    "description": "玉子手机独立扩展，支持表格 App 主屏、专属/通用模板渲染、数据库配置桥接与手机界面拖拽缩放。集成 SillyTavern 事件系统、TavernHelper API、Slash 命令、错误处理和虚拟滚动优化。"
 }
