@@ -152,6 +152,10 @@
     background: transparent;
     border: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    min-width: 0;
+    box-sizing: border-box;
+    width: 100%;
 }
 .phone-app-page:not(.phone-generic-template-scope) .phone-row-detail-kv:last-child {
     border-bottom: none;
@@ -162,7 +166,12 @@
     font-weight: 500;
     color: #0A84FF;
     min-width: 60px;
+    max-width: 40%;
     margin-right: 12px;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .phone-app-page:not(.phone-generic-template-scope) .phone-row-detail-value {
@@ -173,6 +182,9 @@
     white-space: pre-wrap;
     text-align: right; /* 右对齐以匹配 iOS */
     flex: 1;
+    min-width: 0;
+    overflow-wrap: break-word;
+    max-width: 100%;
 }
 
 

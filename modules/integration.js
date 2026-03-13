@@ -227,7 +227,7 @@ export async function onEvent(eventType, listener, options = {}) {
             }
         };
 
-        runtime.addCleanup(cleanup);
+        runtime.registerCleanup(cleanup);
 
         return cleanup;
     } catch (error) {
