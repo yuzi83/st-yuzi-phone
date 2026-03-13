@@ -28,9 +28,8 @@
         0 0 0 4px #3a3a3a, /* Inner bezel */
         0 0 0 8px #1a1a1a, /* Outer frame */
         0 20px 50px rgba(0,0,0,0.6); /* Drop shadow */
-    -webkit-mask-image: -webkit-radial-gradient(white, black);
-    mask-image: radial-gradient(white, black);
     transform: translateZ(0); /* For curve clipping */
+    contain: paint; /* 阻止子元素绘制溢出圆角边界 */
 }
 
 /* 小圆形水滴屏 */
@@ -92,7 +91,9 @@
     flex: 1;
     position: relative;
     overflow: hidden;
-    background: transparent; 
+    background: transparent;
+    border-radius: 0 0 49px 49px; /* 匹配 shell 内侧底部圆角 */
+    contain: paint; /* 确保内容不溢出圆角区域 */
 }
 
 /* --- 下拉通知 --- */
