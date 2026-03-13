@@ -2126,6 +2126,10 @@
     flex-direction: column;
     gap: 8px;
     color: var(--textColor, rgba(255, 255, 255, 0.88));
+    overflow: hidden;
+    min-width: 0;
+    box-sizing: border-box;
+    width: 100%;
 }
 
 .phone-row-detail-kv {
@@ -2139,6 +2143,10 @@
     box-shadow: var(--boxShadow, none);
     backdrop-filter: var(--backdropFilter, none);
     -webkit-backdrop-filter: var(--backdropFilter, none);
+    overflow: hidden;
+    min-width: 0;
+    box-sizing: border-box;
+    width: 100%;
 }
 
 .phone-row-detail-kv.is-locked {
@@ -2157,6 +2165,9 @@
     line-height: 1.45;
     white-space: pre-wrap;
     word-break: break-word;
+    overflow-wrap: break-word;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .phone-row-detail-input {
@@ -2235,6 +2246,10 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .phone-table-card {
