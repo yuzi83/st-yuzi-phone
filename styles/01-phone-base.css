@@ -28,8 +28,9 @@
         0 0 0 4px #3a3a3a, /* Inner bezel */
         0 0 0 8px #1a1a1a, /* Outer frame */
         0 20px 50px rgba(0,0,0,0.6); /* Drop shadow */
+    -webkit-mask-image: -webkit-radial-gradient(white, black);
+    mask-image: radial-gradient(white, black);
     transform: translateZ(0); /* For curve clipping */
-    contain: paint; /* 阻止子元素绘制溢出圆角边界 */
 }
 
 /* 小圆形水滴屏 */
@@ -91,9 +92,7 @@
     flex: 1;
     position: relative;
     overflow: hidden;
-    background: transparent;
-    border-radius: 0 0 49px 49px; /* 匹配 shell 内侧底部圆角 */
-    contain: paint; /* 确保内容不溢出圆角区域 */
+    background: transparent; 
 }
 
 /* --- 下拉通知 --- */
@@ -2698,4 +2697,88 @@
     background: rgba(255, 255, 255, 0.45);
 }
 
+/* ========================================
+   Phone 修复补丁 v5（2026-03-13）
+   - 修复表格详情页边框溢出手机外壳圆角
+   - 多层宽度约束 + 响应式优化
+   ======================================== */
+
+/* 1. 确保 phone-screen 正确裁剪内容 */
+#yuzi-phone-standalone .phone-screen {
+    overflow: hidden;
+    contain: layout style;
+}
+
+/* 2. 确保 phone-app-page 不溢出 */
+#yuzi-phone-standalone .phone-app-page {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* 3. 确保 phone-app-body 内容区正确约束 */
+#yuzi-phone-standalone .phone-app-body {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* 4. 确保详情页卡片不溢出 */
+#yuzi-phone-standalone .phone-row-detail-card,
+#yuzi-phone-standalone .phone-row-detail-kv,
+#yuzi-phone-standalone .phone-table-body {
+    max-width: 100%;
+    box-sizing: border-box;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+/* 5. 确保详情页列表容器不溢出 */
+#yuzi-phone-standalone .phone-nav-list,
+#yuzi-phone-standalone .phone-field-detail-list,
+#yuzi-phone-standalone .phone-field-detail-item {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* 6. 小屏幕下进一步减小 padding */
+@media screen and (max-width: 360px) {
+    #yuzi-phone-standalone .phone-app-body {
+        padding: 8px 8px 28px;
+    }
+    
+    #yuzi-phone-standalone .phone-row-detail-kv {
+        padding: 8px;
+    }
+    
+    #yuzi-phone-standalone .phone-row-detail-card {
+        gap: 6px;
+    }
+    
+    #yuzi-phone-standalone .phone-nav-list,
+    #yuzi-phone-standalone .phone-field-detail-list {
+        margin-left: 0;
+        margin-right: 0;
+    }
+}
+
+/* 7. 极小屏幕下更激进的约束 */
+@media screen and (max-width: 320px) {
+    #yuzi-phone-standalone .phone-app-body {
+        padding: 6px 6px 24px;
+    }
+    
+    #yuzi-phone-standalone .phone-row-detail-kv {
+        padding: 6px;
+        border-radius: 8px;
+    }
+    
+    #yuzi-phone-standalone .phone-row-detail-card {
+        gap: 4px;
+    }
+    
+    #yuzi-phone-standalone .phone-nav-list-item,
+    #yuzi-phone-standalone .phone-field-detail-item {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+}
 
