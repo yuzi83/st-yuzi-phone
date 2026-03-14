@@ -30,6 +30,7 @@
         0 20px 50px rgba(0,0,0,0.6); /* Drop shadow */
     -webkit-mask-image: -webkit-radial-gradient(white, black);
     mask-image: radial-gradient(white, black);
+    clip-path: inset(0 round 55px); /* 第三重裁剪：修复部分 WebView 圆角溢出 */
     transform: translateZ(0); /* For curve clipping */
 }
 
