@@ -14,14 +14,6 @@
 
 /* --- Phone Shell --- */
 .phone-shell {
-    /* --- 隔离宿主主题变量，防止浅色主题泄漏到手机 UI --- */
-    --tableBackgroundColor: rgba(255, 255, 255, 0.03);
-    --textColor: rgba(255, 255, 255, 0.88);
-    --borderColor: rgba(255, 255, 255, 0.08);
-    --boxShadow: none;
-    --backdropFilter: none;
-    --borderRadius: 8px;
-
     width: 100%;
     height: 100%;
     display: flex;
