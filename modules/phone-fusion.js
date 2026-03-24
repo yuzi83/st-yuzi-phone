@@ -6,20 +6,74 @@
 
 import { navigateBack } from './phone-core.js';
 import { PHONE_ICONS } from './phone-home.js';
-import { escapeHtml, escapeHtmlAttr, safeText } from './utils.js';
+import { showNotification } from './integration.js';
+import { Logger } from './error-handler.js';
+import { escapeHtml, escapeHtmlAttr } from './utils.js';
 
 let templateA = null;
 let templateB = null;
 let templateAName = '';
 let templateBName = '';
+let activeDownloadUrl = null;
+let fusionPageCleanup = null;
 
-export function renderFusion(container) {
-    templateA = null;
-    templateB = null;
-    templateAName = '';
-    templateBName = '';
+function revokeFusionDownloadUrl() {
+    if (!activeDownloadUrl) return;
 
-    container.innerHTML = `
+    try {
+        URL.revokeObjectURL(activeDownloadUrl);
+    } catch (error) {
+        Logger.warn('[phone-fusion] revokeObjectURL failed:', error);
+    }
+
+    activeDownloadUrl = null;
+}
+
+function cleanupFusionPageResources() {
+    if (typeof fusionPageCleanup === 'function') {
+        try {
+            fusionPageCleanup();
+        } catch (error) {
+            Logger.warn('[phone-fusion] page cleanup failed:', error);
+        }
+    }
+
+    fusionPageCleanup = null;
+    revokeFusionDownloadUrl();
+}
+
+function bindFusionContainerCleanup(container) {
+    if (!(container instanceof HTMLElement) || !(document.body instanceof HTMLElement)) {
+        fusionPageCleanup = null;
+        return;
+    }
+
+    const observer = new MutationObserver(() => {
+        if (container.isConnected) return;
+        cleanupFusionPageResources();
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    fusionPageCleanup = () => observer.disconnect();
+}
+
+function reportFusionError(message, error = null) {
+    if (error) {
+        Logger.warn(`[phone-fusion] ${message}`, error);
+    }
+    showNotification(message, 'error');
+}
+
+function clearFusionResult(container) {
+    revokeFusionDownloadUrl();
+    const resultEl = container?.querySelector?.('#phone-fusion-result');
+    if (resultEl instanceof HTMLElement) {
+        resultEl.innerHTML = '';
+    }
+}
+
+function buildFusionPageHtml() {
+    return `
         <div class="phone-app-page">
             <div class="phone-nav-bar">
                 <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
@@ -52,6 +106,83 @@ export function renderFusion(container) {
             </div>
         </div>
     `;
+}
+
+function buildFusionCompareRowHtml({ key, name, cols, source, sourceClass, conflict }) {
+    if (conflict) {
+        return `
+            <div class="phone-fusion-table-row phone-fusion-conflict" data-key="${escapeHtmlAttr(key)}">
+                <span class="phone-fusion-col-check">
+                    <input type="checkbox" class="phone-fusion-check" checked>
+                </span>
+                <span class="phone-fusion-col-name">${escapeHtml(name)}</span>
+                <span class="phone-fusion-col-source ${sourceClass}">
+                    <select class="phone-fusion-source-select" data-key="${escapeHtmlAttr(key)}">
+                        <option value="A">模板 A</option>
+                        <option value="B">模板 B</option>
+                    </select>
+                </span>
+                <span class="phone-fusion-col-cols">${cols}</span>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="phone-fusion-table-row" data-key="${escapeHtmlAttr(key)}">
+            <span class="phone-fusion-col-check">
+                <input type="checkbox" class="phone-fusion-check" checked>
+            </span>
+            <span class="phone-fusion-col-name">${escapeHtml(name)}</span>
+            <span class="phone-fusion-col-source ${sourceClass}">${source}</span>
+            <span class="phone-fusion-col-cols">${cols}</span>
+        </div>
+    `;
+}
+
+function buildFusionCompareHtml(rowsHtml) {
+    return `
+        <div class="phone-fusion-table">
+            <div class="phone-fusion-table-header">
+                <span class="phone-fusion-col-check"></span>
+                <span class="phone-fusion-col-name">表格名称</span>
+                <span class="phone-fusion-col-source">来源</span>
+                <span class="phone-fusion-col-cols">列数</span>
+            </div>
+            ${rowsHtml}
+        </div>
+    `;
+}
+
+function buildFusionEmptyResultHtml() {
+    return `<div class="phone-empty-msg">未选中任何表格</div>`;
+}
+
+function buildFusionSuccessResultHtml(activeUrl, sheetCount) {
+    return `
+        <div class="phone-fusion-success">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="32" height="32" stroke-linecap="round"><path d="M5 12l5 5L19 7"/></svg>
+            <div class="phone-fusion-success-text">
+                <strong>合并完成</strong>
+                <span>${sheetCount} 个表格已合并</span>
+            </div>
+            <a class="phone-fusion-download-btn" href="${activeUrl}" download="merged_template.json">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" stroke-linecap="round"><path d="M12 4v12M12 16l-4-4M12 16l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+                <span>下载合并模板</span>
+            </a>
+        </div>
+    `;
+}
+
+export function renderFusion(container) {
+    cleanupFusionPageResources();
+    bindFusionContainerCleanup(container);
+
+    templateA = null;
+    templateB = null;
+    templateAName = '';
+    templateBName = '';
+
+    container.innerHTML = buildFusionPageHtml();
 
     container.querySelector('.phone-nav-back')?.addEventListener('click', navigateBack);
 
@@ -59,6 +190,7 @@ export function renderFusion(container) {
         pickJsonFile((obj, name) => {
             templateA = obj;
             templateAName = name;
+            clearFusionResult(container);
             container.querySelector('#phone-fname-a').textContent = name;
             container.querySelector('#phone-import-a').classList.add('phone-fusion-imported');
             tryRenderCompare(container);
@@ -69,6 +201,7 @@ export function renderFusion(container) {
         pickJsonFile((obj, name) => {
             templateB = obj;
             templateBName = name;
+            clearFusionResult(container);
             container.querySelector('#phone-fname-b').textContent = name;
             container.querySelector('#phone-import-b').classList.add('phone-fusion-imported');
             tryRenderCompare(container);
@@ -87,6 +220,7 @@ function tryRenderCompare(container) {
     if (!templateA || !templateB) {
         compareEl.innerHTML = '';
         actionsEl.style.display = 'none';
+        clearFusionResult(container);
         return;
     }
 
@@ -96,55 +230,19 @@ function tryRenderCompare(container) {
     // 找出所有唯一的 sheet keys
     const allKeys = [...new Set([...sheetsA.map(s => s.key), ...sheetsB.map(s => s.key)])];
 
-    compareEl.innerHTML = `
-        <div class="phone-fusion-table">
-            <div class="phone-fusion-table-header">
-                <span class="phone-fusion-col-check"></span>
-                <span class="phone-fusion-col-name">表格名称</span>
-                <span class="phone-fusion-col-source">来源</span>
-                <span class="phone-fusion-col-cols">列数</span>
-            </div>
-            ${allKeys.map(key => {
-                const inA = sheetsA.find(s => s.key === key);
-                const inB = sheetsB.find(s => s.key === key);
-                const conflict = inA && inB;
-                const name = inA?.name || inB?.name || key;
-                const cols = inA?.cols || inB?.cols || 0;
-                const source = conflict ? '两者都有' : (inA ? 'A' : 'B');
-                const sourceClass = conflict ? 'phone-source-conflict' : (inA ? 'phone-source-a' : 'phone-source-b');
+    const rowsHtml = allKeys.map(key => {
+        const inA = sheetsA.find(s => s.key === key);
+        const inB = sheetsB.find(s => s.key === key);
+        const conflict = inA && inB;
+        const name = inA?.name || inB?.name || key;
+        const cols = inA?.cols || inB?.cols || 0;
+        const source = conflict ? '两者都有' : (inA ? 'A' : 'B');
+        const sourceClass = conflict ? 'phone-source-conflict' : (inA ? 'phone-source-a' : 'phone-source-b');
 
-                if (conflict) {
-                    // 冲突：让用户选择来源
-                    return `
-                        <div class="phone-fusion-table-row phone-fusion-conflict" data-key="${escapeHtmlAttr(key)}">
-                            <span class="phone-fusion-col-check">
-                                <input type="checkbox" class="phone-fusion-check" checked>
-                            </span>
-                            <span class="phone-fusion-col-name">${escapeHtml(name)}</span>
-                            <span class="phone-fusion-col-source ${sourceClass}">
-                                <select class="phone-fusion-source-select" data-key="${escapeHtmlAttr(key)}">
-                                    <option value="A">模板 A</option>
-                                    <option value="B">模板 B</option>
-                                </select>
-                            </span>
-                            <span class="phone-fusion-col-cols">${cols}</span>
-                        </div>
-                    `;
-                }
+        return buildFusionCompareRowHtml({ key, name, cols, source, sourceClass, conflict });
+    }).join('');
 
-                return `
-                    <div class="phone-fusion-table-row" data-key="${escapeHtmlAttr(key)}">
-                        <span class="phone-fusion-col-check">
-                            <input type="checkbox" class="phone-fusion-check" checked>
-                        </span>
-                        <span class="phone-fusion-col-name">${escapeHtml(name)}</span>
-                        <span class="phone-fusion-col-source ${sourceClass}">${source}</span>
-                        <span class="phone-fusion-col-cols">${cols}</span>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-    `;
+    compareEl.innerHTML = buildFusionCompareHtml(rowsHtml);
 
     actionsEl.style.display = 'flex';
 }
@@ -180,28 +278,17 @@ function performMerge(container) {
     const sheetCount = Object.keys(merged).filter(k => k.startsWith('sheet_')).length;
 
     if (sheetCount === 0) {
-        resultEl.innerHTML = `<div class="phone-empty-msg">未选中任何表格</div>`;
+        resultEl.innerHTML = buildFusionEmptyResultHtml();
         return;
     }
 
     // 生成输出
+    clearFusionResult(container);
     const jsonStr = JSON.stringify(merged, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    activeDownloadUrl = URL.createObjectURL(blob);
 
-    resultEl.innerHTML = `
-        <div class="phone-fusion-success">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="32" height="32" stroke-linecap="round"><path d="M5 12l5 5L19 7"/></svg>
-            <div class="phone-fusion-success-text">
-                <strong>合并完成</strong>
-                <span>${sheetCount} 个表格已合并</span>
-            </div>
-            <a class="phone-fusion-download-btn" href="${url}" download="merged_template.json">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" stroke-linecap="round"><path d="M12 4v12M12 16l-4-4M12 16l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
-                <span>下载合并模板</span>
-            </a>
-        </div>
-    `;
+    resultEl.innerHTML = buildFusionSuccessResultHtml(activeDownloadUrl, sheetCount);
 }
 
 // ===== 工具 =====
@@ -229,21 +316,49 @@ function pickJsonFile(callback) {
     input.style.display = 'none';
     document.body.appendChild(input);
 
+    const cleanupInput = () => {
+        if (input.parentNode) {
+            input.remove();
+        }
+    };
+
+    const handleWindowFocus = () => {
+        window.setTimeout(() => {
+            if (!input.files?.length) {
+                cleanupInput();
+            }
+        }, 300);
+    };
+
+    window.addEventListener('focus', handleWindowFocus, { once: true });
+
     input.addEventListener('change', () => {
         const file = input.files?.[0];
-        if (!file) return;
+        if (!file) {
+            cleanupInput();
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = () => {
             try {
-                const obj = JSON.parse(reader.result);
+                const text = typeof reader.result === 'string' ? reader.result : '';
+                const obj = JSON.parse(text);
                 callback(obj, file.name);
-            } catch (e) {
-                alert('JSON 解析失败: ' + e.message);
+            } catch (error) {
+                reportFusionError(`模板文件解析失败：${file.name}`, error);
+            } finally {
+                cleanupInput();
             }
-            input.remove();
         };
+
+        reader.onerror = () => {
+            reportFusionError(`模板文件读取失败：${file.name}`, reader.error || null);
+            cleanupInput();
+        };
+
         reader.readAsText(file);
-    });
+    }, { once: true });
 
     input.click();
 }

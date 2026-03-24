@@ -128,6 +128,46 @@ async function handleDockAction(app, container) {
     showHomeToast(container, result.message, !result.ok);
 }
 
+function buildHomeShellStyleText({ bgStyle, appIconSize, appIconRadius, appGridColumns, appGridGap, dockIconSize }) {
+    const styleChunks = [];
+
+    if (bgStyle) {
+        styleChunks.push(bgStyle);
+    }
+
+    styleChunks.push(`--phone-app-icon-size:${appIconSize}px`);
+    styleChunks.push(`--phone-app-icon-radius:${appIconRadius}px`);
+    styleChunks.push(`--phone-app-grid-columns:${appGridColumns}`);
+    styleChunks.push(`--phone-app-grid-gap:${appGridGap}px`);
+    styleChunks.push(`--phone-dock-icon-size:${dockIconSize}px`);
+
+    return styleChunks.join('; ');
+}
+
+function buildHomeShellHtml(styleText) {
+    return `
+        <div class="phone-home" style="${styleText}">
+            <div class="phone-home-overlay"></div>
+            <div class="phone-app-grid"></div>
+            <div class="phone-dock" data-dock-count="4"></div>
+        </div>
+    `;
+}
+
+function buildHomeAppItemHtml(iconHtml, name) {
+    return `
+        <div class="phone-app-icon">${iconHtml}</div>
+        <span class="phone-app-label">${name}</span>
+    `;
+}
+
+function buildDockItemHtml(iconHtml, name) {
+    return `
+        <div class="phone-app-icon phone-dock-icon">${iconHtml}</div>
+        <span class="phone-app-label">${name}</span>
+    `;
+}
+
 // ===== 主屏渲染 =====
 
 export function renderHomeScreen(container) {
@@ -147,13 +187,16 @@ export function renderHomeScreen(container) {
         ? `background-image: url(${phoneSettings.backgroundImage}); background-size: cover; background-position: center;`
         : '';
 
-    container.innerHTML = `
-        <div class="phone-home" style="${bgStyle}; --phone-app-icon-size:${appIconSize}px; --phone-app-icon-radius:${appIconRadius}px; --phone-app-grid-columns:${appGridColumns}; --phone-app-grid-gap:${appGridGap}px; --phone-dock-icon-size:${dockIconSize}px;">
-            <div class="phone-home-overlay"></div>
-            <div class="phone-app-grid"></div>
-            <div class="phone-dock" data-dock-count="4"></div>
-        </div>
-    `;
+    const homeShellStyle = buildHomeShellStyleText({
+        bgStyle,
+        appIconSize,
+        appIconRadius,
+        appGridColumns,
+        appGridGap,
+        dockIconSize,
+    });
+
+    container.innerHTML = buildHomeShellHtml(homeShellStyle);
 
     const grid = container.querySelector('.phone-app-grid');
     const dock = container.querySelector('.phone-dock');
@@ -178,10 +221,7 @@ export function renderHomeScreen(container) {
             app.className = 'phone-app-item';
             app.dataset.sheetKey = key;
             app.style.animationDelay = `${index * 0.04}s`;
-            app.innerHTML = `
-                <div class="phone-app-icon">${iconHtml}</div>
-                <span class="phone-app-label">${name}</span>
-            `;
+            app.innerHTML = buildHomeAppItemHtml(iconHtml, name);
 
             if (!hideTableCountBadge) {
                 const totalCount = getSheetRowCount(sheet);
@@ -252,10 +292,7 @@ export function renderHomeScreen(container) {
 
         const el = document.createElement('div');
         el.className = `phone-dock-item phone-dock-item-${safeAppIdClass}`;
-        el.innerHTML = `
-            <div class="phone-app-icon phone-dock-icon">${iconHtml}</div>
-            <span class="phone-app-label">${app.name}</span>
-        `;
+        el.innerHTML = buildDockItemHtml(iconHtml, app.name);
         el.dataset.dockAppId = app.id;
         dock.appendChild(el);
     });

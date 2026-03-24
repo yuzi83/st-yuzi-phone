@@ -71,9 +71,12 @@ const SPECIAL_FIELD_BINDING_ALLOWED_KEYS = Object.freeze([
     'threadSubtitle',
     'sender',
     'senderRole',
+    'chatTarget',
     'content',
     'sentAt',
     'messageStatus',
+    'requestId',
+    'replyToMessageId',
     'imageDesc',
     'videoDesc',
     'playerReply1',
@@ -106,17 +109,14 @@ const DEFAULT_SPECIAL_FIELD_BINDINGS_BY_RENDERER = Object.freeze({
         threadSubtitle: ['会话副标题', '会话描述', '备注'],
         sender: ['发送者', '发言者', '作者'],
         senderRole: ['发送者身份', '角色', '身份'],
+        chatTarget: ['聊天对象', '对话目标'],
         content: ['消息内容', '三人消息内容', '文案', '正文'],
         sentAt: ['消息发送时间', '发送时间', '时间', '@now'],
         messageStatus: ['消息状态', '状态'],
+        requestId: ['请求ID', '请求Id', '请求编号'],
+        replyToMessageId: ['回复到消息ID', '回复消息ID', '回复到'],
         imageDesc: ['图片描述'],
         videoDesc: ['视频描述'],
-        playerReply1: ['主角回复选项1'],
-        playerReply2: ['主角回复选项2'],
-        playerReply3: ['主角回复选项3'],
-        counterReply1: ['对方回复1', '三人回复1', '发布者回复1'],
-        counterReply2: ['对方回复2', '三人回复2', '发布者回复2'],
-        counterReply3: ['对方回复3', '三人回复3', '发布者回复3'],
     },
     special_moments: {
         poster: ['发帖人', '作者', '发布者', '发送者'],
@@ -169,11 +169,9 @@ const DEFAULT_SPECIAL_STYLE_OPTIONS_BY_RENDERER = Object.freeze({
         avatarShape: 'circle',
         bubbleMaxWidthPct: 80,
         conversationTitleMode: 'auto',
-        replyOptionMode: 'auto',
         mediaActionTextMode: 'short',
         showAvatar: true,
         showMessageTime: true,
-        showReplyReset: true,
         emptyConversationText: '暂无消息',
         emptyDetailText: '该会话暂无消息',
         emptyMessageText: '（空消息）',
@@ -265,21 +263,37 @@ const GENERIC_LAYOUT_ALLOWED_VALUES = Object.freeze({
 
 const DEFAULT_GENERIC_LAYOUT_OPTIONS = Object.freeze({
     pageMode: 'framed',
-    navMode: 'glass',
-    listContainerMode: 'card',
+    navMode: 'solid',
+    listContainerMode: 'table',
     listItemMode: 'row',
     listMetaMode: 'inline',
-    detailContainerMode: 'card',
-    detailFieldLayout: 'stack',
+    detailContainerMode: 'plain',
+    detailFieldLayout: 'grid-2',
     detailGroupMode: 'section',
-    actionBarMode: 'inline',
+    actionBarMode: 'sticky',
     buttonShape: 'rounded',
-    buttonSize: 'sm',
+    buttonSize: 'md',
     density: 'normal',
     shadowLevel: 'soft',
-    radiusLevel: 'md',
+    radiusLevel: 'lg',
     showListDivider: true,
-    showDetailDivider: true,
+    showDetailDivider: false,
+});
+
+const GENERIC_FIELD_BINDING_ALLOWED_KEYS = Object.freeze([
+    'summaryTitle',
+    'summarySubtitle',
+    'summaryStatus',
+    'summaryTime',
+    'summaryPreview',
+]);
+
+const DEFAULT_GENERIC_FIELD_BINDINGS = Object.freeze({
+    summaryTitle: ['标题', '名称', '姓名', '主题', '会话标题', '发帖人', '发帖人网名'],
+    summarySubtitle: ['副标题', '分类', '标签', '话题', '位置'],
+    summaryStatus: ['状态', '进度', '类型', '审核状态'],
+    summaryTime: ['时间', '更新时间', '创建时间', '消息发送时间', '发帖时间'],
+    summaryPreview: ['描述', '内容', '备注', '简介', '文案', '消息内容', '正文'],
 });
 
 const GENERIC_STYLE_TOKEN_ALIAS_MAP = Object.freeze({
@@ -402,9 +416,9 @@ const SPECIAL_MESSAGE_DEFAULT_STYLE_TOKENS = Object.freeze({
     spBtnBg: '#f5f5f5',
     spBtnText: '#222222',
     spBtnBorder: '#dbdbdb',
-    spInputBg: '#f7f7f7',
+    spInputBg: '#ffffff',
     spInputText: '#191919',
-    spInputBorder: '#e6e6e6',
+    spInputBorder: '#dfe3e8',
     spInputPlaceholder: '#ababab',
     spShadowSm: '0 1px 2px rgba(0, 0, 0, 0.06)',
     spShadowMd: '0 2px 6px rgba(0, 0, 0, 0.08)',
@@ -416,16 +430,6 @@ const SPECIAL_MESSAGE_DEFAULT_STYLE_TOKENS = Object.freeze({
     spScrollbarThumb: 'rgba(0, 0, 0, 0.24)',
     spScrollbarTrack: 'rgba(0, 0, 0, 0.08)',
 
-    // 兼容旧字段
-    pageBgColor: '#ededed',
-    navBgColor: '#ededed',
-    navTextColor: '#191919',
-    bubbleLeftBg: '#ffffff',
-    bubbleLeftText: '#191919',
-    bubbleRightBg: '#95ec69',
-    bubbleRightText: '#111111',
-    bubbleBorderRadius: '10px',
-    timeTextColor: '#b2b2b2',
 });
 
 const SPECIAL_MOMENTS_DEFAULT_STYLE_TOKENS = Object.freeze({
@@ -499,7 +503,7 @@ const BUILTIN_TEMPLATES = Object.freeze([
             tableNameExact: ['消息记录表'],
             tableNameIncludes: ['消息', '聊天'],
             requiredHeaders: ['会话ID', '发送者', '消息内容'],
-            optionalHeaders: ['消息发送时间', '图片描述', '视频描述', '主角回复选项1', '对方回复1'],
+            optionalHeaders: ['会话标题', '消息发送时间', '消息状态', '聊天对象', '请求ID', '回复到消息ID', '图片描述', '视频描述'],
             minScore: 70,
         },
         render: {
@@ -513,18 +517,48 @@ const BUILTIN_TEMPLATES = Object.freeze([
             styleTokens: {
                 ...SPECIAL_MESSAGE_DEFAULT_STYLE_TOKENS,
             },
+            structureOptions: {
+                conversationList: {
+                    showSubtitle: true,
+                    showLastMessage: true,
+                },
+                detailHeader: {
+                    showSubtitle: true,
+                },
+                composeBar: {
+                    showStatusText: true,
+                    showRetryButton: true,
+                    showTemplateNote: true,
+                },
+            },
+            typographyOptions: {
+                navTitleFontSize: '16px',
+                navTitleFontWeight: '700',
+                conversationTitleFontSize: '14px',
+                conversationTitleFontWeight: '600',
+                conversationPreviewFontSize: '12px',
+                conversationMetaFontSize: '11px',
+                messageFontSize: '14px',
+                messageLineHeight: '1.6',
+                messageMetaFontSize: '11px',
+                composeStatusFontSize: '11px',
+            },
+            motionOptions: {
+                fastDuration: '0.15s',
+                normalDuration: '0.25s',
+                hoverLiftY: '-1px',
+            },
             customCss: [
                 '.phone-special-message .phone-nav-bar { backdrop-filter: blur(6px); }',
                 '.phone-special-message .phone-special-conversation-item { border-radius: var(--sp-radius-sm, 10px); margin-bottom: 2px; }',
                 '.phone-special-message .phone-special-message-item.media-row .phone-special-message-bubble { font-style: italic; }',
-                '.phone-special-message .phone-special-reply-option-item { font-weight: var(--sp-font-weight-medium, 600); }',
                 '.phone-special-message .phone-special-media-preview-modal { max-width: 92%; }',
             ].join('\n'),
         },
         meta: {
             author: 'YuziPhone',
-            description: '内置默认专属模板：消息记录表（全接口示例，支持 fieldBindings + styleOptions + styleTokens + customCss）',
-            tags: ['builtin', 'special', 'message', 'full-interface-demo'],
+            description: '内置默认专属模板：消息记录表（补齐聊天对象/请求链路字段，并接入结构/排版/动效配置）',
+            tags: ['builtin', 'special', 'message', 'structure-runtime'],
             updatedAt: 1760000000000,
         },
     },
@@ -540,7 +574,7 @@ const BUILTIN_TEMPLATES = Object.freeze([
             tableNameExact: ['动态表'],
             tableNameIncludes: ['动态', '朋友圈'],
             requiredHeaders: ['发帖人', '标题', '文案'],
-            optionalHeaders: ['发帖时间', '评论内容', '点赞数', '转发数', '图片描述', '视频描述', '主角回复选项1', '发布者回复1'],
+            optionalHeaders: ['发帖时间', '评论内容', '点赞数', '评论数', '转发数', '浏览数', '图片描述', '视频描述', '话题', '位置', '主角回复选项1', '发布者回复1'],
             minScore: 68,
         },
         render: {
@@ -554,6 +588,31 @@ const BUILTIN_TEMPLATES = Object.freeze([
             styleTokens: {
                 ...SPECIAL_MOMENTS_DEFAULT_STYLE_TOKENS,
             },
+            structureOptions: {
+                postMeta: {
+                    showTopicTag: true,
+                    showLocation: true,
+                    showViewCount: true,
+                    showTime: true,
+                },
+                commentList: {
+                    showCount: true,
+                },
+            },
+            typographyOptions: {
+                navTitleFontSize: '16px',
+                postTitleFontSize: '15px',
+                postTitleFontWeight: '700',
+                postMetaFontSize: '11px',
+                postBodyFontSize: '14px',
+                postBodyLineHeight: '1.7',
+                commentFontSize: '13px',
+            },
+            motionOptions: {
+                fastDuration: '0.15s',
+                normalDuration: '0.25s',
+                hoverLiftY: '-1px',
+            },
             customCss: [
                 '.phone-special-moments .phone-special-moment-item { backdrop-filter: blur(4px); }',
                 '.phone-special-moments .phone-special-moment-stats span { letter-spacing: 0.3px; }',
@@ -563,8 +622,8 @@ const BUILTIN_TEMPLATES = Object.freeze([
         },
         meta: {
             author: 'YuziPhone',
-            description: '内置默认专属模板：动态表（全接口示例，支持 fieldBindings + styleOptions + styleTokens + customCss）',
-            tags: ['builtin', 'special', 'moments', 'full-interface-demo'],
+            description: '内置默认专属模板：动态表（新增帖子元信息、浏览数与评论区结构配置）',
+            tags: ['builtin', 'special', 'moments', 'structure-runtime'],
             updatedAt: 1760000000000,
         },
     },
@@ -580,7 +639,7 @@ const BUILTIN_TEMPLATES = Object.freeze([
             tableNameExact: ['论坛表'],
             tableNameIncludes: ['论坛', '帖子'],
             requiredHeaders: ['发帖人网名', '主角网名', '标题', '文案'],
-            optionalHeaders: ['发帖时间', '评论内容', '点赞数', '转发数', '图片描述', '视频描述', '主角回复选项1', '发布者回复1'],
+            optionalHeaders: ['发帖时间', '评论内容', '点赞数', '评论数', '转发数', '浏览数', '图片描述', '视频描述', '话题', '位置', '主角回复选项1', '发布者回复1'],
             minScore: 68,
         },
         render: {
@@ -594,6 +653,34 @@ const BUILTIN_TEMPLATES = Object.freeze([
             styleTokens: {
                 ...SPECIAL_FORUM_DEFAULT_STYLE_TOKENS,
             },
+            structureOptions: {
+                postMeta: {
+                    showTopicTag: true,
+                    showLocation: false,
+                    showViewCount: true,
+                    showTime: true,
+                },
+                forumMeta: {
+                    showPrefix: true,
+                },
+                commentList: {
+                    showCount: true,
+                },
+            },
+            typographyOptions: {
+                navTitleFontSize: '16px',
+                postTitleFontSize: '16px',
+                postTitleFontWeight: '700',
+                postMetaFontSize: '11px',
+                postBodyFontSize: '14px',
+                postBodyLineHeight: '1.7',
+                commentFontSize: '13px',
+            },
+            motionOptions: {
+                fastDuration: '0.15s',
+                normalDuration: '0.25s',
+                hoverLiftY: '-1px',
+            },
             customCss: [
                 '.phone-special-forum .phone-special-moment-title.forum { text-transform: none; }',
                 '.phone-special-forum .phone-special-moment-meta.forum { font-style: italic; }',
@@ -603,8 +690,8 @@ const BUILTIN_TEMPLATES = Object.freeze([
         },
         meta: {
             author: 'YuziPhone',
-            description: '内置默认专属模板：论坛表（全接口示例，支持 fieldBindings + styleOptions + styleTokens + customCss）',
-            tags: ['builtin', 'special', 'forum', 'full-interface-demo'],
+            description: '内置默认专属模板：论坛表（新增板块元信息、浏览数与论坛专属结构配置）',
+            tags: ['builtin', 'special', 'forum', 'structure-runtime'],
             updatedAt: 1760000000000,
         },
     },
@@ -625,72 +712,115 @@ const BUILTIN_TEMPLATES = Object.freeze([
         },
         render: {
             rendererKey: 'generic_table',
+            fieldBindings: {
+                ...DEFAULT_GENERIC_FIELD_BINDINGS,
+            },
             layoutOptions: {
                 pageMode: 'framed',
-                navMode: 'glass',
-                listContainerMode: 'card',
+                navMode: 'solid',
+                listContainerMode: 'table',
                 listItemMode: 'row',
                 listMetaMode: 'inline',
-                detailContainerMode: 'card',
-                detailFieldLayout: 'stack',
+                detailContainerMode: 'plain',
+                detailFieldLayout: 'grid-2',
                 detailGroupMode: 'section',
-                actionBarMode: 'inline',
+                actionBarMode: 'sticky',
                 buttonShape: 'rounded',
                 buttonSize: 'md',
                 density: 'normal',
                 shadowLevel: 'soft',
                 radiusLevel: 'lg',
-                showListDivider: false,
-                showDetailDivider: true,
+                showListDivider: true,
+                showDetailDivider: false,
+            },
+            structureOptions: {
+                toolbar: {
+                    showSearch: true,
+                    showResultCount: true,
+                    showHint: true,
+                },
+                listItem: {
+                    showIndex: true,
+                    showStatus: true,
+                    showTime: true,
+                    showArrow: true,
+                },
+                bottomBar: {
+                    showAdd: true,
+                    showLock: true,
+                    showDelete: true,
+                },
+            },
+            typographyOptions: {
+                navTitleFontSize: '16px',
+                listTitleFontSize: '14px',
+                listPreviewFontSize: '13px',
+                detailKeyFontSize: '11px',
+                detailValueFontSize: '13px',
+                buttonFontSize: '13px',
+                chipFontSize: '11px',
+            },
+            motionOptions: {
+                fastDuration: '0.15s',
+                normalDuration: '0.25s',
             },
             styleTokens: {
-                gtPageBg: 'linear-gradient(180deg, #F8F9FB 0%, #F1F3F6 100%)',
-                gtBodyBg: 'rgba(255, 255, 255, 0.6)',
-                gtText: '#3A3A45',
-                gtMutedText: '#8A8A9E',
-                gtNavBg: 'rgba(255, 255, 255, 0.85)',
-                gtNavBorderColor: 'rgba(239, 239, 244, 0.8)',
-                gtNavText: '#3A3A45',
-                gtNavBackText: '#FF9FB3',
+                gtPageBg: 'linear-gradient(180deg, #F4F7FB 0%, #EEF3F8 100%)',
+                gtBodyBg: 'transparent',
+                gtText: '#0F172A',
+                gtMutedText: '#64748B',
+                gtNavBg: 'rgba(248, 250, 252, 0.9)',
+                gtNavBorderColor: 'rgba(148, 163, 184, 0.18)',
+                gtNavText: '#0F172A',
+                gtNavBackText: '#2563EB',
                 gtListBg: '#FFFFFF',
-                gtListBorder: 'rgba(239, 239, 244, 0.9)',
+                gtListBorder: 'rgba(148, 163, 184, 0.18)',
                 gtListItemBg: '#FFFFFF',
-                gtListItemHoverBg: '#FFF4F7',
-                gtListItemText: '#3A3A45',
+                gtListItemHoverBg: 'rgba(37, 99, 235, 0.06)',
+                gtListItemText: '#0F172A',
                 gtDetailBg: '#FFFFFF',
-                gtDetailBorder: 'rgba(239, 239, 244, 0.9)',
-                gtDetailFieldBg: '#F0F2F5',
-                gtDetailFieldBorder: 'rgba(220, 222, 228, 0.8)',
-                gtDetailKeyText: '#7A7A8E',
-                gtDetailValueText: '#2A2A35',
+                gtDetailBorder: 'rgba(148, 163, 184, 0.18)',
+                gtDetailFieldBg: '#FFFFFF',
+                gtDetailFieldBorder: 'rgba(203, 213, 225, 0.95)',
+                gtDetailKeyText: '#475569',
+                gtDetailValueText: '#0F172A',
                 gtActionBtnBg: '#FFFFFF',
-                gtActionBtnBorder: 'rgba(255, 159, 179, 0.4)',
-                gtActionBtnText: '#FF9FB3',
-                gtBackdropFilter: 'blur(24px)',
+                gtActionBtnBorder: 'rgba(148, 163, 184, 0.28)',
+                gtActionBtnText: '#334155',
+                gtBackdropFilter: 'blur(16px)',
+                gtAccent: '#2563EB',
+                gtAccentStrong: '#1D4ED8',
+                gtAccentSoft: 'rgba(37, 99, 235, 0.12)',
+                gtAccentBorder: 'rgba(37, 99, 235, 0.22)',
+                gtSuccess: '#16A34A',
+                gtWarning: '#D97706',
+                gtDanger: '#DC2626',
+                gtInfo: '#2563EB',
+                gtPanelBg: 'rgba(255, 255, 255, 0.8)',
+                gtPanelMutedBg: 'rgba(248, 250, 252, 0.74)',
+                gtPanelBorderStrong: 'rgba(148, 163, 184, 0.22)',
                 gtRadiusSm: '10px',
                 gtRadiusMd: '16px',
-                gtRadiusLg: '24px',
-                gtShadowSm: '0 2px 8px rgba(184, 184, 204, 0.06)',
-                gtShadowMd: '0 8px 24px rgba(184, 184, 204, 0.1)',
-                gtShadowLg: '0 14px 34px rgba(184, 184, 204, 0.14)',
+                gtRadiusLg: '22px',
+                gtShadowSm: '0 8px 18px rgba(15, 23, 42, 0.06)',
+                gtShadowMd: '0 18px 40px rgba(15, 23, 42, 0.08)',
+                gtShadowLg: '0 24px 56px rgba(15, 23, 42, 0.12)',
                 gtGapXs: '4px',
-                gtGapSm: '8px',
-                gtGapMd: '12px',
-                gtGapLg: '24px',
-                tableBackgroundColor: '#FFFFFF',
-                headerBackgroundColor: 'rgba(255, 255, 255, 0.95)',
-                textColor: '#3A3A45',
-                borderColor: 'rgba(239, 239, 244, 0.9)',
-                borderRadius: '24px',
-                boxShadow: '0 8px 24px rgba(184, 184, 204, 0.1)',
-                backdropFilter: 'blur(24px)',
+                gtGapSm: '10px',
+                gtGapMd: '14px',
+                gtGapLg: '20px',
             },
-            customCss: '.phone-generic-slot-nav { box-shadow: 0 4px 20px rgba(184, 184, 204, 0.08); padding-bottom: 4px; } .phone-generic-slot-list-item.is-row-locked { opacity: 0.6; filter: grayscale(50%); } .phone-generic-slot-list-item { margin-bottom: 12px; display: flex !important; justify-content: space-between !important; } .phone-generic-slot-detail-field { margin-bottom: 6px; padding: 6px 12px !important; min-height: unset !important; } .phone-generic-slot-detail-field.is-locked { outline: 1px dashed rgba(255, 159, 179, 0.6); } .phone-generic-slot-detail-field input, .phone-generic-slot-detail-field textarea, .phone-generic-slot-detail-field select { background-color: #FFFFFF !important; color: #3A3A45 !important; border: 1px solid rgba(220, 222, 228, 0.8) !important; border-radius: 8px !important; padding: 4px 10px !important; margin-top: 4px !important; min-height: 38px !important; } .phone-generic-slot-list-meta { margin-left: auto !important; padding-left: 20px !important; color: #8A8A9E !important; flex-shrink: 0 !important; } .phone-generic-slot-list-item-title { margin-right: auto !important; padding-right: 20px !important; font-weight: 500 !important; flex-grow: 1 !important; }',
+            customCss: [
+                '.phone-generic-slot-nav { box-shadow: 0 1px 0 rgba(148, 163, 184, 0.14); }',
+                '.phone-generic-slot-list-item.is-row-locked { opacity: 0.74; }',
+                '.phone-generic-slot-detail-field.is-locked { border-color: rgba(217, 119, 6, 0.18); background: rgba(245, 158, 11, 0.06); }',
+                '.phone-generic-slot-detail-field textarea::placeholder { color: rgba(100, 116, 139, 0.68); }',
+            ].join('\n'),
         },
         meta: {
             author: 'YuziPhone',
-            description: '内置默认模板：通用表格全接口示例（layoutOptions + styleTokens + customCss）',
-            tags: ['builtin', 'generic', 'full-interface-demo'],
+            description: '内置默认模板：通用表格（支持摘要字段映射、结构开关、排版与动效变量）',
+            tags: ['builtin', 'generic', 'summary-bindings', 'structure-runtime'],
             updatedAt: 1760000000000,
         },
     },
@@ -964,6 +1094,28 @@ function normalizeSpecialFieldBindings(rawFieldBindings, rendererKey) {
     return merged;
 }
 
+function normalizeGenericFieldBindings(rawFieldBindings) {
+    const source = unwrapAnnotatedValue(rawFieldBindings);
+    const src = source && typeof source === 'object' && !Array.isArray(source)
+        ? source
+        : {};
+
+    const merged = {};
+
+    GENERIC_FIELD_BINDING_ALLOWED_KEYS.forEach((fieldKey) => {
+        const rawValue = Object.prototype.hasOwnProperty.call(src, fieldKey)
+            ? src[fieldKey]
+            : DEFAULT_GENERIC_FIELD_BINDINGS[fieldKey];
+
+        const normalized = normalizeFieldBindingCandidates(rawValue);
+        if (normalized.length > 0) {
+            merged[fieldKey] = normalized;
+        }
+    });
+
+    return merged;
+}
+
 function normalizeSpecialStyleOptions(rawStyleOptions, rendererKey) {
     const defaults = DEFAULT_SPECIAL_STYLE_OPTIONS_BY_RENDERER[rendererKey]
         || DEFAULT_SPECIAL_STYLE_OPTIONS_BY_RENDERER.special_message
@@ -1100,7 +1252,7 @@ function normalizeRender(rawRender, templateType) {
             ? normalizeGenericStyleTokens(src.styleTokens)
             : normalizeSpecialStyleTokens(src.styleTokens),
         fieldBindings: isGenericRenderer
-            ? {}
+            ? normalizeGenericFieldBindings(src.fieldBindings)
             : normalizeSpecialFieldBindings(src.fieldBindings, rendererKey),
         styleOptions: isGenericRenderer
             ? {}

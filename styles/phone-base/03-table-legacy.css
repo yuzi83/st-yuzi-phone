@@ -1,0 +1,77 @@
+/* --- Table Viewer Cards --- */
+.phone-table-note {
+    background: rgba(40, 40, 40, 0.6);
+    border-radius: 14px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+.phone-table-note-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #0A84FF;
+    font-weight: 500;
+}
+.phone-table-note-toggle svg {
+    flex-shrink: 0;
+}
+.phone-table-note-content {
+    padding: 0 16px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(235, 235, 245, 0.6);
+    max-height: 200px;
+    overflow-y: auto;
+}
+.phone-table-config-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.phone-config-tag {
+    font-size: 12px;
+    background: rgba(10, 132, 255, 0.15);
+    color: #0A84FF;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-weight: 500;
+}
+
+.phone-table-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.phone-table-card:active {
+    background: rgba(60, 60, 60, 0.6);
+}
+.phone-card-row-num {
+    font-size: 13px;
+    color: rgba(235, 235, 245, 0.3);
+    font-weight: 600;
+    min-width: 24px;
+}
+.phone-card-expand-icon {
+    color: rgba(235, 235, 245, 0.3);
+    transition: transform 0.25s ease;
+    flex-shrink: 0;
+}
+.phone-table-card.expanded .phone-card-expand-icon {
+    transform: rotate(180deg);
+}
+.phone-card-label {
+    color: rgba(235, 235, 245, 0.6);
+    font-size: 12px;
+    font-weight: 500;
+}
+.phone-card-value {
+    color: #fff;
+    word-break: break-word;
+}
+.phone-card-value-full {
+    white-space: pre-wrap;
+}

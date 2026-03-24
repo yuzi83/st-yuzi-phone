@@ -2,10 +2,38 @@
 /**
  * Yuzi Phone - 运行时资源管理
  * 统一管理定时器、RAF、事件监听与清理逻辑，避免长会话泄漏。
+ * @fix P1-016 统一错误处理，使用 Logger 替代 console
  */
+
+import { Logger } from './error-handler.js';
 
 function isFn(fn) {
     return typeof fn === 'function';
+}
+
+/**
+ * 错误类型枚举
+ */
+const RuntimeErrorType = {
+    TIMEOUT: 'timeout',
+    INTERVAL: 'interval',
+    RAF: 'requestAnimationFrame',
+    LISTENER: 'listener',
+    CLEANUP: 'cleanup',
+};
+
+/**
+ * 格式化错误日志
+ * @param {string} scopeName - 作用域名称
+ * @param {string} type - 错误类型
+ * @param {Error} error - 错误对象
+ * @param {Object} [context] - 上下文信息
+ */
+function logError(scopeName, type, error, context = {}) {
+    const message = error?.message || String(error);
+    const details = Object.keys(context).length > 0 ? JSON.stringify(context) : '';
+    
+    Logger.warn(`[${scopeName}][${type}] ${message}`, details);
 }
 
 export function createRuntimeScope(scopeName = 'yuzi-runtime') {
@@ -15,12 +43,12 @@ export function createRuntimeScope(scopeName = 'yuzi-runtime') {
     const listenerRecords = new Set();
     const cleanups = new Set();
 
-    const safeInvoke = (fn) => {
+    const safeInvoke = (fn, type = RuntimeErrorType.CLEANUP) => {
         if (!isFn(fn)) return;
         try {
             fn();
         } catch (e) {
-            console.warn(`[玉子手机][${scopeName}] cleanup error:`, e);
+            logError(scopeName, type, e);
         }
     };
 
@@ -32,7 +60,7 @@ export function createRuntimeScope(scopeName = 'yuzi-runtime') {
             try {
                 callback?.();
             } catch (e) {
-                console.warn(`[玉子手机][${scopeName}] timeout callback error:`, e);
+                logError(scopeName, RuntimeErrorType.TIMEOUT, e, { delay: ms });
             }
         }, ms);
         timeoutIds.add(id);
@@ -52,7 +80,7 @@ export function createRuntimeScope(scopeName = 'yuzi-runtime') {
             try {
                 callback?.();
             } catch (e) {
-                console.warn(`[玉子手机][${scopeName}] interval callback error:`, e);
+                logError(scopeName, RuntimeErrorType.INTERVAL, e, { delay: ms });
             }
         }, ms);
         intervalIds.add(id);
@@ -75,7 +103,7 @@ export function createRuntimeScope(scopeName = 'yuzi-runtime') {
             try {
                 callback?.(ts);
             } catch (e) {
-                console.warn(`[玉子手机][${scopeName}] raf callback error:`, e);
+                logError(scopeName, RuntimeErrorType.RAF, e);
             }
         });
 
@@ -168,7 +196,7 @@ export function scheduleIdleTask(task, options = {}) {
             try {
                 task?.();
             } catch (e) {
-                console.warn('[玉子手机][idle-task] error:', e);
+                Logger.warn('[idle-task] error:', e);
             }
         }, { timeout: timeoutMs });
 
@@ -183,7 +211,7 @@ export function scheduleIdleTask(task, options = {}) {
         try {
             task?.();
         } catch (e) {
-            console.warn('[玉子手机][idle-task] error:', e);
+            Logger.warn('[idle-task] error:', e);
         }
     }, Math.min(timeoutMs, 120));
 
@@ -203,7 +231,7 @@ export function createDebouncedTask(task, wait = 200) {
         try {
             task?.(...args);
         } catch (e) {
-            console.warn('[玉子手机][debounce-task] error:', e);
+            Logger.warn('[debounce-task] error:', e);
         }
     };
 

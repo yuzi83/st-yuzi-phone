@@ -5,7 +5,7 @@
  * @description 提供命令行操作接口，支持手机控制、表格操作等
  */
 
-import { Logger, handleError, YuziPhoneError, ErrorCodes } from './error-handler.js';
+import { Logger, handleError } from './error-handler.js';
 import { showNotification } from './integration.js';
 
 /**
@@ -18,6 +18,100 @@ let registeredCommands = [];
  * 命令处理器映射
  */
 const commandHandlers = new Map();
+
+const HOST_FUNCTION_POLICY = Object.freeze({
+    registerSlashCommand: {
+        description: 'SillyTavern Slash 注册函数',
+        stableSources: ['sillyTavernContext'],
+        compatSources: [],
+    },
+    unregisterSlashCommand: {
+        description: 'SlashCommandParser 注册表清理包装器',
+        stableSources: ['slashCommandParserRegistry'],
+        compatSources: [],
+    },
+});
+
+function getSlashCommandContextRoot() {
+    try {
+        if (typeof window !== 'undefined' && window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
+            return window.SillyTavern.getContext();
+        }
+
+        if (typeof getContext === 'function') {
+            return getContext();
+        }
+
+        if (typeof window !== 'undefined' && typeof window.getContext === 'function') {
+            return window.getContext();
+        }
+    } catch (error) {
+        Logger.debug('获取 Slash 上下文失败:', error);
+    }
+
+    return null;
+}
+
+function getHostSourceRoot(sourceName) {
+    const globalRoot = typeof globalThis !== 'undefined' ? globalThis : null;
+
+    if (sourceName === 'sillyTavernContext') {
+        return getSlashCommandContextRoot();
+    }
+
+    if (sourceName === 'slashCommandParserRegistry') {
+        const unregister = getSlashCommandRegistryUnregistrar();
+        return unregister ? { unregisterSlashCommand: unregister } : null;
+    }
+
+    if (sourceName === 'globalThis') {
+        return globalRoot;
+    }
+
+    if (sourceName === 'window') {
+        if (typeof window === 'undefined') return null;
+        return window === globalRoot ? null : window;
+    }
+
+    return null;
+}
+
+function formatHostFunctionBoundary(name) {
+    const policy = HOST_FUNCTION_POLICY[name];
+    if (!policy) {
+        return `仅检查 globalThis.${name}`;
+    }
+
+    const stable = policy.stableSources.length
+        ? policy.stableSources.map(source => `${source}.${name}`).join(' / ')
+        : '无';
+    const compat = policy.compatSources.length
+        ? `；兼容回退：${policy.compatSources.map(source => `${source}.${name}`).join(' / ')}`
+        : '';
+
+    return `稳定来源：${stable}${compat}`;
+}
+
+function getSlashCommandParserRegistry() {
+    const context = getSlashCommandContextRoot();
+    const parser = context?.SlashCommandParser;
+    if (!parser || typeof parser !== 'object' || !parser.commands || typeof parser.commands !== 'object') {
+        return null;
+    }
+
+    return parser.commands;
+}
+
+function getSlashCommandRegistryUnregistrar() {
+    const registry = getSlashCommandParserRegistry();
+    if (!registry) {
+        return null;
+    }
+
+    return (commandName) => {
+        delete registry[commandName];
+    };
+}
 
 /**
  * 注册 Slash 命令
@@ -56,30 +150,46 @@ export function registerSlashCommands() {
     }
 }
 
+function resolveGlobalFunction(name, options = {}) {
+    const policy = HOST_FUNCTION_POLICY[name] || {
+        stableSources: ['globalThis'],
+        compatSources: ['window'],
+    };
+
+    const allowCompatWindow = options.allowCompatWindow === true;
+    const candidates = [
+        ...policy.stableSources.map(source => ({ source, level: 'stable' })),
+        ...(allowCompatWindow ? policy.compatSources.map(source => ({ source, level: 'compat' })) : []),
+    ];
+
+    for (const candidate of candidates) {
+        const root = getHostSourceRoot(candidate.source);
+        if (!root || typeof root[name] !== 'function') {
+            continue;
+        }
+
+        return {
+            fn: root[name].bind(root),
+            source: candidate.source,
+            level: candidate.level,
+        };
+    }
+
+    return null;
+}
+
 /**
  * 获取 SillyTavern 的 Slash 命令注册函数
  * @returns {Function|null} 注册函数
  */
 function getSillyTavernSlashCommandRegistrar() {
     try {
-        // 尝试从全局获取
-        if (typeof registerSlashCommand !== 'undefined') {
-            return registerSlashCommand;
+        const resolved = resolveGlobalFunction('registerSlashCommand');
+        if (resolved) {
+            return resolved.fn;
         }
 
-        // 尝试从 SillyTavern 上下文获取
-        if (typeof window !== 'undefined' && window.registerSlashCommand) {
-            return window.registerSlashCommand;
-        }
-
-        // 尝试从 TavernHelper 获取
-        if (typeof window !== 'undefined' && window.TavernHelper) {
-            const helper = window.TavernHelper;
-            if (helper.registerSlashCommand) {
-                return helper.registerSlashCommand;
-            }
-        }
-
+        Logger.warn(`未检测到稳定的 registerSlashCommand 接口；${formatHostFunctionBoundary('registerSlashCommand')}。将使用本地降级命令方案`);
         return null;
     } catch (error) {
         Logger.debug('获取 Slash 命令注册函数失败:', error);
@@ -275,9 +385,7 @@ function executePhoneAction(action) {
                     break;
                 case 'reset':
                     if (toggle) {
-                        // 重置位置到默认
-                        toggle.style.left = '';
-                        toggle.style.top = '';
+                        window.dispatchEvent(new CustomEvent('yuzi-phone-toggle-position-reset'));
                         showNotification('手机位置已重置', 'success');
                     }
                     break;
@@ -291,27 +399,37 @@ function executePhoneAction(action) {
 /**
  * 显示手机状态
  */
-function showPhoneStatus() {
-    try {
-        const container = document.getElementById('yuzi-phone-standalone');
-        const isVisible = container && container.classList.contains('visible');
-        const toggle = document.getElementById('yuzi-phone-toggle');
-        const position = toggle ? {
+function getPhoneStatusSnapshot() {
+    const container = document.getElementById('yuzi-phone-standalone');
+    const toggle = document.getElementById('yuzi-phone-toggle');
+
+    return {
+        hasContainer: !!container,
+        isVisible: !!(container && container.classList.contains('visible')),
+        hasToggle: !!toggle,
+        position: toggle ? {
             left: toggle.style.left || '默认',
             top: toggle.style.top || '默认',
-        } : null;
+        } : null,
+        size: container ? {
+            width: container.style.width || '自动',
+            height: container.style.height || '自动',
+        } : null,
+        registeredCommands: [...registeredCommands],
+        hasFallbackCommands: !!(typeof window !== 'undefined' && window.yuziPhoneCommands),
+    };
+}
 
-        const status = [
-            '📱 玉子手机状态',
-            '─'.repeat(20),
-            `状态: ${isVisible ? '✅ 打开' : '❌ 关闭'}`,
-        ];
+function showPhoneStatus() {
+    try {
+        const snapshot = getPhoneStatusSnapshot();
+        Logger.info('[玉子手机] Slash 状态详情:', snapshot);
 
-        if (position) {
-            status.push(`位置: 左 ${position.left}, 上 ${position.top}`);
-        }
+        const summary = snapshot.isVisible
+            ? '玉子手机当前已打开，详细状态已输出到控制台'
+            : '玉子手机当前已关闭，详细状态已输出到控制台';
 
-        showNotification(status.join('\n'), 'info');
+        showNotification(summary, 'info');
     } catch (error) {
         handleError(error, '获取手机状态失败');
     }
@@ -321,26 +439,8 @@ function showPhoneStatus() {
  * 显示手机帮助
  */
 function showPhoneHelp() {
-    const help = [
-        '📱 玉子手机命令帮助',
-        '─'.repeat(30),
-        '/phone - 切换手机状态',
-        '/phone open - 打开手机',
-        '/phone close - 关闭手机',
-        '/phone toggle - 切换手机状态',
-        '/phone reset - 重置手机位置',
-        '/phone status - 查看手机状态',
-        '/phone help - 显示此帮助',
-        '',
-        '/phone-table <表名> - 打开指定表格',
-        '/phone-tables - 列出所有表格',
-        '',
-        '/phone-settings reset - 重置设置',
-        '/phone-settings export - 导出设置',
-        '/phone-settings import - 导入设置',
-    ].join('\n');
-
-    showNotification(help, 'info');
+    Logger.info('[玉子手机] Slash 命令帮助:\n/phone\n/phone open\n/phone close\n/phone toggle\n/phone reset\n/phone status\n/phone help\n/phone-table <表名>\n/phone-tables\n/phone-settings reset\n/phone-settings export\n/phone-settings import');
+    showNotification('Slash 命令帮助已输出到控制台', 'info');
 }
 
 /**
@@ -429,10 +529,7 @@ function resetPhoneSettings() {
             handler();
             showNotification('设置已重置', 'success');
         } else {
-            // 清除 localStorage
-            const keys = Object.keys(localStorage).filter(key => key.startsWith('yuzi-phone'));
-            keys.forEach(key => localStorage.removeItem(key));
-            showNotification(`已清除 ${keys.length} 个设置项，请刷新页面`, 'success');
+            showNotification('未检测到设置重置处理器，无法安全重置扩展设置', 'warning');
         }
     } catch (error) {
         handleError(error, '重置设置失败');
@@ -451,20 +548,7 @@ function exportPhoneSettings() {
             copyToClipboard(json);
             showNotification('设置已复制到剪贴板', 'success');
         } else {
-            // 从 localStorage 导出
-            const settings = {};
-            Object.keys(localStorage)
-                .filter(key => key.startsWith('yuzi-phone'))
-                .forEach(key => {
-                    try {
-                        settings[key] = JSON.parse(localStorage.getItem(key));
-                    } catch {
-                        settings[key] = localStorage.getItem(key);
-                    }
-                });
-            const json = JSON.stringify(settings, null, 2);
-            copyToClipboard(json);
-            showNotification('设置已复制到剪贴板', 'success');
+            showNotification('未检测到设置导出处理器，无法导出扩展设置', 'warning');
         }
     } catch (error) {
         handleError(error, '导出设置失败');
@@ -528,9 +612,7 @@ export function unregisterSlashCommands() {
     if (!isRegistered) return;
 
     try {
-        // 尝试注销 SillyTavern 命令
         const unregisterSlashCommand = getSillyTavernSlashCommandUnregistrar();
-        
         if (unregisterSlashCommand) {
             registeredCommands.forEach(cmd => {
                 try {
@@ -556,21 +638,22 @@ export function unregisterSlashCommands() {
 }
 
 /**
- * 获取 SillyTavern 的 Slash 命令注销函数
+ * 获取 Slash 注册表清理函数
+ * 当前项目优先通过 [`SlashCommandParser.commands`](../../../slash-commands/SlashCommandParser.js:39) 删除本扩展注册项，
+ * 避免继续依赖未在稳定接口文档中确认的全局 `unregisterSlashCommand`。
  * @returns {Function|null} 注销函数
  */
 function getSillyTavernSlashCommandUnregistrar() {
     try {
-        if (typeof unregisterSlashCommand !== 'undefined') {
-            return unregisterSlashCommand;
+        const resolved = resolveGlobalFunction('unregisterSlashCommand');
+        if (resolved) {
+            return resolved.fn;
         }
 
-        if (typeof window !== 'undefined' && window.unregisterSlashCommand) {
-            return window.unregisterSlashCommand;
-        }
-
+        Logger.debug(`未检测到 Slash 注册表清理接口；${formatHostFunctionBoundary('unregisterSlashCommand')}`);
         return null;
     } catch (error) {
+        Logger.debug('获取 Slash 命令注销函数失败:', error);
         return null;
     }
 }

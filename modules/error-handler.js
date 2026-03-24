@@ -1,11 +1,51 @@
 // modules/error-handler.js
 /**
  * Yuzi Phone - 统一错误处理系统
- * @version 1.0.0
+ * @version 1.1.0
  * @description 提供统一的错误处理、日志记录和用户通知
+ * @fix P0-008 移除对 integration.js 的直接依赖，解决循环依赖问题
  */
 
-import { showNotification } from './integration.js';
+// 注意：移除了对 integration.js 的直接导入，改用回调机制
+// 这样可以避免循环依赖：error-handler.js <-> integration.js
+
+/**
+ * 通知回调函数
+ * @type {function(string, string): void | null}
+ */
+let notificationCallback = null;
+
+/**
+ * 设置通知回调函数
+ * @param {function(string, string): void} callback - 通知回调函数
+ */
+export function setNotificationCallback(callback) {
+    notificationCallback = callback;
+}
+
+/**
+ * 获取当前通知回调函数
+ * @returns {function(string, string): void | null}
+ */
+export function getNotificationCallback() {
+    return notificationCallback;
+}
+
+/**
+ * 内部通知函数
+ * @param {string} message - 消息
+ * @param {string} type - 类型
+ */
+function notify(message, type = 'info') {
+    if (notificationCallback && typeof notificationCallback === 'function') {
+        try {
+            notificationCallback(message, type);
+        } catch (e) {
+            // 通知失败时静默处理，避免影响主流程
+            console.error('[玉子手机] 通知回调执行失败:', e);
+        }
+    }
+}
 
 /**
  * 错误代码定义
@@ -275,7 +315,7 @@ export function handleError(error, userMessage = '操作失败', options = {}) {
         }
     }
 
-    // 显示用户通知
+    // 显示用户通知（使用内部 notify 函数，避免循环依赖）
     if (shouldShowNotification && errorHandlerConfig.enableNotification) {
         let notificationMessage = userMessage;
         
@@ -283,7 +323,7 @@ export function handleError(error, userMessage = '操作失败', options = {}) {
             notificationMessage = `${userMessage} (错误码: ${error.code})`;
         }
         
-        showNotification(notificationMessage, 'error');
+        notify(notificationMessage, 'error');
     }
 
     // 可选：上报错误

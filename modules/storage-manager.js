@@ -4,7 +4,10 @@
  * - localStorage 分片
  * - TTL / LRU 清理
  * - 软容量预算
+ * @fix P1-013 添加错误边界和降级策略
  */
+
+import { Logger } from './error-handler.js';
 
 const STORE_PREFIX = 'yzp:v2';
 const INDEX_KEY = `${STORE_PREFIX}:index`;
@@ -15,6 +18,74 @@ const DEFAULT_OPTIONS = {
     defaultTTL: 1000 * 60 * 60 * 24 * 14,
 };
 
+/**
+ * 存储错误类型
+ */
+const StorageErrorType = {
+    QUOTA_EXCEEDED: 'QUOTA_EXCEEDED',
+    ACCESS_DENIED: 'ACCESS_DENIED',
+    INVALID_DATA: 'INVALID_DATA',
+    UNKNOWN: 'UNKNOWN',
+};
+
+/**
+ * 存储操作结果
+ * @typedef {Object} StorageResult
+ * @property {boolean} success - 是否成功
+ * @property {string} [error] - 错误类型
+ * @property {string} [message] - 错误消息
+ */
+
+/**
+ * 日志前缀
+ */
+const LOG_PREFIX = '[玉子手机][存储]';
+
+/**
+ * 检测存储错误类型
+ * @param {Error} error - 错误对象
+ * @returns {string} 错误类型
+ */
+function detectStorageErrorType(error) {
+    const message = error?.message || '';
+    const name = error?.name || '';
+
+    if (name === 'QuotaExceededError' || message.includes('quota') || message.includes('QUOTA')) {
+        return StorageErrorType.QUOTA_EXCEEDED;
+    }
+    if (name === 'SecurityError' || message.includes('access') || message.includes('denied')) {
+        return StorageErrorType.ACCESS_DENIED;
+    }
+    if (name === 'SyntaxError' || message.includes('JSON') || message.includes('parse')) {
+        return StorageErrorType.INVALID_DATA;
+    }
+    return StorageErrorType.UNKNOWN;
+}
+
+/**
+ * 处理存储错误
+ * @param {Error} error - 错误对象
+ * @param {string} operation - 操作名称
+ * @param {Object} [context] - 上下文信息
+ * @returns {StorageResult}
+ */
+function handleStorageError(error, operation, context = {}) {
+    const errorType = detectStorageErrorType(error);
+    const message = error?.message || '未知错误';
+
+    Logger.warn(`${LOG_PREFIX} ${operation} 失败 [${errorType}]:`, message, context);
+
+    if (errorType === StorageErrorType.QUOTA_EXCEEDED) {
+        Logger.warn(`${LOG_PREFIX} 存储配额超出，建议执行清理操作`);
+    }
+
+    return {
+        success: false,
+        error: errorType,
+        message,
+    };
+}
+
 function nowTs() {
     return Date.now();
 }
@@ -23,7 +94,8 @@ function safeJsonParse(text, fallback) {
     if (!text || typeof text !== 'string') return fallback;
     try {
         return JSON.parse(text);
-    } catch {
+    } catch (e) {
+        Logger.warn(`${LOG_PREFIX} JSON 解析失败:`, e?.message);
         return fallback;
     }
 }
@@ -43,31 +115,61 @@ function toStorageKey(namespace, key) {
 }
 
 function loadIndex() {
-    const raw = localStorage.getItem(INDEX_KEY);
-    const parsed = safeJsonParse(raw, null);
-    if (!parsed || typeof parsed !== 'object') {
+    try {
+        const raw = localStorage.getItem(INDEX_KEY);
+        const parsed = safeJsonParse(raw, null);
+        if (!parsed || typeof parsed !== 'object') {
+            return {
+                entries: {},
+                totalBytes: 0,
+            };
+        }
+
+        if (!parsed.entries || typeof parsed.entries !== 'object') {
+            parsed.entries = {};
+        }
+
+        parsed.totalBytes = Number.isFinite(Number(parsed.totalBytes))
+            ? Math.max(0, Math.round(Number(parsed.totalBytes)))
+            : 0;
+
+        return parsed;
+    } catch (e) {
+        Logger.warn(`${LOG_PREFIX} 加载索引失败:`, e?.message);
         return {
             entries: {},
             totalBytes: 0,
         };
     }
-
-    if (!parsed.entries || typeof parsed.entries !== 'object') {
-        parsed.entries = {};
-    }
-
-    parsed.totalBytes = Number.isFinite(Number(parsed.totalBytes))
-        ? Math.max(0, Math.round(Number(parsed.totalBytes)))
-        : 0;
-
-    return parsed;
 }
 
+/**
+ * 保存索引
+ * @param {Object} index - 索引对象
+ * @returns {StorageResult}
+ */
 function saveIndex(index) {
     try {
-        localStorage.setItem(INDEX_KEY, JSON.stringify(index));
-    } catch {
-        // ignore
+        const data = JSON.stringify(index);
+        localStorage.setItem(INDEX_KEY, data);
+        return { success: true };
+    } catch (e) {
+        const errorType = detectStorageErrorType(e);
+
+        if (errorType === StorageErrorType.QUOTA_EXCEEDED) {
+            Logger.warn(`${LOG_PREFIX} 索引保存配额超出，尝试清理...`);
+            try {
+                pruneExpired(index);
+                evictByLRU(index, { maxEntries: 300, maxBytes: 256 * 1024 });
+                localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+                Logger.info(`${LOG_PREFIX} 清理后索引保存成功`);
+                return { success: true };
+            } catch (retryError) {
+                Logger.error(`${LOG_PREFIX} 清理后仍无法保存索引:`, retryError?.message);
+            }
+        }
+
+        return handleStorageError(e, 'saveIndex', { indexSize: Object.keys(index?.entries || {}).length });
     }
 }
 
@@ -211,11 +313,11 @@ export function createStorageManager(options = {}) {
                     saveIndex(index);
                     return true;
                 } catch (retryError) {
-                    console.warn('[玉子手机] 存储空间不足，写入失败:', retryError);
+                    Logger.warn('[玉子手机] 存储空间不足，写入失败:', retryError);
                     return false;
                 }
             }
-            console.warn('[玉子手机] 存储写入失败:', e);
+            Logger.warn('[玉子手机] 存储写入失败:', e);
             return false;
         }
     };

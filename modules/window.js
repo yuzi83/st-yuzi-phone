@@ -4,6 +4,16 @@
  */
 
 import { constrainPosition, savePhoneSetting } from './settings.js';
+import { createRuntimeScope } from './runtime-manager.js';
+
+let windowInteractionRuntime = createRuntimeScope('phone-window');
+const DRAG_BOUND_ATTR = 'yuziPhoneDragBound';
+const RESIZE_BOUND_ATTR = 'resizeBound';
+
+export function destroyPhoneWindowInteractions() {
+    windowInteractionRuntime.dispose();
+    windowInteractionRuntime = createRuntimeScope('phone-window');
+}
 
 export function initPhoneShellDrag() {
     const phoneEl = document.getElementById('yuzi-phone-standalone');
@@ -13,6 +23,11 @@ export function initPhoneShellDrag() {
 
     const notch = shell.querySelector('.phone-notch');
     const statusBar = shell.querySelector('.phone-status-bar');
+    const dragHandles = [notch, statusBar].filter((el) => el instanceof HTMLElement);
+    if (dragHandles.length === 0) return;
+
+    const unboundHandles = dragHandles.filter((el) => el.dataset[DRAG_BOUND_ATTR] !== '1');
+    if (unboundHandles.length === 0) return;
 
     let isDragging = false;
     let offsetX = 0;
@@ -66,16 +81,22 @@ export function initPhoneShellDrag() {
         pointerId = null;
     }
 
-    [notch, statusBar].forEach((el) => {
-        if (!(el instanceof HTMLElement)) return;
+    unboundHandles.forEach((el) => {
+        el.dataset[DRAG_BOUND_ATTR] = '1';
         el.style.cursor = 'grab';
         el.style.touchAction = 'none';
         el.style.pointerEvents = 'auto';
-        el.addEventListener('contextmenu', onContextMenu);
-        el.addEventListener('pointerdown', onPointerDown);
-        el.addEventListener('pointermove', onPointerMove);
-        el.addEventListener('pointerup', onPointerUp);
-        el.addEventListener('pointercancel', onPointerUp);
+        windowInteractionRuntime.addEventListener(el, 'contextmenu', onContextMenu);
+        windowInteractionRuntime.addEventListener(el, 'pointerdown', onPointerDown);
+        windowInteractionRuntime.addEventListener(el, 'pointermove', onPointerMove);
+        windowInteractionRuntime.addEventListener(el, 'pointerup', onPointerUp);
+        windowInteractionRuntime.addEventListener(el, 'pointercancel', onPointerUp);
+    });
+
+    windowInteractionRuntime.registerCleanup(() => {
+        unboundHandles.forEach((el) => {
+            delete el.dataset[DRAG_BOUND_ATTR];
+        });
     });
 }
 
@@ -86,8 +107,8 @@ export function initPhoneShellResize() {
     phoneEl.querySelectorAll('.yuzi-phone-resize').forEach((handle) => {
         if (!(handle instanceof HTMLElement)) return;
 
-        if (handle.dataset.resizeBound === '1') return;
-        handle.dataset.resizeBound = '1';
+        if (handle.dataset[RESIZE_BOUND_ATTR] === '1') return;
+        handle.dataset[RESIZE_BOUND_ATTR] = '1';
 
         let isResizing = false;
         let pointerId = null;
@@ -174,10 +195,14 @@ export function initPhoneShellResize() {
             dir = '';
         }
 
-        handle.addEventListener('contextmenu', onContextMenu);
-        handle.addEventListener('pointerdown', onPointerDown);
-        handle.addEventListener('pointermove', onPointerMove);
-        handle.addEventListener('pointerup', onPointerUp);
-        handle.addEventListener('pointercancel', onPointerUp);
+        windowInteractionRuntime.addEventListener(handle, 'contextmenu', onContextMenu);
+        windowInteractionRuntime.addEventListener(handle, 'pointerdown', onPointerDown);
+        windowInteractionRuntime.addEventListener(handle, 'pointermove', onPointerMove);
+        windowInteractionRuntime.addEventListener(handle, 'pointerup', onPointerUp);
+        windowInteractionRuntime.addEventListener(handle, 'pointercancel', onPointerUp);
+
+        windowInteractionRuntime.registerCleanup(() => {
+            delete handle.dataset[RESIZE_BOUND_ATTR];
+        });
     });
 }

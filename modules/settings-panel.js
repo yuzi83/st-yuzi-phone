@@ -7,6 +7,7 @@ import { getPhoneSettings, savePhoneSetting } from './settings.js';
 
 const PANEL_ID = 'yuzi-phone-settings';
 const CHECKBOX_ID = 'yuzi-phone-enabled';
+const RESET_POSITION_BTN_ID = 'yuzi-phone-reset-position';
 
 export function createPhoneSettingsPanel(onToggleEnabled) {
     if (document.getElementById(PANEL_ID)) return true;
@@ -30,6 +31,9 @@ export function createPhoneSettingsPanel(onToggleEnabled) {
                             <input type="checkbox" id="${CHECKBOX_ID}" ${isEnabled ? 'checked' : ''}>
                             <span>启用玉子手机</span>
                         </label>
+                        <div style="margin-top: 10px;">
+                            <button type="button" id="${RESET_POSITION_BTN_ID}" class="menu_button" style="display:inline-flex;align-items:center;justify-content:center;width:auto;min-width:0;max-width:100%;white-space:nowrap;word-break:keep-all;writing-mode:horizontal-tb;text-orientation:mixed;">重置悬浮按钮位置</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -40,6 +44,7 @@ export function createPhoneSettingsPanel(onToggleEnabled) {
 
     bindDrawerEvents();
     bindEnabledToggle(onToggleEnabled);
+    bindResetPositionButton();
     return true;
 }
 
@@ -75,5 +80,14 @@ function bindEnabledToggle(onToggleEnabled) {
         if (typeof onToggleEnabled === 'function') {
             onToggleEnabled(enabled);
         }
+    });
+}
+
+function bindResetPositionButton() {
+    const button = document.getElementById(RESET_POSITION_BTN_ID);
+    if (!button) return;
+
+    button.addEventListener('click', () => {
+        window.dispatchEvent(new CustomEvent('yuzi-phone-toggle-position-reset'));
     });
 }
