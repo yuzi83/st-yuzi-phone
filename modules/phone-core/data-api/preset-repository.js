@@ -1,6 +1,8 @@
 import { Logger } from '../../error-handler.js';
 import { getDB } from '../db-bridge.js';
 
+const logger = Logger.withScope({ scope: 'phone-core/data-api/preset-repository', feature: 'db-api' });
+
 export function getApiPresets() {
     const api = getDB();
     if (!api || typeof api.getApiPresets !== 'function') {
@@ -9,7 +11,11 @@ export function getApiPresets() {
     try {
         return api.getApiPresets() || [];
     } catch (error) {
-        Logger.warn('[玉子的手机] getApiPresets 调用失败:', error);
+        logger.warn({
+            action: 'api-presets.get',
+            message: 'getApiPresets 调用失败',
+            error,
+        });
         return [];
     }
 }
@@ -22,7 +28,11 @@ export function getTableApiPreset() {
     try {
         return api.getTableApiPreset() || '';
     } catch (error) {
-        Logger.warn('[玉子的手机] getTableApiPreset 调用失败:', error);
+        logger.warn({
+            action: 'table-api-preset.get',
+            message: 'getTableApiPreset 调用失败',
+            error,
+        });
         return '';
     }
 }
@@ -35,7 +45,12 @@ export function setTableApiPreset(presetName) {
     try {
         return !!api.setTableApiPreset(presetName);
     } catch (error) {
-        Logger.warn('[玉子的手机] setTableApiPreset 调用失败:', error);
+        logger.warn({
+            action: 'table-api-preset.set',
+            message: 'setTableApiPreset 调用失败',
+            context: { presetName },
+            error,
+        });
         return false;
     }
 }
@@ -48,7 +63,11 @@ export function getPlotApiPreset() {
     try {
         return api.getPlotApiPreset() || '';
     } catch (error) {
-        Logger.warn('[玉子的手机] getPlotApiPreset 调用失败:', error);
+        logger.warn({
+            action: 'plot-api-preset.get',
+            message: 'getPlotApiPreset 调用失败',
+            error,
+        });
         return '';
     }
 }
@@ -61,7 +80,12 @@ export function setPlotApiPreset(presetName) {
     try {
         return !!api.setPlotApiPreset(presetName);
     } catch (error) {
-        Logger.warn('[玉子的手机] setPlotApiPreset 调用失败:', error);
+        logger.warn({
+            action: 'plot-api-preset.set',
+            message: 'setPlotApiPreset 调用失败',
+            context: { presetName },
+            error,
+        });
         return false;
     }
 }
@@ -74,7 +98,12 @@ export function loadApiPreset(presetName) {
     try {
         return !!api.loadApiPreset(presetName);
     } catch (error) {
-        Logger.warn('[玉子的手机] loadApiPreset 调用失败:', error);
+        logger.warn({
+            action: 'api-preset.load',
+            message: 'loadApiPreset 调用失败',
+            context: { presetName },
+            error,
+        });
         return false;
     }
 }

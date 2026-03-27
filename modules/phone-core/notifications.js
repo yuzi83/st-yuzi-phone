@@ -3,6 +3,8 @@ import { getPhoneCoreState, phoneRuntime } from './state.js';
 import { processTableData, getTableData } from './data-api.js';
 import { navigateTo } from './routing.js';
 
+const logger = Logger.withScope({ scope: 'phone-core/notifications', feature: 'notifications' });
+
 export function getUnreadCount(sheetKey) {
     return getPhoneCoreState().unreadCounts[sheetKey] || 0;
 }
@@ -49,7 +51,11 @@ function runDataWatcherTick() {
             state.lastTableRowsCount[tableName] = currentCount;
         }
     } catch (error) {
-        Logger.warn('[玉子的手机] 通知轮询异常:', error);
+        logger.warn({
+            action: 'watcher.tick',
+            message: '通知轮询异常',
+            error,
+        });
     }
 }
 

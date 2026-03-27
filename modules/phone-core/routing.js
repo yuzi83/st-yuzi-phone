@@ -1,6 +1,8 @@
 import { Logger } from '../error-handler.js';
 import { getPhoneCoreState, MAX_ROUTE_HISTORY, PHONE_DEFAULT_ROUTE } from './state.js';
 
+const logger = Logger.withScope({ scope: 'phone-core/routing', feature: 'route' });
+
 function pushRouteHistory(route) {
     if (!route || typeof route !== 'string') return;
 
@@ -21,7 +23,15 @@ function emitRouteChange(route, opts = {}) {
         try {
             callback(route, opts);
         } catch (error) {
-            Logger.warn('[玉子的手机] route callback failed:', error);
+            logger.warn({
+                action: 'change.emit',
+                message: 'route change callback 执行失败',
+                context: {
+                    route,
+                    isBack: !!opts.isBack,
+                },
+                error,
+            });
         }
     });
 }
@@ -41,11 +51,17 @@ export function getCurrentRoute() {
 
 export function navigateTo(route, opts = {}) {
     const state = getPhoneCoreState();
-    if (state.currentRoute !== PHONE_DEFAULT_ROUTE) {
-        pushRouteHistory(state.currentRoute);
+    const previousRoute = state.currentRoute;
+    const pushedHistory = previousRoute !== PHONE_DEFAULT_ROUTE;
+    if (pushedHistory) {
+        pushRouteHistory(previousRoute);
     }
     state.currentRoute = route;
-    emitRouteChange(route, opts);
+    emitRouteChange(route, {
+        ...opts,
+        fromRoute: previousRoute,
+        pushedHistory,
+    });
 }
 
 export function navigateBack() {

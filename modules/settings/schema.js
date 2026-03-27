@@ -29,10 +29,18 @@ export const defaultSettings = {
     phoneChat: {
         useStoryContext: true,
         storyContextTurns: 3,
-        promptTemplateName: '',
         apiPresetName: '',
-        lastSelectedTarget: '',
-        lastSelectedPromptTemplateName: '',
+        maxHistoryMessages: 12,
+        maxReplyTokens: 900,
+        requestTimeoutMs: 90000,
+        worldbookMaxEntries: 24,
+        worldbookMaxChars: 6000,
+    },
+    phoneAiInstruction: {
+        currentPresetName: '',
+        lastOpenedPresetName: '',
+        migratedLegacyTemplates: false,
+        presets: [],
     },
     worldbookSelection: {
         sourceMode: 'manual',
@@ -153,6 +161,18 @@ export function validateSettings(settings) {
 
     if (typeof settings.beautifyActiveTemplateIdsSpecial === 'object' && !Array.isArray(settings.beautifyActiveTemplateIdsSpecial)) {
         validated.beautifyActiveTemplateIdsSpecial = { ...settings.beautifyActiveTemplateIdsSpecial };
+    }
+
+    if (typeof settings.phoneChat === 'object' && !Array.isArray(settings.phoneChat)) {
+        validated.phoneChat = cloneSettingsValue(settings.phoneChat);
+    }
+
+    if (typeof settings.phoneAiInstruction === 'object' && !Array.isArray(settings.phoneAiInstruction)) {
+        validated.phoneAiInstruction = cloneSettingsValue(settings.phoneAiInstruction);
+    }
+
+    if (typeof settings.worldbookSelection === 'object' && !Array.isArray(settings.worldbookSelection)) {
+        validated.worldbookSelection = cloneSettingsValue(settings.worldbookSelection);
     }
 
     return validated;

@@ -4,6 +4,9 @@ import {
     callApiWithTimeout,
     getDB,
 } from '../db-bridge.js';
+import { enqueueTableMutation } from './mutation-queue.js';
+
+const logger = Logger.withScope({ scope: 'phone-core/data-api/table-repository', feature: 'db-api' });
 
 export function getTableData() {
     const api = getDB();
@@ -11,7 +14,11 @@ export function getTableData() {
         try {
             return api.exportTableAsJson();
         } catch (error) {
-            Logger.warn('[玉子的手机] getTableData 调用失败:', error);
+            logger.warn({
+                action: 'table-data.get',
+                message: 'getTableData 调用失败',
+                error,
+            });
             return null;
         }
     }
@@ -31,21 +38,27 @@ export async function getTableDataAsync(timeout = DEFAULT_API_TIMEOUT) {
 }
 
 export async function saveTableData(rawData, timeout = DEFAULT_API_TIMEOUT) {
-    const api = getDB();
-    if (!api || typeof api.importTableAsJson !== 'function') return false;
+    return enqueueTableMutation('saveTableData', async () => {
+        const api = getDB();
+        if (!api || typeof api.importTableAsJson !== 'function') return false;
 
-    try {
-        const jsonString = typeof rawData === 'string' ? rawData : JSON.stringify(rawData);
-        const result = await callApiWithTimeout(
-            () => api.importTableAsJson(jsonString),
-            timeout,
-            'saveTableData',
-        );
-        return result === true || result === 'true' || result !== null;
-    } catch (error) {
-        Logger.warn('[玉子的手机] importTableAsJson 调用失败:', error);
-        return false;
-    }
+        try {
+            const jsonString = typeof rawData === 'string' ? rawData : JSON.stringify(rawData);
+            const result = await callApiWithTimeout(
+                () => api.importTableAsJson(jsonString),
+                timeout,
+                'saveTableData',
+            );
+            return result === true || result === 'true' || result !== null;
+        } catch (error) {
+            logger.warn({
+                action: 'table-data.save',
+                message: 'importTableAsJson 调用失败',
+                error,
+            });
+            return false;
+        }
+    });
 }
 
 export function processTableData(rawData) {
@@ -78,61 +91,69 @@ export function getSheetKeys(rawData) {
 }
 
 export async function updateTableCell(tableName, rowIndex, colIdentifier, value) {
-    const api = getDB();
-    if (!api || typeof api.updateCell !== 'function') {
-        return { ok: false, code: 'api_unavailable', message: '数据库API不可用' };
-    }
+    return enqueueTableMutation('updateTableCell', async () => {
+        const api = getDB();
+        if (!api || typeof api.updateCell !== 'function') {
+            return { ok: false, code: 'api_unavailable', message: '数据库API不可用' };
+        }
 
-    try {
-        const result = await api.updateCell(tableName, rowIndex, colIdentifier, value);
-        return { ok: !!result, code: result ? 'ok' : 'failed' };
-    } catch (error) {
-        return { ok: false, code: 'error', message: error?.message || '未知错误' };
-    }
+        try {
+            const result = await api.updateCell(tableName, rowIndex, colIdentifier, value);
+            return { ok: !!result, code: result ? 'ok' : 'failed' };
+        } catch (error) {
+            return { ok: false, code: 'error', message: error?.message || '未知错误' };
+        }
+    });
 }
 
 export async function updateTableRow(tableName, rowIndex, data) {
-    const api = getDB();
-    if (!api || typeof api.updateRow !== 'function') {
-        return { ok: false, code: 'api_unavailable', message: '数据库API不可用' };
-    }
+    return enqueueTableMutation('updateTableRow', async () => {
+        const api = getDB();
+        if (!api || typeof api.updateRow !== 'function') {
+            return { ok: false, code: 'api_unavailable', message: '数据库API不可用' };
+        }
 
-    try {
-        const result = await api.updateRow(tableName, rowIndex, data);
-        return { ok: !!result, code: result ? 'ok' : 'failed' };
-    } catch (error) {
-        return { ok: false, code: 'error', message: error?.message || '未知错误' };
-    }
+        try {
+            const result = await api.updateRow(tableName, rowIndex, data);
+            return { ok: !!result, code: result ? 'ok' : 'failed' };
+        } catch (error) {
+            return { ok: false, code: 'error', message: error?.message || '未知错误' };
+        }
+    });
 }
 
 export async function insertTableRow(tableName, data) {
-    const api = getDB();
-    if (!api || typeof api.insertRow !== 'function') {
-        return { ok: false, code: 'api_unavailable', message: '数据库API不可用' };
-    }
+    return enqueueTableMutation('insertTableRow', async () => {
+        const api = getDB();
+        if (!api || typeof api.insertRow !== 'function') {
+            return { ok: false, code: 'api_unavailable', message: '数据库API不可用' };
+        }
 
-    try {
-        const rowIndex = await api.insertRow(tableName, data);
-        return {
-            ok: rowIndex >= 0,
-            code: rowIndex >= 0 ? 'ok' : 'failed',
-            rowIndex: rowIndex >= 0 ? rowIndex : undefined,
-        };
-    } catch (error) {
-        return { ok: false, code: 'error', message: error?.message || '未知错误' };
-    }
+        try {
+            const rowIndex = await api.insertRow(tableName, data);
+            return {
+                ok: rowIndex >= 0,
+                code: rowIndex >= 0 ? 'ok' : 'failed',
+                rowIndex: rowIndex >= 0 ? rowIndex : undefined,
+            };
+        } catch (error) {
+            return { ok: false, code: 'error', message: error?.message || '未知错误' };
+        }
+    });
 }
 
 export async function deleteTableRowViaApi(tableName, rowIndex) {
-    const api = getDB();
-    if (!api || typeof api.deleteRow !== 'function') {
-        return { ok: false, code: 'api_unavailable', message: '数据库API不可用' };
-    }
+    return enqueueTableMutation('deleteTableRowViaApi', async () => {
+        const api = getDB();
+        if (!api || typeof api.deleteRow !== 'function') {
+            return { ok: false, code: 'api_unavailable', message: '数据库API不可用' };
+        }
 
-    try {
-        const result = await api.deleteRow(tableName, rowIndex);
-        return { ok: !!result, code: result ? 'ok' : 'failed' };
-    } catch (error) {
-        return { ok: false, code: 'error', message: error?.message || '未知错误' };
-    }
+        try {
+            const result = await api.deleteRow(tableName, rowIndex);
+            return { ok: !!result, code: result ? 'ok' : 'failed' };
+        } catch (error) {
+            return { ok: false, code: 'error', message: error?.message || '未知错误' };
+        }
+    });
 }

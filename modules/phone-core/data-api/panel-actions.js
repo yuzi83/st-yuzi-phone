@@ -1,13 +1,19 @@
 import { Logger } from '../../error-handler.js';
 import { getDB, sleep, withTimeout } from '../db-bridge.js';
 
+const logger = Logger.withScope({ scope: 'phone-core/data-api/panel-actions', feature: 'db-api' });
+
 export async function triggerManualUpdate() {
     const api = getDB();
     if (api && typeof api.manualUpdate === 'function') {
         try {
             return await api.manualUpdate();
         } catch (error) {
-            Logger.warn('[玉子的手机] manualUpdate 调用失败:', error);
+            logger.warn({
+                action: 'manual-update.api',
+                message: 'manualUpdate 调用失败',
+                error,
+            });
         }
     }
 
@@ -19,7 +25,11 @@ export async function triggerManualUpdate() {
             return true;
         }
     } catch (error) {
-        Logger.warn('[玉子的手机] 按钮点击方式也失败:', error);
+        logger.warn({
+            action: 'manual-update.fallback',
+            message: '按钮点击方式也失败',
+            error,
+        });
     }
     return false;
 }

@@ -2,15 +2,31 @@ import { Logger } from '../error-handler.js';
 import { getDB } from './db-bridge.js';
 import { getPhoneCoreState } from './state.js';
 
+const logger = Logger.withScope({ scope: 'phone-core/callbacks', feature: 'callbacks' });
+
+function clearRegisteredTableUpdateCallback(state = getPhoneCoreState()) {
+    state.registeredTableUpdateCallback = null;
+}
+
+function clearRegisteredTableFillStartCallback(state = getPhoneCoreState()) {
+    state.registeredTableFillStartCallback = null;
+}
+
 export function registerTableUpdateListener(callback) {
     if (typeof callback !== 'function') {
-        Logger.warn('[玉子手机] registerTableUpdateListener: 回调必须是函数');
+        logger.warn({
+            action: 'table-update.register',
+            message: '表格更新回调注册失败：回调必须是函数',
+        });
         return false;
     }
 
     const api = getDB();
     if (!api || typeof api.registerTableUpdateCallback !== 'function') {
-        Logger.warn('[玉子手机] 表格更新回调API不可用');
+        logger.warn({
+            action: 'table-update.register',
+            message: '表格更新回调API不可用',
+        });
         return false;
     }
 
@@ -20,10 +36,18 @@ export function registerTableUpdateListener(callback) {
         const state = getPhoneCoreState();
         state.registeredTableUpdateCallback = callback;
         api.registerTableUpdateCallback(callback);
+        logger.debug({
+            action: 'table-update.register',
+            message: '表格更新回调已注册',
+        });
         return true;
     } catch (error) {
-        Logger.warn('[玉子手机] 注册表格更新回调失败:', error);
-        getPhoneCoreState().registeredTableUpdateCallback = null;
+        logger.warn({
+            action: 'table-update.register',
+            message: '注册表格更新回调失败',
+            error,
+        });
+        clearRegisteredTableUpdateCallback();
         return false;
     }
 }
@@ -31,29 +55,46 @@ export function registerTableUpdateListener(callback) {
 export function unregisterTableUpdateListener() {
     const api = getDB();
     const state = getPhoneCoreState();
+    const callback = state.registeredTableUpdateCallback;
+
     if (!api || typeof api.unregisterTableUpdateCallback !== 'function') {
-        state.registeredTableUpdateCallback = null;
+        clearRegisteredTableUpdateCallback(state);
         return;
     }
 
-    if (state.registeredTableUpdateCallback) {
-        try {
-            api.unregisterTableUpdateCallback(state.registeredTableUpdateCallback);
-        } catch (error) {
-            Logger.warn('[玉子手机] 注销表格更新回调失败:', error);
-        }
-        state.registeredTableUpdateCallback = null;
+    if (!callback) return;
+
+    try {
+        api.unregisterTableUpdateCallback(callback);
+        logger.debug({
+            action: 'table-update.unregister',
+            message: '表格更新回调已注销',
+        });
+    } catch (error) {
+        logger.warn({
+            action: 'table-update.unregister',
+            message: '注销表格更新回调失败',
+            error,
+        });
     }
+    clearRegisteredTableUpdateCallback(state);
 }
 
 export function registerTableFillStartListener(callback) {
     if (typeof callback !== 'function') {
-        Logger.warn('[玉子手机] registerTableFillStartListener: 回调必须是函数');
+        logger.warn({
+            action: 'table-fill-start.register',
+            message: '填表开始回调注册失败：回调必须是函数',
+        });
         return false;
     }
 
     const api = getDB();
     if (!api || typeof api.registerTableFillStartCallback !== 'function') {
+        logger.warn({
+            action: 'table-fill-start.register',
+            message: '填表开始回调API不可用',
+        });
         return false;
     }
 
@@ -63,10 +104,18 @@ export function registerTableFillStartListener(callback) {
         const state = getPhoneCoreState();
         state.registeredTableFillStartCallback = callback;
         api.registerTableFillStartCallback(callback);
+        logger.debug({
+            action: 'table-fill-start.register',
+            message: '填表开始回调已注册',
+        });
         return true;
     } catch (error) {
-        Logger.warn('[玉子手机] 注册填表开始回调失败:', error);
-        getPhoneCoreState().registeredTableFillStartCallback = null;
+        logger.warn({
+            action: 'table-fill-start.register',
+            message: '注册填表开始回调失败',
+            error,
+        });
+        clearRegisteredTableFillStartCallback();
         return false;
     }
 }
@@ -74,19 +123,29 @@ export function registerTableFillStartListener(callback) {
 export function unregisterTableFillStartListener() {
     const api = getDB();
     const state = getPhoneCoreState();
+    const callback = state.registeredTableFillStartCallback;
+
     if (!api || typeof api.unregisterTableFillStartCallback !== 'function') {
-        state.registeredTableFillStartCallback = null;
+        clearRegisteredTableFillStartCallback(state);
         return;
     }
 
-    if (state.registeredTableFillStartCallback) {
-        try {
-            api.unregisterTableFillStartCallback(state.registeredTableFillStartCallback);
-        } catch (error) {
-            Logger.warn('[玉子手机] 注销填表开始回调失败:', error);
-        }
-        state.registeredTableFillStartCallback = null;
+    if (!callback) return;
+
+    try {
+        api.unregisterTableFillStartCallback(callback);
+        logger.debug({
+            action: 'table-fill-start.unregister',
+            message: '填表开始回调已注销',
+        });
+    } catch (error) {
+        logger.warn({
+            action: 'table-fill-start.unregister',
+            message: '注销填表开始回调失败',
+            error,
+        });
     }
+    clearRegisteredTableFillStartCallback(state);
 }
 
 export function setCurrentViewingSheet(sheetKey) {
@@ -114,24 +173,78 @@ function computeDataVersion(data) {
     }
 }
 
-export function initSmartRefreshListener() {
-    registerTableUpdateListener((newData) => {
-        const state = getPhoneCoreState();
-        if (!state.currentViewingSheetKey) return;
+function shouldSkipSmartRefresh(state, newVersion) {
+    if (!state.currentViewingSheetKey) {
+        logger.debug({
+            action: 'smart-refresh.skip',
+            message: 'smart refresh 跳过：当前无查看表',
+            context: { reason: 'no-viewing-sheet' },
+        });
+        return true;
+    }
 
-        const newVersion = computeDataVersion(newData);
-        if (newVersion === state.lastDataVersion) return;
-
-        state.lastDataVersion = newVersion;
-
-        window.dispatchEvent(new CustomEvent('yuzi-phone-table-updated', {
-            detail: {
+    if (newVersion === state.lastDataVersion) {
+        logger.debug({
+            action: 'smart-refresh.skip',
+            message: 'smart refresh 跳过：数据版本未变化',
+            context: {
+                reason: 'same-version',
                 sheetKey: state.currentViewingSheetKey,
-                data: newData,
                 version: newVersion,
             },
-        }));
+        });
+        return true;
+    }
+
+    return false;
+}
+
+function dispatchSmartRefreshEvent(state, newData, newVersion) {
+    const detail = {
+        sheetKey: state.currentViewingSheetKey,
+        data: newData,
+        version: newVersion,
+    };
+
+    window.dispatchEvent(new CustomEvent('yuzi-phone-table-updated', { detail }));
+    logger.debug({
+        action: 'smart-refresh.dispatch',
+        message: 'smart refresh 事件已派发',
+        context: {
+            sheetKey: detail.sheetKey,
+            version: detail.version,
+        },
     });
+}
+
+export function initSmartRefreshListener() {
+    logger.debug({
+        action: 'smart-refresh.setup',
+        message: '开始注册 smart refresh 监听器',
+    });
+
+    const registered = registerTableUpdateListener((newData) => {
+        const state = getPhoneCoreState();
+        const newVersion = computeDataVersion(newData);
+        if (shouldSkipSmartRefresh(state, newVersion)) return;
+
+        state.lastDataVersion = newVersion;
+        dispatchSmartRefreshEvent(state, newData, newVersion);
+    });
+
+    if (!registered) {
+        logger.warn({
+            action: 'smart-refresh.setup',
+            message: 'smart refresh 监听器注册失败',
+        });
+        return false;
+    }
+
+    logger.debug({
+        action: 'smart-refresh.setup',
+        message: 'smart refresh 监听器已注册',
+    });
+    return true;
 }
 
 export function resetDataVersion() {

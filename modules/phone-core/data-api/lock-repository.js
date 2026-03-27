@@ -1,6 +1,8 @@
 import { Logger } from '../../error-handler.js';
 import { getDB } from '../db-bridge.js';
 
+const logger = Logger.withScope({ scope: 'phone-core/data-api/lock-repository', feature: 'db-api' });
+
 function normalizeLockState(lockState) {
     if (!lockState || typeof lockState !== 'object') {
         return { rows: [], cols: [], cells: [] };
@@ -64,7 +66,12 @@ function setTableColLock(sheetKey, colIndex, locked) {
             }, { merge: false });
         }
     } catch (error) {
-        Logger.warn('[玉子的手机] lockTableCol/setTableLockState 调用失败:', error);
+        logger.warn({
+            action: 'lock.col.set',
+            message: 'lockTableCol/setTableLockState 调用失败',
+            context: { sheetKey, colIndex, locked: !!locked },
+            error,
+        });
         return false;
     }
 
@@ -81,7 +88,12 @@ export function getTableLockState(sheetKey) {
         const lockState = api.getTableLockState(sheetKey);
         return normalizeLockState(lockState);
     } catch (error) {
-        Logger.warn('[玉子的手机] getTableLockState 调用失败:', error);
+        logger.warn({
+            action: 'lock.state.get',
+            message: 'getTableLockState 调用失败',
+            context: { sheetKey },
+            error,
+        });
         return { rows: [], cols: [], cells: [] };
     }
 }
@@ -93,7 +105,12 @@ export function setTableCellLock(sheetKey, rowIndex, colIndex, locked) {
     try {
         return !!api.lockTableCell(sheetKey, rowIndex, colIndex, locked);
     } catch (error) {
-        Logger.warn('[玉子的手机] lockTableCell 调用失败:', error);
+        logger.warn({
+            action: 'lock.cell.set',
+            message: 'lockTableCell 调用失败',
+            context: { sheetKey, rowIndex, colIndex, locked: !!locked },
+            error,
+        });
         return false;
     }
 }
@@ -123,7 +140,12 @@ export function setTableRowLock(sheetKey, rowIndex, locked) {
             }, { merge: false });
         }
     } catch (error) {
-        Logger.warn('[玉子的手机] lockTableRow/setTableLockState 调用失败:', error);
+        logger.warn({
+            action: 'lock.row.set',
+            message: 'lockTableRow/setTableLockState 调用失败',
+            context: { sheetKey, rowIndex, locked: !!locked },
+            error,
+        });
         return false;
     }
 
@@ -157,7 +179,12 @@ export function toggleTableRowLock(sheetKey, rowIndex) {
             const result = api.toggleTableRowLock(sheetKey, rowIndex);
             return typeof result === 'boolean' ? result : isTableRowLocked(sheetKey, rowIndex);
         } catch (error) {
-            Logger.warn('[玉子的手机] toggleTableRowLock 调用失败:', error);
+            logger.warn({
+                action: 'lock.row.toggle',
+                message: 'toggleTableRowLock 调用失败',
+                context: { sheetKey, rowIndex },
+                error,
+            });
         }
     }
 
@@ -174,7 +201,12 @@ export function toggleTableCellLock(sheetKey, rowIndex, colIndex) {
             const result = api.toggleTableCellLock(sheetKey, rowIndex, colIndex);
             return typeof result === 'boolean' ? result : isTableCellLocked(sheetKey, rowIndex, colIndex);
         } catch (error) {
-            Logger.warn('[玉子的手机] toggleTableCellLock 调用失败:', error);
+            logger.warn({
+                action: 'lock.cell.toggle',
+                message: 'toggleTableCellLock 调用失败',
+                context: { sheetKey, rowIndex, colIndex },
+                error,
+            });
         }
     }
 
@@ -191,7 +223,12 @@ export function toggleTableColLock(sheetKey, colIndex) {
             const result = api.toggleTableColLock(sheetKey, colIndex);
             return typeof result === 'boolean' ? result : isTableColLocked(sheetKey, colIndex);
         } catch (error) {
-            Logger.warn('[玉子的手机] toggleTableColLock 调用失败:', error);
+            logger.warn({
+                action: 'lock.col.toggle',
+                message: 'toggleTableColLock 调用失败',
+                context: { sheetKey, colIndex },
+                error,
+            });
         }
     }
 

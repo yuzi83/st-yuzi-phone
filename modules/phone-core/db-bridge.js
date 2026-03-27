@@ -1,6 +1,7 @@
 import { Logger } from '../error-handler.js';
 
 export const DEFAULT_API_TIMEOUT = 5000;
+const logger = Logger.withScope({ scope: 'phone-core/db-bridge', feature: 'db-api' });
 
 export function getDB() {
     const w = window.parent || window;
@@ -33,7 +34,11 @@ export async function callApiWithTimeout(apiCall, timeout = DEFAULT_API_TIMEOUT,
         };
 
         const timer = setTimeout(() => {
-            Logger.warn(`[玉子的手机] ${apiName} 调用超时 (${timeout}ms)`);
+            logger.warn({
+                action: `${apiName}.timeout`,
+                message: '数据库 API 调用超时',
+                context: { apiName, timeout },
+            });
             finish(null);
         }, timeout);
 
@@ -46,7 +51,12 @@ export async function callApiWithTimeout(apiCall, timeout = DEFAULT_API_TIMEOUT,
                         finish(data);
                     })
                     .catch((error) => {
-                        Logger.warn(`[玉子的手机] ${apiName} 调用失败:`, error);
+                        logger.warn({
+                            action: `${apiName}.reject`,
+                            message: '数据库 API 调用失败',
+                            context: { apiName },
+                            error,
+                        });
                         finish(null);
                     });
                 return;
@@ -54,7 +64,12 @@ export async function callApiWithTimeout(apiCall, timeout = DEFAULT_API_TIMEOUT,
 
             finish(result);
         } catch (error) {
-            Logger.warn(`[玉子的手机] ${apiName} 调用异常:`, error);
+            logger.warn({
+                action: `${apiName}.exception`,
+                message: '数据库 API 调用异常',
+                context: { apiName },
+                error,
+            });
             finish(null);
         }
     });

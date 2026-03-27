@@ -11,8 +11,13 @@ function createInitialState() {
         phoneContainer: null,
         onRouteChangeCallbacks: [],
         isPhoneUiInitialized: false,
+        isPhoneActive: false,
+        isDestroying: false,
         statusClockTimerId: null,
+        shellInteractionTimerId: null,
         routeRenderRegistered: false,
+        routeRenderCleanup: null,
+        routeRenderToken: 0,
         dataWatcherTimerId: null,
         visibilityCleanup: null,
         idleApiDebugCancel: null,
@@ -38,8 +43,13 @@ export function resetPhoneCoreState() {
     state.phoneContainer = next.phoneContainer;
     state.onRouteChangeCallbacks = next.onRouteChangeCallbacks;
     state.isPhoneUiInitialized = next.isPhoneUiInitialized;
+    state.isPhoneActive = next.isPhoneActive;
+    state.isDestroying = next.isDestroying;
     state.statusClockTimerId = next.statusClockTimerId;
+    state.shellInteractionTimerId = next.shellInteractionTimerId;
     state.routeRenderRegistered = next.routeRenderRegistered;
+    state.routeRenderCleanup = next.routeRenderCleanup;
+    state.routeRenderToken = next.routeRenderToken;
     state.dataWatcherTimerId = next.dataWatcherTimerId;
     state.visibilityCleanup = next.visibilityCleanup;
     state.idleApiDebugCancel = next.idleApiDebugCancel;

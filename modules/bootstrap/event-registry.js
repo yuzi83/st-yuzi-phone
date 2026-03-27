@@ -9,7 +9,7 @@ import {
     onGenerationStarted,
     onGenerationEnded,
     onGenerationAfterCommands,
-} from '../integration.js';
+} from '../integration/event-bridge.js';
 import { Logger, handleError } from '../error-handler.js';
 import {
     DOM_IDS,

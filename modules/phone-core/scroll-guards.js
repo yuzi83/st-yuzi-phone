@@ -8,6 +8,8 @@ const PHONE_SCROLL_EDITABLE_SELECTOR = 'input, textarea, select, [contenteditabl
 const PHONE_SCROLL_DEBUG_GLOBAL_KEY = 'TAMAKO_PHONE_SCROLL_DEBUG';
 const PHONE_SCROLL_DEBUG_CANDIDATE_SELECTOR = '.phone-app-body, .phone-app-grid, .phone-table-body, .phone-nav-list, .phone-row-detail-card, .phone-special-message-list, .phone-special-moments-list, .phone-settings-scroll';
 const PHONE_INTERACTION_GUARD_BOUND_ATTR = 'phoneInteractionGuardBound';
+const SCROLL_DEBUG_CHANNEL = 'ScrollDebug';
+const logger = Logger.withScope({ scope: 'phone-core/scroll-guards', feature: 'scroll-guards' });
 
 function isPhoneScrollDebugEnabled() {
     return !!window[PHONE_SCROLL_DEBUG_GLOBAL_KEY];
@@ -61,15 +63,45 @@ function collectScrollDebugCandidates(scope) {
     return Array.from(new Set(candidates));
 }
 
+function normalizeScrollDebugTitle(title) {
+    const normalizedTitle = String(title || '').trim();
+    return normalizedTitle || 'debug';
+}
+
+function buildScrollDebugContext(title, payload) {
+    const baseContext = {
+        debugChannel: SCROLL_DEBUG_CHANNEL,
+        title: normalizeScrollDebugTitle(title),
+    };
+
+    if (payload === undefined) {
+        return baseContext;
+    }
+
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        return {
+            ...baseContext,
+            ...payload,
+        };
+    }
+
+    return {
+        ...baseContext,
+        payload,
+    };
+}
+
 function logPhoneScrollDebug(title, payload) {
     if (!isPhoneScrollDebugEnabled()) return;
 
-    if (payload === undefined) {
-        Logger.info(`[玉子的手机][ScrollDebug] ${title}`);
-        return;
-    }
+    const normalizedTitle = normalizeScrollDebugTitle(title);
+    const message = `[${SCROLL_DEBUG_CHANNEL}] ${normalizedTitle}`;
 
-    Logger.info(`[玉子的手机][ScrollDebug] ${title}`, payload);
+    logger.info({
+        action: 'scroll-debug',
+        message,
+        context: buildScrollDebugContext(normalizedTitle, payload),
+    });
 }
 
 export function logRouteScrollDebugSnapshot(route, page) {
