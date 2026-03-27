@@ -25,7 +25,7 @@ export type SillyTavernEventType =
     | 'chat_created'
     | 'app_ready'
     | 'settings_loaded_after'
-    | 'character_loaded';
+    | 'character_page_loaded';
 
 /**
  * 事件监听器选项
@@ -40,11 +40,13 @@ export interface EventListenerOptions {
  */
 export interface EventSource {
     on(event: string, listener: Function): void;
-    off(event: string, listener: Function): void;
     once(event: string, listener: Function): void;
     makeFirst(event: string, listener: Function): void;
     makeLast(event: string, listener: Function): void;
-    emit(event: string, data?: any): void;
+    removeListener(event: string, listener: Function): void;
+    off?(event: string, listener: Function): void;
+    emit(event: string, ...data: any[]): void | Promise<void>;
+    emitAndWait?(event: string, ...data: any[]): void | Promise<void>;
 }
 
 // ===== TavernHelper API 类型定义 =====
@@ -91,7 +93,17 @@ export interface VariableOption {
 }
 
 /**
- * TavernHelper API 接口
+ * TavernHelper 返回的最小角色数据子集
+ */
+export interface TavernCharacterDataLike {
+    name?: string;
+    avatar?: string;
+    data?: Record<string, any>;
+    [key: string]: any;
+}
+
+/**
+ * 当前项目真实依赖的 TavernHelper 最小子集接口
  */
 export interface TavernHelper {
     // 聊天消息
@@ -100,16 +112,36 @@ export interface TavernHelper {
 
     // 变量操作
     getVariables(options?: VariableOption): Record<string, any>;
-    insertOrAssignVariables(variables: Record<string, any>, options?: VariableOption): Promise<Record<string, any>>;
+    insertOrAssignVariables(variables: Record<string, any>, options?: VariableOption): Promise<Record<string, any> | void>;
 
     // 宏替换
     substitudeMacros(text: string): string;
 
     // 角色操作
-    getCharData(name: string, allowAvatar?: boolean): any;
+    getCharData(name: string, allowAvatar?: boolean): TavernCharacterDataLike | null;
 
-    // 通知
-    // toastr 由全局提供
+    // 世界书能力：在当前项目中通过 helper / global 双路径探测，因此声明为可选
+    getWorldbookNames?(): Promise<string[]> | string[];
+    getWorldbook?(worldbookName: string): Promise<Record<string, any>[]> | Record<string, any>[];
+}
+
+export interface SlashCommandParserLike {
+    commands?: Record<string, any>;
+}
+
+/**
+ * 当前项目实际依赖到的 SillyTavern 上下文最小子集
+ */
+export interface SillyTavernContextLike {
+    eventSource?: EventSource;
+    eventTypes?: Record<string, string>;
+    event_types?: Record<string, string>;
+    extensionSettings?: Record<string, any>;
+    saveSettingsDebounced?: (...args: any[]) => void;
+    saveSettings?: (...args: any[]) => void | Promise<void>;
+    registerSlashCommand?: HostSlashCommandRegistrar;
+    SlashCommandParser?: SlashCommandParserLike;
+    [key: string]: any;
 }
 
 // ===== 设置类型定义 =====
@@ -117,6 +149,183 @@ export interface TavernHelper {
 /**
  * 手机设置
  */
+export type BeautifyTemplateType = 'special_app_template' | 'generic_table_template';
+export type BeautifySourceMode = 'builtin' | 'user';
+export type PhoneBeautifySpecialRendererKey = 'special_message' | 'special_moments' | 'special_forum';
+export type PhoneBeautifyGenericRendererKey = 'generic_table';
+export type PhoneBeautifyRendererKey = PhoneBeautifySpecialRendererKey | PhoneBeautifyGenericRendererKey;
+export type PhoneBeautifySpecialType = 'message' | 'moments' | 'forum';
+export type PhoneBeautifyTemplateSource = 'builtin' | 'user';
+export type PhoneBeautifyTemplateBindings = Record<string, string>;
+export type PhoneBeautifyTemplateExportMode = 'runtime' | 'annotated';
+
+export interface PhoneBeautifyTemplateMeta {
+    author: string;
+    description: string;
+    tags: string[];
+    updatedAt: number;
+}
+
+export interface PhoneBeautifyTemplateMatcher {
+    tableNameExact?: string[];
+    tableNameIncludes?: string[];
+    requiredHeaders?: string[];
+    optionalHeaders?: string[];
+    minScore?: number;
+}
+
+export interface PhoneBeautifyTemplateRenderConfig {
+    rendererKey: PhoneBeautifyRendererKey;
+    fieldBindings: Record<string, string[]>;
+    styleTokens: Record<string, string>;
+    styleOptions: Record<string, unknown>;
+    layoutOptions: Record<string, unknown>;
+    structureOptions: Record<string, unknown>;
+    typographyOptions: Record<string, unknown>;
+    motionOptions: Record<string, unknown>;
+    stateOptions: Record<string, unknown>;
+    fieldDecorators: Record<string, unknown>;
+    customCss: string;
+    advanced: {
+        customCssEnabled?: boolean;
+        customCss?: string;
+        [key: string]: unknown;
+    };
+}
+
+export interface PhoneBeautifyTemplate {
+    id: string;
+    name: string;
+    templateType: BeautifyTemplateType;
+    source: PhoneBeautifyTemplateSource;
+    readOnly: boolean;
+    exportable: boolean;
+    enabled: boolean;
+    matcher: PhoneBeautifyTemplateMatcher;
+    render: PhoneBeautifyTemplateRenderConfig;
+    meta: PhoneBeautifyTemplateMeta;
+}
+
+export interface PhoneBeautifyTemplateStore {
+    schemaVersion: string;
+    updatedAt: number;
+    templates: PhoneBeautifyTemplate[];
+    bindings: PhoneBeautifyTemplateBindings;
+}
+
+export interface PhoneBeautifyTemplateSourceModeRuntime {
+    preferredMode: BeautifySourceMode;
+    effectiveMode: BeautifySourceMode | 'active_template';
+    fallbackApplied: boolean;
+    hasUserTemplates: boolean;
+    templates: PhoneBeautifyTemplate[];
+}
+
+export interface PhoneBeautifyTemplateValidationResult {
+    ok: boolean;
+    errors: string[];
+    warnings: string[];
+    template: PhoneBeautifyTemplate | null;
+}
+
+export interface PhoneBeautifyTemplateQueryOptions {
+    includeDisabled?: boolean;
+    includeBuiltin?: boolean;
+    includeUser?: boolean;
+    enabledOnly?: boolean;
+}
+
+export interface PhoneBeautifyTemplateSourceModeRuntimeOptions {
+    enabledOnly?: boolean;
+}
+
+export interface PhoneBeautifyTemplateExportOptions {
+    templateType?: BeautifyTemplateType;
+    builtinOnly?: boolean;
+    userOnly?: boolean;
+    templateIds?: string[];
+    exportMode?: PhoneBeautifyTemplateExportMode;
+    packName?: string;
+}
+
+export interface PhoneBeautifyTemplateImportOptions {
+    overwrite?: boolean;
+    templateTypeFilter?: BeautifyTemplateType;
+}
+
+export interface PhoneBeautifyTemplateSourceModeResult {
+    success: boolean;
+    mode?: BeautifySourceMode;
+    message: string;
+}
+
+export interface PhoneBeautifyTemplateActivationResult {
+    success: boolean;
+    message: string;
+    templateId?: string;
+    rendererKey?: PhoneBeautifyRendererKey;
+}
+
+export interface PhoneBeautifyTemplatePackMeta {
+    name?: string;
+    exportedAt?: string;
+    exporter?: string;
+    exportMode?: PhoneBeautifyTemplateExportMode;
+    schemaCompatMin?: string;
+    schemaCompatMax?: string;
+    [key: string]: unknown;
+}
+
+export interface PhoneBeautifyTemplateImportPack {
+    format: string;
+    schemaVersion: string;
+    packMeta: PhoneBeautifyTemplatePackMeta;
+    templates: PhoneBeautifyTemplate[];
+}
+
+export interface PhoneBeautifyTemplateExportResult {
+    success: boolean;
+    count: number;
+    pack: PhoneBeautifyTemplateImportPack;
+}
+
+export interface PhoneBeautifyTemplateImportResult {
+    success: boolean;
+    imported: number;
+    replaced: number;
+    skipped: number;
+    errors: string[];
+    warnings: string[];
+    message: string;
+}
+
+export interface PhoneBeautifyTemplateSaveResult {
+    success: boolean;
+    warnings: string[];
+    errors: string[];
+    replaced?: boolean;
+    template: PhoneBeautifyTemplate | null;
+    message: string;
+}
+
+export interface PhoneBeautifyTemplateBindingResult {
+    success: boolean;
+    message: string;
+}
+
+export interface PhoneBeautifyTemplateMatchResult {
+    sheetKey: string;
+    tableName: string;
+    template: PhoneBeautifyTemplate;
+    score: number;
+    threshold?: number;
+    reason: string;
+    specialType?: PhoneBeautifySpecialType;
+    sourceMode?: BeautifySourceMode | 'active_template';
+    sourceModePreferred?: BeautifySourceMode;
+    sourceModeFallbackApplied?: boolean;
+}
+
 export interface PhoneSettings {
     enabled: boolean;
     phoneToggleX: number | null;
@@ -129,14 +338,35 @@ export interface PhoneSettings {
     appIcons: Record<string, string>;
     hideTableCountBadge: boolean;
     hiddenTableApps: Record<string, boolean>;
-    beautifyTemplateSourceModeSpecial: string;
-    beautifyTemplateSourceModeGeneric: string;
-    beautifyActiveTemplateIdsSpecial: Record<string, string>;
+    beautifyTemplateSourceModeSpecial: BeautifySourceMode;
+    beautifyTemplateSourceModeGeneric: BeautifySourceMode;
+    beautifyActiveTemplateIdsSpecial: Partial<Record<PhoneBeautifySpecialRendererKey, string>>;
     beautifyActiveTemplateIdGeneric: string;
     dockIconSize: number;
     phoneToggleStyleSize: number;
     phoneToggleStyleShape: 'circle' | 'rounded';
     phoneToggleCoverImage: string | null;
+    phoneChat: {
+        useStoryContext: boolean;
+        storyContextTurns: number;
+        apiPresetName: string;
+        maxHistoryMessages: number;
+        maxReplyTokens: number;
+        requestTimeoutMs: number;
+        worldbookMaxEntries: number;
+        worldbookMaxChars: number;
+    };
+    phoneAiInstruction: {
+        currentPresetName: string;
+        lastOpenedPresetName: string;
+        migratedLegacyTemplates: boolean;
+        presets: any[];
+    };
+    worldbookSelection: {
+        sourceMode: 'off' | 'manual' | 'character_bound';
+        selectedWorldbook: string;
+        entries: Record<string, Record<string, boolean>>;
+    };
 }
 
 /**
@@ -237,6 +467,22 @@ export interface YuziPhoneErrorInfo {
 export type SlashCommandHandler = (args: string) => void | Promise<void>;
 
 /**
+ * 当前项目实际探测到的 Slash 注册函数签名
+ */
+export type HostSlashCommandRegistrar = (
+    name: string,
+    handler: SlashCommandHandler,
+    aliases?: string[],
+    helpText?: string,
+    autoComplete?: boolean,
+) => void;
+
+/**
+ * 当前项目实际探测到的 Slash 注销函数签名
+ */
+export type HostSlashCommandUnregistrar = (name: string) => void;
+
+/**
  * Slash 命令定义
  */
 export interface SlashCommandDefinition {
@@ -301,13 +547,16 @@ export interface IntegrationModule {
 
     // TavernHelper API
     getTavernHelper(): TavernHelper | null;
-    getSillyTavernContext(): any;
+    getSillyTavernContext(): SillyTavernContextLike | null;
     getChatMessages(range?: string | number, options?: GetChatMessagesOption): ChatMessage[] | ChatMessageSwiped[];
     getLastMessageId(): number;
     getVariables(options?: VariableOption): Record<string, any>;
     setVariables(variables: Record<string, any>, options?: VariableOption): Promise<void>;
     substituteMacros(text: string): string;
-    getCharacterData(name?: string, allowAvatar?: boolean): any;
+    getCharacterData(name?: string, allowAvatar?: boolean): TavernCharacterDataLike | null;
+    getWorldbookNames(): Promise<string[]>;
+    getWorldbook(worldbookName: string): Promise<any[]>;
+    onWorldInfoUpdated(callback: Function, options?: EventListenerOptions): Promise<() => void>;
     showNotification(message: string, type?: 'success' | 'error' | 'warning' | 'info'): void;
 
     // 清理
@@ -325,9 +574,179 @@ export interface SettingsModule {
     savePhoneSettingsPatch(patch: Partial<PhoneSettings>): void;
     migrateLegacyPhoneSettings(): void;
     flushPhoneSettingsSave(): void;
+    resetPhoneSettingsToDefault(): boolean;
     isMobileDevice(): boolean;
     getDefaultPhoneTogglePosition(): { x: number; y: number };
     constrainPosition(x: number, y: number, width: number, height: number): { x: number; y: number };
+}
+
+export type SettingsPageMode =
+    | 'home'
+    | 'appearance'
+    | 'database'
+    | 'beautify'
+    | 'button_style'
+    | 'ai_instruction_presets'
+    | 'api_prompt_config'
+    | 'prompt_editor';
+
+export interface SettingsAppState {
+    mode: SettingsPageMode;
+    homeScrollTop?: number;
+    databaseScrollTop: number;
+    appearanceScrollTop: number;
+    beautifyScrollTop: number;
+    buttonStyleScrollTop: number;
+    apiPromptConfigScrollTop: number;
+    promptEditorName: string;
+    promptEditorContent: string;
+    promptEditorIsNew: boolean;
+    promptEditorOriginalName: string;
+    aiInstructionSelectedPresetName?: string;
+    aiInstructionDraftName?: string;
+    aiInstructionDraftOriginalName?: string;
+    aiInstructionDraftImagePrefix?: string;
+    aiInstructionDraftVideoPrefix?: string;
+    aiInstructionDraftPromptGroup?: any[];
+    apiPromptConfigSelectedTemplate: string;
+    worldbookLoading: boolean;
+    worldbookError: string | null;
+    worldbookList: string[];
+    currentWorldbook: string;
+    worldbookSourceMode: 'off' | 'manual' | 'character_bound';
+    boundWorldbookNames: string[];
+    worldbookEntries: any[];
+    worldbookSearchQuery: string;
+    worldbookEventCleanup: (() => void) | null;
+}
+
+export interface SettingsRuntimeStatus {
+    ok: boolean;
+    message?: string;
+    [key: string]: any;
+}
+
+export interface NamedSettingsEntry {
+    name: string;
+    [key: string]: any;
+}
+
+export type SettingsToastHandler = (host: unknown, message: string, isError?: boolean) => void;
+
+export interface SettingsPageRendererCommonDeps {
+    container: HTMLElement;
+    state: SettingsAppState;
+    render: () => void;
+}
+
+export interface SettingsPageRendererNavigationDeps {
+    navigateBack: () => void;
+}
+
+export interface SettingsPageRendererScrollDeps {
+    captureScroll: (key: string) => void;
+    restoreScroll: (key: string) => void;
+    rerenderHomeKeepScroll: () => void;
+    rerenderDatabaseKeepScroll: () => void;
+    rerenderButtonStyleKeepScroll: () => void;
+    rerenderApiPromptConfigKeepScroll: () => void;
+}
+
+export interface SettingsPageRendererFeedbackDeps {
+    showToast: SettingsToastHandler;
+}
+
+export interface SettingsHomePageRendererDeps {
+    getDbConfigApiAvailability: () => SettingsRuntimeStatus;
+    getDbPresets: () => NamedSettingsEntry[];
+    getActiveDbPresetName: () => string;
+    getApiPresets: () => NamedSettingsEntry[];
+    getTableApiPreset: () => string;
+    setTableApiPreset: (presetName: string) => boolean;
+    getCurrentPhoneAiInstructionPresetName: () => string;
+    switchPresetByName: (presetName: string, toastHost?: unknown) => boolean;
+    setupManualUpdateBtn: (container: HTMLElement, btnSelector?: string, statusSelector?: string | null) => void;
+}
+
+export interface SettingsAppearancePageRendererDeps {
+    getLayoutValue: (key: string, fallback: number) => string;
+    getPhoneSettings: SettingsModule['getPhoneSettings'];
+    setupBgUpload: (container: HTMLElement) => void;
+    setupIconLayoutSettings: (container: HTMLElement) => void;
+    setupAppearanceToggles: (container: HTMLElement) => void;
+    renderHiddenTableAppsList: (listEl: Element | null) => void;
+    renderIconUploadList: (listEl: Element | null) => void;
+}
+
+export interface SettingsDataConfigPageRendererDeps {
+    getTableData: () => Record<string, any> | null;
+    getSheetKeys: (rawData?: Record<string, any> | null) => string[];
+    getDbConfigApiAvailability: () => SettingsRuntimeStatus;
+    readDbSnapshot: () => { ready: boolean; snapshot: Record<string, any>; apiAvailability?: SettingsRuntimeStatus; [key: string]: any };
+    getDbPresets: () => NamedSettingsEntry[];
+    getActiveDbPresetName: () => string;
+    switchPresetByName: (presetName: string, toastHost?: unknown) => boolean;
+    clearActivePresetBindingIfNeeded: () => boolean;
+    normalizeDbManualSelection: (raw: any) => { hasManualSelection: boolean; selectedTables: string[] };
+    normalizeDbUpdateConfig: (raw: any) => Record<string, any>;
+    createDbPreset: (name: string, snapshot: any) => NamedSettingsEntry;
+    saveDbPresets: (presets: NamedSettingsEntry[]) => void;
+    setActiveDbPresetName: (name: string) => void;
+    writeDbUpdateConfigViaApi: (payload: Record<string, any>) => SettingsRuntimeStatus;
+    writeManualTableSelectionViaApi: (sheetKeys: string[]) => SettingsRuntimeStatus;
+    clearManualTableSelectionViaApi: () => SettingsRuntimeStatus;
+}
+
+export interface SettingsButtonStylePageRendererDeps {
+    getPhoneSettings: SettingsModule['getPhoneSettings'];
+    savePhoneSetting: SettingsModule['savePhoneSetting'];
+    savePhoneSettingsPatch: SettingsModule['savePhoneSettingsPatch'];
+}
+
+export interface SettingsApiPromptPageRendererDeps {
+    getDbConfigApiAvailability: () => SettingsRuntimeStatus;
+    getApiPresets: () => NamedSettingsEntry[];
+    getTableApiPreset: () => string;
+    setTableApiPreset: (presetName: string) => boolean;
+    getPlotApiPreset: () => string;
+    setPlotApiPreset: (presetName: string) => boolean;
+    getPhoneAiInstructionPresets: () => NamedSettingsEntry[];
+    getPhoneAiInstructionPreset: (name: string) => any;
+    getCurrentPhoneAiInstructionPresetName: () => string;
+    setCurrentPhoneAiInstructionPresetName: (name: string) => any;
+    deletePhoneAiInstructionPreset: (name: string) => any;
+    importPhoneAiInstructionPresetsFromData: (data: any, options?: Record<string, any>) => any;
+    exportPhoneAiInstructionPresetPack: (name?: string) => any;
+    exportAllPhoneAiInstructionPresetsPack: () => any;
+}
+
+export interface SettingsPromptEditorPageRendererDeps {
+    getPhoneAiInstructionPreset: (name: string) => any;
+    savePhoneAiInstructionPreset: (...args: any[]) => any;
+}
+
+export interface SettingsPageRendererGroupedDeps {
+    common?: SettingsPageRendererCommonDeps;
+    navigation?: SettingsPageRendererNavigationDeps;
+    scroll?: SettingsPageRendererScrollDeps;
+    feedback?: SettingsPageRendererFeedbackDeps;
+    home?: SettingsHomePageRendererDeps;
+    appearance?: SettingsAppearancePageRendererDeps;
+    dataConfig?: SettingsDataConfigPageRendererDeps;
+    buttonStyle?: SettingsButtonStylePageRendererDeps;
+    apiPrompt?: SettingsApiPromptPageRendererDeps;
+    promptEditor?: SettingsPromptEditorPageRendererDeps;
+}
+
+export interface SettingsPageRenderers {
+    renderHomePage(): void;
+    renderAppearancePage(): void;
+    renderDatabasePage(): void;
+    renderButtonStylePage(): void;
+    renderAiInstructionPresetsPage(): void;
+    renderApiPromptConfigPage(): void;
+    renderPromptEditorPage(): void;
+    renderBeautifyTemplatePage(): void;
 }
 
 /**
@@ -381,13 +800,35 @@ export interface ErrorHandlerModule {
     configureErrorHandler(config: { enableLogging?: boolean; enableNotification?: boolean; logLevel?: 'debug' | 'info' | 'warn' | 'error' }): void;
 }
 
+export interface PhoneBeautifyTemplatesModule {
+    getBeautifyTemplateSourceMode(templateType: BeautifyTemplateType): BeautifySourceMode;
+    setBeautifyTemplateSourceMode(templateType: BeautifyTemplateType, sourceMode: BeautifySourceMode): PhoneBeautifyTemplateSourceModeResult;
+    getActiveBeautifyTemplateIdByType(templateType: BeautifyTemplateType, options?: { withFallback?: boolean; persist?: boolean }): string;
+    getActiveBeautifyTemplateIdsForSpecial(options?: { withFallback?: boolean; persist?: boolean }): Partial<Record<PhoneBeautifySpecialRendererKey, string>>;
+    setActiveBeautifyTemplateIdByType(templateType: BeautifyTemplateType, templateId: string): PhoneBeautifyTemplateActivationResult;
+    getBeautifyTemplateSourceModeRuntime(templateType: BeautifyTemplateType, options?: PhoneBeautifyTemplateSourceModeRuntimeOptions): PhoneBeautifyTemplateSourceModeRuntime;
+    getBuiltinPhoneBeautifyTemplates(): PhoneBeautifyTemplate[];
+    getPhoneBeautifyTemplateStore(): PhoneBeautifyTemplateStore;
+    getAllPhoneBeautifyTemplates(options?: PhoneBeautifyTemplateQueryOptions): PhoneBeautifyTemplate[];
+    getPhoneBeautifyTemplatesByType(templateType: BeautifyTemplateType, options?: PhoneBeautifyTemplateQueryOptions): PhoneBeautifyTemplate[];
+    validatePhoneBeautifyTemplate(rawTemplate: any): PhoneBeautifyTemplateValidationResult;
+    savePhoneBeautifyUserTemplate(rawTemplate: any, options?: { overwrite?: boolean }): PhoneBeautifyTemplateSaveResult;
+    deletePhoneBeautifyUserTemplate(templateId: string): PhoneBeautifyTemplateBindingResult;
+    exportPhoneBeautifyPack(options?: PhoneBeautifyTemplateExportOptions): PhoneBeautifyTemplateExportResult;
+    importPhoneBeautifyPackFromData(input: string | object, options?: PhoneBeautifyTemplateImportOptions): PhoneBeautifyTemplateImportResult;
+    detectSpecialTemplateForTable(payload?: { sheetKey?: string; tableName?: string; headers?: string[] }): PhoneBeautifyTemplateMatchResult | null;
+    detectGenericTemplateForTable(payload?: { sheetKey?: string; tableName?: string; headers?: string[] }): PhoneBeautifyTemplateMatchResult | null;
+    bindSheetToBeautifyTemplate(sheetKey: string, templateId: string): PhoneBeautifyTemplateBindingResult;
+    clearSheetBeautifyBinding(sheetKey: string): PhoneBeautifyTemplateBindingResult;
+}
+
 /**
  * Slash 命令模块导出
  */
 export interface SlashCommandsModule {
     registerSlashCommands(): boolean;
     unregisterSlashCommands(): void;
-    registerCommandHandler(command: string, handler: SlashCommandHandler): void;
+    registerCommandHandler(command: string, handler: (action?: string) => any): void;
     unregisterCommandHandler(command: string): void;
     isSlashCommandsRegistered(): boolean;
     getRegisteredCommands(): string[];
@@ -418,9 +859,9 @@ export interface YuziPhoneExtension {
     configureErrorHandler: ErrorHandlerModule['configureErrorHandler'];
 
     // 虚拟滚动
-    VirtualScroll: any;
-    createVirtualScroll: any;
-    renderVirtualList: any;
+    VirtualScroll: typeof import('./modules/virtual-scroll.js').VirtualScroll;
+    createVirtualScroll: typeof import('./modules/virtual-scroll.js').createVirtualScroll;
+    renderVirtualList: typeof import('./modules/virtual-scroll.js').renderVirtualList;
 
     // 工具函数
     debounce: UtilsModule['debounce'];
@@ -441,24 +882,33 @@ export interface YuziPhoneExtension {
     createFPSMonitor: UtilsModule['createFPSMonitor'];
     getMemoryUsage: UtilsModule['getMemoryUsage'];
 
+    // 设置模块
+    getPhoneSettings: SettingsModule['getPhoneSettings'];
+    savePhoneSetting: SettingsModule['savePhoneSetting'];
+    savePhoneSettingsPatch: SettingsModule['savePhoneSettingsPatch'];
+    flushPhoneSettingsSave: SettingsModule['flushPhoneSettingsSave'];
+    resetPhoneSettingsToDefault: SettingsModule['resetPhoneSettingsToDefault'];
+
     // 销毁函数
     destroy(): void;
+}
+
+export interface SillyTavernGlobalLike {
+    getContext(): SillyTavernContextLike;
+    eventSource?: EventSource;
+    eventTypes?: Record<string, string>;
+    event_types?: Record<string, string>;
 }
 
 // 全局类型声明
 declare global {
     interface Window {
         TavernHelper?: TavernHelper;
-        SillyTavern?: {
-            getContext(): any;
-            eventSource?: EventSource;
-            event_types?: Record<string, string>;
-        };
+        SillyTavern?: SillyTavernGlobalLike;
         eventSource?: EventSource;
+        eventTypes?: Record<string, string>;
         event_types?: Record<string, string>;
-        getContext?: () => any;
-        registerSlashCommand?: (name: string, handler: SlashCommandHandler, aliases?: string[], helpText?: string, autoComplete?: boolean) => void;
-        unregisterSlashCommand?: (name: string) => void;
+        getContext?: () => SillyTavernContextLike;
         toastr?: {
             success(message: string, title?: string): void;
             error(message: string, title?: string): void;
@@ -468,24 +918,19 @@ declare global {
         yuziPhoneCommands?: Record<string, SlashCommandHandler>;
     }
 
-    const toastr: {
+    var toastr: {
         success(message: string, title?: string): void;
         error(message: string, title?: string): void;
         warning(message: string, title?: string): void;
         info(message: string, title?: string): void;
-    };
+    } | undefined;
 
-    const SillyTavern: {
-        getContext(): any;
-        eventSource?: EventSource;
-        event_types?: Record<string, string>;
-    };
+    var SillyTavern: SillyTavernGlobalLike | undefined;
 
-    const eventSource: EventSource;
-    const event_types: Record<string, string>;
-    const getContext: () => any;
-    const registerSlashCommand: (name: string, handler: SlashCommandHandler, aliases?: string[], helpText?: string, autoComplete?: boolean) => void;
-    const unregisterSlashCommand: (name: string) => void;
+    var eventSource: EventSource | undefined;
+    var eventTypes: Record<string, string> | undefined;
+    var event_types: Record<string, string> | undefined;
+    var getContext: (() => SillyTavernContextLike) | undefined;
 }
 
 export {};

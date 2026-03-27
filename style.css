@@ -1,12 +1,27 @@
 ﻿/* style.css */
 /**
- * 玉子手机 - 样式入口
+ * 玉子手机 - 样式顶层入口
+ * Layer map
+ * 1. shell    : 独立容器 / toggle / resize 基础层
+ * 2. base     : phone-base 现代基础层（legacy 归档说明由 01-phone-base.css 承接）
+ * 3. nav      : 顶层通用导航 / 详情补层
+ * 4. special  : 三张专属表模板层
+ * 5. generic  : 通用表模板层
  * @version 1.0.0
  */
 
+/* 1) shell layer */
 @import url('./styles/00-phone-shell.css');
+
+/* 2) base modern layer */
 @import url('./styles/01-phone-base.css');
+
+/* 3) shared nav / detail layer */
 @import url('./styles/02-phone-nav-detail.css');
+
+/* 4) special template layers */
 @import url('./styles/03-phone-special-base.css');
 @import url('./styles/04-phone-special-interactions.css');
+
+/* 5) generic template layer */
 @import url('./styles/05-phone-generic-template.css');
