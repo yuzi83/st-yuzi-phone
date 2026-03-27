@@ -103,6 +103,14 @@
     cursor: pointer;
 }
 
+.phone-special-app.phone-special-template-scope .phone-nav-back,
+.phone-special-app.phone-special-template-scope .phone-special-nav-action-btn {
+    position: relative;
+    z-index: 240;
+    pointer-events: auto;
+    touch-action: manipulation;
+}
+
 .phone-special-app.phone-special-template-scope .phone-special-new-chat-btn:hover,
 .phone-special-app.phone-special-template-scope .phone-special-nav-action-btn:hover,
 .phone-special-app.phone-special-template-scope .phone-special-manage-btn:hover {
@@ -203,6 +211,8 @@
 
 .phone-special-app.phone-special-template-scope .phone-special-message-item {
     display: flex;
+    width: 100%;
+    min-width: 0;
     align-items: flex-start;
     gap: var(--sp-gap-sm);
 }
@@ -213,6 +223,9 @@
 
 .phone-special-app.phone-special-template-scope .phone-special-message-bubble-wrap {
     display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
     flex-direction: column;
     gap: var(--sp-gap-xs);
     align-items: flex-start;
@@ -222,14 +235,81 @@
     align-items: flex-end;
 }
 
-.phone-special-app.phone-special-template-scope .phone-special-message-bubble {
+.phone-special-app.phone-special-template-scope .phone-special-message-stack {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: fit-content;
+    min-width: 0;
     max-width: 80%;
+    gap: 6px;
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-message-bubble {
+    display: block;
+    width: fit-content;
+    min-width: 0;
+    max-width: 100%;
     padding: var(--sp-gap-sm) var(--sp-gap-md);
     border-radius: var(--sp-radius-md);
     border-top-left-radius: var(--sp-radius-xs);
     line-height: var(--sp-line-height-normal);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     word-break: break-word;
     transition: background var(--sp-duration-fast) var(--sp-ease-standard), color var(--sp-duration-fast) var(--sp-ease-standard), border-color var(--sp-duration-fast) var(--sp-ease-standard), box-shadow var(--sp-duration-fast) var(--sp-ease-standard);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-message-media-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-message-media-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid var(--sp-btn-border);
+    border-style: solid;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--sp-media-text);
+    box-shadow: none;
+    line-height: 0;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-message-media-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--sp-shadow-sm);
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-message-media-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12), 0 0 0 4px rgba(219, 180, 138, 0.24);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-message-media-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    pointer-events: none;
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-message-media-icon svg {
+    width: 14px;
+    height: 14px;
+    display: block;
 }
 
 .phone-special-app.phone-special-template-scope .phone-special-message-item.self .phone-special-message-bubble {
@@ -299,11 +379,20 @@
 }
 
 .phone-special-app.phone-special-template-scope .phone-special-manage-bar {
+    position: sticky;
+    top: calc(var(--sp-gap-md) * -1);
+    z-index: 6;
     display: flex;
     align-items: center;
     gap: var(--sp-gap-sm);
-    padding: 2px 2px var(--sp-gap-xs);
+    padding: var(--sp-gap-sm) calc(var(--sp-gap-md) + 2px) var(--sp-gap-xs);
+    margin: 0 calc(var(--sp-gap-md) * -1) var(--sp-gap-xs);
     flex-wrap: wrap;
+    background: var(--sp-body-bg);
+    border-bottom: 1px solid var(--sp-list-divider);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 .phone-special-app.phone-special-template-scope .phone-special-manage-btn:disabled {
@@ -646,13 +735,16 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: var(--sp-gap-md);
+    padding: var(--sp-gap-lg);
     box-sizing: border-box;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
 }
 
 .phone-special-app.phone-special-template-scope .phone-special-media-preview-modal {
-    width: 100%;
-    max-height: 85%;
+    width: min(100%, 320px);
+    max-width: 320px;
+    max-height: min(85%, 420px);
     overflow-y: auto;
     border-radius: var(--sp-radius-md);
     border: 1px solid var(--sp-card-border);
@@ -660,6 +752,7 @@
     padding: calc(var(--sp-gap-md) + 2px);
     box-sizing: border-box;
     box-shadow: var(--sp-shadow-lg);
+    margin: 0 auto;
 }
 
 .phone-special-app.phone-special-template-scope .phone-special-media-preview-title {

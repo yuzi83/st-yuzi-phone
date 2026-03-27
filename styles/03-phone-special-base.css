@@ -4,6 +4,7 @@
    ======================================== */
 
 .phone-special-app.phone-special-template-scope {
+    position: relative;
     --sp-page-bg: var(--spPageBg, linear-gradient(180deg, rgba(28, 24, 21, 0.98) 0%, rgba(42, 36, 31, 0.96) 100%));
     --sp-body-bg: var(--spBodyBg, rgba(38, 33, 29, 0.9));
     --sp-surface-bg: var(--spSurfaceBg, rgba(42, 36, 31, 0.88));

@@ -1,4 +1,10 @@
-/* --- Table Viewer Cards --- */
+/* ========================================
+   Legacy archive — Table Viewer Cards
+   - 默认不加载
+   - 仅保留历史参考 / 回滚比对
+   - 现代替代层：styles/phone-base/09-table-manage-detail.css
+   - 目标归档路径：styles/legacy/phone-base/03-table-legacy.css
+   ======================================== */
 .phone-table-note {
     background: rgba(40, 40, 40, 0.6);
     border-radius: 14px;

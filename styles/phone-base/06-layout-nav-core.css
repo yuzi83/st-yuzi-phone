@@ -1,5 +1,6 @@
 /* ========== App Page Layout ========== */
 .phone-app-page {
+    position: relative;
     display: flex;
     flex-direction: column;
     flex: 1;

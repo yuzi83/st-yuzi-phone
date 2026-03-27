@@ -1,4 +1,10 @@
-/* --- Settings Page --- */
+/* ========================================
+   Legacy archive — Settings Page
+   - 默认不加载
+   - 仅保留历史参考 / 回滚比对
+   - 现代替代层：styles/phone-base/07-settings-modern.css
+   - 目标归档路径：styles/legacy/phone-base/04-settings-legacy.css
+   ======================================== */
 .phone-settings-body {
     display: flex;
     flex-direction: column;
