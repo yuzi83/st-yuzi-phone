@@ -1,32 +1,30 @@
 import {
-    callPhoneChatAI,
     deletePhoneSheetRows,
     getCurrentCharacterDisplayName,
-    getPhoneChatLastSelectedPromptTemplateName,
-    getPhoneChatLastSelectedTarget,
-    getPhoneChatPromptTemplateContent,
-    getPhoneChatSettings,
-    getPhoneChatWorldbookContext,
-    getPhoneStoryContext,
-    getPromptTemplates,
+    getCurrentPhoneAiInstructionPresetName,
+    getPhoneAiInstructionPresets,
     getSheetDataByKey,
-    insertPhoneMessageRecord,
-    navigateBack,
-    refreshPhoneMessageProjection,
-    setPhoneChatLastSelectedPromptTemplateName,
-    setPhoneChatLastSelectedTarget,
-    updatePhoneMessageRecord,
-} from '../../phone-core.js';
+    setCurrentPhoneAiInstructionPresetName,
+} from '../../phone-core/chat-support.js';
+import { navigateBack } from '../../phone-core/routing.js';
 import { PHONE_ICONS } from '../../phone-home.js';
 import { escapeHtml, escapeHtmlAttr } from '../../utils.js';
 import { showConfirmDialog } from '../../settings-app/ui/confirm-dialog.js';
 import { bindWheelBridge, showInlineToast } from '../shared-ui.js';
 import { createSpecialFieldReader, buildHeaderIndexMap } from './field-reader.js';
 import {
+    getConversationRows,
+    getConversationRowEntries,
+    resolveConversationHeaderLabel,
+    detectChatTargetFromRows,
+    getRetryTarget,
+    scrollMessageDetailToBottom,
+    renderOneMessageRow,
+} from './message-viewer-helpers.js';
+import { createMessageViewerActions } from './message-viewer-actions.js';
+import {
     buildConversations,
-    resolveConversationDisplayName,
     normalizeMediaDesc,
-    normalizeSenderName,
     renderInPhoneMediaPreview,
     getAvatarText,
     formatTimeLike,
@@ -56,14 +54,6 @@ import {
  * @property {MessageStyleOptions} styleOptions
  */
 
-const DEFAULT_PHONE_CHAT_SYSTEM_PROMPT = [
-    '你正在通过手机聊天应用与用户对话。',
-    '请保持自然、口语化、贴近即时通讯的表达。',
-    '除非设定明确要求，否则避免长篇叙述、旁白腔和总结腔。',
-    '请基于会话上下文、世界书设定与正文近期剧情继续回复。',
-].join('\n');
-
-const MAX_THREAD_CONTEXT_MESSAGES = 12;
 
 export function renderMessageTable(container, context, deps = {}) {
     const { createSpecialTemplateStylePayload, viewerEventManager } = deps;
@@ -79,9 +69,6 @@ export function renderMessageTable(container, context, deps = {}) {
         tableName,
     });
 
-    const restoredTarget = getPhoneChatLastSelectedTarget();
-    const restoredPromptTemplateName = getPhoneChatLastSelectedPromptTemplateName();
-
     const state = {
         mode: 'conversation',
         conversationId: null,
@@ -92,8 +79,7 @@ export function renderMessageTable(container, context, deps = {}) {
         statusText: '',
         errorText: '',
         suppressExternalUpdateUntil: 0,
-        selectedTarget: restoredTarget || null,
-        selectedPromptTemplateName: restoredPromptTemplateName || '',
+        selectedTarget: null,
         contactPickerVisible: false,
         deleteManageMode: false,
         deletingSelection: false,
@@ -242,20 +228,11 @@ export function renderMessageTable(container, context, deps = {}) {
         }
     };
 
-    const patchConversationPromptUi = () => {
-        if (state.mode !== 'conversation') return;
-
-        const activePromptTemplateName = String(state.selectedPromptTemplateName || '').trim();
-        const promptSelect = /** @type {HTMLSelectElement | null} */ (container.querySelector('.phone-special-prompt-select'));
-        const noteEl = container.querySelector('.phone-special-conversation-template-note');
-
-        if (promptSelect) {
-            promptSelect.value = activePromptTemplateName;
-        }
-        if (noteEl instanceof HTMLElement) {
-            noteEl.textContent = `当前提示词：${activePromptTemplateName || '默认提示词'}`;
-        }
+    const getCurrentAiInstructionPresetNameText = () => {
+        const safeName = String(getCurrentPhoneAiInstructionPresetName() || '').trim();
+        return safeName || '默认实时回复预设';
     };
+
 
     const patchMessageManageUi = () => {
         if (state.mode !== 'detail' || !state.deleteManageMode) return;
@@ -292,6 +269,19 @@ export function renderMessageTable(container, context, deps = {}) {
         });
     };
 
+    const { handleSendMessage, handleRetryMessage } = createMessageViewerActions({
+        state,
+        sheetKey,
+        headers,
+        container,
+        readSpecialField,
+        patchComposeUi,
+        renderKeepScroll,
+        syncRowsFromSheet,
+        markLocalTableMutation,
+        createDraftConversationId,
+    });
+
     const handleExternalTableUpdate = (event) => {
         if (event?.detail?.sheetKey !== sheetKey) return;
         if (Date.now() < state.suppressExternalUpdateUntil) return;
@@ -311,16 +301,14 @@ export function renderMessageTable(container, context, deps = {}) {
         const titleMode = String(stylePayload.styleOptions.conversationTitleMode || 'auto');
         const emptyConversationText = String(stylePayload.styleOptions.emptyConversationText || '暂无消息');
         const timeFallbackText = String(stylePayload.styleOptions.timeFallbackText || '刚刚');
-        const promptTemplates = getPromptTemplates();
-        const activePromptTemplateName = promptTemplates.some(template => template.name === state.selectedPromptTemplateName)
-            ? String(state.selectedPromptTemplateName || '').trim()
-            : '';
+        const aiInstructionPresets = getPhoneAiInstructionPresets();
+        const activeAiInstructionPresetName = getCurrentAiInstructionPresetNameText();
+        const selectedAiInstructionPresetName = aiInstructionPresets.some((preset) => preset?.name === activeAiInstructionPresetName)
+            ? activeAiInstructionPresetName
+            : String(aiInstructionPresets[0]?.name || '').trim();
         const showConversationSubtitle = stylePayload.structureOptions?.conversationList?.showSubtitle !== false;
         const showLastMessage = stylePayload.structureOptions?.conversationList?.showLastMessage !== false;
         const showTemplateNote = stylePayload.structureOptions?.composeBar?.showTemplateNote !== false;
-        if (activePromptTemplateName !== state.selectedPromptTemplateName) {
-            state.selectedPromptTemplateName = activePromptTemplateName;
-        }
 
         container.innerHTML = `
             <div class="phone-app-page phone-special-app phone-special-message ${stylePayload.className}" ${stylePayload.dataAttrs} style="${stylePayload.styleAttr}">
@@ -331,15 +319,16 @@ export function renderMessageTable(container, context, deps = {}) {
                 </div>
                 <div class="phone-app-body phone-table-body">
                     <div class="phone-special-conversation-actions">
-                        <select class="phone-special-prompt-select" ${promptTemplates.length === 0 ? 'disabled' : ''}>
-                            <option value="" ${!activePromptTemplateName ? 'selected' : ''}>默认提示词</option>
-                            ${promptTemplates.map(template => `
-                                <option value="${escapeHtmlAttr(template.name)}" ${template.name === activePromptTemplateName ? 'selected' : ''}>${escapeHtml(template.name)}</option>
-                            `).join('')}
+                        <select class="phone-special-prompt-select" ${aiInstructionPresets.length > 0 ? '' : 'disabled'}>
+                            ${aiInstructionPresets.length > 0
+                                ? aiInstructionPresets.map((preset) => `
+                                    <option value="${escapeHtmlAttr(preset.name)}" ${preset.name === selectedAiInstructionPresetName ? 'selected' : ''}>${escapeHtml(preset.name)}</option>
+                                `).join('')
+                                : '<option value="">暂无预设</option>'}
                         </select>
                         <button type="button" class="phone-special-new-chat-btn">开始聊天</button>
                     </div>
-                    ${showTemplateNote ? `<div class="phone-special-conversation-template-note">当前提示词：${escapeHtml(activePromptTemplateName || '默认提示词')}</div>` : ''}
+                    ${showTemplateNote ? `<div class="phone-special-conversation-template-note">当前 AI 指令预设：${escapeHtml(selectedAiInstructionPresetName || activeAiInstructionPresetName || '未选择')}</div>` : ''}
                     ${conversations.length === 0
                         ? `<div class="phone-empty-msg">${escapeHtml(emptyConversationText)}</div>`
                         : `<div class="phone-special-conversation-list">
@@ -378,10 +367,7 @@ export function renderMessageTable(container, context, deps = {}) {
             clearDeleteManageState();
             const convRows = getConversationRows(state.rowsData, safeId, readSpecialField);
             const detectedTarget = detectChatTargetFromRows(convRows, readSpecialField);
-            if (detectedTarget) {
-                state.selectedTarget = detectedTarget;
-                setPhoneChatLastSelectedTarget(detectedTarget);
-            }
+            state.selectedTarget = detectedTarget || null;
             render();
             scrollMessageDetailToBottom(container);
         };
@@ -393,14 +379,19 @@ export function renderMessageTable(container, context, deps = {}) {
             });
         });
 
-        const promptSelect = /** @type {HTMLSelectElement | null} */ (container.querySelector('.phone-special-prompt-select'));
-        if (promptSelect) {
-            promptSelect.addEventListener('change', () => {
-                state.selectedPromptTemplateName = String(promptSelect.value || '').trim();
-                setPhoneChatLastSelectedPromptTemplateName(state.selectedPromptTemplateName);
-                patchConversationPromptUi();
-            });
-        }
+        container.querySelector('.phone-special-prompt-select')?.addEventListener('change', (event) => {
+            const target = event.currentTarget;
+            if (!(target instanceof HTMLSelectElement)) return;
+            const nextName = String(target.value || '').trim();
+            if (!nextName) return;
+            const result = setCurrentPhoneAiInstructionPresetName(nextName);
+            if (result?.success) {
+                showInlineToast(container, `当前实时回复预设已切换为：${nextName}`);
+                renderKeepScroll();
+            } else {
+                showInlineToast(container, result?.message || '切换预设失败', true);
+            }
+        });
 
         container.querySelector('.phone-special-new-chat-btn')?.addEventListener('click', () => {
             state.contactPickerVisible = true;
@@ -442,7 +433,6 @@ export function renderMessageTable(container, context, deps = {}) {
             }
             state.selectedTarget = safeName;
             state.contactPickerVisible = false;
-            setPhoneChatLastSelectedTarget(safeName);
             const newConvId = createDraftConversationId();
             state.mode = 'detail';
             state.conversationId = newConvId;
@@ -558,7 +548,7 @@ export function renderMessageTable(container, context, deps = {}) {
             ? 'is-error'
             : (state.sending ? 'is-pending' : (statusText ? 'is-success' : ''));
         const selectedCount = state.selectedMessageRowIndexes.length;
-        const activePromptTemplateName = String(state.selectedPromptTemplateName || '').trim();
+        const activeAiInstructionPresetName = getCurrentAiInstructionPresetNameText();
         const detailSubtitle = String(currentConversation?.threadSubtitle || '').trim();
         const showDetailSubtitle = stylePayload.structureOptions?.detailHeader?.showSubtitle !== false;
         const showComposeStatus = stylePayload.structureOptions?.composeBar?.showStatusText !== false;
@@ -595,12 +585,10 @@ export function renderMessageTable(container, context, deps = {}) {
                         </div>
                         ${state.deleteManageMode ? '' : `
                             <div class="phone-special-message-compose">
-                                ${showComposeTemplateNote || showComposeStatus ? `
-                                    <div class="phone-special-message-compose-meta">
-                                        ${showComposeTemplateNote ? `<span class="phone-special-message-template-pill">当前提示词：${escapeHtml(activePromptTemplateName || '默认提示词')}</span>` : ''}
-                                        ${showComposeStatus ? `<div class="phone-special-message-compose-status ${statusClass}">${escapeHtml(statusText || ' ')}</div>` : ''}
-                                    </div>
-                                ` : ''}
+                                <div class="phone-special-message-compose-meta">
+                                    ${showComposeTemplateNote ? `<span class="phone-special-message-template-pill">当前 AI 指令预设：${escapeHtml(activeAiInstructionPresetName)}</span>` : ''}
+                                    ${showComposeStatus ? `<div class="phone-special-message-compose-status ${statusClass}">${escapeHtml(statusText || ' ')}</div>` : ''}
+                                </div>
                                 <div class="phone-special-message-compose-editor">
                                     <textarea
                                         class="phone-special-message-compose-input"
@@ -623,7 +611,34 @@ export function renderMessageTable(container, context, deps = {}) {
 
         bindWheelBridge(container);
 
-        container.querySelector('.phone-nav-back')?.addEventListener('click', () => {
+        const bindStableTapAction = (selector, handler) => {
+            const button = container.querySelector(selector);
+            if (!(button instanceof HTMLElement) || typeof handler !== 'function') return null;
+
+            let handledByPointer = false;
+            button.style.touchAction = 'manipulation';
+
+            button.addEventListener('pointerup', (event) => {
+                handledByPointer = true;
+                event.preventDefault();
+                event.stopPropagation();
+                handler();
+                requestAnimationFrame(() => {
+                    handledByPointer = false;
+                });
+            });
+
+            button.addEventListener('click', (event) => {
+                if (handledByPointer) return;
+                event.preventDefault();
+                event.stopPropagation();
+                handler();
+            });
+
+            return button;
+        };
+
+        bindStableTapAction('.phone-nav-back', () => {
             state.mode = 'conversation';
             state.conversationId = null;
             state.mediaPreview = null;
@@ -633,24 +648,24 @@ export function renderMessageTable(container, context, deps = {}) {
             render();
         });
 
-        container.querySelector('.phone-special-nav-action-btn')?.addEventListener('click', () => {
+        bindStableTapAction('.phone-special-nav-action-btn', () => {
             state.deleteManageMode = !state.deleteManageMode;
             state.deletingSelection = false;
             state.selectedMessageRowIndexes = [];
             renderKeepScroll();
         });
 
-        container.querySelector('.phone-special-manage-select-all-btn')?.addEventListener('click', () => {
+        bindStableTapAction('.phone-special-manage-select-all-btn', () => {
             setSelectedMessageRowIndexes(rowEntriesInConv.map(entry => entry.rowIndex));
             patchMessageManageUi();
         });
 
-        container.querySelector('.phone-special-manage-clear-btn')?.addEventListener('click', () => {
+        bindStableTapAction('.phone-special-manage-clear-btn', () => {
             setSelectedMessageRowIndexes([]);
             patchMessageManageUi();
         });
 
-        container.querySelector('.phone-special-manage-delete-btn')?.addEventListener('click', () => {
+        bindStableTapAction('.phone-special-manage-delete-btn', () => {
             if (state.selectedMessageRowIndexes.length === 0 || state.deletingSelection) {
                 showInlineToast(container, '请先选择要删除的消息');
                 return;
@@ -716,7 +731,6 @@ export function renderMessageTable(container, context, deps = {}) {
                 void handleSendMessage({
                     conversationId,
                     threadTitle: detailTitle || tableName,
-                    readSpecialField,
                 });
             });
         }
@@ -725,7 +739,6 @@ export function renderMessageTable(container, context, deps = {}) {
             void handleSendMessage({
                 conversationId,
                 threadTitle: detailTitle || tableName,
-                readSpecialField,
             });
         });
 
@@ -733,7 +746,6 @@ export function renderMessageTable(container, context, deps = {}) {
             void handleRetryMessage({
                 conversationId,
                 threadTitle: detailTitle || tableName,
-                readSpecialField,
             });
         });
 
@@ -744,630 +756,7 @@ export function renderMessageTable(container, context, deps = {}) {
         });
     };
 
-    const handleSendMessage = async ({ conversationId, threadTitle, readSpecialField }) => {
-        if (state.sending) return;
-
-        const activeConversationId = String(conversationId || '').trim() || createDraftConversationId();
-        const draftText = String(state.draftByConversation[activeConversationId] || state.draftByConversation[conversationId] || '').trim();
-        if (!draftText) {
-            state.errorText = '请输入消息内容';
-            state.statusText = '';
-            patchComposeUi();
-            return;
-        }
-
-        state.sending = true;
-        state.errorText = '';
-        state.statusText = '正在发送消息...';
-        state.conversationId = activeConversationId;
-        patchComposeUi();
-        scrollMessageDetailToBottom(container);
-
-        const requestId = createPhoneMessageRequestId();
-        const sentAt = new Date().toISOString();
-        const userRecord = {
-            threadId: activeConversationId,
-            threadTitle,
-            sender: '主角',
-            senderRole: 'user',
-            chatTarget: state.selectedTarget || '',
-            content: draftText,
-            sentAt,
-            messageStatus: '等待回复',
-            requestId,
-            imageDesc: 'none',
-            videoDesc: 'none',
-        };
-
-        markLocalTableMutation();
-        const userInsert = /** @type {any} */ (await insertPhoneMessageRecord(sheetKey, userRecord));
-        if (!userInsert.ok) {
-            state.sending = false;
-            state.errorText = String(userInsert.message || '用户消息写入失败');
-            state.statusText = '';
-            patchComposeUi();
-            return;
-        }
-
-        state.rowsData.push(materializeRowFromPayload(headers, userInsert.payload));
-        state.draftByConversation[activeConversationId] = '';
-        state.statusText = '正在等待角色回复...';
-        renderKeepScroll();
-        scrollMessageDetailToBottom(container);
-
-        let assistantPlaceholder = /** @type {any} */ (null);
-
-        try {
-            const phoneChatSettings = getPhoneChatSettings();
-            const promptTemplate = getPhoneChatPromptTemplateContent(state.selectedPromptTemplateName);
-            const storyContext = phoneChatSettings.useStoryContext
-                ? await getPhoneStoryContext(phoneChatSettings.storyContextTurns)
-                : '';
-            const worldbookContext = await getPhoneChatWorldbookContext();
-            const threadRowsForGeneration = getConversationRows(state.rowsData, activeConversationId, readSpecialField);
-            const partnerName = state.selectedTarget || findConversationPartnerName(threadRowsForGeneration, readSpecialField, getCurrentCharacterDisplayName(threadTitle || '对方'));
-            const aiMessages = [
-                ...buildPhoneChatSystemMessages({
-                    promptTemplate,
-                    worldbookText: worldbookContext.text,
-                    storyContext,
-                    conversationTitle: threadTitle,
-                    targetCharacterName: state.selectedTarget || '',
-                }),
-                ...buildPhoneChatConversationMessages(threadRowsForGeneration, readSpecialField),
-            ];
-
-            markLocalTableMutation();
-            assistantPlaceholder = /** @type {any} */ (await insertPhoneMessageRecord(sheetKey, {
-                threadId: activeConversationId,
-                threadTitle,
-                sender: partnerName,
-                senderRole: 'assistant',
-                chatTarget: state.selectedTarget || '',
-                content: '…',
-                sentAt: new Date().toISOString(),
-                messageStatus: '生成中',
-                requestId: `${requestId}_reply`,
-                replyToMessageId: requestId,
-                imageDesc: 'none',
-                videoDesc: 'none',
-            }));
-
-            if (assistantPlaceholder.ok) {
-                state.rowsData.push(materializeRowFromPayload(headers, assistantPlaceholder.payload));
-                renderKeepScroll();
-                scrollMessageDetailToBottom(container);
-            }
-
-            const aiResult = await callPhoneChatAI(aiMessages, {
-                apiPresetName: phoneChatSettings.apiPresetName,
-                maxTokens: 900,
-                timeout: 90000,
-            });
-
-            if (!aiResult.ok) {
-                if (Number.isInteger(userInsert.rowIndex)) {
-                    markLocalTableMutation();
-                    await updatePhoneMessageRecord(sheetKey, userInsert.rowIndex, { messageStatus: '待重试' });
-                }
-                if (assistantPlaceholder?.ok && Number.isInteger(assistantPlaceholder.rowIndex)) {
-                    markLocalTableMutation();
-                    await updatePhoneMessageRecord(sheetKey, assistantPlaceholder.rowIndex, {
-                        content: '（回复失败，可稍后重试）',
-                        messageStatus: '失败',
-                    });
-                }
-                syncRowsFromSheet();
-                state.sending = false;
-                state.errorText = String(aiResult.message || '角色回复失败');
-                state.statusText = '用户消息已保存，可稍后重试';
-                renderKeepScroll();
-                scrollMessageDetailToBottom(container);
-                return;
-            }
-
-            if (Number.isInteger(userInsert.rowIndex)) {
-                markLocalTableMutation();
-                await updatePhoneMessageRecord(sheetKey, userInsert.rowIndex, { messageStatus: '已完成' });
-            }
-
-            if (assistantPlaceholder?.ok && Number.isInteger(assistantPlaceholder.rowIndex)) {
-                markLocalTableMutation();
-                await updatePhoneMessageRecord(sheetKey, assistantPlaceholder.rowIndex, {
-                    content: aiResult.text,
-                    messageStatus: '已完成',
-                });
-            } else {
-                markLocalTableMutation();
-                await insertPhoneMessageRecord(sheetKey, {
-                    threadId: activeConversationId,
-                    threadTitle,
-                    sender: partnerName,
-                    senderRole: 'assistant',
-                    chatTarget: state.selectedTarget || '',
-                    content: aiResult.text,
-                    sentAt: new Date().toISOString(),
-                    messageStatus: '已完成',
-                    requestId: `${requestId}_reply`,
-                    replyToMessageId: requestId,
-                    imageDesc: 'none',
-                    videoDesc: 'none',
-                });
-            }
-
-            markLocalTableMutation(1800);
-            const refreshed = await refreshPhoneMessageProjection();
-            syncRowsFromSheet();
-            state.sending = false;
-            state.errorText = '';
-            state.statusText = refreshed ? '发送成功' : '发送成功，但投影刷新失败';
-            renderKeepScroll();
-            scrollMessageDetailToBottom(container);
-        } catch (error) {
-            if (Number.isInteger(userInsert.rowIndex)) {
-                await updatePhoneMessageRecord(sheetKey, userInsert.rowIndex, { messageStatus: '待重试' });
-            }
-            if (assistantPlaceholder?.ok && Number.isInteger(assistantPlaceholder.rowIndex)) {
-                await updatePhoneMessageRecord(sheetKey, assistantPlaceholder.rowIndex, {
-                    content: '（发送异常，可稍后重试）',
-                    messageStatus: '失败',
-                });
-            }
-            syncRowsFromSheet();
-            state.sending = false;
-            state.errorText = error?.message || '发送过程中发生异常';
-            state.statusText = '用户消息已保存，可稍后继续';
-            renderKeepScroll();
-            scrollMessageDetailToBottom(container);
-        }
-    };
-
-    const handleRetryMessage = async ({ conversationId, threadTitle, readSpecialField }) => {
-        if (state.sending) return;
-
-        const threadRows = getConversationRows(state.rowsData, conversationId, readSpecialField);
-        const retryTarget = getRetryTarget(threadRows, readSpecialField);
-        if (!retryTarget?.requestId) {
-            state.errorText = '当前没有可重试的消息';
-            state.statusText = '';
-            patchComposeUi();
-            return;
-        }
-
-        state.sending = true;
-        state.errorText = '';
-        state.statusText = '正在重新生成回复...';
-        patchComposeUi();
-        scrollMessageDetailToBottom(container);
-
-        const userRowIndex = findRowIndexByRequestId(state.rowsData, retryTarget.requestId, readSpecialField, { key: 'requestId', userOnly: true });
-        const assistantRowIndex = findRowIndexByRequestId(state.rowsData, retryTarget.requestId, readSpecialField, { key: 'replyToMessageId' });
-
-        try {
-            if (Number.isInteger(userRowIndex)) {
-                markLocalTableMutation();
-                await updatePhoneMessageRecord(sheetKey, userRowIndex, { messageStatus: '等待回复' });
-            }
-
-            if (Number.isInteger(assistantRowIndex)) {
-                markLocalTableMutation();
-                await updatePhoneMessageRecord(sheetKey, assistantRowIndex, {
-                    content: '…',
-                    messageStatus: '生成中',
-                });
-            }
-
-            syncRowsFromSheet();
-            renderKeepScroll();
-            scrollMessageDetailToBottom(container);
-
-            const phoneChatSettings = getPhoneChatSettings();
-            const promptTemplate = getPhoneChatPromptTemplateContent(state.selectedPromptTemplateName);
-            const storyContext = phoneChatSettings.useStoryContext
-                ? await getPhoneStoryContext(phoneChatSettings.storyContextTurns)
-                : '';
-            const worldbookContext = await getPhoneChatWorldbookContext();
-            const freshThreadRows = getConversationRows(state.rowsData, conversationId, readSpecialField);
-            const partnerName = state.selectedTarget || findConversationPartnerName(freshThreadRows, readSpecialField, getCurrentCharacterDisplayName(threadTitle || '对方'));
-            const aiMessages = [
-                ...buildPhoneChatSystemMessages({
-                    promptTemplate,
-                    worldbookText: worldbookContext.text,
-                    storyContext,
-                    conversationTitle: threadTitle,
-                    targetCharacterName: state.selectedTarget || '',
-                }),
-                ...buildPhoneChatConversationMessages(freshThreadRows, readSpecialField),
-            ];
-
-            const aiResult = await callPhoneChatAI(aiMessages, {
-                apiPresetName: phoneChatSettings.apiPresetName,
-                maxTokens: 900,
-                timeout: 90000,
-            });
-
-            if (!aiResult.ok) {
-                if (Number.isInteger(userRowIndex)) {
-                    markLocalTableMutation();
-                    await updatePhoneMessageRecord(sheetKey, userRowIndex, { messageStatus: '待重试' });
-                }
-                if (Number.isInteger(assistantRowIndex)) {
-                    markLocalTableMutation();
-                    await updatePhoneMessageRecord(sheetKey, assistantRowIndex, {
-                        content: '（回复失败，可稍后重试）',
-                        messageStatus: '失败',
-                    });
-                }
-                syncRowsFromSheet();
-                state.sending = false;
-                state.errorText = String(aiResult.message || '角色回复失败');
-                state.statusText = '仍可继续重试';
-                renderKeepScroll();
-                scrollMessageDetailToBottom(container);
-                return;
-            }
-
-            if (Number.isInteger(userRowIndex)) {
-                markLocalTableMutation();
-                await updatePhoneMessageRecord(sheetKey, userRowIndex, { messageStatus: '已完成' });
-            }
-
-            if (Number.isInteger(assistantRowIndex)) {
-                markLocalTableMutation();
-                await updatePhoneMessageRecord(sheetKey, assistantRowIndex, {
-                    sender: partnerName,
-                    content: aiResult.text,
-                    messageStatus: '已完成',
-                });
-            }
-
-            markLocalTableMutation(1800);
-            const refreshed = await refreshPhoneMessageProjection();
-            syncRowsFromSheet();
-            state.sending = false;
-            state.errorText = '';
-            state.statusText = refreshed ? '重试成功' : '重试成功，但投影刷新失败';
-            renderKeepScroll();
-            scrollMessageDetailToBottom(container);
-        } catch (error) {
-            if (Number.isInteger(userRowIndex)) {
-                await updatePhoneMessageRecord(sheetKey, userRowIndex, { messageStatus: '待重试' });
-            }
-            if (Number.isInteger(assistantRowIndex)) {
-                await updatePhoneMessageRecord(sheetKey, assistantRowIndex, {
-                    content: '（发送异常，可稍后重试）',
-                    messageStatus: '失败',
-                });
-            }
-            syncRowsFromSheet();
-            state.sending = false;
-            state.errorText = error?.message || '重试过程中发生异常';
-            state.statusText = '仍可继续重试';
-            renderKeepScroll();
-            scrollMessageDetailToBottom(container);
-        }
-    };
 
     render();
 }
 
-function materializeRowFromPayload(headers, payload = {}) {
-    const headerList = Array.isArray(headers) ? headers : [];
-    return headerList.map((header) => {
-        const key = String(header || '').trim();
-        return Object.prototype.hasOwnProperty.call(payload, key) ? payload[key] : '';
-    });
-}
-
-function getConversationRows(rows, conversationId, readSpecialField) {
-    return getConversationRowEntries(rows, conversationId, readSpecialField).map(entry => entry.row);
-}
-
-function getConversationRowEntries(rows, conversationId, readSpecialField) {
-    return (Array.isArray(rows) ? rows : []).reduce((result, row, rowIndex) => {
-        const fallbackConversationId = `default_thread_${rowIndex + 1}`;
-        const rowConversationId = String(readSpecialField(row, 'threadId', fallbackConversationId) || fallbackConversationId).trim() || fallbackConversationId;
-        if (rowConversationId === conversationId) {
-            result.push({ row, rowIndex });
-        }
-        return result;
-    }, []);
-}
-
-function buildPhoneChatConversationMessages(threadRows, readSpecialField) {
-    return (Array.isArray(threadRows) ? threadRows : [])
-        .slice(-MAX_THREAD_CONTEXT_MESSAGES)
-        .map((row) => {
-            const sender = normalizeSenderName(readSpecialField(row, 'sender', ''));
-            const senderRole = String(readSpecialField(row, 'senderRole', '') || '').trim().toLowerCase();
-            const messageStatus = String(readSpecialField(row, 'messageStatus', '') || '').trim();
-            const content = buildPromptContentFromRow(row, readSpecialField);
-            if (!content) return null;
-
-            const isSelf = sender === '我' || ['user', 'self', '主角'].includes(senderRole);
-            if (!isSelf && shouldSkipAssistantMessageForPrompt(content, messageStatus)) {
-                return null;
-            }
-
-            return {
-                role: isSelf ? 'user' : 'assistant',
-                content,
-            };
-        })
-        .filter(Boolean);
-}
-
-function buildPhoneChatSystemMessages({ promptTemplate, worldbookText, storyContext, conversationTitle, targetCharacterName }) {
-    const messages = [];
-    const safePromptTemplate = String(promptTemplate || '').trim();
-    messages.push({
-        role: 'system',
-        content: safePromptTemplate || DEFAULT_PHONE_CHAT_SYSTEM_PROMPT,
-    });
-
-    const safeTargetCharacterName = String(targetCharacterName || '').trim();
-    if (safeTargetCharacterName) {
-        messages.push({
-            role: 'system',
-            content: `在这个手机聊天中，你要扮演的角色是“${safeTargetCharacterName}”。请完全以这个角色的身份、口吻和性格来回复。`,
-        });
-    }
-
-    const safeConversationTitle = String(conversationTitle || '').trim();
-    if (safeConversationTitle) {
-        messages.push({
-            role: 'system',
-            content: `当前手机会话标题：${safeConversationTitle}`,
-        });
-    }
-
-    const safeWorldbookText = String(worldbookText || '').trim();
-    if (safeWorldbookText) {
-        messages.push({
-            role: 'system',
-            content: `以下是当前手机聊天可参考的世界书设定，请只提取与当前会话有关的内容：\n\n${safeWorldbookText}`,
-        });
-    }
-
-    const safeStoryContext = String(storyContext || '').trim();
-    if (safeStoryContext) {
-        messages.push({
-            role: 'system',
-            content: `以下是正文最近的 AI 剧情上下文，请作为背景参考，不要机械复述：\n\n${safeStoryContext}`,
-        });
-    }
-
-    return messages;
-}
-
-function buildPromptContentFromRow(row, readSpecialField) {
-    const parts = [];
-    const content = String(readSpecialField(row, 'content', '') || '').trim();
-    const imageDesc = normalizeMediaDesc(readSpecialField(row, 'imageDesc', ''));
-    const videoDesc = normalizeMediaDesc(readSpecialField(row, 'videoDesc', ''));
-
-    if (content) parts.push(content);
-    if (imageDesc) parts.push(`[图片] ${imageDesc}`);
-    if (videoDesc) parts.push(`[视频] ${videoDesc}`);
-
-    return parts.join('\n').trim();
-}
-
-function shouldSkipAssistantMessageForPrompt(content, messageStatus = '') {
-    const safeContent = String(content || '').trim();
-    const safeStatus = String(messageStatus || '').trim();
-    if (!safeContent) return true;
-    if (/^[.…]+$/.test(safeContent)) return true;
-    if (/^（回复失败|^（发送异常/.test(safeContent)) return true;
-    if (/生成中/.test(safeStatus)) return true;
-    return false;
-}
-
-function resolveConversationHeaderLabel(conversation, titleMode = 'auto', fallback = '会话') {
-    const conv = conversation || {};
-    const resolved = String(resolveConversationDisplayName(conv, titleMode) || '').trim();
-    if (resolved && resolved !== '我') {
-        return resolved;
-    }
-
-    const threadTitle = String(conv.threadTitle || '').trim();
-    if (threadTitle) {
-        return threadTitle;
-    }
-
-    const titleSender = String(conv.titleSender || '').trim();
-    if (titleSender && titleSender !== '我') {
-        return titleSender;
-    }
-
-    return String(fallback || '会话').trim() || '会话';
-}
-
-function findConversationPartnerName(threadRows, readSpecialField, fallback = '对方') {
-    const safeFallback = getCurrentCharacterDisplayName(fallback);
-    for (let index = threadRows.length - 1; index >= 0; index--) {
-        const sender = normalizeSenderName(readSpecialField(threadRows[index], 'sender', ''));
-        if (sender && sender !== '我') {
-            return sender;
-        }
-    }
-    return safeFallback;
-}
-
-function detectChatTargetFromRows(threadRows, readSpecialField) {
-    for (let i = threadRows.length - 1; i >= 0; i--) {
-        const target = String(readSpecialField(threadRows[i], 'chatTarget', '') || '').trim();
-        if (target) return target;
-    }
-    for (let i = threadRows.length - 1; i >= 0; i--) {
-        const sender = normalizeSenderName(readSpecialField(threadRows[i], 'sender', ''));
-        if (sender && sender !== '我') return sender;
-    }
-    return null;
-}
-
-function createPhoneMessageRequestId() {
-    return `phone_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function findRowIndexByRequestId(rows, requestId, readSpecialField, { key = 'requestId', userOnly = false } = {}) {
-    const safeRequestId = String(requestId || '').trim();
-    if (!safeRequestId) return null;
-
-    for (let index = rows.length - 1; index >= 0; index--) {
-        const row = rows[index];
-        const rowRequestId = String(readSpecialField(row, key, '') || '').trim();
-        if (rowRequestId !== safeRequestId) continue;
-        if (userOnly) {
-            const sender = normalizeSenderName(readSpecialField(row, 'sender', ''));
-            const senderRole = String(readSpecialField(row, 'senderRole', '') || '').trim().toLowerCase();
-            const isSelf = sender === '我' || ['user', 'self', '主角'].includes(senderRole);
-            if (!isSelf) continue;
-        }
-        return index + 1;
-    }
-
-    return null;
-}
-
-function getRetryTarget(threadRows, readSpecialField) {
-    for (let index = threadRows.length - 1; index >= 0; index--) {
-        const row = threadRows[index];
-        const sender = normalizeSenderName(readSpecialField(row, 'sender', ''));
-        const senderRole = String(readSpecialField(row, 'senderRole', '') || '').trim().toLowerCase();
-        const messageStatus = String(readSpecialField(row, 'messageStatus', '') || '').trim();
-        const requestId = String(readSpecialField(row, 'requestId', '') || '').trim();
-        const isSelf = sender === '我' || ['user', 'self', '主角'].includes(senderRole);
-        if (!isSelf) continue;
-        if (!requestId) continue;
-        if (!/待重试|失败/.test(messageStatus)) continue;
-        return {
-            requestId,
-            messageStatus,
-        };
-    }
-    return null;
-}
-
-function scrollMessageDetailToBottom(container, remainingFrames = 2) {
-    if (!(container instanceof HTMLElement)) return;
-    const body = container.querySelector('.phone-app-body');
-    if (!(body instanceof HTMLElement)) return;
-
-    body.scrollTop = body.scrollHeight;
-    if (remainingFrames <= 0) return;
-
-    requestAnimationFrame(() => {
-        scrollMessageDetailToBottom(container, remainingFrames - 1);
-    });
-}
-
-function getMessageStatusClass(statusText = '') {
-    const text = String(statusText || '').trim();
-    if (!text) return '';
-    if (/失败|异常|错误|重试/.test(text)) return 'is-error';
-    if (/等待|生成中|发送中/.test(text)) return 'is-pending';
-    return 'is-success';
-}
-
-function buildMessageMetaHtml({ showMessageTime, time, timeFallbackText, messageStatus }) {
-    const safeStatus = String(messageStatus || '').trim();
-    const statusClass = getMessageStatusClass(safeStatus);
-    const timeHtml = showMessageTime
-        ? `<div class="phone-special-message-time">${escapeHtml(formatTimeLike(time) || timeFallbackText)}</div>`
-        : '';
-    const statusHtml = safeStatus
-        ? `<span class="phone-special-message-status ${escapeHtmlAttr(statusClass)}">${escapeHtml(safeStatus)}</span>`
-        : '';
-
-    if (!timeHtml && !statusHtml) return '';
-    return `<div class="phone-special-message-meta">${timeHtml}${statusHtml}</div>`;
-}
-
-/**
- * @param {{
- *   row:any,
- *   sourceRowIndex:number,
- *   readSpecialField:Function,
- *   styleOptions:MessageStyleOptions,
- *   deleteManageMode?:boolean,
- *   selected?:boolean,
- * }} params
- */
-function renderOneMessageRow({ row, sourceRowIndex, readSpecialField, styleOptions = /** @type {MessageStyleOptions} */ ({}), deleteManageMode = false, selected = false }) {
-    const sender = normalizeSenderName(readSpecialField(row, 'sender', '')) || '';
-    const content = readSpecialField(row, 'content', '') || '';
-    const time = readSpecialField(row, 'sentAt', '');
-    const messageStatus = String(readSpecialField(row, 'messageStatus', '') || '').trim();
-    const imageDesc = normalizeMediaDesc(readSpecialField(row, 'imageDesc', ''));
-    const videoDesc = normalizeMediaDesc(readSpecialField(row, 'videoDesc', ''));
-
-    const isSelf = sender === '我';
-    const senderLabel = isSelf ? '我' : (sender || '对方');
-    const senderColor = isSelf ? '#4A90E2' : generateColor(senderLabel);
-
-    const showAvatar = styleOptions.showAvatar !== false;
-    const showMessageTime = styleOptions.showMessageTime !== false;
-    const mediaActionTextMode = String(styleOptions.mediaActionTextMode || 'short');
-
-    const emptyMessageText = String(styleOptions.emptyMessageText || '（空消息）');
-    const timeFallbackText = String(styleOptions.timeFallbackText || '刚刚');
-    const bubbleMaxWidthPct = Math.max(48, Math.min(96, Number(styleOptions.bubbleMaxWidthPct || 80)));
-    const bubbleInlineStyle = `max-width:${bubbleMaxWidthPct}%;`;
-
-    const messageMetaHtml = buildMessageMetaHtml({
-        showMessageTime,
-        time,
-        timeFallbackText,
-        messageStatus,
-    });
-
-    const baseMessageHtml = `
-        <div class="phone-special-message-item ${isSelf ? 'self' : 'other'}">
-            ${showAvatar
-                ? `<div class="phone-special-name-avatar" style="background-color:${escapeHtmlAttr(senderColor)};">${escapeHtml(getAvatarText(senderLabel))}</div>`
-                : ''}
-            <div class="phone-special-message-bubble-wrap">
-                <div class="phone-special-message-bubble" style="${escapeHtmlAttr(bubbleInlineStyle)}">${escapeHtml(content || emptyMessageText)}</div>
-                ${messageMetaHtml}
-            </div>
-        </div>
-    `;
-
-    const mediaItems = [];
-    if (imageDesc) {
-        mediaItems.push({
-            label: '图片内容',
-            text: imageDesc,
-            actionText: mediaActionTextMode === 'detailed' ? '点击查看图片详情' : '点击查看图片',
-        });
-    }
-    if (videoDesc) {
-        mediaItems.push({
-            label: '视频内容',
-            text: videoDesc,
-            actionText: mediaActionTextMode === 'detailed' ? '点击查看视频详情' : '点击查看视频',
-        });
-    }
-
-    const mediaHtml = mediaItems.map(item => `
-        <div class="phone-special-message-item ${isSelf ? 'self' : 'other'} media-row">
-            ${isSelf || !showAvatar ? '' : '<div class="phone-special-message-media-placeholder"></div>'}
-            <div class="phone-special-message-bubble phone-special-media-item" style="${escapeHtmlAttr(bubbleInlineStyle)}" data-media-label="${escapeHtmlAttr(item.label)}" data-description="${escapeHtmlAttr(item.text)}">
-                ${escapeHtml(item.actionText)}
-            </div>
-        </div>
-    `).join('');
-
-    const contentHtml = `${baseMessageHtml}${mediaHtml}`;
-    if (!deleteManageMode) {
-        return contentHtml;
-    }
-
-    return `
-        <div class="phone-special-message-manage-row ${selected ? 'is-selected' : ''}">
-            <button type="button" class="phone-special-message-select-toggle ${selected ? 'is-selected' : ''}" data-row-index="${escapeHtmlAttr(String(sourceRowIndex))}" aria-pressed="${selected ? 'true' : 'false'}">${selected ? '✓' : ''}</button>
-            <div class="phone-special-message-manage-main">${contentHtml}</div>
-        </div>
-    `;
-}

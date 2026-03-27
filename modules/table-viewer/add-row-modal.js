@@ -22,6 +22,14 @@ export function showGenericAddRowModal(options = {}) {
     if (typeof insertTableRow !== 'function' || typeof getTableData !== 'function' || typeof getTableLockState !== 'function') return;
     if (typeof showInlineToast !== 'function' || typeof renderKeepScroll !== 'function') return;
 
+    const candidateMountRoot = container.matches('.phone-app-page')
+        ? container
+        : (container.querySelector('.phone-app-page') || container.closest('.phone-app-page') || document.body);
+    const mountRoot = candidateMountRoot instanceof HTMLElement && candidateMountRoot.isConnected
+        ? candidateMountRoot
+        : document.body;
+    const overlayModeClass = mountRoot === document.body ? 'phone-modal-overlay-fixed' : 'phone-modal-overlay-local';
+
     if (state.lockManageMode || state.deleteManageMode) {
         state.lockManageMode = false;
         state.deleteManageMode = false;
@@ -40,7 +48,7 @@ export function showGenericAddRowModal(options = {}) {
     const modal = document.createElement('div');
     const modalAny = /** @type {any} */ (modal);
     modal.id = addRowModalId;
-    modal.className = 'phone-modal-overlay';
+    modal.className = `phone-modal-overlay ${overlayModeClass}`;
     const modalEventManager = new EventManager();
     let focusTimerId = null;
     let closeTimerId = null;
@@ -83,7 +91,7 @@ export function showGenericAddRowModal(options = {}) {
         </div>
     `;
 
-    document.body.appendChild(modal);
+    mountRoot.appendChild(modal);
 
     const closeModal = () => {
         if (modalClosed) return;

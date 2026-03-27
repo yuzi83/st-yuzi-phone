@@ -2,19 +2,24 @@ import {
     PHONE_TEMPLATE_TYPE_SPECIAL,
     PHONE_TEMPLATE_TYPE_GENERIC,
     PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
+} from '../../phone-beautify-templates/shared.js';
+import {
     getPhoneBeautifyTemplatesByType,
-    importPhoneBeautifyPackFromData,
-    exportPhoneBeautifyPack,
     deletePhoneBeautifyUserTemplate,
     getActiveBeautifyTemplateIdsForSpecial,
     getActiveBeautifyTemplateIdByType,
     setActiveBeautifyTemplateIdByType,
-} from '../../phone-beautify-templates.js';
+} from '../../phone-beautify-templates/repository.js';
+import {
+    importPhoneBeautifyPackFromData,
+    exportPhoneBeautifyPack,
+} from '../../phone-beautify-templates/import-export.js';
 import { escapeHtml, escapeHtmlAttr } from '../../utils.js';
 import { downloadTextFile } from '../services/media-upload.js';
 import { buildBeautifyTemplatePageHtml as buildBeautifyTemplatePageHtmlFromFrame } from '../layout/frame.js';
 import { showConfirmDialog } from '../ui/confirm-dialog.js';
 import { showToast } from '../ui/toast.js';
+import { createBeautifyPageBehavior } from './beautify-behavior.js';
 
 export function renderBeautifyTemplatePage(ctx) {
     const {
@@ -181,34 +186,30 @@ export function renderBeautifyTemplatePage(ctx) {
         render();
     });
 
-    const rerenderBeautifyKeepScroll = () => {
-        captureScroll('beautifyScrollTop');
-
-        const specialList = container.querySelector('#phone-beautify-list-special');
-        const genericList = container.querySelector('#phone-beautify-list-generic');
-        const specialListScrollTop = specialList ? Math.max(0, Number(specialList.scrollTop) || 0) : 0;
-        const genericListScrollTop = genericList ? Math.max(0, Number(genericList.scrollTop) || 0) : 0;
-
-        renderBeautifyTemplatePage(ctx);
-        restoreScroll('beautifyScrollTop');
-
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                const nextSpecialList = container.querySelector('#phone-beautify-list-special');
-                const nextGenericList = container.querySelector('#phone-beautify-list-generic');
-
-                if (nextSpecialList) {
-                    const maxSpecialTop = Math.max(0, (nextSpecialList.scrollHeight || 0) - (nextSpecialList.clientHeight || 0));
-                    nextSpecialList.scrollTop = Math.min(specialListScrollTop, maxSpecialTop);
-                }
-
-                if (nextGenericList) {
-                    const maxGenericTop = Math.max(0, (nextGenericList.scrollHeight || 0) - (nextGenericList.clientHeight || 0));
-                    nextGenericList.scrollTop = Math.min(genericListScrollTop, maxGenericTop);
-                }
-            });
-        });
-    };
+    const {
+        rerenderBeautifyKeepScroll,
+        handleTemplateActivation,
+        triggerExport,
+        bindImportByType,
+        handleSingleTemplateExport,
+        handleDeleteTemplate,
+    } = createBeautifyPageBehavior({
+        container,
+        ctx,
+        getTemplateById,
+        renderPage: renderBeautifyTemplatePage,
+    }, {
+        setActiveBeautifyTemplateIdByType,
+        importPhoneBeautifyPackFromData,
+        exportPhoneBeautifyPack,
+        deletePhoneBeautifyUserTemplate,
+        downloadTextFile,
+        showConfirmDialog,
+        showToast,
+        requestAnimationFrameImpl: requestAnimationFrame,
+        createFileReader: () => new FileReader(),
+        annotatedExportMode: PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
+    });
 
     container.querySelectorAll('.phone-beautify-active-radio').forEach((radio) => {
         const input = radio;
@@ -219,76 +220,9 @@ export function renderBeautifyTemplatePage(ctx) {
 
             const templateId = String(input.dataset.templateId || '').trim();
             const templateType = String(input.dataset.templateType || '').trim();
-            const result = setActiveBeautifyTemplateIdByType(templateType, templateId);
-            if (!result.success) {
-                showToast(container, result.message || '启用模板失败', true);
-                rerenderBeautifyKeepScroll();
-                return;
-            }
-
-            showToast(container, result.message || '模板已启用');
-            rerenderBeautifyKeepScroll();
+            handleTemplateActivation({ templateId, templateType });
         });
     });
-
-    const triggerExport = (options, filename, successTip) => {
-        const result = exportPhoneBeautifyPack(options);
-        if (!result.success || !result.pack || result.count <= 0) {
-            showToast(container, '没有可导出的模板', true);
-            return;
-        }
-
-        try {
-            downloadTextFile(filename, JSON.stringify(result.pack, null, 2), 'application/json');
-            const modeText = result?.pack?.packMeta?.exportMode || PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED;
-            showToast(container, `${successTip}（${result.count}项 / ${modeText}）`);
-        } catch (error) {
-            showToast(container, `导出失败：${error?.message || '未知错误'}`, true);
-        }
-    };
-
-    const bindImportByType = (triggerSelector, inputSelector, templateType, labelText) => {
-        const trigger = container.querySelector(triggerSelector);
-        const input = container.querySelector(inputSelector);
-        if (!trigger || !input) return;
-
-        trigger.addEventListener('click', () => {
-            input.value = '';
-            input.click();
-        });
-
-        input.addEventListener('change', () => {
-            const file = input.files?.[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = () => {
-                const text = String(reader.result || '');
-                const imported = importPhoneBeautifyPackFromData(text, {
-                    templateTypeFilter: templateType,
-                    overwrite: false,
-                });
-
-                if (!imported.success) {
-                    const detail = imported.errors?.[0] || imported.message || '导入失败';
-                    showToast(container, `${labelText}导入失败：${detail}`, true);
-                    return;
-                }
-
-                const warningText = imported.warnings?.length > 0
-                    ? `（含${imported.warnings.length}条警告）`
-                    : '';
-                showToast(container, `${labelText}导入成功：${imported.imported}项${warningText}`);
-                rerenderBeautifyKeepScroll();
-            };
-
-            reader.onerror = () => {
-                showToast(container, `${labelText}导入失败：文件读取异常`, true);
-            };
-
-            reader.readAsText(file, 'utf-8');
-        });
-    };
 
     bindImportByType('#phone-beautify-import-special-btn', '#phone-beautify-import-special-input', PHONE_TEMPLATE_TYPE_SPECIAL, '专属模板');
     bindImportByType('#phone-beautify-import-generic-btn', '#phone-beautify-import-generic-input', PHONE_TEMPLATE_TYPE_GENERIC, '通用模板');
@@ -347,21 +281,7 @@ export function renderBeautifyTemplatePage(ctx) {
         btn.addEventListener('click', () => {
             const templateId = String(btn.getAttribute('data-template-id') || '').trim();
             if (!templateId) return;
-
-            const result = exportPhoneBeautifyPack({
-                templateIds: [templateId],
-                packName: `单模板导出-${templateId}`,
-                exportMode: PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
-            });
-
-            if (!result.success || result.count <= 0 || !result.pack) {
-                showToast(container, '导出失败：模板不存在', true);
-                return;
-            }
-
-            const fileName = `yuzi_phone_template_${templateId.replace(/[^a-zA-Z0-9_.-]/g, '_')}.json`;
-            downloadTextFile(fileName, JSON.stringify(result.pack, null, 2), 'application/json');
-            showToast(container, '模板已导出');
+            handleSingleTemplateExport(templateId);
         });
     });
 
@@ -369,27 +289,7 @@ export function renderBeautifyTemplatePage(ctx) {
         btn.addEventListener('click', () => {
             const templateId = String(btn.getAttribute('data-template-id') || '').trim();
             if (!templateId) return;
-
-            const target = getTemplateById(templateId);
-            const displayName = target?.name || templateId;
-
-            showConfirmDialog(
-                container,
-                '确认删除',
-                `确定删除模板「${displayName}」吗？此操作无法撤销。`,
-                () => {
-                    const result = deletePhoneBeautifyUserTemplate(templateId);
-                    if (!result.success) {
-                        showToast(container, result.message || '删除失败', true);
-                        return;
-                    }
-
-                    showToast(container, `模板「${displayName}」已删除`);
-                    rerenderBeautifyKeepScroll();
-                },
-                '删除',
-                '取消'
-            );
+            handleDeleteTemplate(templateId);
         });
     });
 }

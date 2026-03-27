@@ -10,7 +10,11 @@ import { escapeHtml } from '../../utils.js';
  * @param {string} cancelText 取消按钮文字
  */
 export function showConfirmDialog(container, title, message, onConfirm, confirmText = '确认', cancelText = '取消') {
-    const existing = container.querySelector('.phone-confirm-dialog-overlay');
+    const candidateMountRoot = container.matches('.phone-app-page')
+        ? container
+        : (container.querySelector('.phone-app-page') || container.closest('.phone-app-page') || container);
+    const mountRoot = candidateMountRoot instanceof HTMLElement ? candidateMountRoot : container;
+    const existing = mountRoot.querySelector('.phone-confirm-dialog-overlay');
     if (existing) existing.remove();
 
     const overlay = document.createElement('div');
@@ -37,6 +41,6 @@ export function showConfirmDialog(container, title, message, onConfirm, confirmT
         onConfirm?.();
     });
 
-    (container.closest('.phone-app-page') || container).appendChild(overlay);
+    mountRoot.appendChild(overlay);
     setTimeout(() => overlay.classList.add('phone-confirm-dialog-show'), 10);
 }

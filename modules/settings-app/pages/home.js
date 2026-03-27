@@ -14,6 +14,7 @@ export function renderHomePage(ctx) {
         getApiPresets,
         getTableApiPreset,
         setTableApiPreset,
+        getCurrentPhoneAiInstructionPresetName,
         switchPresetByName,
         showToast,
         setupManualUpdateBtn,
@@ -24,6 +25,7 @@ export function renderHomePage(ctx) {
     const activePresetName = getActiveDbPresetName();
     const apiPresets = getApiPresets();
     const currentTablePreset = getTableApiPreset();
+    const currentAiInstructionPresetName = getCurrentPhoneAiInstructionPresetName();
 
     const quickPresetOptions = [
         `<option value="" ${!activePresetName ? 'selected' : ''}>当前配置</option>`,
@@ -45,6 +47,7 @@ export function renderHomePage(ctx) {
         apiPresetQuickOptions,
         activePresetName,
         currentTablePreset,
+        currentAiInstructionPresetName,
     });
 
     container.querySelector('.phone-nav-back')?.addEventListener('click', navigateBack);

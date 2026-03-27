@@ -31,6 +31,93 @@ export function getNotificationCallback() {
     return notificationCallback;
 }
 
+const LOG_NAMESPACE = '玉子手机';
+const LOG_LEVEL_LABELS = {
+    debug: 'DEBUG',
+    info: 'INFO',
+    warn: 'WARN',
+    error: 'ERROR',
+};
+const LOG_DESCRIPTOR_KEYS = new Set(['message', 'scope', 'feature', 'action', 'context', 'errorCode', 'error']);
+
+function serializeLogError(error) {
+    if (!(error instanceof Error)) {
+        return error;
+    }
+
+    const serialized = {
+        name: error.name,
+        message: error.message,
+    };
+
+    if (error.stack) {
+        serialized.stack = error.stack;
+    }
+    if ('code' in error && error.code !== undefined && error.code !== null) {
+        serialized.code = String(error.code);
+    }
+    if ('type' in error && error.type !== undefined && error.type !== null) {
+        serialized.type = String(error.type);
+    }
+    if ('details' in error && error.details !== undefined) {
+        serialized.details = normalizeLogData(error.details, 1);
+    }
+    if ('timestamp' in error && error.timestamp !== undefined) {
+        serialized.timestamp = error.timestamp;
+    }
+    if ('cause' in error && error.cause !== undefined) {
+        serialized.cause = normalizeLogData(error.cause, 1);
+    }
+
+    return serialized;
+}
+
+function normalizeLogData(value, depth = 0) {
+    if (value instanceof Error) {
+        return serializeLogError(value);
+    }
+
+    if (depth >= 4) {
+        return value;
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => normalizeLogData(item, depth + 1));
+    }
+
+    if (isPlainObject(value)) {
+        return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [key, normalizeLogData(item, depth + 1)])
+        );
+    }
+
+    return value;
+}
+
+function normalizeLogPayload(payload = []) {
+    return payload.map((item) => normalizeLogData(item));
+}
+
+function callRawConsole(method, ...args) {
+    if (typeof console === 'undefined') return;
+
+    const consoleMethod = typeof console[method] === 'function'
+        ? console[method].bind(console)
+        : typeof console.log === 'function'
+            ? console.log.bind(console)
+            : null;
+
+    consoleMethod?.(...args);
+}
+
+function isPlainObject(value) {
+    return Object.prototype.toString.call(value) === '[object Object]';
+}
+
+function isLogDescriptor(value) {
+    return isPlainObject(value) && Object.keys(value).some((key) => LOG_DESCRIPTOR_KEYS.has(key));
+}
+
 /**
  * 内部通知函数
  * @param {string} message - 消息
@@ -42,7 +129,16 @@ function notify(message, type = 'info') {
             notificationCallback(message, type);
         } catch (e) {
             // 通知失败时静默处理，避免影响主流程
-            console.error('[玉子手机] 通知回调执行失败:', e);
+            callRawConsole(
+                'error',
+                formatLogPrefix('error', {
+                    scope: 'error-handler',
+                    feature: 'notification',
+                    action: 'callback',
+                }),
+                '通知回调执行失败',
+                normalizeLogData(e),
+            );
         }
     }
 }
@@ -190,6 +286,144 @@ const LogLevelPriority = {
     error: 3,
 };
 
+function mergeLogMeta(defaultMeta = {}, descriptor = {}) {
+    const meta = {};
+
+    ['scope', 'feature', 'action', 'errorCode'].forEach((key) => {
+        const rawValue = descriptor[key] ?? defaultMeta[key];
+        if (rawValue !== undefined && rawValue !== null && rawValue !== '') {
+            meta[key] = String(rawValue);
+        }
+    });
+
+    return meta;
+}
+
+function resolveLogEntry(args, defaultMeta = {}) {
+    if (!Array.isArray(args) || args.length === 0) {
+        return {
+            meta: mergeLogMeta(defaultMeta),
+            message: '',
+            payload: [],
+        };
+    }
+
+    const [first, ...rest] = args;
+
+    if (typeof first === 'string') {
+        return {
+            meta: mergeLogMeta(defaultMeta),
+            message: first,
+            payload: rest,
+        };
+    }
+
+    if (isLogDescriptor(first)) {
+        const payload = [];
+        if (first.context !== undefined) {
+            payload.push({ context: first.context });
+        }
+        if (rest.length) {
+            payload.push(...rest);
+        }
+        if (first.error !== undefined) {
+            payload.push({ error: first.error });
+        }
+
+        return {
+            meta: mergeLogMeta(defaultMeta, first),
+            message: typeof first.message === 'string' ? first.message : '',
+            payload,
+        };
+    }
+
+    return {
+        meta: mergeLogMeta(defaultMeta),
+        message: '',
+        payload: args,
+    };
+}
+
+function formatLogPrefix(level, meta = {}) {
+    const segments = [
+        `[${LOG_NAMESPACE}]`,
+        `[${LOG_LEVEL_LABELS[level] || String(level || 'LOG').toUpperCase()}]`,
+    ];
+
+    if (meta.scope) segments.push(`[${meta.scope}]`);
+    if (meta.feature) segments.push(`[${meta.feature}]`);
+    if (meta.action) segments.push(`[${meta.action}]`);
+    if (meta.errorCode) segments.push(`[${meta.errorCode}]`);
+
+    return segments.join('');
+}
+
+function emitLog(level, args, defaultMeta = {}) {
+    if (!shouldLog(level)) return;
+
+    const { meta, message, payload } = resolveLogEntry(args, defaultMeta);
+    const normalizedPayload = normalizeLogPayload(payload);
+    const method = level === 'debug' ? 'log' : level;
+    const outputArgs = [formatLogPrefix(level, meta)];
+
+    if (message) {
+        outputArgs.push(message);
+    }
+    if (normalizedPayload.length) {
+        outputArgs.push(...normalizedPayload);
+    }
+
+    callRawConsole(method, ...outputArgs);
+}
+
+function formatAuxLogLabel(label, defaultMeta = {}) {
+    const { meta, message } = resolveLogEntry(label === undefined ? [] : [label], defaultMeta);
+    return [formatLogPrefix('debug', meta), message].filter(Boolean).join(' ');
+}
+
+export function createScopedLogger(defaultMeta = {}) {
+    return {
+        debug(...args) {
+            emitLog('debug', args, defaultMeta);
+        },
+        info(...args) {
+            emitLog('info', args, defaultMeta);
+        },
+        warn(...args) {
+            emitLog('warn', args, defaultMeta);
+        },
+        error(...args) {
+            emitLog('error', args, defaultMeta);
+        },
+        group(label) {
+            if (shouldLog('debug')) {
+                callRawConsole('group', formatAuxLogLabel(label, defaultMeta));
+            }
+        },
+        groupEnd() {
+            if (shouldLog('debug')) {
+                callRawConsole('groupEnd');
+            }
+        },
+        time(label) {
+            if (shouldLog('debug')) {
+                callRawConsole('time', formatAuxLogLabel(label, defaultMeta));
+            }
+        },
+        timeEnd(label) {
+            if (shouldLog('debug')) {
+                callRawConsole('timeEnd', formatAuxLogLabel(label, defaultMeta));
+            }
+        },
+        withScope(meta = {}) {
+            return createScopedLogger({ ...defaultMeta, ...meta });
+        },
+        child(meta = {}) {
+            return createScopedLogger({ ...defaultMeta, ...meta });
+        },
+    };
+}
+
 /**
  * 日志系统
  */
@@ -199,9 +433,7 @@ export const Logger = {
      * @param {...any} args - 日志参数
      */
     debug(...args) {
-        if (shouldLog('debug')) {
-            console.log('[玉子手机][DEBUG]', ...args);
-        }
+        emitLog('debug', args);
     },
 
     /**
@@ -209,9 +441,7 @@ export const Logger = {
      * @param {...any} args - 日志参数
      */
     info(...args) {
-        if (shouldLog('info')) {
-            console.info('[玉子手机][INFO]', ...args);
-        }
+        emitLog('info', args);
     },
 
     /**
@@ -219,9 +449,7 @@ export const Logger = {
      * @param {...any} args - 日志参数
      */
     warn(...args) {
-        if (shouldLog('warn')) {
-            console.warn('[玉子手机][WARN]', ...args);
-        }
+        emitLog('warn', args);
     },
 
     /**
@@ -229,18 +457,16 @@ export const Logger = {
      * @param {...any} args - 日志参数
      */
     error(...args) {
-        if (shouldLog('error')) {
-            console.error('[玉子手机][ERROR]', ...args);
-        }
+        emitLog('error', args);
     },
 
     /**
      * 分组日志开始
-     * @param {string} label - 分组标签
+     * @param {string|Object} label - 分组标签
      */
     group(label) {
         if (shouldLog('debug')) {
-            console.group(`[玉子手机] ${label}`);
+            callRawConsole('group', formatAuxLogLabel(label));
         }
     },
 
@@ -249,30 +475,40 @@ export const Logger = {
      */
     groupEnd() {
         if (shouldLog('debug')) {
-            console.groupEnd();
+            callRawConsole('groupEnd');
         }
     },
 
     /**
      * 时间标记开始
-     * @param {string} label - 时间标记标签
+     * @param {string|Object} label - 时间标记标签
      */
     time(label) {
         if (shouldLog('debug')) {
-            console.time(`[玉子手机] ${label}`);
+            callRawConsole('time', formatAuxLogLabel(label));
         }
     },
 
     /**
      * 时间标记结束
-     * @param {string} label - 时间标记标签
+     * @param {string|Object} label - 时间标记标签
      */
     timeEnd(label) {
         if (shouldLog('debug')) {
-            console.timeEnd(`[玉子手机] ${label}`);
+            callRawConsole('timeEnd', formatAuxLogLabel(label));
         }
     },
+
+    withScope(defaultMeta = {}) {
+        return createScopedLogger(defaultMeta);
+    },
+
+    child(defaultMeta = {}) {
+        return createScopedLogger(defaultMeta);
+    },
 };
+
+const errorLogger = Logger.withScope({ scope: 'error-handler', feature: 'error-handler' });
 
 /**
  * 判断是否应该记录日志
@@ -304,15 +540,17 @@ export function handleError(error, userMessage = '操作失败', options = {}) {
 
     // 记录错误
     if (shouldLogError) {
-        if (error instanceof YuziPhoneError) {
-            Logger.error(`[${error.code}] ${error.message}`, {
-                type: error.type,
-                details: error.details,
-                stack: error.stack,
-            });
-        } else {
-            Logger.error(error.message, error);
-        }
+        errorLogger.error({
+            action: 'handle',
+            errorCode: error instanceof YuziPhoneError ? error.code : undefined,
+            message: '统一错误处理器捕获异常',
+            context: {
+                userMessage,
+                showNotification: shouldShowNotification,
+                throwError: shouldThrow,
+            },
+            error,
+        });
     }
 
     // 显示用户通知（使用内部 notify 函数，避免循环依赖）
@@ -384,7 +622,11 @@ export function withSyncErrorHandler(func, userMessage = '操作失败', options
 function reportError(error) {
     // 预留错误上报接口
     // 可以在这里集成错误追踪服务，如 Sentry
-    Logger.debug('错误上报（预留）:', error);
+    errorLogger.debug({
+        action: 'report.pending',
+        message: '错误上报（预留）',
+        error,
+    });
 }
 
 /**
@@ -478,7 +720,12 @@ export function tryOrDefault(func, defaultValue, errorMessage = '操作失败') 
     try {
         return func();
     } catch (error) {
-        Logger.warn(errorMessage, error);
+        errorLogger.warn({
+            action: 'try-default.sync',
+            message: errorMessage,
+            context: { defaultValueApplied: true },
+            error,
+        });
         return defaultValue;
     }
 }
@@ -494,7 +741,12 @@ export async function tryOrDefaultAsync(func, defaultValue, errorMessage = '操�
     try {
         return await func();
     } catch (error) {
-        Logger.warn(errorMessage, error);
+        errorLogger.warn({
+            action: 'try-default.async',
+            message: errorMessage,
+            context: { defaultValueApplied: true },
+            error,
+        });
         return defaultValue;
     }
 }

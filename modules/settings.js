@@ -5,7 +5,7 @@
  */
 
 import { Logger } from './error-handler.js';
-import { showNotification } from './integration.js';
+import { showNotification } from './integration/toast-bridge.js';
 import { getSettingsContext } from './settings/context.js';
 import {
     extensionName,

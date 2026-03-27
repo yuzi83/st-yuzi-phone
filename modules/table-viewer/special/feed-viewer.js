@@ -1,18 +1,19 @@
-import { deletePhoneSheetRows, getSheetDataByKey, navigateBack } from '../../phone-core.js';
+import { deletePhoneSheetRows, getSheetDataByKey } from '../../phone-core/chat-support.js';
+import { navigateBack } from '../../phone-core/routing.js';
 import { PHONE_ICONS } from '../../phone-home.js';
-import { escapeHtml, escapeHtmlAttr } from '../../utils.js';
+import { escapeHtml } from '../../utils.js';
 import { showConfirmDialog } from '../../settings-app/ui/confirm-dialog.js';
 import { bindWheelBridge, showInlineToast } from '../shared-ui.js';
 import { createSpecialFieldReader, buildHeaderIndexMap } from './field-reader.js';
-import { getSavedChoice, setSavedChoice, clearSavedChoice } from './choice-store.js';
+import { setSavedChoice, clearSavedChoice } from './choice-store.js';
 import {
-    parseCommentPairs,
     normalizeMediaDesc,
     renderInPhoneMediaPreview,
-    getAvatarText,
-    formatTimeLike,
-    generateColor,
 } from './view-utils.js';
+import {
+    getRowsForRender,
+    renderFeedItem,
+} from './feed-viewer-helpers.js';
 
 /**
  * @typedef {Object} FeedStyleOptions
@@ -159,7 +160,7 @@ export function renderFeedTable(container, context, deps = {}) {
         viewerEventManager.add(window, 'yuzi-phone-table-updated', handleExternalTableUpdate);
     }
 
-    const getRowsForRender = (styleOptions = {}) => {
+    const legacyGetRowsForRender = (styleOptions = {}) => {
         const feedOrder = String(styleOptions.feedOrder || 'desc');
         const entries = state.rowsData.map((row, rowIndex) => ({ row, rowIndex }));
         return feedOrder === 'asc' ? entries : entries.slice().reverse();
@@ -215,7 +216,7 @@ export function renderFeedTable(container, context, deps = {}) {
     const render = () => {
         syncRowsFromSheet();
         const stylePayload = /** @type {any} */ (createSpecialTemplateStylePayload(templateMatch, type, 'list'));
-        const rowsForRender = getRowsForRender(stylePayload.styleOptions);
+        const rowsForRender = getRowsForRender(state.rowsData, stylePayload.styleOptions);
         const emptyFeedText = String(stylePayload.styleOptions.emptyFeedText || '暂无内容');
         const selectedCount = state.selectedRowIndexes.length;
 
@@ -411,7 +412,7 @@ export function renderFeedTable(container, context, deps = {}) {
  *   selected?:boolean,
  * }} params
  */
-function renderFeedItem({ row, sourceRowIndex, rowIndex, sheetKey, type, readSpecialField, styleOptions = /** @type {FeedStyleOptions} */ ({}), structureOptions = {}, deleteManageMode = false, selected = false }) {
+function legacyRenderFeedItem({ row, sourceRowIndex, rowIndex, sheetKey, type, readSpecialField, styleOptions = /** @type {FeedStyleOptions} */ ({}), structureOptions = {}, deleteManageMode = false, selected = false }) {
     const poster = type === 'forum'
         ? (readSpecialField(row, 'poster', '') || '匿名网友')
         : (readSpecialField(row, 'poster', '') || '未知用户');

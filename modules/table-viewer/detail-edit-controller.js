@@ -1,5 +1,7 @@
 import { Logger } from '../error-handler.js';
 
+const logger = Logger.withScope({ scope: 'table-viewer/detail-edit', feature: 'table-viewer' });
+
 export function bindGenericDetailEditController(options = {}) {
     const {
         container,
@@ -192,7 +194,12 @@ export function bindGenericDetailEditController(options = {}) {
                 showInlineToast(container, '保存失败：数据库写入失败');
             }
         } catch (err) {
-            Logger.error('[玉子手机] 保存异常', err);
+            logger.error({
+                action: 'row.save',
+                message: '详情行保存异常',
+                context: { sheetKey, rowIndex: state.rowIndex },
+                error: err,
+            });
             showInlineToast(container, `保存异常: ${err?.message || '未知错误'}`);
         } finally {
             state.saving = false;

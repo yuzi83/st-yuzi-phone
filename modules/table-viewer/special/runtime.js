@@ -168,20 +168,43 @@ export function createSpecialTemplateStylePayload(templateMatch, specialType, vi
     };
 }
 
-export function renderSpecialTableViewer(container, context, deps = {}) {
-    const { sheetKey, tableName, rows, headers, type, templateMatch } = context;
-    const { viewerEventManager } = deps;
-
-    if (type === 'message') {
-        renderMessageTablePage(container, { sheetKey, tableName, rows, headers, templateMatch, type }, {
-            createSpecialTemplateStylePayload,
-            viewerEventManager,
-        });
-        return;
+export function createSpecialTableViewerRuntime(container, context, deps = {}) {
+    if (!(container instanceof HTMLElement) || !context) {
+        return null;
     }
 
-    renderFeedTablePage(container, { sheetKey, tableName, rows, headers, type, templateMatch }, {
-        createSpecialTemplateStylePayload,
+    const { sheetKey, tableName, rows, headers, type, templateMatch } = context;
+    const viewerRuntime = deps.viewerRuntime;
+    const viewerEventManager = deps.viewerEventManager || viewerRuntime?.viewerEventManager;
+    const renderMessageTable = deps.renderMessageTable || renderMessageTablePage;
+    const renderFeedTable = deps.renderFeedTable || renderFeedTablePage;
+    const createStylePayload = deps.createSpecialTemplateStylePayload || createSpecialTemplateStylePayload;
+
+    const start = () => {
+        if (type === 'message') {
+            renderMessageTable(container, { sheetKey, tableName, rows, headers, templateMatch, type }, {
+                createSpecialTemplateStylePayload: createStylePayload,
+                viewerEventManager,
+            });
+            return true;
+        }
+
+        renderFeedTable(container, { sheetKey, tableName, rows, headers, type, templateMatch }, {
+            createSpecialTemplateStylePayload: createStylePayload,
+            viewerEventManager,
+        });
+        return true;
+    };
+
+    return {
+        viewerRuntime,
         viewerEventManager,
-    });
+        start,
+    };
+}
+
+export function renderSpecialTableViewer(container, context, deps = {}) {
+    const runtime = createSpecialTableViewerRuntime(container, context, deps);
+    if (!runtime) return false;
+    return runtime.start();
 }

@@ -1,4 +1,4 @@
-import { bindPhoneScrollGuards } from '../phone-core.js';
+import { bindPhoneScrollGuards } from '../phone-core/scroll-guards.js';
 
 export function showInlineToast(container, msg, isError = false) {
     const root = container.querySelector('.phone-app-page') || container;

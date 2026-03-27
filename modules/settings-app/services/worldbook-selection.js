@@ -1,4 +1,5 @@
-import { getCurrentCharacterWorldbooks, getWorldbook, getWorldbookNames, onWorldInfoUpdated } from '../../integration.js';
+import { onWorldInfoUpdated } from '../../integration/event-bridge.js';
+import { getCurrentCharacterWorldbooks, getWorldbook, getWorldbookNames } from '../../integration/tavern-helper-bridge.js';
 import { getPhoneSettings, savePhoneSetting } from '../../settings.js';
 
 const WORLDBOOK_SELECTION_DEFAULTS = Object.freeze({

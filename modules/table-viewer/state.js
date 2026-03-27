@@ -1,5 +1,5 @@
 import { Logger } from '../error-handler.js';
-import { getTableLockState } from '../phone-core.js';
+import { getTableLockState } from '../phone-core/data-api.js';
 
 /**
  * 表格查看器状态管理类

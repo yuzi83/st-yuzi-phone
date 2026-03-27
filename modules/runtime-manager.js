@@ -30,10 +30,18 @@ const RuntimeErrorType = {
  * @param {Object} [context] - 上下文信息
  */
 function logError(scopeName, type, error, context = {}) {
-    const message = error?.message || String(error);
-    const details = Object.keys(context).length > 0 ? JSON.stringify(context) : '';
-    
-    Logger.warn(`[${scopeName}][${type}] ${message}`, details);
+    Logger.warn({
+        scope: 'runtime-manager',
+        feature: 'runtime',
+        action: 'scope.invoke',
+        message: '运行时任务执行失败',
+        context: {
+            scopeName,
+            runtimeType: type,
+            ...context,
+        },
+        error,
+    });
 }
 
 export function createRuntimeScope(scopeName = 'yuzi-runtime') {
@@ -196,7 +204,14 @@ export function scheduleIdleTask(task, options = {}) {
             try {
                 task?.();
             } catch (e) {
-                Logger.warn('[idle-task] error:', e);
+                Logger.warn({
+                    scope: 'runtime-manager',
+                    feature: 'runtime',
+                    action: 'idle-task.execute',
+                    message: '空闲任务执行失败',
+                    context: { timeoutMs, fallback: false },
+                    error: e,
+                });
             }
         }, { timeout: timeoutMs });
 
@@ -211,7 +226,14 @@ export function scheduleIdleTask(task, options = {}) {
         try {
             task?.();
         } catch (e) {
-            Logger.warn('[idle-task] error:', e);
+            Logger.warn({
+                scope: 'runtime-manager',
+                feature: 'runtime',
+                action: 'idle-task.execute',
+                message: '空闲任务执行失败',
+                context: { timeoutMs, fallback: true },
+                error: e,
+            });
         }
     }, Math.min(timeoutMs, 120));
 
@@ -231,7 +253,14 @@ export function createDebouncedTask(task, wait = 200) {
         try {
             task?.(...args);
         } catch (e) {
-            Logger.warn('[debounce-task] error:', e);
+            Logger.warn({
+                scope: 'runtime-manager',
+                feature: 'runtime',
+                action: 'debounce-task.execute',
+                message: '防抖任务执行失败',
+                context: { delay },
+                error: e,
+            });
         }
     };
 
