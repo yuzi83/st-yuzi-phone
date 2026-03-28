@@ -1,0 +1,43 @@
+import {
+    buildAppearancePageHtml,
+    buildApiPromptConfigPageHtml,
+    buildAiInstructionPresetsPageHtml,
+    buildBeautifyTemplatePageHtml,
+    buildButtonStylePageHtml,
+    buildDatabasePageHtml,
+    buildDatabaseTableChecklistHtml,
+    buildSettingsHomePageHtml,
+    buildPromptEditorPageHtml,
+} from './page-builders.js';
+import {
+    SETTINGS_ENTRY_META,
+    buildSettingsBadgeHtml,
+    buildSettingsChipHtml,
+    buildSettingsHeroHtml,
+    buildSettingsHomeItemHtml,
+    buildSettingsPageFrame,
+    buildSettingsSectionHtml,
+    buildSettingsStatGridHtml,
+    buildSettingsSummaryListHtml,
+} from './primitives.js';
+
+export {
+    SETTINGS_ENTRY_META,
+    buildSettingsChipHtml,
+    buildSettingsBadgeHtml,
+    buildSettingsHeroHtml,
+    buildSettingsStatGridHtml,
+    buildSettingsSummaryListHtml,
+    buildSettingsSectionHtml,
+    buildSettingsPageFrame,
+    buildSettingsHomeItemHtml,
+    buildSettingsHomePageHtml,
+    buildAppearancePageHtml,
+    buildDatabaseTableChecklistHtml,
+    buildDatabasePageHtml,
+    buildButtonStylePageHtml,
+    buildPromptEditorPageHtml,
+    buildApiPromptConfigPageHtml,
+    buildAiInstructionPresetsPageHtml,
+    buildBeautifyTemplatePageHtml,
+};
