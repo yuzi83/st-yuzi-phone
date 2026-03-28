@@ -25,3 +25,6 @@
 
 /* 5) generic template layer */
 @import url('./styles/05-phone-generic-template.css');
+
+/* 6) variable manager layer */
+@import url('./styles/12-variable-manager.css');

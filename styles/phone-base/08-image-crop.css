@@ -5,7 +5,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    box-sizing: border-box;
+    min-height: 100vh;
+    min-height: 100dvh;
     padding: 14px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     background: rgba(0, 0, 0, 0.72);
     opacity: 0;
     transition: opacity 0.18s ease;
@@ -22,8 +28,12 @@
 
 .phone-image-crop-dialog {
     width: min(92vw, 380px);
-    max-height: min(88vh, 720px);
+    max-height: min(calc(100vh - 28px), 720px);
+    max-height: min(calc(100dvh - 28px), 720px);
+    box-sizing: border-box;
     padding: 14px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     border-radius: 16px;
     background: rgba(22, 24, 30, 0.96);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -244,11 +254,17 @@
     }
 
     .phone-image-crop-overlay {
-        padding: 10px;
+        padding:
+            max(10px, env(safe-area-inset-top))
+            max(10px, env(safe-area-inset-right))
+            max(10px, env(safe-area-inset-bottom))
+            max(10px, env(safe-area-inset-left));
     }
 
     .phone-image-crop-dialog {
         width: min(95vw, 360px);
+        max-height: calc(100vh - 20px);
+        max-height: calc(100dvh - 20px);
         padding: 12px;
     }
 
