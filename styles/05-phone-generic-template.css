@@ -616,6 +616,7 @@
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-toolbar-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
     gap: 8px;
@@ -646,6 +647,31 @@
     border-color: var(--_gt-accent-border);
     background: var(--_gt-accent-soft);
     color: var(--_gt-accent-strong);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-sort-btn {
+    min-height: 32px;
+    padding: 0 11px;
+    border-radius: 999px;
+    font-size: 11px;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-toolbar-btn.is-active,
+.phone-generic-root.phone-generic-template-scope .phone-generic-sort-btn[aria-pressed="true"] {
+    border-color: var(--_gt-accent-border);
+    background: var(--_gt-accent-soft);
+    color: var(--_gt-accent-strong);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-toolbar-btn:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-toolbar-btn:disabled:hover {
+    border-color: var(--_gt-action-btn-border);
+    background: var(--_gt-action-btn-bg);
+    color: var(--_gt-action-btn-text);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-result-pill,
