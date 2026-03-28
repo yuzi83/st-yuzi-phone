@@ -25,6 +25,7 @@ export function buildGenericListPageHtml(options = {}) {
         emptyStateDesc = '',
         lockManageMode = false,
         deleteManageMode = false,
+        sortDescending = false,
     } = options;
 
     return `
@@ -58,6 +59,13 @@ export function buildGenericListPageHtml(options = {}) {
                             ` : '<div class="phone-generic-search-control is-hidden"></div>'}
                             <div class="phone-generic-toolbar-actions">
                                 ${showSearch && searchQuery ? '<button type="button" class="phone-generic-toolbar-btn" data-clear-search="1">清空搜索</button>' : ''}
+                                <button
+                                    type="button"
+                                    class="phone-generic-toolbar-btn phone-generic-sort-btn ${sortDescending ? 'is-active' : ''}"
+                                    data-toggle-sort="1"
+                                    aria-pressed="${sortDescending ? 'true' : 'false'}"
+                                    ${totalRowCount <= 1 ? 'disabled' : ''}
+                                >${sortDescending ? '正序' : '倒序'}</button>
                             </div>
                         </div>
                         <div class="phone-generic-toolbar-info">

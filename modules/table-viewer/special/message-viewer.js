@@ -563,7 +563,7 @@ export function renderMessageTable(container, context, deps = {}) {
                     <span class="phone-nav-title">${escapeHtml(detailTitle || tableName)}</span>
                     <button type="button" class="phone-special-nav-action-btn ${state.deleteManageMode ? 'is-active' : ''}">${state.deleteManageMode ? '完成' : '删除'}</button>
                 </div>
-                <div class="phone-app-body phone-table-body">
+                <div class="phone-app-body phone-table-body phone-special-message-body">
                     ${showDetailSubtitle && detailSubtitle ? `<div class="phone-special-detail-subtitle">${escapeHtml(detailSubtitle)}</div>` : ''}
                     <div class="phone-special-message-thread">
                         ${state.deleteManageMode ? `
@@ -583,27 +583,25 @@ export function renderMessageTable(container, context, deps = {}) {
                                 selected: state.selectedMessageRowIndexes.includes(entry.rowIndex),
                             })).join('')}
                         </div>
-                        ${state.deleteManageMode ? '' : `
-                            <div class="phone-special-message-compose">
-                                <div class="phone-special-message-compose-meta">
-                                    ${showComposeTemplateNote ? `<span class="phone-special-message-template-pill">当前 AI 指令预设：${escapeHtml(activeAiInstructionPresetName)}</span>` : ''}
-                                    ${showComposeStatus ? `<div class="phone-special-message-compose-status ${statusClass}">${escapeHtml(statusText || ' ')}</div>` : ''}
-                                </div>
-                                <div class="phone-special-message-compose-editor">
-                                    <textarea
-                                        class="phone-special-message-compose-input"
-                                        rows="1"
-                                        placeholder="输入消息，按 Enter 发送，Shift+Enter 换行"
-                                        ${state.sending ? 'disabled' : ''}
-                                    >${escapeHtml(currentDraft)}</textarea>
-                                    <div class="phone-special-message-compose-footer">
-                                        ${showRetryButton && retryTarget ? `<button type="button" class="phone-special-message-retry-btn" ${state.sending ? 'disabled' : ''}>重试回复</button>` : ''}
-                                        <button type="button" class="phone-special-message-send-btn" ${state.sending ? 'disabled' : ''}>${state.sending ? '发送中...' : '发送'}</button>
-                                    </div>
-                                </div>
-                            </div>
-                        `}
                     </div>
+                    ${state.deleteManageMode ? '' : `
+                        <div class="phone-special-message-compose">
+                            <div class="phone-special-message-compose-editor">
+                                <textarea
+                                    class="phone-special-message-compose-input"
+                                    rows="1"
+                                    placeholder="输入消息，按 Enter 发送"
+                                    ${state.sending ? 'disabled' : ''}
+                                >${escapeHtml(currentDraft)}</textarea>
+                                <button type="button" class="phone-special-message-send-btn" ${state.sending ? 'disabled' : ''}>${state.sending ? '...' : '发送'}</button>
+                            </div>
+                            <div class="phone-special-message-compose-meta">
+                                ${showComposeTemplateNote ? `<span class="phone-special-message-template-pill">${escapeHtml(activeAiInstructionPresetName)}</span>` : ''}
+                                ${showComposeStatus ? `<div class="phone-special-message-compose-status ${statusClass}">${escapeHtml(statusText || ' ')}</div>` : ''}
+                                ${showRetryButton && retryTarget ? `<button type="button" class="phone-special-message-retry-btn" ${state.sending ? 'disabled' : ''}>重试</button>` : ''}
+                            </div>
+                        </div>
+                    `}
                 </div>
                 ${state.mediaPreview ? renderInPhoneMediaPreview(state.mediaPreview.title, state.mediaPreview.content) : ''}
             </div>
@@ -615,21 +613,38 @@ export function renderMessageTable(container, context, deps = {}) {
             const button = container.querySelector(selector);
             if (!(button instanceof HTMLElement) || typeof handler !== 'function') return null;
 
-            let handledByPointer = false;
+            const POINTER_CLICK_SUPPRESS_MS = {
+                mouse: 80,
+                touch: 450,
+                pen: 450,
+                unknown: 80,
+            };
+            let lastPointerHandledAt = -Infinity;
+            let lastPointerType = 'unknown';
             button.style.touchAction = 'manipulation';
 
+            const getEventTime = (event) => Number.isFinite(event?.timeStamp)
+                ? Number(event.timeStamp)
+                : Date.now();
+
             button.addEventListener('pointerup', (event) => {
-                handledByPointer = true;
+                const pointerType = String(event.pointerType || 'unknown').trim().toLowerCase() || 'unknown';
+                lastPointerType = pointerType;
+                lastPointerHandledAt = getEventTime(event);
                 event.preventDefault();
                 event.stopPropagation();
                 handler();
-                requestAnimationFrame(() => {
-                    handledByPointer = false;
-                });
             });
 
             button.addEventListener('click', (event) => {
-                if (handledByPointer) return;
+                const suppressWindow = POINTER_CLICK_SUPPRESS_MS[lastPointerType] ?? POINTER_CLICK_SUPPRESS_MS.unknown;
+                const elapsed = getEventTime(event) - lastPointerHandledAt;
+                const shouldSuppressSyntheticClick = elapsed >= 0 && elapsed <= suppressWindow;
+                if (shouldSuppressSyntheticClick) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                }
                 event.preventDefault();
                 event.stopPropagation();
                 handler();

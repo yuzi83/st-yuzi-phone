@@ -125,20 +125,60 @@ export function createMessageViewerActions(ctx = {}) {
         }
 
         const structuredMatch = safeText.match(/^\s*正文[：:]\s*([\s\S]*?)^\s*图片描述[：:]\s*([\s\S]*?)^\s*视频描述[：:]\s*([\s\S]*?)\s*$/m);
-        if (!structuredMatch) {
+        if (structuredMatch) {
             return {
-                matched: false,
-                content: safeText,
-                imageDesc: 'none',
-                videoDesc: 'none',
+                matched: true,
+                content: unwrapStructuredReplyField(structuredMatch[1]),
+                imageDesc: normalizeStructuredMediaValue(structuredMatch[2]),
+                videoDesc: normalizeStructuredMediaValue(structuredMatch[3]),
+            };
+        }
+
+        const lineByLineContent = [];
+        let imageDesc = 'none';
+        let videoDesc = 'none';
+        let anyFieldMatched = false;
+
+        for (const line of safeText.split('\n')) {
+            const trimmed = line.trim();
+            const contentMatch = trimmed.match(/^正文[：:]\s*([\s\S]*)$/);
+            if (contentMatch) {
+                const val = unwrapStructuredReplyField(contentMatch[1]);
+                if (val) lineByLineContent.push(val);
+                anyFieldMatched = true;
+                continue;
+            }
+            const imageMatch = trimmed.match(/^图片描述[：:]\s*([\s\S]*)$/);
+            if (imageMatch) {
+                imageDesc = normalizeStructuredMediaValue(imageMatch[1]);
+                anyFieldMatched = true;
+                continue;
+            }
+            const videoMatch = trimmed.match(/^视频描述[：:]\s*([\s\S]*)$/);
+            if (videoMatch) {
+                videoDesc = normalizeStructuredMediaValue(videoMatch[1]);
+                anyFieldMatched = true;
+                continue;
+            }
+            if (anyFieldMatched && lineByLineContent.length > 0) {
+                lineByLineContent.push(line);
+            }
+        }
+
+        if (anyFieldMatched && lineByLineContent.length > 0) {
+            return {
+                matched: true,
+                content: lineByLineContent.join('\n').trim(),
+                imageDesc,
+                videoDesc,
             };
         }
 
         return {
-            matched: true,
-            content: unwrapStructuredReplyField(structuredMatch[1]),
-            imageDesc: normalizeStructuredMediaValue(structuredMatch[2]),
-            videoDesc: normalizeStructuredMediaValue(structuredMatch[3]),
+            matched: false,
+            content: safeText,
+            imageDesc: 'none',
+            videoDesc: 'none',
         };
     };
 

@@ -68,6 +68,9 @@ export function renderGenericListPage(options = {}) {
     const filteredRows = searchQueryLower
         ? rowViewModels.filter((viewModel) => viewModel.searchText.includes(searchQueryLower))
         : rowViewModels;
+    const orderedFilteredRows = state.listSortDescending
+        ? [...filteredRows].reverse()
+        : filteredRows;
 
     const visibleCount = filteredRows.length;
     const emptyStateTitle = totalRowCount === 0
@@ -107,7 +110,7 @@ export function renderGenericListPage(options = {}) {
         totalRowCount,
         visibleCount,
         toolbarHint,
-        filteredRows,
+        filteredRows: orderedFilteredRows,
         showSearch,
         showResultCount,
         showToolbarHint,
@@ -124,6 +127,7 @@ export function renderGenericListPage(options = {}) {
         emptyStateDesc,
         lockManageMode: state.lockManageMode,
         deleteManageMode: state.deleteManageMode,
+        sortDescending: !!state.listSortDescending,
     });
 
     bindWheelBridge(container);

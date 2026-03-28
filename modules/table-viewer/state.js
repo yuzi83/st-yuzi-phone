@@ -210,6 +210,7 @@ export function createTableViewerState(sheetKey) {
         deletingRowIndex: -1,
         listScrollTop: 0,
         listSearchQuery: '',
+        listSortDescending: false,
     });
 
     return new Proxy(stateManager, {

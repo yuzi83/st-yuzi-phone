@@ -243,7 +243,8 @@ function buildMessageMetaHtml({ showMessageTime, time, timeFallbackText, message
  */
 export function renderOneMessageRow({ row, sourceRowIndex, readSpecialField, styleOptions = /** @type {MessageStyleOptions} */ ({}), deleteManageMode = false, selected = false }) {
     const sender = normalizeSenderName(readSpecialField(row, 'sender', '')) || '';
-    const content = readSpecialField(row, 'content', '') || '';
+    const rawContent = readSpecialField(row, 'content', '') || '';
+    const content = rawContent.replace(/^\s*正文[：:]\s*/m, '');
     const time = readSpecialField(row, 'sentAt', '');
     const messageStatus = String(readSpecialField(row, 'messageStatus', '') || '').trim();
     const imageDesc = normalizeMediaDesc(readSpecialField(row, 'imageDesc', ''));

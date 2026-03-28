@@ -57,6 +57,11 @@ export function bindGenericListPageController(options = {}) {
         renderKeepScroll();
     });
 
+    container.querySelector('[data-toggle-sort]')?.addEventListener('click', () => {
+        state.listSortDescending = !state.listSortDescending;
+        renderKeepScroll();
+    });
+
     container.querySelector('[data-clear-search]')?.addEventListener('click', () => {
         applySearchQuery('', 0, 0);
     });
