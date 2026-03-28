@@ -1,0 +1,96 @@
+/* ========== App Page Layout ========== */
+.phone-app-page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+}
+
+/* --- Nav Bar --- */
+.phone-nav-bar {
+    display: flex;
+    align-items: center;
+    padding: clamp(38px, 8.2%, 50px) 10px 10px;
+    min-height: 40px;
+    background: var(--yuzi-phone-bg-overlay, rgba(0, 0, 0, 0.4));
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--yuzi-phone-border-subtle, rgba(255, 255, 255, 0.08));
+    z-index: 10;
+    flex-shrink: 0;
+    position: relative;
+    --yuzi-phone-nav-side-safe-width: clamp(72px, 22vw, 92px);
+}
+.phone-nav-back {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: none;
+    border: none;
+    color: var(--yuzi-phone-color-accent-secondary, rgba(100, 180, 255, 0.9));
+    font-size: 13px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: var(--yuzi-phone-radius-sm, 6px);
+    transition: background 0.15s;
+}
+.phone-nav-back:hover {
+    background: var(--yuzi-phone-bg-surface-hover, rgba(255, 255, 255, 0.06));
+}
+.phone-nav-back svg {
+    width: 16px;
+    height: 16px;
+}
+.phone-nav-bar > :not(.phone-nav-title) {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+}
+.phone-nav-bar > :not(.phone-nav-title):last-child {
+    margin-left: auto;
+}
+.phone-nav-title {
+    position: absolute;
+    left: var(--yuzi-phone-nav-side-safe-width, 72px);
+    right: var(--yuzi-phone-nav-side-safe-width, 72px);
+    margin: 0;
+    padding: 0 10px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.9));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* --- App Body (scrollable) --- */
+.phone-app-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    padding: 12px;
+    color: var(--yuzi-phone-color-text-app, #F2F2F7);
+    background: var(--yuzi-phone-bg-app, #000);
+    -webkit-overflow-scrolling: touch;
+}
+.phone-app-body::-webkit-scrollbar {
+    width: var(--yuzi-phone-scrollbar-size, 6px);
+}
+.phone-app-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+.phone-app-body::-webkit-scrollbar-thumb {
+    background: var(--yuzi-phone-scrollbar-thumb, rgba(255, 255, 255, 0.25));
+    border-radius: 3px;
+}
+.phone-app-body::-webkit-scrollbar-thumb:hover {
+    background: var(--yuzi-phone-scrollbar-thumb-hover, rgba(255, 255, 255, 0.4));
+}

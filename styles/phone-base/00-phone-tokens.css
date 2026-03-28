@@ -1,0 +1,140 @@
+/* ========================================
+   玉子的手机 — Design Tokens
+   作用域：全局 :root
+   说明：供 phone 容器与 body 级弹层共同继承
+   ======================================== */
+
+:root {
+    --yuzi-phone-color-black: #000000;
+    --yuzi-phone-color-white: #ffffff;
+
+    --yuzi-phone-color-text-app: #F2F2F7;
+    --yuzi-phone-color-text-primary: #ffffff;
+    --yuzi-phone-color-text-secondary: rgba(255, 255, 255, 0.9);
+    --yuzi-phone-color-text-tertiary: rgba(255, 255, 255, 0.8);
+    --yuzi-phone-color-text-muted: rgba(255, 255, 255, 0.6);
+    --yuzi-phone-color-text-soft: rgba(255, 255, 255, 0.48);
+    --yuzi-phone-color-text-dim: rgba(255, 255, 255, 0.35);
+    --yuzi-phone-color-text-faint: rgba(255, 255, 255, 0.25);
+
+    --yuzi-phone-color-accent: #0A84FF;
+    --yuzi-phone-color-accent-secondary: rgba(100, 180, 255, 0.94);
+    --yuzi-phone-color-accent-alt: #5E5CE6;
+
+    --yuzi-phone-color-success: #34C759;
+    --yuzi-phone-color-success-soft: rgba(129, 199, 132, 0.9);
+    --yuzi-phone-color-success-ink: #1b5e20;
+    --yuzi-phone-color-warning: #FF9500;
+    --yuzi-phone-color-warning-soft: rgba(255, 200, 50, 0.8);
+    --yuzi-phone-color-danger: #FF3B30;
+    --yuzi-phone-color-danger-soft: rgba(239, 83, 80, 0.9);
+    --yuzi-phone-color-danger-dim: rgba(239, 83, 80, 0.12);
+    --yuzi-phone-color-danger-border: rgba(239, 83, 80, 0.2);
+    --yuzi-phone-color-danger-border-strong: rgba(239, 83, 80, 0.4);
+    --yuzi-phone-color-danger-contrast: rgba(255, 180, 180, 0.95);
+
+    --yuzi-phone-bg-app: #000000;
+    --yuzi-phone-bg-shell: #121212;
+    --yuzi-phone-bg-shell-bezel-inner: #3a3a3a;
+    --yuzi-phone-bg-shell-bezel-outer: #1a1a1a;
+    --yuzi-phone-bg-surface: rgba(255, 255, 255, 0.03);
+    --yuzi-phone-bg-surface-alt: rgba(255, 255, 255, 0.05);
+    --yuzi-phone-bg-surface-strong: rgba(40, 40, 40, 0.6);
+    --yuzi-phone-bg-surface-hover: rgba(255, 255, 255, 0.06);
+    --yuzi-phone-bg-surface-press: rgba(255, 255, 255, 0.25);
+    --yuzi-phone-bg-overlay: rgba(0, 0, 0, 0.6);
+    --yuzi-phone-bg-overlay-soft: rgba(0, 0, 0, 0.2);
+    --yuzi-phone-bg-overlay-tint: rgba(0, 0, 0, 0.4);
+    --yuzi-phone-bg-notification: rgba(30, 30, 30, 0.75);
+    --yuzi-phone-bg-input: rgba(255, 255, 255, 0.06);
+    --yuzi-phone-bg-input-hover: rgba(255, 255, 255, 0.12);
+    --yuzi-phone-bg-input-disabled: rgba(255, 255, 255, 0.04);
+    --yuzi-phone-bg-dialog: #2a2a2a;
+    --yuzi-phone-bg-inline-toast: rgba(0, 0, 0, 0.62);
+    --yuzi-phone-bg-accent-soft: rgba(10, 132, 255, 0.1);
+    --yuzi-phone-bg-accent-tint: rgba(100, 180, 255, 0.12);
+    --yuzi-phone-bg-accent-tint-strong: rgba(100, 180, 255, 0.2);
+    --yuzi-phone-bg-accent-tint-hover: rgba(100, 180, 255, 0.3);
+    --yuzi-phone-bg-danger-soft: rgba(239, 83, 80, 0.1);
+    --yuzi-phone-bg-danger-tint: rgba(239, 83, 80, 0.12);
+    --yuzi-phone-bg-danger-tint-strong: rgba(239, 83, 80, 0.2);
+    --yuzi-phone-bg-danger-active: rgba(255, 59, 48, 0.25);
+    --yuzi-phone-bg-success-soft: rgba(52, 199, 89, 0.1);
+
+    --yuzi-phone-border-soft: rgba(255, 255, 255, 0.04);
+    --yuzi-phone-border-subtle: rgba(255, 255, 255, 0.08);
+    --yuzi-phone-border-default: rgba(255, 255, 255, 0.1);
+    --yuzi-phone-border-strong: rgba(255, 255, 255, 0.14);
+    --yuzi-phone-border-accent: rgba(100, 180, 255, 0.2);
+    --yuzi-phone-border-accent-strong: rgba(100, 180, 255, 0.4);
+    --yuzi-phone-border-danger: rgba(239, 83, 80, 0.45);
+    --yuzi-phone-border-danger-strong: rgba(239, 83, 80, 0.55);
+    --yuzi-phone-badge-border-color: #222222;
+
+    --yuzi-phone-radius-xs: 4px;
+    --yuzi-phone-radius-sm: 6px;
+    --yuzi-phone-radius-md: 8px;
+    --yuzi-phone-radius-lg: 10px;
+    --yuzi-phone-radius-xl: 12px;
+    --yuzi-phone-radius-2xl: 14px;
+    --yuzi-phone-radius-3xl: 16px;
+    --yuzi-phone-radius-notification: 22px;
+    --yuzi-phone-radius-pill: 999px;
+    --yuzi-phone-shell-radius: 55px;
+
+    --yuzi-phone-shadow-soft: 0 8px 18px rgba(0, 0, 0, 0.18);
+    --yuzi-phone-shadow-medium: 0 10px 30px rgba(0, 0, 0, 0.2);
+    --yuzi-phone-shadow-strong: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --yuzi-phone-shadow-notification: 0 10px 30px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.1);
+    --yuzi-phone-shadow-shell-drop: 0 20px 50px rgba(0,0,0,0.6);
+    --yuzi-phone-shadow-success: 0 8px 24px rgba(52, 199, 89, 0.3);
+    --yuzi-phone-shadow-badge: 0 2px 4px rgba(0,0,0,0.3);
+
+    --yuzi-phone-scrollbar-size: 6px;
+    --yuzi-phone-scrollbar-thumb: rgba(255, 255, 255, 0.25);
+    --yuzi-phone-scrollbar-thumb-hover: rgba(255, 255, 255, 0.4);
+    --yuzi-phone-scrollbar-thumb-settings: rgba(255, 255, 255, 0.3);
+    --yuzi-phone-scrollbar-thumb-settings-hover: rgba(255, 255, 255, 0.45);
+
+    --yuzi-phone-settings-scroll-padding-bottom: 40px;
+    --yuzi-phone-table-body-gap: 12px;
+    --yuzi-phone-table-body-padding-bottom: 20px;
+    --yuzi-phone-card-title-max-width: 76%;
+    --yuzi-phone-card-expand-btn-padding: 8px;
+
+    --yuzi-phone-gradient-accent-soft: linear-gradient(135deg, rgba(100, 180, 255, 0.15), rgba(130, 100, 255, 0.15));
+    --yuzi-phone-gradient-accent: linear-gradient(135deg, rgba(100, 180, 255, 0.25), rgba(130, 100, 255, 0.25));
+
+    --yuzi-settings-page-bg: linear-gradient(180deg, #f7f9fc 0%, #f2f5f9 100%);
+    --yuzi-settings-surface: rgba(255, 255, 255, 0.96);
+    --yuzi-settings-surface-muted: rgba(250, 251, 253, 0.98);
+    --yuzi-settings-surface-soft: rgba(245, 248, 252, 0.92);
+    --yuzi-settings-surface-strong: rgba(255, 255, 255, 0.99);
+    --yuzi-settings-text-primary: #152033;
+    --yuzi-settings-text-secondary: #4d5b71;
+    --yuzi-settings-text-tertiary: #7d899c;
+    --yuzi-settings-text-faint: #98a4b7;
+    --yuzi-settings-border: rgba(196, 206, 220, 0.78);
+    --yuzi-settings-border-strong: rgba(170, 183, 199, 0.9);
+    --yuzi-settings-divider: rgba(217, 225, 235, 0.9);
+    --yuzi-settings-shadow-soft: 0 10px 28px rgba(38, 52, 77, 0.08);
+    --yuzi-settings-shadow-medium: 0 14px 34px rgba(38, 52, 77, 0.12);
+    --yuzi-settings-shadow-strong: 0 18px 44px rgba(38, 52, 77, 0.16);
+    --yuzi-settings-accent: #7b93ff;
+    --yuzi-settings-accent-strong: #5f7bff;
+    --yuzi-settings-accent-soft: rgba(123, 147, 255, 0.14);
+    --yuzi-settings-accent-soft-strong: rgba(123, 147, 255, 0.24);
+    --yuzi-settings-accent-ring: rgba(123, 147, 255, 0.18);
+    --yuzi-settings-success: #56b78f;
+    --yuzi-settings-success-soft: rgba(86, 183, 143, 0.14);
+    --yuzi-settings-warning: #df9b4f;
+    --yuzi-settings-warning-soft: rgba(223, 155, 79, 0.14);
+    --yuzi-settings-danger: #dc7575;
+    --yuzi-settings-danger-soft: rgba(220, 117, 117, 0.14);
+    --yuzi-settings-info: #74a7cf;
+    --yuzi-settings-info-soft: rgba(116, 167, 207, 0.16);
+    --yuzi-settings-chip-bg: rgba(236, 240, 247, 0.95);
+    --yuzi-settings-chip-text: #5f6f86;
+    --yuzi-settings-scrollbar-thumb: rgba(157, 171, 190, 0.72);
+    --yuzi-settings-scrollbar-thumb-hover: rgba(123, 140, 165, 0.9);
+}

@@ -1,0 +1,288 @@
+.phone-image-crop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 14px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    background: rgba(0, 0, 0, 0.72);
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+
+.phone-image-crop-overlay.is-visible {
+    opacity: 1;
+}
+
+.phone-image-crop-overlay.is-dragging,
+.phone-image-crop-overlay.is-dragging * {
+    user-select: none;
+}
+
+.phone-image-crop-dialog {
+    width: min(92vw, 380px);
+    max-height: min(calc(100vh - 28px), 720px);
+    max-height: min(calc(100dvh - 28px), 720px);
+    box-sizing: border-box;
+    padding: 14px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 16px;
+    background: rgba(22, 24, 30, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.phone-image-crop-head {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.phone-image-crop-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.96);
+}
+
+.phone-image-crop-desc,
+.phone-image-crop-meta {
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.phone-image-crop-stage-wrap {
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.24);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 10px;
+}
+
+.phone-image-crop-stage {
+    position: relative;
+    min-height: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 12px;
+    background:
+        linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+        linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+        rgba(8, 10, 14, 0.72);
+    background-position: 0 0, 8px 8px, 0 0;
+    background-size: 16px 16px;
+}
+
+.phone-image-crop-image {
+    max-width: 100%;
+    max-height: 320px;
+    display: block;
+    pointer-events: none;
+    user-select: none;
+}
+
+.phone-image-crop-box {
+    position: absolute;
+    border: 2px solid rgba(255, 255, 255, 0.96);
+    border-radius: 12px;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.48);
+    cursor: move;
+    touch-action: none;
+}
+
+.phone-image-crop-grid,
+.phone-image-crop-guideline {
+    pointer-events: none;
+}
+
+.phone-image-crop-grid {
+    position: absolute;
+    inset: 0;
+}
+
+.phone-image-crop-guideline {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.44);
+}
+
+.phone-image-crop-guideline.is-vertical {
+    top: 0;
+    bottom: 0;
+    width: 1px;
+}
+
+.phone-image-crop-guideline.is-horizontal {
+    left: 0;
+    right: 0;
+    height: 1px;
+}
+
+.phone-image-crop-guideline.is-vertical.is-one {
+    left: 33.333%;
+}
+
+.phone-image-crop-guideline.is-vertical.is-two {
+    left: 66.666%;
+}
+
+.phone-image-crop-guideline.is-horizontal.is-one {
+    top: 33.333%;
+}
+
+.phone-image-crop-guideline.is-horizontal.is-two {
+    top: 66.666%;
+}
+
+.phone-image-crop-handle {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.96);
+    background: rgba(77, 182, 172, 0.96);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+}
+
+.phone-image-crop-handle[data-handle="nw"] {
+    top: 0;
+    left: 0;
+    transform: translate(-50%, -50%);
+    cursor: nwse-resize;
+}
+
+.phone-image-crop-handle[data-handle="n"] {
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    cursor: ns-resize;
+}
+
+.phone-image-crop-handle[data-handle="ne"] {
+    top: 0;
+    right: 0;
+    transform: translate(50%, -50%);
+    cursor: nesw-resize;
+}
+
+.phone-image-crop-handle[data-handle="e"] {
+    top: 50%;
+    right: 0;
+    transform: translate(50%, -50%);
+    cursor: ew-resize;
+}
+
+.phone-image-crop-handle[data-handle="se"] {
+    right: 0;
+    bottom: 0;
+    transform: translate(50%, 50%);
+    cursor: nwse-resize;
+}
+
+.phone-image-crop-handle[data-handle="s"] {
+    left: 50%;
+    bottom: 0;
+    transform: translate(-50%, 50%);
+    cursor: ns-resize;
+}
+
+.phone-image-crop-handle[data-handle="sw"] {
+    left: 0;
+    bottom: 0;
+    transform: translate(-50%, 50%);
+    cursor: nesw-resize;
+}
+
+.phone-image-crop-handle[data-handle="w"] {
+    top: 50%;
+    left: 0;
+    transform: translate(-50%, -50%);
+    cursor: ew-resize;
+}
+
+.phone-image-crop-actions,
+.phone-image-crop-actions-main {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.phone-image-crop-actions {
+    justify-content: space-between;
+}
+
+.phone-image-crop-actions-main {
+    justify-content: flex-end;
+}
+
+@media screen and (max-width: 520px) {
+    .phone-settings-layout-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .phone-settings-home-quick-select {
+        min-width: 84px;
+        max-width: 104px;
+    }
+
+    .phone-settings-toggle-size-row {
+        grid-template-columns: 1fr;
+    }
+
+    .phone-beautify-source-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .phone-beautify-item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .phone-beautify-item-actions {
+        justify-content: flex-end;
+    }
+
+    .phone-image-crop-overlay {
+        padding:
+            max(10px, env(safe-area-inset-top))
+            max(10px, env(safe-area-inset-right))
+            max(10px, env(safe-area-inset-bottom))
+            max(10px, env(safe-area-inset-left));
+    }
+
+    .phone-image-crop-dialog {
+        width: min(95vw, 360px);
+        max-height: calc(100vh - 20px);
+        max-height: calc(100dvh - 20px);
+        padding: 12px;
+    }
+
+    .phone-image-crop-stage {
+        min-height: 220px;
+    }
+
+    .phone-image-crop-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .phone-image-crop-actions-main {
+        width: 100%;
+    }
+
+    .phone-image-crop-actions-main .phone-settings-btn,
+    .phone-image-crop-actions > .phone-settings-btn {
+        flex: 1;
+    }
+}

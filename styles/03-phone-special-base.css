@@ -1,0 +1,419 @@
+﻿/* ========================================
+   Phone 三张专属表美化（消息/动态/论坛）
+   仅在 .phone-special-app 下生效，避免影响通用表格
+   ======================================== */
+
+.phone-special-app.phone-special-template-scope {
+    position: relative;
+    --sp-page-bg: var(--spPageBg, linear-gradient(180deg, rgba(28, 24, 21, 0.98) 0%, rgba(42, 36, 31, 0.96) 100%));
+    --sp-body-bg: var(--spBodyBg, rgba(38, 33, 29, 0.9));
+    --sp-surface-bg: var(--spSurfaceBg, rgba(42, 36, 31, 0.88));
+    --sp-surface-border: var(--spSurfaceBorder, rgba(219, 180, 138, 0.25));
+    --sp-surface-shadow: var(--spSurfaceShadow, 0 10px 26px rgba(0, 0, 0, 0.35));
+
+    --sp-nav-bg: var(--spNavBg, rgba(42, 36, 31, 0.95));
+    --sp-nav-border: var(--spNavBorder, rgba(219, 180, 138, 0.28));
+    --sp-nav-title: var(--spNavTitle, rgba(232, 217, 199, 0.98));
+    --sp-nav-back-text: var(--spNavBackText, rgba(219, 180, 138, 0.96));
+
+    --sp-list-bg: var(--spListBg, rgba(42, 36, 31, 0.86));
+    --sp-list-item-bg: var(--spListItemBg, rgba(42, 36, 31, 0.92));
+    --sp-list-item-hover-bg: var(--spListItemHoverBg, rgba(219, 180, 138, 0.1));
+    --sp-list-divider: var(--spListDivider, rgba(219, 180, 138, 0.25));
+
+    --sp-card-bg: var(--spCardBg, rgba(42, 36, 31, 0.92));
+    --sp-card-border: var(--spCardBorder, rgba(219, 180, 138, 0.26));
+    --sp-meta-text: var(--spMetaText, rgba(190, 169, 148, 0.92));
+    --sp-sub-text: var(--spSubText, rgba(232, 217, 199, 0.9));
+
+    --sp-bubble-left-bg: var(--spBubbleLeftBg, rgba(219, 180, 138, 0.16));
+    --sp-bubble-left-text: var(--spBubbleLeftText, rgba(232, 217, 199, 0.96));
+    --sp-bubble-right-bg: var(--spBubbleRightBg, rgba(219, 180, 138, 0.95));
+    --sp-bubble-right-text: var(--spBubbleRightText, #2A241F);
+    --sp-message-time-text: var(--spMessageTimeText, var(--sp-meta-text));
+
+    --sp-content-text: var(--spContentText, rgba(232, 217, 199, 0.92));
+    --sp-quote-text: var(--spQuoteText, rgba(232, 217, 199, 0.82));
+    --sp-quote-border: var(--spQuoteBorder, rgba(219, 180, 138, 0.3));
+
+    --sp-media-bg: var(--spMediaBg, rgba(219, 180, 138, 0.14));
+    --sp-media-text: var(--spMediaText, rgba(232, 217, 199, 0.95));
+    --sp-btn-bg: var(--spBtnBg, rgba(219, 180, 138, 0.16));
+    --sp-btn-text: var(--spBtnText, rgba(232, 217, 199, 0.96));
+    --sp-btn-border: var(--spBtnBorder, rgba(219, 180, 138, 0.36));
+
+    --sp-input-bg: var(--spInputBg, #ffffff);
+    --sp-input-text: var(--spInputText, #1f1f1f);
+    --sp-input-border: var(--spInputBorder, rgba(0, 0, 0, 0.12));
+    --sp-input-placeholder: var(--spInputPlaceholder, rgba(0, 0, 0, 0.36));
+
+    --sp-radius-xs: var(--spRadiusXs, 6px);
+    --sp-radius-sm: var(--spRadiusSm, 10px);
+    --sp-radius-md: var(--spRadiusMd, 14px);
+    --sp-radius-lg: var(--spRadiusLg, 18px);
+
+    --sp-shadow-sm: var(--spShadowSm, 0 2px 8px rgba(0, 0, 0, 0.25));
+    --sp-shadow-md: var(--spShadowMd, 0 6px 16px rgba(0, 0, 0, 0.32));
+    --sp-shadow-lg: var(--spShadowLg, 0 12px 28px rgba(0, 0, 0, 0.4));
+
+    --sp-font-size-xs: var(--spFontSizeXs, 10px);
+    --sp-font-size-sm: var(--spFontSizeSm, 12px);
+    --sp-font-size-md: var(--spFontSizeMd, 13px);
+    --sp-font-size-lg: var(--spFontSizeLg, 16px);
+    --sp-font-weight-regular: var(--spFontWeightRegular, 400);
+    --sp-font-weight-medium: var(--spFontWeightMedium, 600);
+    --sp-line-height-tight: var(--spLineHeightTight, 1.35);
+    --sp-line-height-normal: var(--spLineHeightNormal, 1.55);
+
+    --sp-gap-xs: var(--spGapXs, 4px);
+    --sp-gap-sm: var(--spGapSm, 8px);
+    --sp-gap-md: var(--spGapMd, 12px);
+    --sp-gap-lg: var(--spGapLg, 16px);
+    --sp-gap-xl: var(--spGapXl, 20px);
+
+    --sp-color-success: var(--spColorSuccess, #8fe85f);
+    --sp-color-warning: var(--spColorWarning, #f5c441);
+    --sp-color-danger: var(--spColorDanger, #ff7272);
+    --sp-color-info: var(--spColorInfo, #79b7ff);
+
+    --sp-scrollbar-thumb: var(--spScrollbarThumb, rgba(219, 180, 138, 0.58));
+    --sp-scrollbar-track: var(--spScrollbarTrack, rgba(255, 255, 255, 0.08));
+    --sp-duration-fast: var(--spDurationFast, 0.15s);
+    --sp-duration-normal: var(--spDurationNormal, 0.25s);
+    --sp-ease-standard: var(--spEaseStandard, cubic-bezier(0.22, 0.61, 0.36, 1));
+
+    --_sp-avatar-radius: var(--sp-opt-avatar-radius, 999px);
+    --_sp-nav-title-size: var(--sp-typo-nav-title-size, var(--sp-font-size-lg));
+    --_sp-nav-title-weight: var(--sp-typo-nav-title-weight, var(--sp-font-weight-medium));
+    --_sp-conversation-title-size: var(--sp-typo-conversation-title-size, var(--sp-font-size-md));
+    --_sp-conversation-title-weight: var(--sp-typo-conversation-title-weight, var(--sp-font-weight-medium));
+    --_sp-conversation-preview-size: var(--sp-typo-conversation-preview-size, var(--sp-font-size-sm));
+    --_sp-conversation-meta-size: var(--sp-typo-conversation-meta-size, var(--sp-font-size-xs));
+    --_sp-message-size: var(--sp-typo-message-size, var(--sp-font-size-md));
+    --_sp-message-line-height: var(--sp-typo-message-line-height, var(--sp-line-height-normal));
+    --_sp-message-meta-size: var(--sp-typo-message-meta-size, var(--sp-font-size-xs));
+    --_sp-compose-status-size: var(--sp-typo-compose-status-size, var(--sp-font-size-xs));
+    --_sp-post-title-size: var(--sp-typo-post-title-size, var(--sp-font-size-lg));
+    --_sp-post-title-weight: var(--sp-typo-post-title-weight, var(--sp-font-weight-medium));
+    --_sp-post-meta-size: var(--sp-typo-post-meta-size, var(--sp-font-size-xs));
+    --_sp-post-body-size: var(--sp-typo-post-body-size, var(--sp-font-size-md));
+    --_sp-post-body-line-height: var(--sp-typo-post-body-line-height, var(--sp-line-height-normal));
+    --_sp-comment-size: var(--sp-typo-comment-size, var(--sp-font-size-md));
+    --_sp-motion-fast: var(--sp-motion-fast-duration, var(--sp-duration-fast));
+    --_sp-motion-normal: var(--sp-motion-normal-duration, var(--sp-duration-normal));
+    --_sp-motion-hover-lift-y: var(--sp-motion-hover-lift-y, -1px);
+
+    background: var(--sp-page-bg);
+    color: var(--sp-sub-text);
+}
+
+.phone-special-app.phone-special-template-scope[data-style-density="compact"] {
+    --sp-gap-xs: 2px;
+    --sp-gap-sm: 6px;
+    --sp-gap-md: 10px;
+    --sp-gap-lg: 12px;
+}
+
+.phone-special-app.phone-special-template-scope[data-style-density="loose"] {
+    --sp-gap-xs: 6px;
+    --sp-gap-sm: 10px;
+    --sp-gap-md: 14px;
+    --sp-gap-lg: 20px;
+}
+
+.phone-special-app.phone-special-template-scope .phone-nav-bar {
+    background: var(--sp-nav-bg);
+    border-bottom: 1px solid var(--sp-nav-border);
+    color: var(--sp-nav-title);
+    box-shadow: var(--sp-shadow-sm);
+}
+
+.phone-special-app.phone-special-template-scope .phone-nav-title {
+    color: var(--sp-nav-title);
+    font-size: var(--_sp-nav-title-size);
+    font-weight: var(--_sp-nav-title-weight);
+}
+
+.phone-special-app.phone-special-template-scope .phone-nav-back {
+    color: var(--sp-nav-back-text);
+}
+
+.phone-special-app.phone-special-template-scope .phone-app-body.phone-table-body {
+    background: var(--sp-body-bg);
+    color: var(--sp-sub-text);
+    overflow-anchor: none;
+}
+
+.phone-special-app.phone-special-template-scope .phone-empty-msg {
+    color: var(--sp-meta-text);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-gap-sm);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-item {
+    width: 100%;
+    border: 1px solid var(--sp-surface-border);
+    background: var(--sp-surface-bg);
+    color: var(--sp-sub-text);
+    border-radius: var(--sp-radius-md);
+    padding: var(--sp-gap-sm) var(--sp-gap-md);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--_sp-motion-fast) var(--sp-ease-standard), background var(--_sp-motion-fast) var(--sp-ease-standard), transform var(--_sp-motion-fast) var(--sp-ease-standard);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-item:hover {
+    border-color: var(--sp-card-border);
+    background: var(--sp-list-item-hover-bg);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-item:active {
+    transform: translateY(1px);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-conversation-avatar,
+.phone-special-app.phone-special-template-scope .phone-special-name-avatar {
+    border-radius: var(--_sp-avatar-radius);
+}
+
+/* 消息记录表 */
+.phone-special-message.phone-special-template-scope .phone-special-conversation-list {
+    background: var(--sp-list-bg);
+    border-radius: var(--sp-radius-sm);
+    border: 1px solid var(--sp-list-divider);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-conversation-item {
+    background: var(--sp-list-item-bg);
+    border-bottom: 1px solid var(--sp-list-divider);
+    transition: background var(--_sp-motion-fast) var(--sp-ease-standard), transform var(--_sp-motion-fast) var(--sp-ease-standard);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-conversation-item:hover {
+    background: var(--sp-list-item-hover-bg);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-conversation-name {
+    color: var(--sp-sub-text);
+    font-size: var(--_sp-conversation-title-size);
+    font-weight: var(--_sp-conversation-title-weight);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-conversation-subtitle {
+    color: var(--sp-meta-text);
+    font-size: var(--_sp-conversation-preview-size);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-conversation-last,
+.phone-special-message.phone-special-template-scope .phone-special-conversation-meta {
+    color: var(--sp-meta-text);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-conversation-last {
+    font-size: var(--_sp-conversation-preview-size);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-conversation-meta {
+    font-size: var(--_sp-conversation-meta-size);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-message-list {
+    gap: var(--sp-gap-md);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-message-bubble {
+    background: var(--sp-bubble-left-bg);
+    color: var(--sp-bubble-left-text);
+    border: 1px solid var(--sp-card-border);
+    border-radius: var(--sp-radius-md);
+    font-size: var(--_sp-message-size);
+    line-height: var(--_sp-message-line-height);
+    box-shadow: var(--sp-shadow-sm);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-message-item.self .phone-special-message-bubble {
+    background: var(--sp-bubble-right-bg);
+    color: var(--sp-bubble-right-text);
+    border-color: transparent;
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-message-time {
+    color: var(--sp-message-time-text);
+    font-size: var(--_sp-message-meta-size);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-message-status,
+.phone-special-message.phone-special-template-scope .phone-special-message-compose-status {
+    font-size: var(--_sp-compose-status-size);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-detail-subtitle {
+    padding: var(--sp-gap-sm) var(--sp-gap-md) 0;
+    color: var(--sp-meta-text);
+    font-size: var(--_sp-conversation-preview-size);
+}
+
+.phone-special-message.phone-special-template-scope .phone-special-media-item {
+    background: var(--sp-media-bg);
+    color: var(--sp-media-text);
+    border: 1px dashed var(--sp-btn-border);
+    border-radius: var(--sp-radius-sm);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-reply-option-item:hover {
+    transform: translateY(var(--_sp-motion-hover-lift-y));
+}
+
+/* 动态表 / 论坛表 */
+.phone-special-app.phone-special-template-scope .phone-special-moment-item {
+    background: var(--sp-card-bg);
+    border: 1px solid var(--sp-card-border);
+    border-radius: var(--sp-radius-md);
+    box-shadow: var(--sp-shadow-md);
+    transition: border-color var(--_sp-motion-fast) var(--sp-ease-standard), box-shadow var(--_sp-motion-fast) var(--sp-ease-standard), transform var(--_sp-motion-fast) var(--sp-ease-standard);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-moment-item:hover {
+    transform: translateY(var(--_sp-motion-hover-lift-y));
+}
+
+.phone-special-app.phone-special-template-scope[data-style-card-style="outlined"] .phone-special-moment-item {
+    background: transparent;
+    box-shadow: none;
+}
+
+.phone-special-app.phone-special-template-scope[data-style-card-style="plain"] .phone-special-moment-item {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-moment-header,
+.phone-special-app.phone-special-template-scope .phone-special-moment-meta.forum,
+.phone-special-app.phone-special-template-scope .phone-special-moment-stats {
+    border-color: var(--sp-list-divider);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-moment-name,
+.phone-special-app.phone-special-template-scope .phone-special-moment-title {
+    color: var(--sp-sub-text);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-moment-title {
+    font-size: var(--_sp-post-title-size);
+    font-weight: var(--_sp-post-title-weight);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-moment-title.forum {
+    color: var(--sp-nav-title);
+    font-size: var(--_sp-post-title-size);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-moment-time,
+.phone-special-app.phone-special-template-scope .phone-special-moment-meta,
+.phone-special-app.phone-special-template-scope .phone-special-moment-stats,
+.phone-special-app.phone-special-template-scope .phone-special-post-meta,
+.phone-special-app.phone-special-template-scope .phone-special-comments-count {
+    color: var(--sp-meta-text);
+    font-size: var(--_sp-post-meta-size);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-moment-content,
+.phone-special-app.phone-special-template-scope .phone-special-comment {
+    color: var(--sp-content-text);
+    font-size: var(--_sp-post-body-size);
+    line-height: var(--_sp-post-body-line-height);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-comment {
+    font-size: var(--_sp-comment-size);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-post-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-gap-xs);
+    margin-top: var(--sp-gap-xs);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-post-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-comments-head {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: var(--sp-gap-xs);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-comment-author {
+    color: var(--sp-color-info);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-comments-section {
+    background: var(--sp-card-bg);
+}
+
+/* 专属详情页 */
+.phone-special-app.phone-special-template-scope .phone-special-detail-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-gap-md);
+    border-radius: var(--sp-radius-md);
+    border: 1px solid var(--sp-surface-border);
+    background: var(--sp-surface-bg);
+    padding: var(--sp-gap-md);
+    box-shadow: var(--sp-surface-shadow);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-detail-title {
+    font-size: var(--sp-font-size-lg);
+    font-weight: var(--sp-font-weight-medium);
+    color: var(--sp-nav-title);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-detail-meta {
+    font-size: var(--sp-font-size-xs);
+    color: var(--sp-meta-text);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-kv-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-gap-sm);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-kv-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-gap-xs);
+    padding: var(--sp-gap-sm) var(--sp-gap-md);
+    border-radius: var(--sp-radius-sm);
+    background: var(--sp-surface-bg);
+    border: 1px solid var(--sp-surface-border);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-kv-key {
+    font-size: var(--sp-font-size-sm);
+    font-weight: var(--sp-font-weight-medium);
+    color: var(--sp-meta-text);
+}
+
+.phone-special-app.phone-special-template-scope .phone-special-kv-value {
+    font-size: var(--sp-font-size-md);
+    color: var(--sp-sub-text);
+    line-height: var(--sp-line-height-normal);
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+

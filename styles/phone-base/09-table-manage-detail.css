@@ -1,0 +1,313 @@
+/* ========== Table Viewer ========== */
+.phone-table-detail-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.phone-table-manage-actions {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.phone-table-lock-manage-btn.active {
+    background: var(--yuzi-phone-bg-danger-tint, rgba(239, 83, 80, 0.15));
+    border-color: var(--yuzi-phone-border-danger-strong, rgba(239, 83, 80, 0.3));
+    color: var(--yuzi-phone-color-danger-contrast, rgba(255, 130, 130, 0.95));
+}
+
+.phone-table-delete-manage-btn {
+    background: var(--yuzi-phone-bg-danger-tint, rgba(239, 83, 80, 0.12));
+    border-color: var(--yuzi-phone-border-danger, rgba(239, 83, 80, 0.24));
+    color: var(--yuzi-phone-color-danger-contrast, rgba(255, 168, 168, 0.95));
+}
+
+.phone-table-delete-manage-btn.active {
+    background: var(--yuzi-phone-bg-danger-tint-strong, rgba(239, 83, 80, 0.2));
+    border-color: var(--yuzi-phone-border-danger-strong, rgba(239, 83, 80, 0.42));
+    color: var(--yuzi-phone-color-danger-contrast, #ffd8d8);
+}
+
+.phone-nav-list-item.is-row-locked .phone-nav-list-main {
+    color: var(--yuzi-phone-color-text-tertiary, rgba(255, 255, 255, 0.72));
+}
+
+.phone-row-lock-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    padding: 2px 8px;
+    border-radius: var(--yuzi-phone-radius-pill, 999px);
+    border: 1px solid var(--yuzi-phone-border-accent, rgba(255, 255, 255, 0.2));
+    color: var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.85));
+    font-size: 11px;
+    line-height: 1.5;
+    cursor: pointer;
+    user-select: none;
+}
+
+.phone-row-lock-chip.locked {
+    border-color: var(--yuzi-phone-border-danger-strong, rgba(239, 83, 80, 0.55));
+    color: var(--yuzi-phone-color-danger-contrast, rgba(255, 150, 150, 0.95));
+    background: var(--yuzi-phone-bg-danger-tint, rgba(239, 83, 80, 0.15));
+}
+
+.phone-row-delete-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    padding: 2px 8px;
+    border-radius: var(--yuzi-phone-radius-pill, 999px);
+    border: 1px solid var(--yuzi-phone-border-danger, rgba(239, 83, 80, 0.45));
+    color: var(--yuzi-phone-color-danger-contrast, rgba(255, 170, 170, 0.95));
+    background: var(--yuzi-phone-bg-danger-tint, rgba(239, 83, 80, 0.14));
+    font-size: 11px;
+    line-height: 1.5;
+    cursor: pointer;
+    user-select: none;
+}
+
+.phone-row-delete-chip.pending {
+    opacity: 0.8;
+}
+
+.phone-row-delete-chip.locked {
+    border-color: var(--yuzi-phone-border-accent, rgba(255, 255, 255, 0.2));
+    color: var(--yuzi-phone-color-text-muted, rgba(255, 255, 255, 0.65));
+    background: var(--yuzi-phone-bg-surface-hover, rgba(255, 255, 255, 0.08));
+}
+
+.phone-row-delete-chip.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.phone-row-detail-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: var(--textColor, var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.88)));
+}
+
+.phone-row-detail-kv {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    border-radius: var(--yuzi-phone-radius-lg, 10px);
+    background: var(--tableBackgroundColor, var(--yuzi-phone-bg-surface, rgba(255, 255, 255, 0.03)));
+    border: 1px solid var(--borderColor, var(--yuzi-phone-border-subtle, rgba(255, 255, 255, 0.08)));
+    box-shadow: var(--boxShadow, none);
+    backdrop-filter: var(--backdropFilter, none);
+    -webkit-backdrop-filter: var(--backdropFilter, none);
+}
+
+.phone-row-detail-kv.is-locked {
+    border-color: var(--yuzi-phone-border-danger-strong, rgba(239, 83, 80, 0.35));
+    background: var(--yuzi-phone-bg-danger-soft, rgba(239, 83, 80, 0.06));
+}
+
+.phone-row-detail-key {
+    font-size: 11px;
+    color: var(--textColor, var(--yuzi-phone-color-accent-secondary, rgba(100, 180, 255, 0.78)));
+}
+
+.phone-row-detail-value {
+    font-size: 13px;
+    color: var(--textColor, var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.88)));
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.phone-row-detail-input {
+    width: 100%;
+    min-height: 52px;
+    resize: vertical;
+    box-sizing: border-box;
+    border-radius: var(--borderRadius, var(--yuzi-phone-radius-md, 8px));
+    border: 1px solid var(--borderColor, var(--yuzi-phone-border-strong, rgba(255, 255, 255, 0.14)));
+    background: var(--tableBackgroundColor, var(--yuzi-phone-bg-overlay-soft, rgba(0, 0, 0, 0.16)));
+    color: var(--textColor, var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.9)));
+    font-size: 12px;
+    line-height: 1.45;
+    padding: 8px;
+    box-shadow: var(--boxShadow, none);
+    backdrop-filter: var(--backdropFilter, none);
+    -webkit-backdrop-filter: var(--backdropFilter, none);
+}
+
+.phone-row-detail-input:disabled {
+    opacity: 0.55;
+}
+
+.phone-row-detail-tools {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 2px;
+}
+
+.phone-table-detail-lock-hint {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    color: var(--yuzi-phone-color-text-soft, rgba(255, 255, 255, 0.48));
+}
+
+.phone-cell-lock-btn {
+    border: 1px solid var(--yuzi-phone-border-strong, rgba(255, 255, 255, 0.15));
+    background: var(--yuzi-phone-bg-input, rgba(255, 255, 255, 0.06));
+    color: var(--yuzi-phone-color-text-tertiary, rgba(255, 255, 255, 0.8));
+    border-radius: var(--yuzi-phone-radius-md, 8px);
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.phone-cell-lock-btn.locked {
+    border-color: var(--yuzi-phone-border-danger-strong, rgba(239, 83, 80, 0.55));
+    color: var(--yuzi-phone-color-danger-soft, rgba(239, 83, 80, 0.95));
+    background: var(--yuzi-phone-bg-danger-tint, rgba(239, 83, 80, 0.12));
+}
+
+.phone-inline-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 64px;
+    transform: translate(-50%, 10px);
+    opacity: 0;
+    padding: 8px 12px;
+    border-radius: var(--yuzi-phone-radius-lg, 10px);
+    font-size: 12px;
+    color: var(--yuzi-phone-color-text-primary, #fff);
+    background: var(--yuzi-phone-bg-inline-toast, rgba(0, 0, 0, 0.62));
+    transition: all 0.18s ease;
+    pointer-events: none;
+    z-index: 100;
+    box-shadow: var(--yuzi-phone-shadow-soft, 0 8px 18px rgba(0, 0, 0, 0.18));
+}
+
+.phone-inline-toast.is-success {
+    background: var(--yuzi-phone-bg-dialog, rgba(34, 34, 34, 0.78));
+}
+
+.phone-inline-toast.is-error {
+    background: var(--yuzi-phone-color-danger-soft, rgba(239, 83, 80, 0.9));
+}
+
+.phone-inline-toast.show {
+    transform: translate(-50%, 0);
+    opacity: 1;
+}
+
+.phone-table-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--yuzi-phone-table-body-gap, 12px);
+    padding-bottom: var(--yuzi-phone-table-body-padding-bottom, 20px);
+}
+
+.phone-table-card {
+    background: var(--yuzi-phone-bg-surface, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--yuzi-phone-border-subtle, rgba(255, 255, 255, 0.08));
+    border-radius: var(--yuzi-phone-radius-xl, 12px);
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+.phone-table-card:hover {
+    border-color: var(--yuzi-phone-border-accent, rgba(100, 180, 255, 0.2));
+}
+
+.phone-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--yuzi-phone-bg-surface, rgba(255, 255, 255, 0.03));
+    border-bottom: 1px solid var(--yuzi-phone-border-soft, rgba(255, 255, 255, 0.06));
+}
+.phone-card-title {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.9));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: var(--yuzi-phone-card-title-max-width, 76%);
+}
+.phone-card-index {
+    font-size: 10px;
+    color: var(--yuzi-phone-color-text-dim, rgba(255, 255, 255, 0.3));
+    font-family: monospace;
+}
+
+.phone-card-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0 16px 14px;
+}
+
+.phone-card-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 12px 16px;
+    border-top: 1px solid var(--yuzi-phone-border-subtle, rgba(255, 255, 255, 0.08));
+    background: var(--yuzi-phone-bg-surface-strong, rgba(30, 30, 30, 0.4));
+}
+
+.phone-card-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 12px;
+    font-size: 14px;
+    line-height: 1.4;
+    border-bottom: 1px solid var(--yuzi-phone-border-soft, rgba(255, 255, 255, 0.04));
+}
+.phone-card-field:last-child { border-bottom: none; }
+
+.phone-field-name {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--yuzi-phone-color-accent-secondary, rgba(100, 180, 255, 0.7));
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.phone-field-value {
+    font-size: 12px;
+    color: var(--yuzi-phone-color-text-tertiary, rgba(255, 255, 255, 0.75));
+    line-height: 1.4;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.phone-card-expand-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: var(--yuzi-phone-card-expand-btn-padding, 8px);
+    font-size: 11px;
+    color: var(--yuzi-phone-color-accent-secondary, rgba(100, 180, 255, 0.6));
+    cursor: pointer;
+    transition: color 0.15s;
+    border-top: 1px solid var(--yuzi-phone-border-soft, rgba(255, 255, 255, 0.04));
+}
+.phone-card-expand-btn:hover {
+    color: var(--yuzi-phone-color-accent-secondary, rgba(100, 180, 255, 0.9));
+}
+.phone-card-expand-btn svg {
+    transition: transform 0.3s;
+}
+

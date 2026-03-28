@@ -1,0 +1,35 @@
+/* ========================================
+   玉子的手机 — Phone Base Modern Aggregator
+   作用：只聚合 `styles/phone-base/` 下的现代基础层。
+   顶层入口 [`style.css`](style.css:1) 负责 shell / nav / special / generic 的总装配，
+   本文件不再承担 legacy CSS 的默认加载职责。
+
+   Active modern layers
+   - foundation: [`styles/phone-base/00-phone-tokens.css`](styles/phone-base/00-phone-tokens.css:1), [`styles/phone-base/01-shell-system.css`](styles/phone-base/01-shell-system.css:1)
+   - page shell: [`styles/phone-base/02-page-home.css`](styles/phone-base/02-page-home.css:1), [`styles/phone-base/05-update-fusion-feedback.css`](styles/phone-base/05-update-fusion-feedback.css:1)
+   - layout / settings / table: [`styles/phone-base/06-layout-nav-core.css`](styles/phone-base/06-layout-nav-core.css:1), [`styles/phone-base/07-settings-modern.css`](styles/phone-base/07-settings-modern.css:1), [`styles/phone-base/09-table-manage-detail.css`](styles/phone-base/09-table-manage-detail.css:1)
+   - patches / dialogs: [`styles/phone-base/10-scroll-generic-patches.css`](styles/phone-base/10-scroll-generic-patches.css:1), [`styles/phone-base/11-api-dialog-worldbook.css`](styles/phone-base/11-api-dialog-worldbook.css:1)
+
+   Legacy archive
+   - [`styles/phone-base/03-table-legacy.css`](styles/phone-base/03-table-legacy.css:1)
+   - [`styles/phone-base/04-settings-legacy.css`](styles/phone-base/04-settings-legacy.css:1)
+   以上文件已停止默认加载，仅保留历史参考 / 回滚比对用途；若后续需要迁移到独立归档目录，应先保持入口契约不变。
+   ======================================== */
+
+/* foundation tokens / shell system */
+@import url('./phone-base/00-phone-tokens.css');
+@import url('./phone-base/01-shell-system.css');
+
+/* home shell / fusion feedback */
+@import url('./phone-base/02-page-home.css');
+@import url('./phone-base/05-update-fusion-feedback.css');
+
+/* layout / settings / table modern layers */
+@import url('./phone-base/06-layout-nav-core.css');
+@import url('./phone-base/07-settings-modern.css');
+@import url('./phone-base/08-image-crop.css');
+@import url('./phone-base/09-table-manage-detail.css');
+
+/* patches / dialog helpers */
+@import url('./phone-base/10-scroll-generic-patches.css');
+@import url('./phone-base/11-api-dialog-worldbook.css');
