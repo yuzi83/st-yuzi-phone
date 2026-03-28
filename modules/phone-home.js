@@ -56,6 +56,9 @@ export function renderHomeScreen(container) {
             const app = document.createElement('div');
             app.className = 'phone-app-item';
             app.dataset.sheetKey = item.key;
+            if (item.route) {
+                app.dataset.route = item.route;
+            }
             app.style.animationDelay = item.animationDelay;
             app.innerHTML = buildHomeAppItemHtml(item.iconHtml, item.name);
 
