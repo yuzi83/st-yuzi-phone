@@ -46,6 +46,17 @@ function flattenObjectItems(obj, parentPath, items) {
         const fullPath = `${parentPath}.${key}`;
 
         if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+            if (Object.keys(value).length === 0) {
+                items.push({
+                    path: fullPath,
+                    key,
+                    value,
+                    valueType: 'object',
+                    parentPath,
+                });
+                continue;
+            }
+
             flattenObjectItems(value, fullPath, items);
         } else {
             items.push({
