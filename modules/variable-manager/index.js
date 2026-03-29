@@ -11,6 +11,8 @@ import { navigateBack } from '../phone-core/routing.js';
 
 /** 当前页面状态 */
 let currentMessageId = -1;
+/** 底部操作栏高度同步清理函数 */
+let bottomBarSyncCleanup = null;
 
 /**
  * 渲染变量管理器页面
@@ -25,6 +27,12 @@ export function renderVariableManager(container) {
 
     // 渲染页面骨架
     container.innerHTML = buildVariableManagerPageHtml(currentMessageId, isMvu);
+
+    if (typeof bottomBarSyncCleanup === 'function') {
+        bottomBarSyncCleanup();
+        bottomBarSyncCleanup = null;
+    }
+    bottomBarSyncCleanup = bindBottomBarInsetSync(container);
 
     // 加载变量数据并渲染
     renderVariableContent(container);
@@ -59,6 +67,50 @@ function renderVariableContent(container) {
 
     const groups = flattenToGroups(data);
     contentEl.innerHTML = renderGroupsHtml(groups);
+}
+
+function bindBottomBarInsetSync(container) {
+    const syncInFrame = () => requestAnimationFrame(() => syncBottomBarInset(container));
+    const bars = [
+        container.querySelector('.vm-footer'),
+        container.querySelector('.vm-delete-bar'),
+    ].filter((el) => el instanceof HTMLElement);
+
+    syncInFrame();
+
+    let resizeObserver = null;
+    if (typeof ResizeObserver === 'function') {
+        resizeObserver = new ResizeObserver(() => syncInFrame());
+        bars.forEach((bar) => resizeObserver.observe(bar));
+    }
+
+    window.addEventListener('resize', syncInFrame);
+
+    return () => {
+        resizeObserver?.disconnect();
+        window.removeEventListener('resize', syncInFrame);
+    };
+}
+
+function syncBottomBarInset(container) {
+    const page = container.querySelector('.vm-page');
+    if (!(page instanceof HTMLElement)) return;
+
+    const bars = [
+        container.querySelector('.vm-footer'),
+        container.querySelector('.vm-delete-bar'),
+    ];
+
+    const bottomBarHeight = bars.reduce((maxHeight, bar) => {
+        if (!(bar instanceof HTMLElement)) return maxHeight;
+        const rectHeight = Math.ceil(bar.getBoundingClientRect().height || 0);
+        const nextHeight = rectHeight || bar.offsetHeight || 0;
+        return Math.max(maxHeight, nextHeight);
+    }, 0);
+
+    if (bottomBarHeight > 0) {
+        page.style.setProperty('--vm-bottom-bar-height', `${bottomBarHeight}px`);
+    }
 }
 
 /**
