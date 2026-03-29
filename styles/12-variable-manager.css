@@ -4,6 +4,8 @@
    ======================================== */
 
 .vm-page {
+    --vm-bottom-bar-height: calc(72px + env(safe-area-inset-bottom, 0px));
+    --vm-bottom-gap: 18px;
     position: relative;
     display: flex;
     flex-direction: column;
@@ -110,7 +112,9 @@
 .vm-body.phone-app-body {
     background: transparent;
     color: #1f2937;
-    padding: 12px 12px 92px;
+    padding: 12px 12px calc(var(--vm-bottom-bar-height) + var(--vm-bottom-gap));
+    scroll-padding-bottom: calc(var(--vm-bottom-bar-height) + var(--vm-bottom-gap));
+    box-sizing: border-box;
 }
 
 .vm-content {
@@ -735,7 +739,7 @@
 .vm-toast {
     position: absolute;
     left: 50%;
-    bottom: 86px;
+    bottom: calc(var(--vm-bottom-bar-height) + 14px);
     transform: translateX(-50%) translateY(10px);
     display: inline-flex;
     align-items: center;
