@@ -5,7 +5,7 @@
 
 .vm-page {
     --vm-bottom-bar-height: calc(72px + env(safe-area-inset-bottom, 0px));
-    --vm-bottom-gap: 18px;
+    --vm-bottom-gap: 40px;
     position: relative;
     display: flex;
     flex-direction: column;
@@ -112,8 +112,8 @@
 .vm-body.phone-app-body {
     background: transparent;
     color: #1f2937;
-    padding: 12px 12px calc(var(--vm-bottom-bar-height) + var(--vm-bottom-gap));
-    scroll-padding-bottom: calc(var(--vm-bottom-bar-height) + var(--vm-bottom-gap));
+    padding: 12px 12px calc(var(--vm-bottom-bar-height) + var(--vm-bottom-gap) + 72px);
+    scroll-padding-bottom: calc(var(--vm-bottom-bar-height) + var(--vm-bottom-gap) + 72px);
     box-sizing: border-box;
 }
 
@@ -121,6 +121,15 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+}
+
+.vm-content::after {
+    content: '';
+    display: block;
+    width: 100%;
+    height: calc(var(--vm-bottom-bar-height) + 120px);
+    flex: 0 0 auto;
+    pointer-events: none;
 }
 
 .vm-empty-state {
