@@ -3,10 +3,278 @@ import {
     DEFAULT_API_TIMEOUT,
     callApiWithTimeout,
     getDB,
+    sleep,
 } from '../db-bridge.js';
 import { enqueueTableMutation } from './mutation-queue.js';
 
 const logger = Logger.withScope({ scope: 'phone-core/data-api/table-repository', feature: 'db-api' });
+
+function summarizeTablePayload(data = {}) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        return {};
+    }
+
+    return Object.fromEntries(
+        Object.entries(data)
+            .slice(0, 6)
+            .map(([key, value]) => {
+                const text = String(value ?? '');
+                return [String(key), text.length > 120 ? `${text.slice(0, 120)}…` : text];
+            })
+    );
+}
+
+function getTableSnapshotSummary(rawData, tableName) {
+    const safeTableName = String(tableName || '').trim();
+    if (!safeTableName || !rawData || typeof rawData !== 'object') {
+        return {
+            found: false,
+            sheetKey: '',
+            rowCount: null,
+            contentLength: null,
+        };
+    }
+
+    const matchedEntry = Object.entries(rawData).find(([, sheet]) => String(sheet?.name || '').trim() === safeTableName);
+    if (!matchedEntry) {
+        return {
+            found: false,
+            sheetKey: '',
+            rowCount: null,
+            contentLength: null,
+        };
+    }
+
+    const [sheetKey, sheet] = matchedEntry;
+    const content = Array.isArray(sheet?.content) ? sheet.content : null;
+    return {
+        found: true,
+        sheetKey,
+        rowCount: content ? Math.max(0, content.length - 1) : null,
+        contentLength: content ? content.length : null,
+    };
+}
+
+function readTableSnapshotSummaryFromApi(api, tableName, action = 'table-data.snapshot-read') {
+    if (!api || typeof api.exportTableAsJson !== 'function') {
+        return null;
+    }
+
+    try {
+        return getTableSnapshotSummary(api.exportTableAsJson(), tableName);
+    } catch (snapshotError) {
+        logger.warn({
+            action,
+            message: '读取表格快照失败',
+            context: { tableName },
+            error: snapshotError,
+        });
+        return null;
+    }
+}
+
+async function verifyInsertedRowBySnapshot(api, tableName, beforeSnapshotSummary, initialSnapshotSummary = null) {
+    const beforeRowCount = Number.isInteger(beforeSnapshotSummary?.rowCount)
+        ? beforeSnapshotSummary.rowCount
+        : null;
+    let snapshotSummary = initialSnapshotSummary;
+
+    if (beforeRowCount === null) {
+        return {
+            snapshotVerifiedInsert: false,
+            snapshotSummary,
+        };
+    }
+
+    const hasRowGrowth = (summary) => Number.isInteger(summary?.rowCount) && summary.rowCount > beforeRowCount;
+    if (hasRowGrowth(snapshotSummary)) {
+        return {
+            snapshotVerifiedInsert: true,
+            snapshotSummary,
+        };
+    }
+
+    for (const waitMs of [120, 320, 680]) {
+        await sleep(waitMs);
+        snapshotSummary = readTableSnapshotSummaryFromApi(api, tableName, 'insert-row.snapshot-retry-error');
+
+        if (hasRowGrowth(snapshotSummary)) {
+            return {
+                snapshotVerifiedInsert: true,
+                snapshotSummary,
+            };
+        }
+    }
+
+    return {
+        snapshotVerifiedInsert: false,
+        snapshotSummary,
+    };
+}
+
+async function persistInsertedTableSnapshot(api, tableName) {
+    if (!api || typeof api.exportTableAsJson !== 'function' || typeof api.importTableAsJson !== 'function') {
+        return {
+            persisted: false,
+            refreshed: false,
+            snapshotSummary: readTableSnapshotSummaryFromApi(api, tableName, 'insert-row.snapshot-persist-read-error'),
+        };
+    }
+
+    let rawData = null;
+    try {
+        rawData = api.exportTableAsJson();
+    } catch (error) {
+        logger.warn({
+            action: 'insert-row.persist-export-error',
+            message: '插入后导出完整快照失败',
+            context: { tableName },
+            error,
+        });
+        return {
+            persisted: false,
+            refreshed: false,
+            snapshotSummary: null,
+        };
+    }
+
+    let persisted = false;
+    try {
+        const jsonString = JSON.stringify(rawData);
+        const persistResult = await callApiWithTimeout(
+            () => api.importTableAsJson(jsonString),
+            DEFAULT_API_TIMEOUT,
+            'insertTableRow.persistSnapshot',
+        );
+        persisted = persistResult === true || persistResult === 'true' || persistResult !== null;
+    } catch (error) {
+        logger.warn({
+            action: 'insert-row.persist-import-error',
+            message: '插入后回写完整快照失败',
+            context: { tableName },
+            error,
+        });
+    }
+
+    let refreshed = false;
+    if (persisted && typeof api.refreshDataAndWorldbook === 'function') {
+        refreshed = !!(await callApiWithTimeout(
+            () => api.refreshDataAndWorldbook(),
+            12000,
+            'insertTableRow.refreshProjection',
+        ));
+    }
+
+    const snapshotSummary = readTableSnapshotSummaryFromApi(api, tableName, 'insert-row.snapshot-persist-read-error');
+
+    return {
+        persisted,
+        refreshed,
+        snapshotSummary,
+    };
+}
+
+function cloneRawTableData(rawData) {
+    if (!rawData || typeof rawData !== 'object') return null;
+
+    try {
+        return JSON.parse(JSON.stringify(rawData));
+    } catch (error) {
+        logger.warn({
+            action: 'table-data.clone',
+            message: '表格快照深拷贝失败',
+            error,
+        });
+        return null;
+    }
+}
+
+function findSheetEntryByTableName(rawData, tableName) {
+    const safeTableName = String(tableName || '').trim();
+    if (!safeTableName || !rawData || typeof rawData !== 'object') {
+        return null;
+    }
+
+    return Object.entries(rawData).find(([, sheet]) => String(sheet?.name || '').trim() === safeTableName) || null;
+}
+
+async function fallbackPersistUpdatedRow(api, tableName, rowIndex, data) {
+    if (!api || typeof api.exportTableAsJson !== 'function' || typeof api.importTableAsJson !== 'function') {
+        return {
+            persisted: false,
+            refreshed: false,
+            snapshotSummary: readTableSnapshotSummaryFromApi(api, tableName, 'update-row.fallback-read-error'),
+            fallbackUsed: false,
+        };
+    }
+
+    const rawData = cloneRawTableData(api.exportTableAsJson());
+    const matchedEntry = findSheetEntryByTableName(rawData, tableName);
+    if (!matchedEntry) {
+        logger.warn({
+            action: 'update-row.fallback-sheet-missing',
+            message: 'updateRow fallback 未找到目标表',
+            context: { tableName, rowIndex },
+        });
+        return {
+            persisted: false,
+            refreshed: false,
+            snapshotSummary: readTableSnapshotSummaryFromApi(api, tableName, 'update-row.fallback-read-error'),
+            fallbackUsed: false,
+        };
+    }
+
+    const [, sheet] = matchedEntry;
+    const content = Array.isArray(sheet?.content) ? sheet.content : null;
+    const headerRow = Array.isArray(content?.[0]) ? content[0] : [];
+    const targetRow = Array.isArray(content?.[rowIndex]) ? [...content[rowIndex]] : null;
+    if (!content || !targetRow) {
+        logger.warn({
+            action: 'update-row.fallback-row-missing',
+            message: 'updateRow fallback 未找到目标行',
+            context: { tableName, rowIndex },
+        });
+        return {
+            persisted: false,
+            refreshed: false,
+            snapshotSummary: readTableSnapshotSummaryFromApi(api, tableName, 'update-row.fallback-read-error'),
+            fallbackUsed: false,
+        };
+    }
+
+    Object.entries(data && typeof data === 'object' && !Array.isArray(data) ? data : {}).forEach(([key, value]) => {
+        const colIndex = headerRow.findIndex((header) => String(header || '').trim() === String(key || '').trim());
+        if (colIndex < 0) return;
+        targetRow[colIndex] = value === undefined || value === null ? '' : value;
+    });
+    content[rowIndex] = targetRow;
+
+    const jsonString = JSON.stringify(rawData);
+    const persistResult = await callApiWithTimeout(
+        () => api.importTableAsJson(jsonString),
+        DEFAULT_API_TIMEOUT,
+        'updateTableRow.fallbackSave',
+    );
+    const persisted = persistResult === true || persistResult === 'true' || persistResult !== null;
+    let refreshed = false;
+
+    if (persisted && typeof api.refreshDataAndWorldbook === 'function') {
+        refreshed = !!(await callApiWithTimeout(
+            () => api.refreshDataAndWorldbook(),
+            12000,
+            'updateTableRow.fallbackRefresh',
+        ));
+    }
+
+    const snapshotSummary = readTableSnapshotSummaryFromApi(api, tableName, 'update-row.fallback-read-error');
+
+    return {
+        persisted,
+        refreshed,
+        snapshotSummary,
+        fallbackUsed: true,
+    };
+}
 
 export function getTableData() {
     const api = getDB();
@@ -109,14 +377,55 @@ export async function updateTableCell(tableName, rowIndex, colIdentifier, value)
 export async function updateTableRow(tableName, rowIndex, data) {
     return enqueueTableMutation('updateTableRow', async () => {
         const api = getDB();
+        const payloadKeys = Object.keys(data && typeof data === 'object' && !Array.isArray(data) ? data : {});
         if (!api || typeof api.updateRow !== 'function') {
             return { ok: false, code: 'api_unavailable', message: '数据库API不可用' };
         }
 
         try {
-            const result = await api.updateRow(tableName, rowIndex, data);
-            return { ok: !!result, code: result ? 'ok' : 'failed' };
+            const apiResult = await api.updateRow(tableName, rowIndex, data);
+            let persistResult = {
+                persisted: false,
+                refreshed: false,
+                snapshotSummary: readTableSnapshotSummaryFromApi(api, tableName, 'update-row.snapshot-error'),
+                fallbackUsed: false,
+            };
+
+            if (apiResult) {
+                persistResult = {
+                    ...await persistInsertedTableSnapshot(api, tableName),
+                    fallbackUsed: false,
+                };
+            } else {
+                persistResult = await fallbackPersistUpdatedRow(api, tableName, rowIndex, data);
+            }
+
+            const finalOk = (apiResult || persistResult.fallbackUsed) && (persistResult.persisted || typeof api.importTableAsJson !== 'function');
+
+            return {
+                ok: finalOk,
+                code: apiResult
+                    ? (persistResult.persisted ? 'ok' : 'persist_failed')
+                    : (persistResult.persisted ? 'ok_fallback' : 'failed'),
+                persisted: persistResult.persisted,
+                refreshed: persistResult.refreshed,
+                fallbackUsed: !!persistResult.fallbackUsed,
+                message: finalOk
+                    ? (persistResult.fallbackUsed ? 'updateRow 原接口返回失败，已通过整表回写兜底成功' : undefined)
+                    : 'updateRow 与整表回写兜底都失败了',
+            };
         } catch (error) {
+            logger.warn({
+                action: 'update-row.error',
+                message: 'updateRow 调用异常',
+                context: {
+                    tableName,
+                    rowIndex,
+                    payloadKeys,
+                    payloadPreview: summarizeTablePayload(data),
+                },
+                error,
+            });
             return { ok: false, code: 'error', message: error?.message || '未知错误' };
         }
     });
@@ -125,18 +434,80 @@ export async function updateTableRow(tableName, rowIndex, data) {
 export async function insertTableRow(tableName, data) {
     return enqueueTableMutation('insertTableRow', async () => {
         const api = getDB();
+        const payloadKeys = Object.keys(data && typeof data === 'object' && !Array.isArray(data) ? data : {});
         if (!api || typeof api.insertRow !== 'function') {
+            logger.warn({
+                action: 'insert-row.api-unavailable',
+                message: 'insertRow 不可用',
+                context: {
+                    tableName,
+                    payloadKeys,
+                },
+            });
             return { ok: false, code: 'api_unavailable', message: '数据库API不可用' };
         }
 
+        const beforeSnapshotSummary = readTableSnapshotSummaryFromApi(api, tableName, 'insert-row.snapshot-before-error');
+
         try {
             const rowIndex = await api.insertRow(tableName, data);
+            let snapshotSummary = readTableSnapshotSummaryFromApi(api, tableName, 'insert-row.snapshot-error');
+            let snapshotVerifiedInsert = false;
+
+            if (rowIndex < 0) {
+                const verifyResult = await verifyInsertedRowBySnapshot(api, tableName, beforeSnapshotSummary, snapshotSummary);
+                snapshotSummary = verifyResult.snapshotSummary ?? snapshotSummary;
+                snapshotVerifiedInsert = verifyResult.snapshotVerifiedInsert;
+            }
+
+            const resolvedRowIndex = rowIndex >= 0
+                ? rowIndex
+                : (snapshotVerifiedInsert && Number.isInteger(snapshotSummary?.rowCount)
+                    ? snapshotSummary.rowCount
+                    : undefined);
+            const insertDetected = rowIndex >= 0 || snapshotVerifiedInsert;
+            let persistResult = {
+                persisted: false,
+                refreshed: false,
+                snapshotSummary,
+            };
+
+            if (insertDetected) {
+                persistResult = await persistInsertedTableSnapshot(api, tableName);
+                snapshotSummary = persistResult.snapshotSummary ?? snapshotSummary;
+            }
+
+            const finalOk = insertDetected && (persistResult.persisted || typeof api.importTableAsJson !== 'function');
+            const resultCode = !insertDetected
+                ? 'failed'
+                : (persistResult.persisted
+                    ? (rowIndex >= 0 ? 'ok' : 'ok_snapshot_verified')
+                    : 'persist_failed');
+            const resultMessage = !insertDetected
+                ? undefined
+                : (persistResult.persisted
+                    ? (snapshotVerifiedInsert ? 'insertRow 返回 -1，但快照确认已插入成功并已持久化' : undefined)
+                    : '插入已发生，但重新写回持久化失败');
+
             return {
-                ok: rowIndex >= 0,
-                code: rowIndex >= 0 ? 'ok' : 'failed',
-                rowIndex: rowIndex >= 0 ? rowIndex : undefined,
+                ok: finalOk,
+                code: resultCode,
+                rowIndex: resolvedRowIndex,
+                persisted: persistResult.persisted,
+                refreshed: persistResult.refreshed,
+                message: resultMessage,
             };
         } catch (error) {
+            logger.warn({
+                action: 'insert-row.error',
+                message: 'insertRow 调用异常',
+                context: {
+                    tableName,
+                    payloadKeys,
+                    payloadPreview: summarizeTablePayload(data),
+                },
+                error,
+            });
             return { ok: false, code: 'error', message: error?.message || '未知错误' };
         }
     });

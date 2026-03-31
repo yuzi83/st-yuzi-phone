@@ -1,5 +1,108 @@
+import { Logger } from '../error-handler.js';
 import { PHONE_ICONS } from '../phone-home.js';
+import { dispatchPhoneTableUpdated, refreshPhoneTableProjection } from '../phone-core/chat-support.js';
+import { sleep } from '../phone-core/db-bridge.js';
 import { escapeHtml, EventManager } from '../utils.js';
+
+const logger = Logger.withScope({ scope: 'table-viewer/add-row-modal', feature: 'table-viewer' });
+
+function summarizeSheetSnapshot(rawData, sheetKey) {
+    const safeSheetKey = String(sheetKey || '').trim();
+    const sheet = rawData && typeof rawData === 'object' && safeSheetKey
+        ? rawData[safeSheetKey]
+        : null;
+    const content = Array.isArray(sheet?.content) ? sheet.content : null;
+    return {
+        sheetKey: safeSheetKey,
+        found: !!sheet,
+        tableName: String(sheet?.name || ''),
+        contentLength: content ? content.length : null,
+        rowCount: content ? Math.max(0, content.length - 1) : null,
+    };
+}
+
+function buildOptimisticRow(headers = [], rawHeaders = [], data = {}) {
+    return headers.map((header, idx) => {
+        const rawHeader = String(rawHeaders[idx] ?? '').trim();
+        if (idx === 0 && rawHeader === '') {
+            return '';
+        }
+
+        const key = String(header);
+        return Object.prototype.hasOwnProperty.call(data, key)
+            ? String(data[key] ?? '')
+            : '';
+    });
+}
+
+function syncRowsFromSheetSnapshot(rows = [], rawData, sheetKey) {
+    const safeSheetKey = String(sheetKey || '').trim();
+    const sheet = rawData && typeof rawData === 'object' && safeSheetKey
+        ? rawData[safeSheetKey]
+        : null;
+
+    if (!sheet?.content || !Array.isArray(sheet.content)) {
+        return {
+            synced: false,
+            rowCount: Array.isArray(rows) ? rows.length : 0,
+        };
+    }
+
+    rows.length = 0;
+    rows.push(...sheet.content.slice(1));
+    return {
+        synced: true,
+        rowCount: rows.length,
+    };
+}
+
+async function reconcileInsertedRow(options = {}) {
+    const {
+        tableName = '',
+        sheetKey = '',
+        rowIndex,
+        rows = [],
+        state,
+        getTableData,
+        getTableLockState,
+        renderKeepScroll,
+        expectedMinRowCount = 0,
+    } = options;
+
+    const retrySteps = [
+        { waitMs: 120, refreshProjection: true },
+        { waitMs: 260, refreshProjection: false },
+        { waitMs: 480, refreshProjection: true },
+    ];
+    let latestSummary = summarizeSheetSnapshot(getTableData(), sheetKey);
+    let reachedExpected = Number.isInteger(latestSummary.rowCount) && latestSummary.rowCount >= expectedMinRowCount;
+
+    for (let attemptIndex = 0; attemptIndex < retrySteps.length && !reachedExpected; attemptIndex++) {
+        const step = retrySteps[attemptIndex];
+        await sleep(step.waitMs);
+
+        if (step.refreshProjection) {
+            await refreshPhoneTableProjection();
+        }
+
+        const latestData = getTableData();
+        latestSummary = summarizeSheetSnapshot(latestData, sheetKey);
+        const syncResult = syncRowsFromSheetSnapshot(rows, latestData, sheetKey);
+        reachedExpected = syncResult.rowCount >= expectedMinRowCount;
+
+        if (syncResult.synced && state) {
+            state.lockState = getTableLockState(sheetKey);
+            renderKeepScroll();
+        }
+    }
+
+    dispatchPhoneTableUpdated(sheetKey);
+
+    return {
+        reachedExpected,
+        latestSummary,
+    };
+}
 
 export function showGenericAddRowModal(options = {}) {
     const {
@@ -171,21 +274,49 @@ export function showGenericAddRowModal(options = {}) {
                 newData[String(header)] = value;
             });
 
+            const localRowsBefore = rows.length;
             const result = await insertTableRow(tableName, newData);
 
             if (result.ok) {
-                showInlineToast(container, '新增成功');
                 closeModal();
+
+                const expectedMinRowCount = Number.isInteger(result.rowIndex) && result.rowIndex > 0
+                    ? result.rowIndex
+                    : localRowsBefore + 1;
                 const freshData = getTableData();
-                if (freshData && freshData[sheetKey]) {
-                    const freshSheet = freshData[sheetKey];
-                    if (freshSheet?.content && Array.isArray(freshSheet.content)) {
-                        rows.length = 0;
-                        rows.push(...freshSheet.content.slice(1));
-                    }
+                syncRowsFromSheetSnapshot(rows, freshData, sheetKey);
+
+                if (rows.length < expectedMinRowCount) {
+                    rows.push(buildOptimisticRow(headers, rawHeaders, newData));
                 }
+
                 state.lockState = getTableLockState(sheetKey);
                 renderKeepScroll();
+                showInlineToast(container, '新增成功');
+
+                Promise.resolve(reconcileInsertedRow({
+                    tableName,
+                    sheetKey,
+                    rowIndex: result.rowIndex,
+                    rows,
+                    state,
+                    getTableData,
+                    getTableLockState,
+                    renderKeepScroll,
+                    expectedMinRowCount,
+                })).catch((reconcileError) => {
+                    logger.warn({
+                        action: 'add-row.reconcile-error',
+                        message: '新增后对账同步失败',
+                        context: {
+                            tableName,
+                            sheetKey,
+                            rowIndex: result.rowIndex,
+                            expectedMinRowCount,
+                        },
+                        error: reconcileError,
+                    });
+                });
             } else {
                 showInlineToast(container, `新增失败: ${result.message || '未知错误'}`);
                 if (confirmBtn) {
@@ -194,6 +325,15 @@ export function showGenericAddRowModal(options = {}) {
                 }
             }
         } catch (err) {
+            logger.warn({
+                action: 'add-row.exception',
+                message: '新增条目流程异常',
+                context: {
+                    tableName,
+                    sheetKey,
+                },
+                error: err,
+            });
             showInlineToast(container, `新增异常: ${err?.message || '未知错误'}`);
             if (confirmBtn) {
                 confirmBtn.disabled = false;

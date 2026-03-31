@@ -96,10 +96,69 @@ export function createMessageViewerActions(ctx = {}) {
     const createDraftConversation = typeof createDraftConversationId === 'function'
         ? createDraftConversationId
         : () => `phone_thread_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const headerIndexMap = new Map(
+        (Array.isArray(headers) ? headers : []).map((header, index) => [String(header || '').trim(), index])
+    );
+
+    const patchLocalRowAt = (rowIndex, payload = {}) => {
+        const dataRowIndex = Number(rowIndex) - 1;
+        if (!Number.isInteger(dataRowIndex) || dataRowIndex < 0) return false;
+
+        const currentRow = Array.isArray(state.rowsData[dataRowIndex])
+            ? [...state.rowsData[dataRowIndex]]
+            : materializeRowFromPayloadImpl(headers, {});
+        let changed = false;
+
+        Object.entries(payload).forEach(([key, value]) => {
+            const colIndex = headerIndexMap.get(String(key || '').trim());
+            if (!Number.isInteger(colIndex) || colIndex < 0) return;
+            const nextValue = value === undefined || value === null ? '' : String(value);
+            if (currentRow[colIndex] === nextValue) return;
+            currentRow[colIndex] = nextValue;
+            changed = true;
+        });
+
+        if (!changed) return false;
+        state.rowsData[dataRowIndex] = currentRow;
+        return true;
+    };
+
+    const patchLocalRowByRequestKey = (requestId, payload = {}, options = {}) => {
+        const resolvedRowIndex = findRowIndexByRequestIdImpl(state.rowsData, requestId, readSpecialField, options);
+        if (!Number.isInteger(resolvedRowIndex)) return false;
+        return patchLocalRowAt(resolvedRowIndex, payload);
+    };
+
+    const patchLocalRowByResolvedTarget = (rowIndex, requestId, payload = {}, options = {}) => {
+        if (patchLocalRowAt(rowIndex, payload)) {
+            return true;
+        }
+        if (!requestId) {
+            return false;
+        }
+        return patchLocalRowByRequestKey(requestId, payload, options);
+    };
 
     const rerenderAndScrollToBottom = () => {
         rerender();
         scrollMessageDetailToBottomImpl(container);
+    };
+
+    const rerenderPreservingLocalRows = () => {
+        if (state && typeof state === 'object') {
+            state.skipSheetSyncOnce = true;
+        }
+        rerenderAndScrollToBottom();
+    };
+
+    const syncRowsAndRerender = () => {
+        const synced = syncRows();
+        if (synced) {
+            rerenderAndScrollToBottom();
+            return true;
+        }
+        rerenderPreservingLocalRows();
+        return false;
     };
 
     const unwrapStructuredReplyField = (value = '') => {
@@ -271,7 +330,7 @@ export function createMessageViewerActions(ctx = {}) {
         state.rowsData.push(materializeRowFromPayloadImpl(headers, userInsert.payload));
         state.draftByConversation[activeConversationId] = '';
         state.statusText = '正在等待角色回复...';
-        rerenderAndScrollToBottom();
+        rerenderPreservingLocalRows();
 
         let assistantPlaceholder = /** @type {any} */ (null);
 
@@ -296,7 +355,7 @@ export function createMessageViewerActions(ctx = {}) {
 
             if (assistantPlaceholder.ok) {
                 state.rowsData.push(materializeRowFromPayloadImpl(headers, assistantPlaceholder.payload));
-                rerenderAndScrollToBottom();
+                rerenderPreservingLocalRows();
             }
 
             const aiResult = await callPhoneChatAIImpl(aiMessages, {
@@ -317,32 +376,40 @@ export function createMessageViewerActions(ctx = {}) {
                         messageStatus: '失败',
                     });
                 }
-                syncRows();
+                patchLocalRowByResolvedTarget(userInsert.rowIndex, requestId, { messageStatus: '待重试' }, { key: 'requestId', userOnly: true });
+                patchLocalRowByResolvedTarget(assistantPlaceholder?.rowIndex, requestId, {
+                    content: '（回复失败，可稍后重试）',
+                    messageStatus: '失败',
+                }, { key: 'replyToMessageId' });
                 state.sending = false;
                 state.errorText = String(aiResult.message || '角色回复失败');
                 state.statusText = '用户消息已保存，可稍后重试';
-                rerenderAndScrollToBottom();
+                syncRowsAndRerender();
                 return;
             }
 
             const parsedAssistantReply = parseStructuredAiReply(aiResult.text);
+            const assistantReplyPayload = {
+                sender: partnerName,
+                content: parsedAssistantReply.content,
+                imageDesc: parsedAssistantReply.imageDesc,
+                videoDesc: parsedAssistantReply.videoDesc,
+                messageStatus: '已完成',
+            };
 
             if (Number.isInteger(userInsert.rowIndex)) {
                 markMutation();
                 await updatePhoneMessageRecordImpl(sheetKey, userInsert.rowIndex, { messageStatus: '已完成' });
             }
+            patchLocalRowByResolvedTarget(userInsert.rowIndex, requestId, { messageStatus: '已完成' }, { key: 'requestId', userOnly: true });
 
             if (assistantPlaceholder?.ok && Number.isInteger(assistantPlaceholder.rowIndex)) {
                 markMutation();
-                await updatePhoneMessageRecordImpl(sheetKey, assistantPlaceholder.rowIndex, {
-                    content: parsedAssistantReply.content,
-                    imageDesc: parsedAssistantReply.imageDesc,
-                    videoDesc: parsedAssistantReply.videoDesc,
-                    messageStatus: '已完成',
-                });
+                await updatePhoneMessageRecordImpl(sheetKey, assistantPlaceholder.rowIndex, assistantReplyPayload);
+                patchLocalRowByResolvedTarget(assistantPlaceholder.rowIndex, requestId, assistantReplyPayload, { key: 'replyToMessageId' });
             } else {
                 markMutation();
-                await insertPhoneMessageRecordImpl(sheetKey, {
+                const assistantInsertResult = await insertPhoneMessageRecordImpl(sheetKey, {
                     threadId: activeConversationId,
                     threadTitle,
                     sender: partnerName,
@@ -356,15 +423,18 @@ export function createMessageViewerActions(ctx = {}) {
                     imageDesc: parsedAssistantReply.imageDesc,
                     videoDesc: parsedAssistantReply.videoDesc,
                 });
+                if (assistantInsertResult?.ok) {
+                    state.rowsData.push(materializeRowFromPayloadImpl(headers, assistantInsertResult.payload));
+                }
             }
 
+            rerenderPreservingLocalRows();
             markMutation(1800);
             const refreshed = await refreshPhoneMessageProjectionImpl();
-            syncRows();
             state.sending = false;
             state.errorText = '';
             state.statusText = refreshed ? '发送成功' : '发送成功，但投影刷新失败';
-            rerenderAndScrollToBottom();
+            syncRowsAndRerender();
         } catch (error) {
             if (Number.isInteger(userInsert.rowIndex)) {
                 await updatePhoneMessageRecordImpl(sheetKey, userInsert.rowIndex, { messageStatus: '待重试' });
@@ -375,11 +445,15 @@ export function createMessageViewerActions(ctx = {}) {
                     messageStatus: '失败',
                 });
             }
-            syncRows();
+            patchLocalRowByResolvedTarget(userInsert.rowIndex, requestId, { messageStatus: '待重试' }, { key: 'requestId', userOnly: true });
+            patchLocalRowByResolvedTarget(assistantPlaceholder?.rowIndex, requestId, {
+                content: '（发送异常，可稍后重试）',
+                messageStatus: '失败',
+            }, { key: 'replyToMessageId' });
             state.sending = false;
             state.errorText = error?.message || '发送过程中发生异常';
             state.statusText = '用户消息已保存，可稍后继续';
-            rerenderAndScrollToBottom();
+            syncRowsAndRerender();
         }
     };
 
@@ -418,8 +492,12 @@ export function createMessageViewerActions(ctx = {}) {
                 });
             }
 
-            syncRows();
-            rerenderAndScrollToBottom();
+            patchLocalRowAt(userRowIndex, { messageStatus: '等待回复' });
+            patchLocalRowAt(assistantRowIndex, {
+                content: '…',
+                messageStatus: '生成中',
+            });
+            rerenderPreservingLocalRows();
 
             const { phoneChatSettings, partnerName, aiMessages } = await buildAiRuntime(conversationId, threadTitle);
             const aiResult = await callPhoneChatAIImpl(aiMessages, {
@@ -440,39 +518,46 @@ export function createMessageViewerActions(ctx = {}) {
                         messageStatus: '失败',
                     });
                 }
-                syncRows();
+                patchLocalRowAt(userRowIndex, { messageStatus: '待重试' });
+                patchLocalRowAt(assistantRowIndex, {
+                    content: '（回复失败，可稍后重试）',
+                    messageStatus: '失败',
+                });
                 state.sending = false;
                 state.errorText = String(aiResult.message || '角色回复失败');
                 state.statusText = '仍可继续重试';
-                rerenderAndScrollToBottom();
+                syncRowsAndRerender();
                 return;
             }
 
             const parsedAssistantReply = parseStructuredAiReply(aiResult.text);
+            const assistantReplyPayload = {
+                sender: partnerName,
+                content: parsedAssistantReply.content,
+                imageDesc: parsedAssistantReply.imageDesc,
+                videoDesc: parsedAssistantReply.videoDesc,
+                messageStatus: '已完成',
+            };
 
             if (Number.isInteger(userRowIndex)) {
                 markMutation();
                 await updatePhoneMessageRecordImpl(sheetKey, userRowIndex, { messageStatus: '已完成' });
             }
+            patchLocalRowAt(userRowIndex, { messageStatus: '已完成' });
 
             if (Number.isInteger(assistantRowIndex)) {
                 markMutation();
-                await updatePhoneMessageRecordImpl(sheetKey, assistantRowIndex, {
-                    sender: partnerName,
-                    content: parsedAssistantReply.content,
-                    imageDesc: parsedAssistantReply.imageDesc,
-                    videoDesc: parsedAssistantReply.videoDesc,
-                    messageStatus: '已完成',
-                });
+                await updatePhoneMessageRecordImpl(sheetKey, assistantRowIndex, assistantReplyPayload);
             }
+            patchLocalRowAt(assistantRowIndex, assistantReplyPayload);
 
+            rerenderPreservingLocalRows();
             markMutation(1800);
             const refreshed = await refreshPhoneMessageProjectionImpl();
-            syncRows();
             state.sending = false;
             state.errorText = '';
             state.statusText = refreshed ? '重试成功' : '重试成功，但投影刷新失败';
-            rerenderAndScrollToBottom();
+            syncRowsAndRerender();
         } catch (error) {
             if (Number.isInteger(userRowIndex)) {
                 await updatePhoneMessageRecordImpl(sheetKey, userRowIndex, { messageStatus: '待重试' });
@@ -483,11 +568,15 @@ export function createMessageViewerActions(ctx = {}) {
                     messageStatus: '失败',
                 });
             }
-            syncRows();
+            patchLocalRowAt(userRowIndex, { messageStatus: '待重试' });
+            patchLocalRowAt(assistantRowIndex, {
+                content: '（发送异常，可稍后重试）',
+                messageStatus: '失败',
+            });
             state.sending = false;
             state.errorText = error?.message || '重试过程中发生异常';
             state.statusText = '仍可继续重试';
-            rerenderAndScrollToBottom();
+            syncRowsAndRerender();
         }
     };
 
