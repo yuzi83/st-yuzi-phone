@@ -12,8 +12,7 @@
 - `05-phone-generic-template.css`：通用表模板层
 
 ## phone-base 子目录
-- 详见 `styles/phone-base/README.md`，用于固定 `phone-base` 子目录的 modern / legacy 归档策略。
-- 当前 legacy 文件仍保留在 `styles/phone-base/` 原路径，后续目标归档目录为 `styles/legacy/phone-base/`。
+- 详见 `styles/phone-base/README.md`，集中说明 `phone-base` 子目录的现代分层。
 
 ### modern active
 - `00-phone-tokens.css`
@@ -27,18 +26,9 @@
 - `10-scroll-generic-patches.css`
 - `11-api-dialog-worldbook.css`
 
-### legacy archive
-- `03-table-legacy.css`
-- `04-settings-legacy.css`
-
-这两个 legacy 文件已经停止默认加载，仅保留历史参考 / 回滚比对用途，并在文件头部固定归档语义。
-
-## 目标 legacy 目录约定
-- `styles/legacy/README.md`：legacy 顶层归档目录说明
-- `styles/legacy/phone-base/README.md`：`phone-base` legacy 目标归档说明
+> 历史 legacy 文件（`03-table-legacy.css` / `04-settings-legacy.css`）已在 2026-04 完成清理，对应现代替代层分别为 `09-table-manage-detail.css` 与 `07-settings-modern.css`。
 
 ## 当前收口原则
-1. 先整理入口和层级语义，不直接大范围改视觉规则。
-2. legacy 文件在导入关系完全收敛前不物理删除。
-3. 若未来继续做目录迁移，应优先保持 `style.css` 与 `styles/01-phone-base.css` 的入口契约稳定。
-4. 真正迁移 legacy 文件时，应先保留原路径桥接说明，再逐步把历史引用转向 `styles/legacy/phone-base/`。
+1. 入口和层级语义保持稳定，不直接大范围改视觉规则。
+2. 如需新增样式层级，统一从 `style.css` 与 `styles/01-phone-base.css` 两层入口扩展。
+3. 历史回滚需求请通过版本控制取回旧文件，不再在仓库内常驻 legacy 副本。

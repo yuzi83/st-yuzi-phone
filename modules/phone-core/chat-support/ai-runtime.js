@@ -1,4 +1,4 @@
-import { callApiWithTimeout, clampPositiveInteger, getDB } from '../db-bridge.js';
+import { callApiWithTimeout, clampPositiveInteger, getDB, isDbBooleanSuccess } from '../db-bridge.js';
 
 function sanitizePhoneChatMessages(messages) {
     return (Array.isArray(messages) ? messages : [])
@@ -45,7 +45,7 @@ export async function callPhoneChatAI(messages, options = {}) {
                 };
             }
 
-            const presetLoaded = !!api.loadApiPreset(requestedPresetName);
+            const presetLoaded = isDbBooleanSuccess(api.loadApiPreset(requestedPresetName));
             if (!presetLoaded) {
                 return {
                     ok: false,

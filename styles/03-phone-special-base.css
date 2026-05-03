@@ -1,5 +1,5 @@
 ﻿/* ========================================
-   Phone 三张专属表美化（消息/动态/论坛）
+   Phone 消息记录表专属美化
    仅在 .phone-special-app 下生效，避免影响通用表格
    ======================================== */
 
@@ -93,12 +93,6 @@
     --_sp-message-line-height: var(--sp-typo-message-line-height, var(--sp-line-height-normal));
     --_sp-message-meta-size: var(--sp-typo-message-meta-size, var(--sp-font-size-xs));
     --_sp-compose-status-size: var(--sp-typo-compose-status-size, var(--sp-font-size-xs));
-    --_sp-post-title-size: var(--sp-typo-post-title-size, var(--sp-font-size-lg));
-    --_sp-post-title-weight: var(--sp-typo-post-title-weight, var(--sp-font-weight-medium));
-    --_sp-post-meta-size: var(--sp-typo-post-meta-size, var(--sp-font-size-xs));
-    --_sp-post-body-size: var(--sp-typo-post-body-size, var(--sp-font-size-md));
-    --_sp-post-body-line-height: var(--sp-typo-post-body-line-height, var(--sp-line-height-normal));
-    --_sp-comment-size: var(--sp-typo-comment-size, var(--sp-font-size-md));
     --_sp-motion-fast: var(--sp-motion-fast-duration, var(--sp-duration-fast));
     --_sp-motion-normal: var(--sp-motion-normal-duration, var(--sp-duration-normal));
     --_sp-motion-hover-lift-y: var(--sp-motion-hover-lift-y, -1px);
@@ -262,106 +256,6 @@
     color: var(--sp-media-text);
     border: 1px dashed var(--sp-btn-border);
     border-radius: var(--sp-radius-sm);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-reply-option-item:hover {
-    transform: translateY(var(--_sp-motion-hover-lift-y));
-}
-
-/* 动态表 / 论坛表 */
-.phone-special-app.phone-special-template-scope .phone-special-moment-item {
-    background: var(--sp-card-bg);
-    border: 1px solid var(--sp-card-border);
-    border-radius: var(--sp-radius-md);
-    box-shadow: var(--sp-shadow-md);
-    transition: border-color var(--_sp-motion-fast) var(--sp-ease-standard), box-shadow var(--_sp-motion-fast) var(--sp-ease-standard), transform var(--_sp-motion-fast) var(--sp-ease-standard);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-item:hover {
-    transform: translateY(var(--_sp-motion-hover-lift-y));
-}
-
-.phone-special-app.phone-special-template-scope[data-style-card-style="outlined"] .phone-special-moment-item {
-    background: transparent;
-    box-shadow: none;
-}
-
-.phone-special-app.phone-special-template-scope[data-style-card-style="plain"] .phone-special-moment-item {
-    background: transparent;
-    border-color: transparent;
-    box-shadow: none;
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-header,
-.phone-special-app.phone-special-template-scope .phone-special-moment-meta.forum,
-.phone-special-app.phone-special-template-scope .phone-special-moment-stats {
-    border-color: var(--sp-list-divider);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-name,
-.phone-special-app.phone-special-template-scope .phone-special-moment-title {
-    color: var(--sp-sub-text);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-title {
-    font-size: var(--_sp-post-title-size);
-    font-weight: var(--_sp-post-title-weight);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-title.forum {
-    color: var(--sp-nav-title);
-    font-size: var(--_sp-post-title-size);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-time,
-.phone-special-app.phone-special-template-scope .phone-special-moment-meta,
-.phone-special-app.phone-special-template-scope .phone-special-moment-stats,
-.phone-special-app.phone-special-template-scope .phone-special-post-meta,
-.phone-special-app.phone-special-template-scope .phone-special-comments-count {
-    color: var(--sp-meta-text);
-    font-size: var(--_sp-post-meta-size);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-content,
-.phone-special-app.phone-special-template-scope .phone-special-comment {
-    color: var(--sp-content-text);
-    font-size: var(--_sp-post-body-size);
-    line-height: var(--_sp-post-body-line-height);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-comment {
-    font-size: var(--_sp-comment-size);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-post-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-gap-xs);
-    margin-top: var(--sp-gap-xs);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-post-meta-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-comments-head {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    margin-bottom: var(--sp-gap-xs);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-comment-author {
-    color: var(--sp-color-info);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-comments-section {
-    background: var(--sp-card-bg);
 }
 
 /* 专属详情页 */

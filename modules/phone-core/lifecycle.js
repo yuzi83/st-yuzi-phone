@@ -1,9 +1,11 @@
 import { Logger } from '../error-handler.js';
 import { scheduleIdleTask } from '../runtime-manager.js';
-import { destroyPhoneWindowInteractions, initPhoneShellDrag, initPhoneShellResize } from '../window.js';
+import { destroyPhoneWindowInteractions } from '../window/runtime.js';
+import { initPhoneShellDrag } from '../window/drag.js';
+import { initPhoneShellResize } from '../window/resize.js';
 import { unregisterTableFillStartListener, unregisterTableUpdateListener, initSmartRefreshListener } from './callbacks.js';
 import { debugCheckAPI } from './data-api.js';
-import { getPhoneCoreState, phoneRuntime, resetPhoneCoreState } from './state.js';
+import { getPhoneCoreState, phoneRuntime, resetPhoneCoreState, resetPhoneRuntimeScope } from './state.js';
 import { startDataWatcherForNotifications, stopDataWatcherForNotifications } from './notifications.js';
 import {
     ensureRouteRuntimeSubscription,
@@ -284,7 +286,7 @@ export function destroyPhoneRuntime() {
     state.isDestroying = true;
     deactivatePhoneRuntimeState(state);
     cleanupPhoneRuntimeBindings(state);
-    phoneRuntime.dispose();
+    resetPhoneRuntimeScope();
     resetPhoneCoreState();
 
     logger.info({

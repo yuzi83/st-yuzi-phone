@@ -15,6 +15,7 @@ class FakeHTMLElement {
         this.style = {};
         this.nodes = new Map();
         this.isConnected = true;
+        this.parentElement = null;
     }
 
     querySelector(selector) {
@@ -29,9 +30,17 @@ class FakeHTMLElement {
         this.nodes.set(selector, value);
         return value;
     }
+
+    contains(target) {
+        return target === this;
+    }
+
+    addEventListener() {}
+
+    removeEventListener() {}
 }
 
-function installDomGlobals() {
+function installDomGlobals(order = []) {
     global.HTMLElement = FakeHTMLElement;
     global.Element = FakeHTMLElement;
     global.requestAnimationFrame = (callback) => {
@@ -42,11 +51,35 @@ function installDomGlobals() {
     };
     global.cancelAnimationFrame = () => {};
 
+    class FakeMutationObserver {
+        constructor(callback) {
+            this.callback = callback;
+            this.target = null;
+            this.options = null;
+        }
+
+        observe(target, options = {}) {
+            this.target = target;
+            this.options = options;
+            order.push(`observe:${target?.name || 'unknown'}`);
+        }
+
+        disconnect() {
+            order.push('observer-disconnect');
+        }
+    }
+
+    global.MutationObserver = FakeMutationObserver;
+
     const body = new FakeHTMLElement('body');
     const windowTarget = {
         addEventListener() {},
         removeEventListener() {},
         dispatchEvent() {},
+        setTimeout: global.setTimeout.bind(global),
+        clearTimeout: global.clearTimeout.bind(global),
+        requestAnimationFrame: global.requestAnimationFrame,
+        cancelAnimationFrame: global.cancelAnimationFrame,
     };
 
     global.window = windowTarget;
@@ -69,6 +102,7 @@ async function importViewerModules() {
 
 async function testViewerRuntimeStartSession(runtimeModule) {
     const order = [];
+    installDomGlobals(order);
     const container = new FakeHTMLElement('viewer-container');
     const observerRoot = new FakeHTMLElement('body');
 
@@ -86,14 +120,6 @@ async function testViewerRuntimeStartSession(runtimeModule) {
                     order.push('draft-cleanup');
                 };
             },
-            createMutationObserver: () => ({
-                observe(target) {
-                    order.push(`observe:${target.name}`);
-                },
-                disconnect() {
-                    order.push('observer-disconnect');
-                },
-            }),
             getObserverRoot: () => observerRoot,
         },
     });
@@ -151,7 +177,6 @@ async function testSpecialRuntimeStartPath(specialRuntimeModule) {
     const container = new FakeHTMLElement('special-container');
     const viewerEventManager = { name: 'viewer-event-manager' };
     const messageCalls = [];
-    const feedCalls = [];
 
     const messageRuntime = specialRuntimeModule.createSpecialTableViewerRuntime(
         container,
@@ -177,30 +202,6 @@ async function testSpecialRuntimeStartPath(specialRuntimeModule) {
     assert.equal(messageCalls.length, 1);
     assert.equal(messageCalls[0].viewerEventManager, viewerEventManager);
     assert.equal(typeof messageCalls[0].createSpecialTemplateStylePayload, 'function');
-
-    const feedRuntime = specialRuntimeModule.createSpecialTableViewerRuntime(
-        container,
-        {
-            sheetKey: 'sheet_forum',
-            tableName: '论坛表',
-            rows: [],
-            headers: [],
-            type: 'forum',
-            templateMatch: null,
-        },
-        {
-            viewerRuntime: { viewerEventManager },
-            renderFeedTable: (_container, _context, deps) => {
-                feedCalls.push(deps);
-            },
-        },
-    );
-
-    assert.ok(feedRuntime);
-    assert.equal(feedRuntime.start(), true);
-    assert.equal(feedCalls.length, 1);
-    assert.equal(feedCalls[0].viewerEventManager, viewerEventManager);
-    assert.equal(typeof feedCalls[0].createSpecialTemplateStylePayload, 'function');
 }
 
 async function main() {

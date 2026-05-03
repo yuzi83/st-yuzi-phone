@@ -10,6 +10,7 @@ const FILES = {
     data: 'modules/settings-app/layout/page-builders/data-builders.js',
     editor: 'modules/settings-app/layout/page-builders/editor-builders.js',
     frame: 'modules/settings-app/layout/frame.js',
+    pageShell: 'modules/settings-app/ui/page-shell.js',
     homePage: 'modules/settings-app/pages/home.js',
     appearancePage: 'modules/settings-app/pages/appearance.js',
     databasePage: 'modules/settings-app/pages/database.js',
@@ -55,12 +56,21 @@ function main() {
     check(results, 'editor', '存在 buildBeautifyTemplatePageHtml()', has(contents.editor, 'export function buildBeautifyTemplatePageHtml('));
 
     check(results, 'frame', '继续从 page-builders façade 导入 settings builders', has(contents.frame, "from './page-builders.js';"));
+    check(results, 'pageShell', '共享 page-shell 暴露 createPageShellSnapshot()', has(contents.pageShell, 'export function createPageShellSnapshot('));
+    check(results, 'pageShell', '共享 page-shell 暴露 ensurePageShell()', has(contents.pageShell, 'export function ensurePageShell('));
+    check(results, 'pageShell', '共享 page-shell 暴露 patchPageShell()', has(contents.pageShell, 'export function patchPageShell('));
+    check(results, 'pageShell', '共享 page-shell patch 使用 replaceWith()', has(contents.pageShell, 'currentRegion.replaceWith(nextRegion);'));
+
     check(results, 'homePage', '继续使用 buildSettingsHomePageHtml()', has(contents.homePage, 'buildSettingsHomePageHtml('));
     check(results, 'appearancePage', '继续使用 buildAppearancePageHtml()', has(contents.appearancePage, 'buildAppearancePageHtml('));
-    check(results, 'databasePage', '继续使用 buildDatabasePageHtml()', has(contents.databasePage, 'buildDatabasePageHtml('));
+    check(results, 'databasePage', '数据库页使用共享 createPageShellSnapshot()', has(contents.databasePage, 'createPageShellSnapshot({'));
+    check(results, 'databasePage', '数据库页使用共享 ensurePageShell()', has(contents.databasePage, 'ensurePageShell(container, shellSnapshot,'));
+    check(results, 'databasePage', '数据库页使用共享 patchPageShell()', has(contents.databasePage, 'patchPageShell(shellState.pageRoot, shellSnapshot,'));
     check(results, 'buttonStylePage', '继续使用 buildButtonStylePageHtml()', has(contents.buttonStylePage, 'buildButtonStylePageHtml('));
     check(results, 'promptEditorPage', '继续使用 buildPromptEditorPageHtml()', has(contents.promptEditorPage, 'buildPromptEditorPageHtml('));
-    check(results, 'apiPromptConfigPage', '继续使用 buildApiPromptConfigPageHtml()', has(contents.apiPromptConfigPage, 'buildApiPromptConfigPageHtml('));
+    check(results, 'apiPromptConfigPage', 'API Prompt 页使用共享 createPageShellSnapshot()', has(contents.apiPromptConfigPage, 'createPageShellSnapshot({'));
+    check(results, 'apiPromptConfigPage', 'API Prompt 页使用共享 ensurePageShell()', has(contents.apiPromptConfigPage, 'ensurePageShell(container, shellSnapshot,'));
+    check(results, 'apiPromptConfigPage', 'API Prompt 页使用共享 patchPageShell()', has(contents.apiPromptConfigPage, 'patchPageShell(shellState.pageRoot, shellSnapshot,'));
 
     const failed = results.filter(item => !item.ok);
     if (failed.length > 0) {

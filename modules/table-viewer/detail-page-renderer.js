@@ -22,23 +22,21 @@ export function renderGenericDetailPage(options = {}) {
         toggleTableCellLock,
         getTableData,
         saveTableData,
+        viewerRuntime,
     } = options;
 
     if (!(container instanceof HTMLElement) || !state) return;
 
     const row = rows[state.rowIndex];
     if (!row) {
-        state.mode = 'list';
-        state.rowIndex = -1;
-        state.editMode = false;
-        state.draftValues = {};
+        state.returnToListMode();
         if (typeof render === 'function') {
             render();
         }
         return;
     }
 
-    state.lockState = getTableLockState(sheetKey);
+    state.syncLockState(getTableLockState(sheetKey));
 
     const genericStylePayload = createGenericTemplateStylePayload(genericMatch, 'detail');
     const {
@@ -48,6 +46,7 @@ export function renderGenericDetailPage(options = {}) {
         shouldHideLeadingPlaceholder,
         toLockColIndex,
         kvPairs,
+        pagerInfo,
     } = buildGenericDetailRowPayload({
         row,
         state,
@@ -55,6 +54,8 @@ export function renderGenericDetailPage(options = {}) {
         rawHeaders,
         fieldBindings: genericStylePayload.fieldBindings,
         sheetKey,
+        rowsCount: rows.length,
+        saving: state.saving,
         isTableRowLocked,
         isTableCellLocked,
     });
@@ -63,6 +64,7 @@ export function renderGenericDetailPage(options = {}) {
         title,
         kvPairs,
         rowLocked,
+        pagerInfo,
         genericStylePayload,
         state,
     });
@@ -89,5 +91,6 @@ export function renderGenericDetailPage(options = {}) {
         getTableData,
         saveTableData,
         showInlineToast,
+        runtime: viewerRuntime,
     });
 }

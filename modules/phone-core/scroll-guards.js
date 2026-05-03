@@ -1,12 +1,12 @@
 import { Logger } from '../error-handler.js';
-import { getPhoneCoreState, phoneRuntime } from './state.js';
 
 const PHONE_SCROLL_ROOT_SELECTOR = '.phone-app-body, .phone-app-grid';
 const PHONE_SCROLL_GUARD_BOUND_ATTR = 'phoneScrollGuardBound';
+const PHONE_TOUCH_GUARD_BOUND_ATTR = 'phoneTouchGuardBound';
 const PHONE_SCROLL_EDGE_EPSILON = 1;
 const PHONE_SCROLL_EDITABLE_SELECTOR = 'input, textarea, select, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]';
 const PHONE_SCROLL_DEBUG_GLOBAL_KEY = 'TAMAKO_PHONE_SCROLL_DEBUG';
-const PHONE_SCROLL_DEBUG_CANDIDATE_SELECTOR = '.phone-app-body, .phone-app-grid, .phone-table-body, .phone-nav-list, .phone-row-detail-card, .phone-special-message-list, .phone-special-moments-list, .phone-settings-scroll';
+const PHONE_SCROLL_DEBUG_CANDIDATE_SELECTOR = '.phone-app-body, .phone-app-grid, .phone-table-body, .phone-nav-list, .phone-row-detail-card, .phone-special-message-list, .phone-settings-scroll';
 const PHONE_INTERACTION_GUARD_BOUND_ATTR = 'phoneInteractionGuardBound';
 const SCROLL_DEBUG_CHANNEL = 'ScrollDebug';
 const logger = Logger.withScope({ scope: 'phone-core/scroll-guards', feature: 'scroll-guards' });
@@ -256,6 +256,8 @@ function bindWheelGuard(boundary, scope) {
 
 function bindTouchGuard(boundary, scope) {
     if (!(boundary instanceof HTMLElement)) return;
+    if (boundary.dataset[PHONE_TOUCH_GUARD_BOUND_ATTR] === '1') return;
+    boundary.dataset[PHONE_TOUCH_GUARD_BOUND_ATTR] = '1';
 
     let lastTouchY = 0;
 

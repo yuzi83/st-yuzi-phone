@@ -1,18 +1,22 @@
 import {
-    PHONE_TEMPLATE_TYPE_SPECIAL,
-    PHONE_TEMPLATE_TYPE_GENERIC,
-    RENDERER_KEY_TO_SPECIAL_TYPE,
-    DEFAULT_SPECIAL_MIN_SCORE,
     DEFAULT_GENERIC_MIN_SCORE,
+    DEFAULT_SPECIAL_MIN_SCORE,
+    PHONE_TEMPLATE_TYPE_GENERIC,
+    PHONE_TEMPLATE_TYPE_SPECIAL,
+    RENDERER_KEY_TO_SPECIAL_TYPE,
+} from './constants.js';
+import {
+    clampNumber,
     deepClone,
-    saveTemplateStore,
     normalizeString,
     sanitizeId,
+} from './core.js';
+import {
+    inferSpecialRendererKeyByTableName,
     normalizeHeadersSet,
     scoreTemplateMatcher,
-    clampNumber,
-    inferSpecialRendererKeyByTableName,
-} from './shared.js';
+} from './matcher-helpers.js';
+import { saveTemplateStore } from './store.js';
 import {
     getCachedPhoneBeautifyTemplateById,
     getCachedPhoneBeautifyTemplateStore,
@@ -37,7 +41,10 @@ export function detectSpecialTemplateForTable({ sheetKey, tableName, headers = [
     const safeTableName = normalizeString(tableName, 80);
     const headerSet = normalizeHeadersSet(headers);
 
-    const activeMap = getActiveBeautifyTemplateIdsForSpecial({ withFallback: true, persist: true });
+    const activeMap = getActiveBeautifyTemplateIdsForSpecial({
+        withFallback: true,
+        persist: false,
+    });
     const sourceRuntime = getBeautifyTemplateSourceModeRuntime(PHONE_TEMPLATE_TYPE_SPECIAL, {
         enabledOnly: true,
     });
@@ -144,7 +151,7 @@ export function detectGenericTemplateForTable({ sheetKey, tableName, headers = [
 
     const activeTemplateId = getActiveBeautifyTemplateIdByType(PHONE_TEMPLATE_TYPE_GENERIC, {
         withFallback: true,
-        persist: true,
+        persist: false,
     });
     const sourceRuntime = getBeautifyTemplateSourceModeRuntime(PHONE_TEMPLATE_TYPE_GENERIC, {
         enabledOnly: true,

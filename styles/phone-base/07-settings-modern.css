@@ -151,7 +151,7 @@
     margin: 0 16px;
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    border-radius: 4px;
     overflow: hidden;
 }
 
@@ -728,7 +728,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 999px;
+    border-radius: 3px;
     padding: 2px 8px;
     font-size: 10px;
     line-height: 1.4;
@@ -785,30 +785,35 @@
     accent-color: #4DB6AC;
 }
 
-/* ========== Settings App White Redesign Override ========== */
-.phone-settings-page .phone-nav-bar {
+/* ========== Settings App Wabi-Sabi Redesign ========== */
+.phone-settings-page .phone-nav-bar,
+.phone-fusion-page .phone-nav-bar {
     padding: clamp(38px, 8.2%, 50px) 14px 12px;
-    background: rgba(250, 252, 255, 0.92);
-    backdrop-filter: blur(18px);
-    border-bottom: 1px solid var(--yuzi-settings-divider, rgba(217, 225, 235, 0.9));
+    background: rgba(245, 243, 239, 0.92);
+    backdrop-filter: none;
+    border-bottom: 1px solid rgba(58, 55, 49, 0.06);
 }
 
-.phone-settings-page .phone-nav-back {
+.phone-settings-page .phone-nav-back,
+.phone-fusion-page .phone-nav-back {
     min-height: 32px;
     padding: 6px 10px;
     gap: 4px;
-    color: var(--yuzi-settings-accent-strong, #5f7bff);
-    border-radius: 10px;
+    color: #5B7A6A;
+    border-radius: 4px;
 }
 
-.phone-settings-page .phone-nav-back:hover {
-    background: var(--yuzi-settings-accent-soft, rgba(123, 147, 255, 0.14));
+.phone-settings-page .phone-nav-back:hover,
+.phone-fusion-page .phone-nav-back:hover {
+    background: rgba(91, 122, 106, 0.06);
 }
 
-.phone-settings-page .phone-nav-title {
-    color: var(--yuzi-settings-text-primary, #152033);
+.phone-settings-page .phone-nav-title,
+.phone-fusion-page .phone-nav-title {
+    color: #3A3731;
     font-size: 15px;
-    font-weight: 700;
+    font-weight: 600;
+    letter-spacing: 0.03em;
 }
 
 .phone-settings-nav-side {
@@ -822,22 +827,22 @@
 }
 
 .phone-settings-page .phone-app-body.phone-settings-scroll {
-    padding: 14px 14px 28px;
-    background: var(--yuzi-settings-page-bg, linear-gradient(180deg, #f7f9fc 0%, #f2f5f9 100%));
-    color: var(--yuzi-settings-text-primary, #152033);
+    padding: 10px 14px 28px;
+    background: linear-gradient(180deg, #F5F3EF 0%, #EDEAE4 100%);
+    color: #3A3731;
 }
 
 .phone-settings-page .phone-app-body.phone-settings-scroll::-webkit-scrollbar {
-    width: 7px;
+    width: 5px;
 }
 
 .phone-settings-page .phone-app-body.phone-settings-scroll::-webkit-scrollbar-thumb {
-    background: var(--yuzi-settings-scrollbar-thumb, rgba(157, 171, 190, 0.72));
-    border-radius: 999px;
+    background: rgba(58, 55, 49, 0.15);
+    border-radius: 4px;
 }
 
 .phone-settings-page .phone-app-body.phone-settings-scroll::-webkit-scrollbar-thumb:hover {
-    background: var(--yuzi-settings-scrollbar-thumb-hover, rgba(123, 140, 165, 0.9));
+    background: rgba(58, 55, 49, 0.25);
 }
 
 .phone-settings-page .phone-settings-open {
@@ -852,16 +857,7 @@
 }
 
 .phone-settings-hero {
-    position: relative;
-    overflow: hidden;
-    border-radius: 24px;
-    padding: 20px 18px;
-    background:
-        radial-gradient(circle at top right, rgba(123, 147, 255, 0.18), transparent 42%),
-        radial-gradient(circle at bottom left, rgba(116, 167, 207, 0.14), transparent 38%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 249, 253, 0.96));
-    border: 1px solid rgba(223, 229, 238, 0.98);
-    box-shadow: var(--yuzi-settings-shadow-medium, 0 14px 34px rgba(38, 52, 77, 0.12));
+    display: none;
 }
 
 .phone-settings-hero::after {
@@ -871,7 +867,7 @@
     width: 180px;
     height: 180px;
     border-radius: 50%;
-    background: rgba(123, 147, 255, 0.08);
+    background: rgba(91, 122, 106, 0.06);
     filter: blur(12px);
     pointer-events: none;
 }
@@ -889,7 +885,7 @@
     line-height: 1;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--yuzi-settings-text-tertiary, #7d899c);
+    color: #7A7772;
 }
 
 .phone-settings-hero-title {
@@ -897,14 +893,14 @@
     font-size: 22px;
     line-height: 1.2;
     font-weight: 700;
-    color: var(--yuzi-settings-text-primary, #152033);
+    color: #3A3731;
 }
 
 .phone-settings-hero-description {
     margin: 0;
     font-size: 13px;
     line-height: 1.6;
-    color: var(--yuzi-settings-text-secondary, #4d5b71);
+    color: #7A7772;
 }
 
 .phone-settings-hero-chips {
@@ -928,27 +924,28 @@
 .phone-settings-stat-card {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 12px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.78);
-    border: 1px solid rgba(223, 229, 238, 0.95);
+    gap: 3px;
+    padding: 10px;
+    border-radius: 4px;
+    background: rgba(245, 243, 239, 0.6);
+    border: 1px solid rgba(58, 55, 49, 0.06);
 }
 
 .phone-settings-stat-label {
-    font-size: 11px;
-    color: var(--yuzi-settings-text-tertiary, #7d899c);
+    font-size: 10px;
+    color: #7A7772;
+    letter-spacing: 0.04em;
 }
 
 .phone-settings-stat-value {
-    font-size: 18px;
+    font-size: 16px;
     line-height: 1.1;
-    color: var(--yuzi-settings-text-primary, #152033);
+    color: #3A3731;
 }
 
 .phone-settings-stat-note {
-    font-size: 11px;
-    color: var(--yuzi-settings-text-secondary, #4d5b71);
+    font-size: 10px;
+    color: #7A7772;
 }
 
 .phone-settings-chip,
@@ -956,49 +953,49 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 24px;
-    padding: 0 10px;
-    border-radius: 999px;
+    min-height: 20px;
+    padding: 0 8px;
+    border-radius: 3px;
     border: 1px solid transparent;
-    font-size: 11px;
+    font-size: 10px;
     line-height: 1;
     white-space: nowrap;
 }
 
 .phone-settings-chip {
-    background: var(--yuzi-settings-chip-bg, rgba(236, 240, 247, 0.95));
-    color: var(--yuzi-settings-chip-text, #5f6f86);
+    background: rgba(58, 55, 49, 0.04);
+    color: #7A7772;
 }
 
 .phone-settings-chip.is-soft,
 .phone-settings-badge.is-soft {
-    background: rgba(236, 240, 247, 0.95);
-    color: #627189;
-    border-color: rgba(219, 226, 236, 0.94);
+    background: rgba(58, 55, 49, 0.04);
+    color: #7A7772;
+    border-color: rgba(58, 55, 49, 0.06);
 }
 
 .phone-settings-chip.is-neutral {
-    background: rgba(244, 247, 252, 0.98);
-    color: #73829a;
-    border-color: rgba(223, 229, 238, 0.96);
+    background: rgba(58, 55, 49, 0.04);
+    color: #7A7772;
+    border-color: rgba(58, 55, 49, 0.06);
 }
 
 .phone-settings-chip.is-success {
-    background: var(--yuzi-settings-success-soft, rgba(86, 183, 143, 0.14));
-    color: var(--yuzi-settings-success, #56b78f);
-    border-color: rgba(123, 198, 164, 0.34);
+    background: rgba(107, 143, 113, 0.08);
+    color: #5B7A6A;
+    border-color: rgba(107, 143, 113, 0.15);
 }
 
 .phone-settings-chip.is-danger {
-    background: var(--yuzi-settings-danger-soft, rgba(220, 117, 117, 0.14));
-    color: var(--yuzi-settings-danger, #dc7575);
-    border-color: rgba(225, 149, 149, 0.34);
+    background: rgba(139, 94, 94, 0.08);
+    color: #8B5E5E;
+    border-color: rgba(139, 94, 94, 0.15);
 }
 
 .phone-settings-chip.is-info {
-    background: var(--yuzi-settings-info-soft, rgba(116, 167, 207, 0.16));
-    color: var(--yuzi-settings-info, #74a7cf);
-    border-color: rgba(159, 193, 222, 0.44);
+    background: rgba(91, 122, 106, 0.08);
+    color: #5B7A6A;
+    border-color: rgba(91, 122, 106, 0.15);
 }
 
 .phone-settings-section {
@@ -1006,13 +1003,15 @@
     flex-direction: column;
     gap: 0;
     padding: 0;
-    border: 1px solid var(--yuzi-settings-border, rgba(196, 206, 220, 0.78));
-    border-radius: 22px;
-    background: var(--yuzi-settings-surface, rgba(255, 255, 255, 0.96));
-    box-shadow: var(--yuzi-settings-shadow-soft, 0 10px 28px rgba(38, 52, 77, 0.08));
+    border: none;
+    border-bottom: 1px solid rgba(58, 55, 49, 0.06);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .phone-settings-section:last-child {
+    border-bottom: none;
     padding-bottom: 0;
 }
 
@@ -1021,29 +1020,29 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 14px;
-    padding: 18px 18px 0;
+    padding: 14px 0 0;
 }
 
 .phone-settings-section-heading {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     min-width: 0;
 }
 
 .phone-settings-section-title {
-    font-size: 16px;
-    line-height: 1.2;
-    font-weight: 700;
-    color: var(--yuzi-settings-text-primary, #152033);
-    letter-spacing: 0;
+    font-size: 14px;
+    line-height: 1.3;
+    font-weight: 500;
+    color: #3A3731;
+    letter-spacing: 0.04em;
 }
 
 .phone-settings-section-subtitle {
     margin: 0;
     font-size: 12px;
     line-height: 1.55;
-    color: var(--yuzi-settings-text-secondary, #4d5b71);
+    color: #7A7772;
 }
 
 .phone-settings-section-side {
@@ -1053,8 +1052,8 @@
 .phone-settings-section-body {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 16px 18px 18px;
+    gap: 10px;
+    padding: 10px 0 14px;
 }
 
 .phone-settings-inline-row,
@@ -1074,7 +1073,7 @@
 .phone-settings-label {
     font-size: 13px;
     line-height: 1.4;
-    color: var(--yuzi-settings-text-secondary, #4d5b71);
+    color: #3A3731;
     flex: 1 1 auto;
     min-width: 0;
 }
@@ -1083,45 +1082,45 @@
 .phone-settings-inline-meta {
     font-size: 12px;
     line-height: 1.6;
-    color: var(--yuzi-settings-text-tertiary, #7d899c);
+    color: #7A7772;
 }
 
 .phone-settings-inline-meta {
-    padding: 10px 12px;
-    border-radius: 14px;
-    background: var(--yuzi-settings-surface-soft, rgba(245, 248, 252, 0.92));
-    border: 1px solid rgba(225, 231, 239, 0.96);
+    padding: 8px 10px;
+    border-radius: 4px;
+    background: rgba(245, 243, 239, 0.6);
+    border: 1px solid rgba(58, 55, 49, 0.06);
 }
 
 .phone-settings-note {
-    padding: 12px 14px;
-    border-radius: 16px;
-    background: rgba(243, 247, 253, 0.98);
-    border: 1px solid rgba(223, 229, 238, 0.92);
+    padding: 10px 12px;
+    border-radius: 4px;
+    background: rgba(245, 243, 239, 0.6);
+    border: 1px solid rgba(58, 55, 49, 0.06);
     font-size: 12px;
     line-height: 1.6;
-    color: var(--yuzi-settings-text-secondary, #4d5b71);
+    color: #7A7772;
 }
 
 .phone-settings-inline-status {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 14px;
-    border-radius: 16px;
+    padding: 10px 12px;
+    border-radius: 4px;
     font-size: 12px;
     line-height: 1.5;
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(223, 229, 238, 0.92);
-    box-shadow: var(--yuzi-settings-shadow-soft, 0 10px 28px rgba(38, 52, 77, 0.08));
+    background: rgba(245, 243, 239, 0.5);
+    border: 1px solid rgba(58, 55, 49, 0.06);
+    box-shadow: none;
 }
 
 .phone-settings-inline-status.is-success {
-    color: var(--yuzi-settings-success, #56b78f);
+    color: #6B8F71;
 }
 
 .phone-settings-inline-status.is-danger {
-    color: var(--yuzi-settings-danger, #dc7575);
+    color: #8B5E5E;
 }
 
 .phone-settings-inline-status-dot {
@@ -1148,15 +1147,20 @@
     justify-content: space-between;
     align-items: flex-start;
     gap: 12px;
-    padding: 12px 14px;
-    border-radius: 16px;
-    background: var(--yuzi-settings-surface-soft, rgba(245, 248, 252, 0.92));
-    border: 1px solid rgba(225, 231, 239, 0.96);
+    padding: 8px 0;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(58, 55, 49, 0.04);
+}
+
+.phone-settings-summary-item:last-child {
+    border-bottom: none;
 }
 
 .phone-settings-summary-label {
     font-size: 12px;
-    color: var(--yuzi-settings-text-tertiary, #7d899c);
+    color: #7A7772;
 }
 
 .phone-settings-summary-value {
@@ -1164,7 +1168,7 @@
     text-align: right;
     font-size: 12px;
     line-height: 1.55;
-    color: var(--yuzi-settings-text-primary, #152033);
+    color: #3A3731;
 }
 
 .phone-settings-home-list {
@@ -1177,19 +1181,24 @@
 .phone-settings-home-item {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 14px;
-    border: 1px solid rgba(223, 229, 238, 0.96);
-    border-radius: 20px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 251, 253, 0.98));
-    box-shadow: 0 8px 18px rgba(55, 73, 99, 0.05);
-    transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+    gap: 0;
+    padding: 10px 0;
+    border: none;
+    border-bottom: 1px solid rgba(58, 55, 49, 0.06);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    transition: background 0.2s ease;
+}
+
+.phone-settings-home-item:last-child {
+    border-bottom: none;
 }
 
 .phone-settings-home-item:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 14px 26px rgba(55, 73, 99, 0.08);
-    border-color: rgba(186, 198, 214, 0.98);
+    transform: none;
+    box-shadow: none;
+    background: rgba(58, 55, 49, 0.02);
 }
 
 .phone-settings-home-trigger {
@@ -1214,46 +1223,46 @@
 .phone-settings-page .phone-settings-input-full:focus,
 .phone-settings-page .phone-settings-home-quick-select:focus {
     outline: none;
-    border-color: var(--yuzi-settings-accent, #7b93ff);
-    box-shadow: 0 0 0 4px var(--yuzi-settings-accent-ring, rgba(123, 147, 255, 0.18));
+    border-color: #5B7A6A;
+    box-shadow: 0 0 0 3px rgba(91, 122, 106, 0.18);
 }
 
 .phone-settings-home-icon {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 16px;
-    background: rgba(123, 147, 255, 0.16);
-    color: var(--yuzi-settings-accent-strong, #5f7bff);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    border-radius: 4px;
+    background: rgba(91, 122, 106, 0.08);
+    color: #5B7A6A;
+    box-shadow: none;
     flex-shrink: 0;
 }
 
 .phone-settings-home-item.is-appearance .phone-settings-home-icon {
-    background: rgba(116, 167, 207, 0.16);
-    color: #5c93c1;
+    background: rgba(91, 122, 106, 0.08);
+    color: #5B7A6A;
 }
 
 .phone-settings-home-item.is-beautify .phone-settings-home-icon {
-    background: rgba(184, 165, 255, 0.18);
-    color: #8f74dc;
+    background: rgba(166, 139, 91, 0.08);
+    color: #A68B5B;
 }
 
 .phone-settings-home-item.is-button .phone-settings-home-icon {
-    background: rgba(123, 147, 255, 0.18);
-    color: #657ffd;
+    background: rgba(91, 122, 106, 0.08);
+    color: #5B7A6A;
 }
 
 .phone-settings-home-item.is-database .phone-settings-home-icon {
-    background: rgba(86, 183, 143, 0.17);
-    color: #4aa87f;
+    background: rgba(107, 143, 113, 0.08);
+    color: #6B8F71;
 }
 
 .phone-settings-home-item.is-ai .phone-settings-home-icon {
-    background: rgba(123, 147, 255, 0.15);
-    color: #647df6;
+    background: rgba(91, 122, 106, 0.08);
+    color: #5B7A6A;
 }
 
 .phone-settings-home-glyph {
@@ -1278,15 +1287,16 @@
 }
 
 .phone-settings-home-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--yuzi-settings-text-primary, #152033);
+    font-size: 14px;
+    font-weight: 500;
+    color: #3A3731;
+    letter-spacing: 0.03em;
 }
 
 .phone-settings-home-desc {
     font-size: 12px;
     line-height: 1.55;
-    color: var(--yuzi-settings-text-secondary, #4d5b71);
+    color: #7A7772;
 }
 
 .phone-settings-home-meta {
@@ -1300,7 +1310,7 @@
     align-items: center;
     justify-content: center;
     width: 28px;
-    color: var(--yuzi-settings-text-faint, #98a4b7);
+    color: var(--yuzi-settings-text-faint, #9A9790);
     flex-shrink: 0;
 }
 
@@ -1324,7 +1334,7 @@
 
 .phone-settings-home-quick-label {
     font-size: 12px;
-    color: var(--yuzi-settings-text-tertiary, #7d899c);
+    color: #7A7772;
     min-width: 72px;
 }
 
@@ -1335,14 +1345,14 @@
 .phone-settings-page .phone-settings-textarea {
     width: 100%;
     box-sizing: border-box;
-    border-radius: 14px;
-    border: 1px solid rgba(203, 213, 226, 0.96);
-    background: rgba(248, 250, 252, 0.96);
-    color: var(--yuzi-settings-text-primary, #152033);
+    border-radius: 4px;
+    border: 1px solid rgba(58, 55, 49, 0.1);
+    background: rgba(245, 243, 239, 0.6);
+    color: #3A3731;
     font-size: 13px;
     line-height: 1.4;
-    padding: 10px 12px;
-    transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+    padding: 8px 10px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .phone-settings-home-quick-select:hover,
@@ -1350,8 +1360,8 @@
 .phone-settings-page .phone-settings-select:hover,
 .phone-settings-page .phone-settings-input-full:hover,
 .phone-settings-page .phone-settings-textarea:hover {
-    background: rgba(255, 255, 255, 0.98);
-    border-color: rgba(176, 188, 205, 0.98);
+    background: rgba(245, 243, 239, 0.8);
+    border-color: rgba(58, 55, 49, 0.15);
 }
 
 .phone-settings-page .phone-settings-input:disabled,
@@ -1367,8 +1377,8 @@
 .phone-settings-home-quick-select option,
 .phone-settings-page .phone-settings-input option,
 .phone-settings-page .phone-settings-select option {
-    background: #ffffff;
-    color: var(--yuzi-settings-text-primary, #152033);
+    background: rgba(245, 243, 239, 0.6);
+    color: #3A3731;
 }
 
 .phone-settings-page .phone-settings-textarea {
@@ -1384,16 +1394,21 @@
 .phone-settings-page .phone-settings-field-inline {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px;
-    border: 1px solid rgba(226, 232, 240, 0.96);
-    border-radius: 16px;
-    background: var(--yuzi-settings-surface-soft, rgba(245, 248, 252, 0.92));
+    gap: 6px;
+    padding: 8px 0;
+    border: none;
+    border-bottom: 1px solid rgba(58, 55, 49, 0.04);
+    border-radius: 0;
+    background: transparent;
+}
+
+.phone-settings-page .phone-settings-field-inline:last-child {
+    border-bottom: none;
 }
 
 .phone-settings-page .phone-settings-field-inline > span {
-    font-size: 12px;
-    color: var(--yuzi-settings-text-tertiary, #7d899c);
+    font-size: 11px;
+    color: #7A7772;
 }
 
 .phone-settings-layout-grid,
@@ -1413,10 +1428,15 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 12px 14px;
-    border-radius: 16px;
-    background: var(--yuzi-settings-surface-soft, rgba(245, 248, 252, 0.92));
-    border: 1px solid rgba(226, 232, 240, 0.96);
+    padding: 8px 0;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(58, 55, 49, 0.04);
+}
+
+.phone-settings-page .phone-settings-field-row:last-child {
+    border-bottom: none;
 }
 
 .phone-settings-page .phone-settings-field-row-compact {
@@ -1442,27 +1462,27 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    min-height: 38px;
-    padding: 8px 14px;
-    border-radius: 14px;
-    border: 1px solid rgba(196, 206, 220, 0.92);
-    background: rgba(255, 255, 255, 0.98);
-    color: var(--yuzi-settings-text-secondary, #4d5b71);
+    min-height: 34px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 1px solid rgba(58, 55, 49, 0.1);
+    background: rgba(245, 243, 239, 0.6);
+    color: #3A3731;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
-    transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease, border-color 0.14s ease;
-    box-shadow: 0 3px 10px rgba(55, 73, 99, 0.06);
+    transition: background 0.2s ease, border-color 0.2s ease;
+    box-shadow: none;
 }
 
 .phone-settings-btn:hover {
-    background: rgba(248, 250, 253, 0.98);
-    border-color: rgba(176, 188, 205, 0.98);
-    transform: translateY(-1px);
+    background: rgba(245, 243, 239, 0.9);
+    border-color: rgba(91, 122, 106, 0.18);
+    transform: none;
 }
 
 .phone-settings-btn:active {
-    transform: translateY(0);
+    transform: translateY(1px);
 }
 
 .phone-settings-btn svg {
@@ -1471,27 +1491,27 @@
 }
 
 .phone-settings-btn-primary {
-    background: linear-gradient(180deg, rgba(123, 147, 255, 0.96), rgba(95, 123, 255, 0.96)) !important;
-    border-color: rgba(94, 121, 255, 0.98) !important;
-    color: #ffffff !important;
-    box-shadow: 0 10px 20px rgba(95, 123, 255, 0.2) !important;
+    background: rgba(91, 122, 106, 0.1) !important;
+    border-color: rgba(91, 122, 106, 0.2) !important;
+    color: #4A6558 !important;
+    box-shadow: none !important;
 }
 
 .phone-settings-btn-ghost {
-    background: rgba(243, 246, 252, 0.96);
-    color: var(--yuzi-settings-accent-strong, #5f7bff);
-    border-color: rgba(212, 220, 235, 0.98);
+    background: transparent;
+    color: #5B7A6A;
+    border-color: rgba(91, 122, 106, 0.15);
 }
 
 .phone-settings-btn-danger {
-    background: rgba(255, 244, 244, 0.98);
-    border-color: rgba(236, 197, 197, 0.96);
-    color: var(--yuzi-settings-danger, #dc7575);
+    background: rgba(139, 94, 94, 0.06);
+    border-color: rgba(139, 94, 94, 0.15);
+    color: #8B5E5E;
 }
 
 .phone-settings-btn-danger:hover {
-    background: rgba(255, 238, 238, 0.98);
-    border-color: rgba(230, 176, 176, 0.98);
+    background: rgba(139, 94, 94, 0.1);
+    border-color: rgba(139, 94, 94, 0.2);
 }
 
 .phone-settings-nav-action {
@@ -1509,24 +1529,24 @@
 .phone-settings-toggle-size-row input[type="range"] {
     width: 100%;
     height: 4px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, rgba(123, 147, 255, 0.25), rgba(123, 147, 255, 0.62));
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(91, 122, 106, 0.18), rgba(91, 122, 106, 0.42));
     appearance: none;
 }
 
 .phone-settings-toggle-size-row input[type="range"]::-webkit-slider-thumb {
     appearance: none;
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
-    border: 3px solid #ffffff;
-    background: var(--yuzi-settings-accent-strong, #5f7bff);
-    box-shadow: 0 4px 10px rgba(95, 123, 255, 0.28);
+    border: 2px solid #F5F3EF;
+    background: #5B7A6A;
+    box-shadow: 0 1px 4px rgba(58, 55, 49, 0.12);
 }
 
 .phone-settings-page .phone-settings-switch,
 .phone-settings-page .phone-beautify-pick-radio input {
-    accent-color: var(--yuzi-settings-accent-strong, #5f7bff);
+    accent-color: #5B7A6A;
 }
 
 .phone-settings-preview {
@@ -1538,14 +1558,14 @@
     width: 100%;
     max-height: 160px;
     object-fit: cover;
-    border-radius: 18px;
-    border: 1px solid rgba(214, 223, 235, 0.96);
-    box-shadow: 0 6px 18px rgba(55, 73, 99, 0.08);
+    border-radius: 4px;
+    border: 1px solid rgba(58, 55, 49, 0.06);
+    box-shadow: none;
 }
 
 .phone-settings-page .phone-empty-msg {
     padding: 20px 14px;
-    color: var(--yuzi-settings-text-tertiary, #7d899c);
+    color: #7A7772;
 }
 
 .phone-settings-page .phone-appearance-switch-list,
@@ -1557,13 +1577,13 @@
 .phone-settings-page .phone-worldbook-entries {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 0;
     max-height: 320px;
     overflow-y: auto;
-    padding: 4px;
-    border: 1px solid rgba(226, 232, 240, 0.96);
-    border-radius: 18px;
-    background: rgba(248, 250, 252, 0.95);
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
 }
 
 .phone-settings-page .phone-appearance-checklist,
@@ -1586,10 +1606,21 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 12px 14px;
-    border: 1px solid rgba(226, 232, 240, 0.96);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.98);
+    padding: 8px 0;
+    border: none;
+    border-bottom: 1px solid rgba(58, 55, 49, 0.04);
+    border-radius: 0;
+    background: transparent;
+}
+
+.phone-settings-page .phone-appearance-switch-item:last-child,
+.phone-settings-page .phone-appearance-check-item:last-child,
+.phone-settings-page .phone-db-table-item:last-child,
+.phone-settings-page .phone-toggle-shape-item:last-child,
+.phone-settings-page .phone-icon-upload-row:last-child,
+.phone-settings-page .phone-beautify-item:last-child,
+.phone-settings-page .phone-worldbook-entry:last-child {
+    border-bottom: none;
 }
 
 .phone-settings-page .phone-beautify-item,
@@ -1603,7 +1634,7 @@
 .phone-settings-page .phone-toggle-shape-name,
 .phone-settings-page .phone-icon-name,
 .phone-settings-page .phone-worldbook-entry-name {
-    color: var(--yuzi-settings-text-primary, #152033);
+    color: #3A3731;
     font-size: 13px;
 }
 
@@ -1615,13 +1646,13 @@
 .phone-settings-page .phone-worldbook-status,
 .phone-settings-page .phone-worldbook-loading,
 .phone-settings-page .phone-worldbook-empty {
-    color: var(--yuzi-settings-text-tertiary, #7d899c);
+    color: #7A7772;
 }
 
 .phone-settings-page .phone-icon-default {
-    padding: 4px 8px;
-    background: rgba(243, 246, 252, 0.98);
-    border-radius: 999px;
+    padding: 2px 6px;
+    background: rgba(58, 55, 49, 0.04);
+    border-radius: 3px;
 }
 
 .phone-settings-page .phone-icon-thumb {
@@ -1633,34 +1664,37 @@
 
 .phone-settings-page .phone-db-api-status {
     margin-top: 0;
-    padding: 12px 14px;
-    border-radius: 16px;
+    padding: 10px 0;
+    border-radius: 0;
     font-size: 12px;
     line-height: 1.55;
+    border: none;
+    border-bottom: 1px solid rgba(58, 55, 49, 0.04);
 }
 
 .phone-settings-page .phone-db-api-status.is-ok {
-    color: var(--yuzi-settings-success, #56b78f);
-    background: rgba(240, 250, 245, 0.96);
-    border-color: rgba(162, 216, 190, 0.98);
+    color: #5B7A6A;
+    background: transparent;
+    border-color: rgba(58, 55, 49, 0.04);
 }
 
 .phone-settings-page .phone-db-api-status.is-error {
-    color: var(--yuzi-settings-danger, #dc7575);
-    background: rgba(255, 244, 244, 0.96);
-    border-color: rgba(236, 197, 197, 0.98);
+    color: #8B5E5E;
+    background: transparent;
+    border-color: rgba(58, 55, 49, 0.04);
 }
 
 .phone-settings-page .phone-prompt-preview {
     margin-top: 0;
-    padding: 14px;
-    background: rgba(248, 250, 252, 0.96);
-    border: 1px solid rgba(226, 232, 240, 0.96);
-    border-radius: 18px;
+    padding: 10px 0;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(58, 55, 49, 0.04);
+    border-radius: 0;
 }
 
 .phone-settings-page .phone-prompt-preview-content {
-    color: var(--yuzi-settings-text-secondary, #4d5b71);
+    color: #7A7772;
     max-height: 112px;
 }
 
@@ -1670,19 +1704,19 @@
 
 .phone-settings-page .phone-beautify-item-title {
     font-size: 14px;
-    color: var(--yuzi-settings-text-primary, #152033);
+    color: #3A3731;
 }
 
 .phone-settings-page .phone-beautify-item-badge.is-builtin {
-    color: var(--yuzi-settings-success, #56b78f);
-    background: rgba(240, 250, 245, 0.96);
-    border-color: rgba(162, 216, 190, 0.98);
+    color: #5B7A6A;
+    background: rgba(91, 122, 106, 0.08);
+    border-color: rgba(91, 122, 106, 0.18);
 }
 
 .phone-settings-page .phone-beautify-item-badge.is-user {
-    color: var(--yuzi-settings-info, #74a7cf);
-    background: rgba(239, 246, 252, 0.96);
-    border-color: rgba(188, 211, 230, 0.98);
+    color: #A68B5B;
+    background: rgba(166, 139, 91, 0.08);
+    border-color: rgba(166, 139, 91, 0.18);
 }
 
 .phone-settings-page .phone-beautify-item-actions {
@@ -1693,12 +1727,12 @@
 
 .phone-settings-page .phone-beautify-pick-radio {
     justify-content: center;
-    min-height: 38px;
-    padding: 0 12px;
-    border-radius: 14px;
-    background: rgba(243, 246, 252, 0.96);
-    border: 1px solid rgba(226, 232, 240, 0.96);
-    color: var(--yuzi-settings-text-secondary, #4d5b71);
+    min-height: 32px;
+    padding: 0 8px;
+    border-radius: 4px;
+    background: transparent;
+    border: 1px solid rgba(58, 55, 49, 0.08);
+    color: #7A7772;
 }
 
 .phone-settings-page .phone-worldbook-entry-label {
@@ -1715,15 +1749,15 @@
 .phone-settings-page .phone-worldbook-loading,
 .phone-settings-page .phone-worldbook-empty,
 .phone-settings-page .phone-worldbook-error {
-    padding: 18px 14px;
-    border-radius: 16px;
+    padding: 14px 0;
+    border-radius: 0;
     text-align: center;
 }
 
 .phone-settings-page .phone-worldbook-error {
-    color: var(--yuzi-settings-danger, #dc7575);
-    background: rgba(255, 244, 244, 0.96);
-    border: 1px solid rgba(236, 197, 197, 0.98);
+    color: #8B5E5E;
+    background: transparent;
+    border: none;
 }
 
 @media screen and (max-width: 480px) {
@@ -1760,7 +1794,7 @@
     }
 }
 
-/* 深色主题兼容：强制设置页表单控件保持白底深字 */
+/* 深色主题兼容：强制设置页表单控件保持侘寂米白底炭灰字 */
 .phone-settings-page .phone-settings-home-quick-select,
 .phone-settings-page .phone-settings-input,
 .phone-settings-page .phone-settings-select,
@@ -1771,12 +1805,12 @@
 .phone-settings-page select.phone-settings-select,
 .phone-settings-page select.phone-settings-home-quick-select,
 .phone-settings-page textarea.phone-settings-textarea {
-    background: #ffffff !important;
-    background-color: #ffffff !important;
-    color: var(--yuzi-settings-text-primary, #152033) !important;
-    -webkit-text-fill-color: var(--yuzi-settings-text-primary, #152033) !important;
-    caret-color: var(--yuzi-settings-text-primary, #152033) !important;
-    border-color: rgba(203, 213, 226, 0.96) !important;
+    background: rgba(245, 243, 239, 0.6) !important;
+    background-color: rgba(245, 243, 239, 0.6) !important;
+    color: #3A3731 !important;
+    -webkit-text-fill-color: #3A3731 !important;
+    caret-color: #3A3731 !important;
+    border-color: rgba(58, 55, 49, 0.1) !important;
 }
 
 .phone-settings-page .phone-settings-home-quick-select:hover,
@@ -1789,18 +1823,18 @@
 .phone-settings-page .phone-settings-select:focus,
 .phone-settings-page .phone-settings-input-full:focus,
 .phone-settings-page .phone-settings-textarea:focus {
-    background: #ffffff !important;
-    background-color: #ffffff !important;
-    color: var(--yuzi-settings-text-primary, #152033) !important;
-    -webkit-text-fill-color: var(--yuzi-settings-text-primary, #152033) !important;
+    background: rgba(245, 243, 239, 0.8) !important;
+    background-color: rgba(245, 243, 239, 0.8) !important;
+    color: #3A3731 !important;
+    -webkit-text-fill-color: #3A3731 !important;
 }
 
 .phone-settings-page .phone-settings-home-quick-select::placeholder,
 .phone-settings-page .phone-settings-input::placeholder,
 .phone-settings-page .phone-settings-input-full::placeholder,
 .phone-settings-page .phone-settings-textarea::placeholder {
-    color: var(--yuzi-settings-text-tertiary, #7d899c) !important;
-    -webkit-text-fill-color: var(--yuzi-settings-text-tertiary, #7d899c) !important;
+    color: #7A7772 !important;
+    -webkit-text-fill-color: #7A7772 !important;
 }
 
 .phone-settings-page .phone-settings-home-quick-select:disabled,
@@ -1808,18 +1842,18 @@
 .phone-settings-page .phone-settings-select:disabled,
 .phone-settings-page .phone-settings-input-full:disabled,
 .phone-settings-page .phone-settings-textarea:disabled {
-    background: #f3f6fb !important;
-    background-color: #f3f6fb !important;
-    color: var(--yuzi-settings-text-tertiary, #7d899c) !important;
-    -webkit-text-fill-color: var(--yuzi-settings-text-tertiary, #7d899c) !important;
+    background: rgba(232, 229, 223, 0.5) !important;
+    background-color: rgba(232, 229, 223, 0.5) !important;
+    color: #7A7772 !important;
+    -webkit-text-fill-color: #7A7772 !important;
     opacity: 1;
 }
 
 .phone-settings-page .phone-settings-home-quick-select option,
 .phone-settings-page .phone-settings-select option {
-    background: #ffffff !important;
-    background-color: #ffffff !important;
-    color: var(--yuzi-settings-text-primary, #152033) !important;
+    background: #F5F3EF !important;
+    background-color: #F5F3EF !important;
+    color: #3A3731 !important;
 }
 
 .phone-settings-page .phone-settings-home-quick {
@@ -1830,7 +1864,7 @@
 .phone-settings-page .phone-settings-home-quick-label {
     min-width: 64px;
     font-size: 12px;
-    color: var(--yuzi-settings-text-tertiary, #7d899c);
+    color: #7A7772;
 }
 
 .phone-settings-page .phone-settings-home-quick-select {
@@ -1843,7 +1877,7 @@
     padding: 0 32px 0 12px !important;
     line-height: 34px;
     display: block;
-    border-radius: 12px;
+    border-radius: 4px;
     appearance: auto;
     -webkit-appearance: menulist;
     box-shadow: none;

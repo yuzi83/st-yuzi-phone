@@ -1,0 +1,190 @@
+/* ========================================
+   Phone Theater 广场场景（朋友圈极简）
+   ======================================== */
+
+.phone-app-page.phone-theater-page[data-theater-scene="square"] {
+    background: linear-gradient(180deg, #fdfdfb 0%, #f6f4ee 100%);
+    box-shadow: inset 0 0 0 1px rgba(246, 244, 238, 0.96);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="square"] .phone-theater-nav {
+    background: #fdfdfb;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="square"] .phone-theater-body {
+    background: linear-gradient(180deg, #fdfdfb 0%, #f6f4ee 100%);
+    color: #1d1d1f;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="square"] .phone-theater-nav .phone-nav-title,
+.phone-app-page.phone-theater-page[data-theater-scene="square"] .phone-theater-nav .phone-nav-back {
+    color: #1d1d1f;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-post {
+    position: relative;
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 6px 14px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-card-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #fcdcc1 0%, #e9b591 100%);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-author-block {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-author {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1d1d1f;
+    line-height: 1.3;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-heat {
+    flex-shrink: 0;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1d1d1f;
+    margin: 0 0 6px;
+    line-height: 1.45;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-body-text {
+    font-size: 14px;
+    line-height: 1.65;
+    color: #1d1d1f;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-topic-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-topic {
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: #4b6584;
+    background: #eef2f7;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-media {
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-featured {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: #faf6ed;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-featured-item {
+    font-size: 13px;
+    line-height: 1.55;
+    color: rgba(0, 0, 0, 0.78);
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-featured-item.is-godlike {
+    background: #fff5d6;
+    border-radius: 8px;
+    padding: 6px 8px;
+    margin: -2px -2px;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-featured-author {
+    font-weight: 600;
+    color: #1d1d1f;
+    font-size: 13px;
+    margin-right: 4px;
+    display: inline-block;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-featured-body {
+    color: rgba(0, 0, 0, 0.78);
+    display: inline;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-comments {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-comment-line {
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: rgba(0, 0, 0, 0.55);
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-noise {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-comment-line.is-noise {
+    color: rgba(0, 0, 0, 0.35);
+    font-style: italic;
+    opacity: 0.85;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-footer {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(0, 0, 0, 0.06);
+    font-size: 11.5px;
+    color: rgba(0, 0, 0, 0.42);
+}

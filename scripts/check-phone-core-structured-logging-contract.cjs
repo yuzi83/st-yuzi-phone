@@ -12,12 +12,20 @@ const FILES = {
     tableRepository: 'modules/phone-core/data-api/table-repository.js',
     mutationQueue: 'modules/phone-core/data-api/mutation-queue.js',
     lockRepository: 'modules/phone-core/data-api/lock-repository.js',
-    templateStore: 'modules/phone-core/chat-support/template-store.js',
+    aiInstructionStore: 'modules/phone-core/chat-support/ai-instruction-store.js',
     scrollGuards: 'modules/phone-core/scroll-guards.js',
+};
+
+const REMOVED_FILES = {
+    legacyTemplateStore: 'modules/phone-core/chat-support/template-store.js',
 };
 
 function read(relativePath) {
     return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
+}
+
+function exists(relativePath) {
+    return fs.existsSync(path.join(ROOT, relativePath));
 }
 
 function has(content, snippet) {
@@ -25,7 +33,7 @@ function has(content, snippet) {
 }
 
 function check(results, fileKey, description, ok) {
-    results.push({ file: FILES[fileKey], description, ok });
+    results.push({ file: FILES[fileKey] || REMOVED_FILES[fileKey], description, ok });
 }
 
 function main() {
@@ -63,9 +71,10 @@ function main() {
     check(results, 'lockRepository', 'lock-repository get lock state 使用结构化日志', has(contents.lockRepository, "action: 'lock.state.get'"));
     check(results, 'lockRepository', 'lock-repository toggle col 使用结构化日志', has(contents.lockRepository, "action: 'lock.col.toggle'"));
 
-    check(results, 'templateStore', 'template-store 使用 scoped logger', has(contents.templateStore, "const logger = Logger.withScope({ scope: 'phone-core/chat-support/template-store', feature: 'chat-support' });"));
-    check(results, 'templateStore', 'template-store 读取失败使用结构化日志', has(contents.templateStore, "action: 'prompt-template.read'"));
-    check(results, 'templateStore', 'template-store 删除失败使用结构化日志', has(contents.templateStore, "action: 'prompt-template.delete'"));
+    check(results, 'legacyTemplateStore', 'legacy template-store 已删除，不再要求旧 CRUD 结构化日志契约', !exists(REMOVED_FILES.legacyTemplateStore));
+    check(results, 'aiInstructionStore', 'ai-instruction-store 使用 scoped logger', has(contents.aiInstructionStore, "const logger = Logger.withScope({ scope: 'phone-core/chat-support/ai-instruction-store', feature: 'chat-support' });"));
+    check(results, 'aiInstructionStore', 'ai-instruction-store 导入失败使用结构化日志', has(contents.aiInstructionStore, "action: 'preset.import'"));
+    check(results, 'aiInstructionStore', 'ai-instruction-store 保存失败使用结构化日志', has(contents.aiInstructionStore, "action: 'preset.save'"));
 
     check(results, 'scrollGuards', 'scroll-guards 使用 scoped logger', has(contents.scrollGuards, "const logger = Logger.withScope({ scope: 'phone-core/scroll-guards', feature: 'scroll-guards' });"));
     check(results, 'scrollGuards', 'scroll-guards 声明 ScrollDebug channel 常量', has(contents.scrollGuards, "const SCROLL_DEBUG_CHANNEL = 'ScrollDebug';"));

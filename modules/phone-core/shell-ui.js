@@ -1,4 +1,4 @@
-import { PHONE_ICONS } from '../phone-home.js';
+import { PHONE_ICONS } from '../phone-home/icons.js';
 
 export function buildPhoneShellHtml() {
     return `

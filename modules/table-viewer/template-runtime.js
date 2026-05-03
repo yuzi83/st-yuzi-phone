@@ -1,4 +1,5 @@
-import { sanitizeCSS } from '../utils.js';
+import { sanitizeCSS } from '../utils/sanitize.js';
+import { EventManager } from '../utils/event-manager.js';
 
 export const VIEWER_ANNOTATION_META_KEYS = new Set([
     '_comment',
@@ -256,7 +257,7 @@ export function buildScopedCustomCss(customCssText, scopeSelector) {
     return transformRules(css);
 }
 
-export function bindTemplateDraftPreviewForViewer(container, sheetKey, renderTableViewer) {
+export function bindTemplateDraftPreviewForViewer(container, sheetKey, renderTableViewer, viewerRuntime = null) {
     if (!(container instanceof HTMLElement)) return;
 
     const host = /** @type {any} */ (container);
@@ -267,18 +268,16 @@ export function bindTemplateDraftPreviewForViewer(container, sheetKey, renderTab
         } catch {}
     }
 
-    const previewEventManager = new EventManager();
-    let observer = null;
+    const runtime = viewerRuntime && typeof viewerRuntime === 'object' ? viewerRuntime : null;
+    const previewEventManager = runtime?.addEventListener
+        ? null
+        : new EventManager(`table-viewer-draft-preview:${sheetKey || 'unknown'}`);
     let disposed = false;
 
     const cleanupDraftPreview = () => {
         if (disposed) return;
         disposed = true;
-        previewEventManager.dispose();
-        if (observer) {
-            try { observer.disconnect(); } catch {}
-            observer = null;
-        }
+        previewEventManager?.dispose?.();
         if (host.__yuziDraftPreviewCleanup === cleanupDraftPreview) {
             delete host.__yuziDraftPreviewCleanup;
         }
@@ -289,41 +288,24 @@ export function bindTemplateDraftPreviewForViewer(container, sheetKey, renderTab
         renderTableViewer(container, sheetKey);
     };
 
-    previewEventManager.add(window, 'yuzi-phone-style-draft-updated', rerender);
-    previewEventManager.add(window, 'yuzi-phone-style-draft-cleared', rerender);
+    const bindListener = runtime?.addEventListener
+        ? (...args) => runtime.addEventListener(...args)
+        : (...args) => previewEventManager.add(...args);
+    const observeDisconnection = runtime?.observeDisconnection
+        ? (...args) => runtime.observeDisconnection(...args)
+        : (...args) => previewEventManager.observeDisconnection(...args);
 
-    observer = new MutationObserver(() => {
-        if (container.isConnected) return;
+    bindListener(window, 'yuzi-phone-style-draft-updated', rerender);
+    bindListener(window, 'yuzi-phone-style-draft-cleared', rerender);
+
+    observeDisconnection(container, () => {
         cleanupDraftPreview();
+    }, {
+        observerRoot: document.body,
+        childList: true,
+        subtree: true,
     });
-    observer.observe(document.body, { childList: true, subtree: true });
 
     host.__yuziDraftPreviewCleanup = cleanupDraftPreview;
 }
 
-class EventManager {
-    constructor() {
-        this._cleanups = [];
-    }
-
-    add(target, type, handler, options) {
-        if (!target || typeof target.addEventListener !== 'function' || typeof handler !== 'function') {
-            return;
-        }
-        target.addEventListener(type, handler, options);
-        this._cleanups.push(() => {
-            try {
-                target.removeEventListener(type, handler, options);
-            } catch {}
-        });
-    }
-
-    dispose() {
-        while (this._cleanups.length > 0) {
-            const cleanup = this._cleanups.pop();
-            try {
-                cleanup();
-            } catch {}
-        }
-    }
-}

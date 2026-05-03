@@ -34,28 +34,64 @@ export function createStorageManager(options = {}) {
 
         const index = loadIndex();
         const storageKey = toStorageKey(ns, innerKey);
+        let previousRaw = null;
+        let previousMeta = null;
+        try {
+            previousRaw = localStorage.getItem(storageKey);
+            previousMeta = index.entries[storageKey]
+                ? { ...index.entries[storageKey] }
+                : null;
+        } catch (error) {
+            Logger.warn('[玉子手机] 存储读取旧 payload 失败:', error);
+            return false;
+        }
         const ttl = Number(opts.ttl);
         const expiresAt = Number.isFinite(ttl) && ttl > 0
             ? nowTs() + ttl
             : (Number(mergedOptions.defaultTTL) > 0 ? nowTs() + Number(mergedOptions.defaultTTL) : 0);
+        let payload = null;
 
-        const payload = JSON.stringify({
-            v: value,
-            expiresAt,
-        });
+        const rollbackWrittenPayload = () => {
+            try {
+                if (previousRaw === null) {
+                    localStorage.removeItem(storageKey);
+                    delete index.entries[storageKey];
+                } else {
+                    localStorage.setItem(storageKey, previousRaw);
+                    index.entries[storageKey] = previousMeta ? { ...previousMeta } : {};
+                }
+                recomputeIndexStats(index);
+                const rollbackSaveResult = saveIndex(index);
+                if (rollbackSaveResult?.success !== true) {
+                    Logger.warn('[玉子手机] 存储索引失败后回滚索引保存失败:', rollbackSaveResult);
+                }
+            } catch (rollbackError) {
+                Logger.warn('[玉子手机] 存储索引失败后回滚 payload 失败:', rollbackError);
+            }
+        };
+
+        const saveIndexOrRollback = () => {
+            const saveResult = saveIndex(index);
+            if (saveResult?.success === true) return true;
+            rollbackWrittenPayload();
+            return false;
+        };
 
         try {
+            payload = JSON.stringify({
+                v: value,
+                expiresAt,
+            });
             writeRaw(storageKey, payload, index);
             index.entries[storageKey].namespace = ns;
             index.entries[storageKey].key = innerKey;
             index.entries[storageKey].expiresAt = expiresAt;
             evictByLRU(index, mergedOptions);
-            saveIndex(index);
-            return true;
+            return saveIndexOrRollback();
         } catch (error) {
             const errorName = String(error?.name || '').toLowerCase();
             const isQuotaError = errorName.includes('quota') || errorName.includes('exceeded');
-            if (isQuotaError) {
+            if (isQuotaError && typeof payload === 'string') {
                 pruneExpired(index);
                 evictByLRU(index, mergedOptions);
                 try {
@@ -64,8 +100,7 @@ export function createStorageManager(options = {}) {
                     index.entries[storageKey].key = innerKey;
                     index.entries[storageKey].expiresAt = expiresAt;
                     evictByLRU(index, mergedOptions);
-                    saveIndex(index);
-                    return true;
+                    return saveIndexOrRollback();
                 } catch (retryError) {
                     Logger.warn('[玉子手机] 存储空间不足，写入失败:', retryError);
                     return false;

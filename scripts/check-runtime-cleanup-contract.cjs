@@ -9,6 +9,9 @@ const FILES = {
     state: 'modules/phone-core/state.js',
     routeRuntime: 'modules/phone-core/route-runtime.js',
     routeRenderer: 'modules/phone-core/route-renderer.js',
+    runtimeManager: 'modules/runtime-manager.js',
+    eventManager: 'modules/utils/event-manager.js',
+    fusionRuntime: 'modules/phone-fusion/runtime.js',
 };
 
 function read(relativePath) {
@@ -72,6 +75,15 @@ function main() {
     check(results, 'routeRenderer', 'route-renderer 新增 scheduleRouteCommit()', has(contents.routeRenderer, 'function scheduleRouteCommit('));
     check(results, 'routeRenderer', 'route-renderer 对加载失败输出结构化错误日志', has(contents.routeRenderer, "message: '加载 route renderer 失败'"));
     check(results, 'routeRenderer', 'route-renderer 对页面渲染失败输出结构化错误日志', has(contents.routeRenderer, "message: 'route 页面渲染失败'"));
+
+    check(results, 'runtimeManager', 'runtime-manager 新增 observeManagedDisconnection()', has(contents.runtimeManager, 'const observeManagedDisconnection = (target, callback, options = {}) => {'));
+    check(results, 'runtimeManager', 'runtime-manager 暴露 observeDisconnection', has(contents.runtimeManager, 'observeDisconnection: observeManagedDisconnection,'));
+    check(results, 'eventManager', 'EventManager 兼容暴露 observeDisconnection()', has(contents.eventManager, 'observeDisconnection(target, callback, options = {}) {'));
+    check(results, 'eventManager', 'EventManager observeDisconnection() 委托 runtime scope', has(contents.eventManager, 'return this.ensureRuntime().observeDisconnection(target, callback, options);'));
+    check(results, 'fusionRuntime', 'fusion-runtime 直接导入 createRuntimeScope()', has(contents.fusionRuntime, "import { createRuntimeScope } from '../runtime-manager.js';"));
+    check(results, 'fusionRuntime', 'fusion-runtime 通过 runtime.observeDisconnection() 托管容器清理', has(contents.fusionRuntime, 'runtime.observeDisconnection(container, dispose, {'));
+    check(results, 'fusionRuntime', 'fusion-runtime 继续通过 cleanupFusionPageResources() 执行断开清理', has(contents.fusionRuntime, 'cleanupFusionPageResources();'));
+    check(results, 'fusionRuntime', 'fusion-runtime 移除裸 MutationObserver', !has(contents.fusionRuntime, 'new MutationObserver('));
 
     const failed = results.filter(item => !item.ok);
     if (failed.length > 0) {

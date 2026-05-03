@@ -1,5 +1,14 @@
 import { Logger } from '../../error-handler.js';
-import { getPhoneSettings, savePhoneSettingsPatch } from '../../settings.js';
+import {
+    getPhoneSettings,
+    savePhoneSettingsPatch,
+    normalizePhoneAiInstructionSettings as normalizePhoneAiInstructionSettingsFromSchema,
+    normalizePhoneAiInstructionMediaMarkers,
+} from '../../settings.js';
+import {
+    normalizePhoneAiInstructionSegmentMainSlot,
+    resolvePhoneAiInstructionMainSlotOrder,
+} from './ai-instruction-slots.js';
 
 const logger = Logger.withScope({ scope: 'phone-core/chat-support/ai-instruction-store', feature: 'chat-support' });
 
@@ -116,18 +125,24 @@ const DEFAULT_PHONE_AI_PROMPT_GROUP = Object.freeze([
         name: '媒体输出协议',
         role: 'user',
         content: [
-            '你的回复必须严格使用以下格式输出：',
-            '正文：<聊天正文>',
-            '图片描述：<图片描述>',
-            '视频描述：<视频描述>',
+            '你的回复必须严格使用以下多气泡格式输出，最多 4 条消息：',
+            '消息1：',
+            '正文：<第一条聊天气泡正文>',
+            '图片描述：<图片描述或 none>',
+            '视频描述：<视频描述或 none>',
+            '消息2：',
+            '正文：<第二条聊天气泡正文>',
+            '图片描述：<图片描述或 none>',
+            '视频描述：<视频描述或 none>',
             '',
             '要求：',
-            '1. 正文必须是聊天气泡里真正显示的文字。',
-            '2. 图片或视频只在当前语境自然合适时偶尔出现，不需要每次都发。',
-            '3. 如果这次没有发图，就写 图片描述：none。',
-            '4. 如果这次没有发视频，就写 视频描述：none。',
-            '5. 如果同时没有图片和视频，也必须保留这两行并写 none。',
-            '6. 不要输出额外解释，不要输出 markdown，不要输出代码块。',
+            '1. 每个“消息N”都是一条独立聊天气泡；不需要多条时只输出 消息1。',
+            '2. 正文必须是聊天气泡里真正显示的文字，不要写旁白、分析或动作描写。',
+            '3. 图片或视频只在当前语境自然合适时偶尔出现，不需要每次都发。',
+            '4. 每条消息都必须分别保留 正文、图片描述、视频描述 三行。',
+            '5. 如果某条消息没有发图，就写 图片描述：none。',
+            '6. 如果某条消息没有发视频，就写 视频描述：none。',
+            '7. 不要超过 4 条消息，不要输出额外解释，不要输出 markdown，不要输出代码块。',
         ].join('\n'),
         deletable: true,
     },
@@ -140,10 +155,7 @@ const DEFAULT_PHONE_AI_PROMPT_GROUP = Object.freeze([
     },
 ]);
 
-const DEFAULT_PHONE_AI_MEDIA_MARKERS = Object.freeze({
-    imagePrefix: '[图片]',
-    videoPrefix: '[视频]',
-});
+const DEFAULT_PHONE_AI_MEDIA_MARKERS = Object.freeze(normalizePhoneAiInstructionMediaMarkers({}));
 
 function cloneValue(value, fallback = null) {
     try {
@@ -161,17 +173,8 @@ function normalizeRole(role) {
     return 'system';
 }
 
-function normalizeMainSlot(raw) {
-    const slot = String(raw || '').trim().toUpperCase();
-    return slot === 'A' || slot === 'B' ? slot : '';
-}
-
 function normalizeMediaMarkers(raw) {
-    const src = raw && typeof raw === 'object' ? raw : {};
-    return {
-        imagePrefix: String(src.imagePrefix ?? DEFAULT_PHONE_AI_MEDIA_MARKERS.imagePrefix).trim(),
-        videoPrefix: String(src.videoPrefix ?? DEFAULT_PHONE_AI_MEDIA_MARKERS.videoPrefix).trim(),
-    };
+    return normalizePhoneAiInstructionMediaMarkers(raw || DEFAULT_PHONE_AI_MEDIA_MARKERS);
 }
 
 function sanitizePresetId(value, fallback = 'phone_ai_preset') {
@@ -189,7 +192,7 @@ function createDefaultSegmentId(index = 0) {
 
 export function createEmptyPhoneAiInstructionSegment(overrides = {}) {
     const src = overrides && typeof overrides === 'object' ? overrides : {};
-    const mainSlot = normalizeMainSlot(src.mainSlot || (src.isMain ? 'A' : (src.isMain2 ? 'B' : '')));
+    const mainSlot = normalizePhoneAiInstructionSegmentMainSlot('', src);
     return {
         id: String(src.id || createDefaultSegmentId(0)).trim() || createDefaultSegmentId(0),
         name: String(src.name || '新片段').trim() || '新片段',
@@ -202,7 +205,7 @@ export function createEmptyPhoneAiInstructionSegment(overrides = {}) {
 
 function normalizeSegment(segment, index = 0) {
     const src = segment && typeof segment === 'object' ? segment : {};
-    const mainSlot = normalizeMainSlot(src.mainSlot || (src.isMain ? 'A' : (src.isMain2 ? 'B' : '')));
+    const mainSlot = normalizePhoneAiInstructionSegmentMainSlot('', src);
     return {
         id: String(src.id || createDefaultSegmentId(index)).trim() || createDefaultSegmentId(index),
         name: String(src.name || `片段 ${index + 1}`).trim() || `片段 ${index + 1}`,
@@ -266,28 +269,15 @@ function normalizePreset(preset, index = 0) {
 }
 
 function normalizePhoneAiInstructionSettings(raw) {
-    const src = raw && typeof raw === 'object' ? raw : {};
-    const base = buildDefaultPhoneAiInstructionSettings();
-    const presets = Array.isArray(src.presets) && src.presets.length > 0
-        ? src.presets.map((preset, index) => normalizePreset(preset, index))
-        : base.presets;
+    const normalized = normalizePhoneAiInstructionSettingsFromSchema(raw);
+    if (Array.isArray(normalized.presets) && normalized.presets.length > 0) {
+        return {
+            ...normalized,
+            presets: normalized.presets.map((preset, index) => normalizePreset(preset, index)),
+        };
+    }
 
-    const presetNames = new Set(presets.map((preset) => preset.name));
-    const currentPresetNameRaw = String(src.currentPresetName || '').trim();
-    const lastOpenedPresetNameRaw = String(src.lastOpenedPresetName || '').trim();
-    const currentPresetName = presetNames.has(currentPresetNameRaw)
-        ? currentPresetNameRaw
-        : presets[0]?.name || base.currentPresetName;
-    const lastOpenedPresetName = presetNames.has(lastOpenedPresetNameRaw)
-        ? lastOpenedPresetNameRaw
-        : currentPresetName;
-
-    return {
-        currentPresetName,
-        lastOpenedPresetName,
-        migratedLegacyTemplates: src.migratedLegacyTemplates === true,
-        presets,
-    };
+    return buildDefaultPhoneAiInstructionSettings();
 }
 
 function isSameJson(a, b) {
@@ -360,8 +350,33 @@ function readLegacyPromptTemplates() {
 }
 
 function persistPhoneAiInstructionSettings(nextSettings) {
-    savePhoneSettingsPatch({ phoneAiInstruction: nextSettings });
-    return nextSettings;
+    try {
+        const saved = savePhoneSettingsPatch({ phoneAiInstruction: nextSettings });
+        if (saved !== true) {
+            logger.warn({
+                action: 'preset.save',
+                message: '保存 AI 指令预设设置未完全成功',
+                context: {
+                    presetCount: Array.isArray(nextSettings?.presets) ? nextSettings.presets.length : 0,
+                    currentPresetName: String(nextSettings?.currentPresetName || ''),
+                    lastOpenedPresetName: String(nextSettings?.lastOpenedPresetName || ''),
+                },
+            });
+        }
+        return nextSettings;
+    } catch (error) {
+        logger.error({
+            action: 'preset.save',
+            message: '保存 AI 指令预设设置时发生异常',
+            context: {
+                presetCount: Array.isArray(nextSettings?.presets) ? nextSettings.presets.length : 0,
+                currentPresetName: String(nextSettings?.currentPresetName || ''),
+                lastOpenedPresetName: String(nextSettings?.lastOpenedPresetName || ''),
+            },
+            error,
+        });
+        throw error;
+    }
 }
 
 function ensurePhoneAiInstructionSettings() {
@@ -456,6 +471,8 @@ export function savePhoneAiInstructionPreset(preset, options = {}) {
     const originalIndex = originalName ? presets.findIndex((item) => item.name === originalName) : -1;
     const sameNameIndex = presets.findIndex((item) => item.name === presetName);
     const hasNameConflict = sameNameIndex >= 0 && sameNameIndex !== originalIndex;
+    const isRename = originalIndex >= 0 && originalName !== presetName;
+    const isConflictingRename = isRename && hasNameConflict;
 
     if (hasNameConflict && !overwrite) {
         return {
@@ -465,16 +482,36 @@ export function savePhoneAiInstructionPreset(preset, options = {}) {
         };
     }
 
-    const nextPresets = presets.filter((item) => item.name !== originalName && item.name !== presetName);
-    nextPresets.push({
+    if (isConflictingRename) {
+        return {
+            success: false,
+            message: `不能将预设「${originalName}」重命名为已存在的「${presetName}」，请先更换名称或删除目标预设`,
+            presetName,
+            originalName,
+        };
+    }
+
+    const nextPreset = {
         ...normalizedPreset,
         updatedAt: Date.now(),
-    });
+    };
+    const nextPresets = [...presets];
+    const replacementIndex = sameNameIndex >= 0
+        ? sameNameIndex
+        : originalIndex;
 
-    const nextCurrentName = switchTo
+    if (replacementIndex >= 0) {
+        nextPresets[replacementIndex] = nextPreset;
+    } else {
+        nextPresets.push(nextPreset);
+    }
+
+    const existingCurrentName = String(settings.currentPresetName || '').trim();
+    const shouldMoveCurrentToRenamedPreset = isRename && existingCurrentName === originalName;
+    const nextCurrentName = switchTo || shouldMoveCurrentToRenamedPreset
         ? presetName
-        : (settings.currentPresetName && nextPresets.some((item) => item.name === settings.currentPresetName)
-            ? settings.currentPresetName
+        : (existingCurrentName && nextPresets.some((item) => item.name === existingCurrentName)
+            ? existingCurrentName
             : (nextPresets[0]?.name || presetName));
 
     const nextSettings = normalizePhoneAiInstructionSettings({
@@ -490,7 +527,7 @@ export function savePhoneAiInstructionPreset(preset, options = {}) {
         success: true,
         message: originalIndex >= 0 ? '预设已保存' : '预设已创建',
         presetName,
-        preset: cloneValue(nextPresets.find((item) => item.name === presetName), null),
+        preset: cloneValue(nextSettings.presets.find((item) => item.name === presetName), null),
     };
 }
 
@@ -702,11 +739,6 @@ export function materializePhoneAiInstructionPresetMessages(presetOrName, variab
     const promptGroup = Array.isArray(preset.promptGroup) && preset.promptGroup.length > 0
         ? preset.promptGroup
         : (Array.isArray(preset.segments) ? preset.segments : []);
-    const resolveMainSlotOrder = (slot) => {
-        if (slot === 'A') return 0;
-        if (slot === 'B') return 1;
-        return 2;
-    };
 
     return promptGroup
         .map((segment, index) => ({
@@ -714,7 +746,7 @@ export function materializePhoneAiInstructionPresetMessages(presetOrName, variab
             __segmentIndex: index,
         }))
         .sort((a, b) => {
-            const slotOrder = resolveMainSlotOrder(a.mainSlot) - resolveMainSlotOrder(b.mainSlot);
+            const slotOrder = resolvePhoneAiInstructionMainSlotOrder(a.mainSlot) - resolvePhoneAiInstructionMainSlotOrder(b.mainSlot);
             return slotOrder || (a.__segmentIndex - b.__segmentIndex);
         })
         .filter((segment) => {

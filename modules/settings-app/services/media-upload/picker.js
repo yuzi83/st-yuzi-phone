@@ -14,6 +14,7 @@ export function pickImageFile(callback, options = {}) {
     const maxWidth = clampNumber(options.maxWidth, 128, 4096, 1440);
     const maxHeight = clampNumber(options.maxHeight, 128, 4096, 1440);
     const quality = clampNumber(options.quality, 0.5, 0.92, 0.82);
+    const runtime = options.runtime || options.pageRuntime || null;
 
     const input = document.createElement('input');
     input.type = 'file';
@@ -27,7 +28,15 @@ export function pickImageFile(callback, options = {}) {
         } catch {}
     };
 
-    input.addEventListener('change', async () => {
+    const addListener = runtime?.addEventListener
+        ? (...args) => runtime.addEventListener(...args)
+        : (target, type, handler, listenerOptions) => {
+            target.addEventListener(type, handler, listenerOptions);
+            return () => target.removeEventListener(type, handler, listenerOptions);
+        };
+    runtime?.registerCleanup?.(cleanup);
+
+    addListener(input, 'change', async () => {
         const file = input.files?.[0];
         if (!file) {
             cleanup();

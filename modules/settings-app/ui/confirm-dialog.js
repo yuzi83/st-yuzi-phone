@@ -1,4 +1,27 @@
-import { escapeHtml } from '../../utils.js';
+import { escapeHtml } from '../../utils/dom-escape.js';
+
+function createDialogRuntime(runtime) {
+    if (runtime && typeof runtime.addEventListener === 'function') return runtime;
+    const cleanups = [];
+    return {
+        addEventListener(target, type, handler, options) {
+            if (!target || typeof target.addEventListener !== 'function' || typeof handler !== 'function') return () => {};
+            target.addEventListener(type, handler, options);
+            const cleanup = () => target.removeEventListener(type, handler, options);
+            cleanups.push(cleanup);
+            return cleanup;
+        },
+        setTimeout(callback, delay) {
+            const id = window.setTimeout(callback, delay);
+            cleanups.push(() => window.clearTimeout(id));
+            return id;
+        },
+        registerCleanup(cleanup) {
+            if (typeof cleanup === 'function') cleanups.push(cleanup);
+            return () => {};
+        },
+    };
+}
 
 /**
  * 显示确认弹窗
@@ -8,8 +31,10 @@ import { escapeHtml } from '../../utils.js';
  * @param {Function} onConfirm 确认回调
  * @param {string} confirmText 确认按钮文字
  * @param {string} cancelText 取消按钮文字
+ * @param {Object} runtime 可选 runtime scope
  */
-export function showConfirmDialog(container, title, message, onConfirm, confirmText = '确认', cancelText = '取消') {
+export function showConfirmDialog(container, title, message, onConfirm, confirmText = '确认', cancelText = '取消', runtime = null) {
+    const runtimeApi = createDialogRuntime(runtime);
     const candidateMountRoot = container.matches('.phone-app-page')
         ? container
         : (container.querySelector('.phone-app-page') || container.closest('.phone-app-page') || container);
@@ -32,15 +57,16 @@ export function showConfirmDialog(container, title, message, onConfirm, confirmT
 
     const closeDialog = () => {
         overlay.classList.remove('phone-confirm-dialog-show');
-        setTimeout(() => overlay.remove(), 200);
+        runtimeApi.setTimeout(() => overlay.remove(), 200);
     };
 
-    overlay.querySelector('.phone-confirm-dialog-cancel')?.addEventListener('click', closeDialog);
-    overlay.querySelector('.phone-confirm-dialog-confirm')?.addEventListener('click', () => {
+    runtimeApi.addEventListener(overlay.querySelector('.phone-confirm-dialog-cancel'), 'click', closeDialog);
+    runtimeApi.addEventListener(overlay.querySelector('.phone-confirm-dialog-confirm'), 'click', () => {
         closeDialog();
         onConfirm?.();
     });
+    runtimeApi.registerCleanup?.(() => overlay.remove());
 
     mountRoot.appendChild(overlay);
-    setTimeout(() => overlay.classList.add('phone-confirm-dialog-show'), 10);
+    runtimeApi.setTimeout(() => overlay.classList.add('phone-confirm-dialog-show'), 10);
 }

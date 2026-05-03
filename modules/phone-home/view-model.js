@@ -1,7 +1,18 @@
-import { escapeHtmlAttr } from '../utils.js';
+import { escapeHtmlAttr } from '../utils/dom-escape.js';
 import { formatTableCountBadge, getHomeDockApps, getSheetRowCount, normalizeHiddenTableApps } from './home-data.js';
-import { getIconForSheet } from './icons.js';
+import { getIconForSheet, getTextIcon } from './icons.js';
 import { VARIABLE_MANAGER_APP, getVariableManagerIcon } from '../variable-manager/index.js';
+import { getAvailableTheaterScenes, getGroupedTheaterSheetKeys } from '../phone-theater/data.js';
+
+function buildTheaterAppIconHtml(scene, customIcon = '') {
+    const name = String(scene?.name || '小剧场');
+    if (customIcon) {
+        return `<img src="${escapeHtmlAttr(customIcon)}" class="phone-app-icon-img" alt="${escapeHtmlAttr(name)}">`;
+    }
+
+    const [colorA, colorB] = Array.isArray(scene?.iconColors) ? scene.iconColors : ['#8E8E93', '#636366'];
+    return `<div class="phone-app-icon-svg">${getTextIcon(scene?.iconText || name, colorA, colorB)}</div>`;
+}
 
 export function buildHomeScreenViewModel(rawData, phoneSettings, deps = {}) {
     const { getSheetKeys } = deps;
@@ -30,9 +41,36 @@ export function buildHomeScreenViewModel(rawData, phoneSettings, deps = {}) {
         });
     }
 
+    const groupedTheaterSheetKeys = rawData ? getGroupedTheaterSheetKeys(rawData) : new Set();
+
+    if (rawData) {
+        getAvailableTheaterScenes(rawData).forEach((scene) => {
+            if (hiddenTableApps[scene.appKey]) return;
+
+            const customIcon = phoneSettings?.appIcons?.[scene.appKey] || '';
+            const totalCount = Number.isFinite(Number(scene.rowCount)) ? Number(scene.rowCount) : 0;
+            const badgeText = hideTableCountBadge ? '' : formatTableCountBadge(totalCount);
+            apps.push({
+                key: scene.appKey,
+                name: scene.name,
+                iconHtml: buildTheaterAppIconHtml(scene, customIcon),
+                badgeText,
+                totalCount,
+                animationDelay: '0s',
+                route: scene.route,
+                isTheaterApp: true,
+                theaterSceneId: scene.id,
+                childSheetKeys: scene.childSheetKeys,
+                sortOrder: Number.isFinite(scene.orderNo) ? Number(scene.orderNo) : Number.POSITIVE_INFINITY,
+                sortName: scene.name,
+            });
+        });
+    }
+
     if (rawData && typeof getSheetKeys === 'function') {
         const sheetKeys = getSheetKeys(rawData);
         sheetKeys.forEach((key) => {
+            if (groupedTheaterSheetKeys.has(key)) return;
             if (hiddenTableApps[key]) return;
 
             const sheet = rawData[key];

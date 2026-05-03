@@ -1,3 +1,4 @@
+import { Logger } from '../error-handler.js';
 import {
     getTableData,
     saveTableData,
@@ -14,11 +15,13 @@ import {
     deletePhoneSheetRows,
 } from '../phone-core/chat-support.js';
 import { createTableViewerState } from './state.js';
-import { createTableViewerScrollPreserver } from './scroll-preserver.js';
+import { createTableViewerScrollPreserver } from './list-scroll-binding.js';
 import { createRowDeleteController } from './row-delete-controller.js';
 import { renderGenericListPage } from './list-page-renderer.js';
 import { renderGenericDetailPage } from './detail-page-renderer.js';
 import { showInlineToast } from './shared-ui.js';
+
+const logger = Logger.withScope({ scope: 'table-viewer/generic-runtime', feature: 'table-viewer' });
 
 export function createGenericTableViewerRuntime(container, context, hooks = {}) {
     if (!(container instanceof HTMLElement)) {
@@ -39,11 +42,53 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
     const renderDetailPage = hooks.renderDetailPage || renderGenericDetailPage;
     const addRowModalId = String(viewerRuntime?.addRowModalId || hooks.addRowModalId || 'phone-add-row-modal');
     const state = createTableViewerState(sheetKey);
-    const scrollPreserver = createTableViewerScrollPreserver(container, state);
+    const scrollPreserver = createTableViewerScrollPreserver(container, state, undefined, viewerRuntime);
+    let activeListRefreshHandler = null;
+    let isDispatchingListStateRefresh = false;
+    const LIST_STATE_REFRESH_KEYS = new Set([
+        'listSearchQuery',
+        'listSortDescending',
+        'lockManageMode',
+        'deleteManageMode',
+        'lockState',
+        'deletingRowIndex',
+    ]);
+
+    const setListRefreshHandler = (handler) => {
+        activeListRefreshHandler = typeof handler === 'function' ? handler : null;
+    };
+
+    const dispatchSubscribedListRefresh = (changedKeys = []) => {
+        if (isDispatchingListStateRefresh) return;
+        if (typeof activeListRefreshHandler !== 'function') return;
+
+        isDispatchingListStateRefresh = true;
+        try {
+            activeListRefreshHandler(Array.isArray(changedKeys) ? changedKeys : []);
+        } finally {
+            isDispatchingListStateRefresh = false;
+        }
+    };
+
+    state.subscribe((changedKeys = []) => {
+        if (state.mode !== 'list') return;
+        if (!Array.isArray(changedKeys)) return;
+        if (!changedKeys.some((key) => LIST_STATE_REFRESH_KEYS.has(key))) return;
+        dispatchSubscribedListRefresh(changedKeys);
+    });
 
     const syncRowsFromSheet = () => {
         const latestSheet = getSheetDataByKey(sheetKey);
         if (!latestSheet?.rows || !Array.isArray(latestSheet.rows)) {
+            logger.warn({
+                action: 'rows.sync.failed',
+                message: '通用表 rows 同步失败：最新 sheet 无有效 rows',
+                context: {
+                    sheetKey: String(sheetKey || ''),
+                    tableName: String(tableName || ''),
+                    latestFound: !!latestSheet,
+                },
+            });
             return false;
         }
 
@@ -68,6 +113,7 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
         isTableRowLocked,
         deletePhoneSheetRows,
         showInlineToast,
+        viewerRuntime,
     });
 
     const captureListScroll = () => {
@@ -99,6 +145,7 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
                 toggleTableCellLock,
                 getTableData,
                 saveTableData,
+                viewerRuntime,
             });
             return;
         }
@@ -115,6 +162,7 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
             addRowModalId,
             render,
             renderKeepScroll,
+            refreshListAfterDataMutation,
             captureListScroll,
             navigateBack,
             deleteRowFromList,
@@ -123,6 +171,8 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
             isTableRowLocked,
             insertTableRow,
             getTableData,
+            setListRefreshHandler,
+            viewerRuntime,
             setSuppressExternalTableUpdate: (next) => {
                 viewerRuntime?.setSuppressExternalTableUpdate(next);
             },
@@ -131,10 +181,18 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
 
     const renderKeepScroll = scrollPreserver.createRerenderWithScroll('listScrollTop', render);
 
+    const refreshListAfterDataMutation = () => {
+        if (state.mode === 'list' && typeof activeListRefreshHandler === 'function') {
+            activeListRefreshHandler([]);
+            return;
+        }
+        renderKeepScroll();
+    };
+
     const handleTableUpdate = () => {
         if (!syncRowsFromSheet()) return;
-        state.lockState = getTableLockState(sheetKey);
-        renderKeepScroll();
+        state.syncLockState(getTableLockState(sheetKey));
+        refreshListAfterDataMutation();
     };
 
     const bind = () => {
@@ -156,6 +214,7 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
         bind,
         start,
         handleTableUpdate,
+        refreshListAfterDataMutation,
         renderKeepScroll,
         captureListScroll,
         restoreListScroll,

@@ -1,0 +1,22 @@
+{
+  "name": "st-yuzi-phone",
+  "version": "1.4.0",
+  "description": "玉子手机 - SillyTavern 扩展",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs",
+    "build:dev": "node build.mjs --dev",
+    "build:watch": "node build.mjs --watch",
+    "check": "node scripts/run-contract-checks.cjs",
+    "check:ci": "node scripts/run-contract-checks-ci.cjs",
+    "lint": "eslint modules/ index.js build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0",
+    "eslint": "^8.57.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

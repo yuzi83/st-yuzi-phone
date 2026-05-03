@@ -4,15 +4,21 @@ const path = require('path');
 const ROOT = process.cwd();
 
 const FILES = {
-    facade: 'modules/phone-fusion.js',
+    render: 'modules/phone-fusion/render.js',
     templates: 'modules/phone-fusion/templates.js',
     utils: 'modules/phone-fusion/utils.js',
     runtime: 'modules/phone-fusion/runtime.js',
     interactions: 'modules/phone-fusion/interactions.js',
 };
 
+const REMOVED_FACADE = 'modules/phone-fusion.js';
+
 function read(relativePath) {
     return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
+}
+
+function exists(relativePath) {
+    return fs.existsSync(path.join(ROOT, relativePath));
 }
 
 function has(content, snippet) {
@@ -30,10 +36,16 @@ function main() {
 
     const results = [];
 
-    check(results, 'facade', '继续暴露 `renderFusion()`', has(contents.facade, 'export function renderFusion(container)'));
-    check(results, 'facade', '继续组合模板模块', has(contents.facade, "from './phone-fusion/templates.js'"));
-    check(results, 'facade', '继续组合 runtime 模块', has(contents.facade, "from './phone-fusion/runtime.js'"));
-    check(results, 'facade', '继续组合交互模块', has(contents.facade, "from './phone-fusion/interactions.js'"));
+    results.push({
+        file: REMOVED_FACADE,
+        description: 'phone-fusion 根级入口已删除',
+        ok: !exists(REMOVED_FACADE),
+    });
+
+    check(results, 'render', 'render 入口继续暴露 `renderFusion()`', has(contents.render, 'export function renderFusion(container)'));
+    check(results, 'render', 'render 入口继续组合模板模块', has(contents.render, "from './templates.js'"));
+    check(results, 'render', 'render 入口继续组合 runtime 模块', has(contents.render, "from './runtime.js'"));
+    check(results, 'render', 'render 入口继续组合交互模块', has(contents.render, "from './interactions.js'"));
 
     check(results, 'templates', '存在 `buildFusionPageHtml()`', has(contents.templates, 'export function buildFusionPageHtml()'));
     check(results, 'templates', '存在 `buildFusionCompareRowHtml()`', has(contents.templates, 'export function buildFusionCompareRowHtml('));

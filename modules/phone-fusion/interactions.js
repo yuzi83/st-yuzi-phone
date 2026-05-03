@@ -10,13 +10,46 @@ export function reportFusionError(message, error = null, deps = {}) {
     showNotification?.(message, 'error');
 }
 
+function createRuntimeAdapter(runtime) {
+    if (runtime && typeof runtime.addEventListener === 'function') {
+        return runtime;
+    }
+
+    const cleanups = [];
+    return {
+        addEventListener(target, type, handler, options) {
+            if (!target || typeof target.addEventListener !== 'function' || typeof handler !== 'function') return () => {};
+            target.addEventListener(type, handler, options);
+            const cleanup = () => target.removeEventListener(type, handler, options);
+            cleanups.push(cleanup);
+            return cleanup;
+        },
+        registerCleanup(cleanup) {
+            if (typeof cleanup === 'function') cleanups.push(cleanup);
+            return () => {};
+        },
+        setTimeout(callback, delay) {
+            const id = window.setTimeout(callback, delay);
+            cleanups.push(() => window.clearTimeout(id));
+            return id;
+        },
+        disposeFallback() {
+            cleanups.splice(0).forEach((cleanup) => {
+                try { cleanup(); } catch {}
+            });
+        },
+    };
+}
+
 export function createFusionInteractionController(deps = {}) {
     const {
         navigateBack,
         Logger,
         showNotification,
+        runtime,
     } = deps;
 
+    const runtimeApi = createRuntimeAdapter(runtime);
     let templateA = null;
     let templateB = null;
     let templateAName = '';
@@ -31,33 +64,42 @@ export function createFusionInteractionController(deps = {}) {
     };
 
     const bind = (container) => {
-        container.querySelector('.phone-nav-back')?.addEventListener('click', navigateBack);
+        if (!(container instanceof HTMLElement)) return () => {};
 
-        container.querySelector('#phone-import-a')?.addEventListener('click', () => {
+        const onImportA = () => {
             pickJsonFile((obj, name) => {
                 templateA = obj;
                 templateAName = name;
                 clearFusionResult(container);
-                container.querySelector('#phone-fname-a').textContent = name;
-                container.querySelector('#phone-import-a').classList.add('phone-fusion-imported');
+                const nameEl = container.querySelector('#phone-fname-a');
+                if (nameEl) nameEl.textContent = name;
+                container.querySelector('#phone-import-a')?.classList.add('phone-fusion-imported');
                 tryRenderCompare(container);
-            }, (message, error) => reportFusionError(message, error, { Logger, showNotification }));
-        });
+            }, (message, error) => reportFusionError(message, error, { Logger, showNotification }), runtimeApi);
+        };
 
-        container.querySelector('#phone-import-b')?.addEventListener('click', () => {
+        const onImportB = () => {
             pickJsonFile((obj, name) => {
                 templateB = obj;
                 templateBName = name;
                 clearFusionResult(container);
-                container.querySelector('#phone-fname-b').textContent = name;
-                container.querySelector('#phone-import-b').classList.add('phone-fusion-imported');
+                const nameEl = container.querySelector('#phone-fname-b');
+                if (nameEl) nameEl.textContent = name;
+                container.querySelector('#phone-import-b')?.classList.add('phone-fusion-imported');
                 tryRenderCompare(container);
-            }, (message, error) => reportFusionError(message, error, { Logger, showNotification }));
-        });
+            }, (message, error) => reportFusionError(message, error, { Logger, showNotification }), runtimeApi);
+        };
 
-        container.querySelector('#phone-fusion-merge')?.addEventListener('click', () => {
+        runtimeApi.addEventListener(container.querySelector('.phone-nav-back'), 'click', navigateBack);
+        runtimeApi.addEventListener(container.querySelector('#phone-import-a'), 'click', onImportA);
+        runtimeApi.addEventListener(container.querySelector('#phone-import-b'), 'click', onImportB);
+        runtimeApi.addEventListener(container.querySelector('#phone-fusion-merge'), 'click', () => {
             performMerge(container);
         });
+
+        const cleanup = () => runtimeApi.disposeFallback?.();
+        runtimeApi.registerCleanup?.(cleanup);
+        return cleanup;
     };
 
     const reset = () => {

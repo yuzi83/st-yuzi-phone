@@ -1,5 +1,5 @@
 import { getPhoneSettings, savePhoneSetting } from '../../settings.js';
-import { clampNumber } from '../../utils.js';
+import { clampNumber } from '../../utils/object.js';
 import { DB_ACTIVE_PRESET_SETTING_KEY, DB_PRESETS_SETTING_KEY } from '../constants.js';
 
 export function getDbPresetsFromPhoneSettings() {

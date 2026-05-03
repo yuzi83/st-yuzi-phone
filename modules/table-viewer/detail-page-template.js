@@ -1,14 +1,20 @@
-import { escapeHtml, escapeHtmlAttr } from '../utils.js';
-import { PHONE_ICONS } from '../phone-home.js';
+import { escapeHtml, escapeHtmlAttr } from '../utils/dom-escape.js';
+import { PHONE_ICONS } from '../phone-home/icons.js';
 
 export function buildGenericDetailPageHtml(options = {}) {
     const {
         title = '',
         kvPairs = [],
         rowLocked = false,
+        pagerInfo = {},
         genericStylePayload,
         state,
     } = options;
+
+    const pagerDisabled = !!pagerInfo.disabled;
+    const prevIndex = Number.isInteger(pagerInfo.prevIndex) ? pagerInfo.prevIndex : -1;
+    const nextIndex = Number.isInteger(pagerInfo.nextIndex) ? pagerInfo.nextIndex : -1;
+    const pagerDisabledAttr = pagerDisabled ? 'disabled aria-disabled="true"' : 'aria-disabled="false"';
 
     return `
         <div class="phone-app-page phone-generic-root ${genericStylePayload.className}" data-generic-template-id="${escapeHtmlAttr(genericStylePayload.templateId)}" ${genericStylePayload.dataAttrs} style="${genericStylePayload.styleAttr}">
@@ -37,6 +43,10 @@ export function buildGenericDetailPageHtml(options = {}) {
                         `).join('')}
                     </div>
                 </div>
+            </div>
+            <div class="phone-detail-pager-bar phone-generic-slot-pager" aria-label="详情页翻页">
+                <button type="button" class="phone-detail-pager-btn" data-pager="prev" data-target-row-index="${escapeHtmlAttr(String(prevIndex))}" aria-label="上一条" ${pagerDisabledAttr}>‹</button>
+                <button type="button" class="phone-detail-pager-btn" data-pager="next" data-target-row-index="${escapeHtmlAttr(String(nextIndex))}" aria-label="下一条" ${pagerDisabledAttr}>›</button>
             </div>
             <div class="phone-detail-bottom-bar phone-generic-slot-actions">
                 <button type="button" class="phone-detail-bottom-btn" id="phone-toggle-edit-mode">${state.editMode ? '退出编辑' : '进入编辑'}</button>

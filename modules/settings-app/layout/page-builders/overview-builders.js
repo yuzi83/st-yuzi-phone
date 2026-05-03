@@ -1,4 +1,4 @@
-import { escapeHtml } from '../../../utils.js';
+import { escapeHtml } from '../../../utils/dom-escape.js';
 import {
     SETTINGS_ENTRY_META,
     buildSettingsHeroHtml,

@@ -1,12 +1,10 @@
 import { onWorldInfoUpdated } from '../../integration/event-bridge.js';
 import { getCurrentCharacterWorldbooks, getWorldbook, getWorldbookNames } from '../../integration/tavern-helper-bridge.js';
 import { getPhoneSettings, savePhoneSetting } from '../../settings.js';
-
-const WORLDBOOK_SELECTION_DEFAULTS = Object.freeze({
-    sourceMode: 'manual',
-    selectedWorldbook: '',
-    entries: {},
-});
+import {
+    WORLDBOOK_SELECTION_DEFAULTS,
+    normalizeWorldbookSelectionSettings,
+} from '../../settings/schema.js';
 
 const WORLDBOOK_SOURCE_MODES = new Set(['off', 'manual', 'character_bound']);
 
@@ -26,36 +24,8 @@ function normalizeWorldbookNames(names) {
     return Array.from(new Set(list.map(item => String(item || '').trim()).filter(Boolean)));
 }
 
-function normalizeWorldbookEntries(entries) {
-    if (!isPlainObject(entries)) return {};
-
-    const normalized = {};
-    Object.entries(entries).forEach(([worldbookName, selectionMap]) => {
-        const safeWorldbookName = String(worldbookName || '').trim();
-        if (!safeWorldbookName || !isPlainObject(selectionMap)) return;
-
-        const normalizedMap = {};
-        Object.entries(selectionMap).forEach(([uid, selected]) => {
-            if (selected === true || selected === false) {
-                normalizedMap[String(uid)] = selected;
-            }
-        });
-
-        if (Object.keys(normalizedMap).length > 0) {
-            normalized[safeWorldbookName] = normalizedMap;
-        }
-    });
-
-    return normalized;
-}
-
 export function normalizeWorldbookSelection(raw) {
-    const src = isPlainObject(raw) ? raw : {};
-    return {
-        sourceMode: normalizeSourceMode(src.sourceMode),
-        selectedWorldbook: String(src.selectedWorldbook || '').trim(),
-        entries: normalizeWorldbookEntries(src.entries),
-    };
+    return normalizeWorldbookSelectionSettings(raw);
 }
 
 function getEntrySelectionMap(selection, worldbookName) {

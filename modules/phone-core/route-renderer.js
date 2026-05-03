@@ -1,4 +1,5 @@
 import { Logger } from '../error-handler.js';
+import { isTheaterRoute, normalizeTheaterSceneId } from '../phone-theater/config.js';
 import { clearRouteHistory } from './routing.js';
 import { bindPhoneScrollGuards, hardenPhoneInteractionDefaults, logRouteScrollDebugSnapshot } from './scroll-guards.js';
 import { getPhoneCoreState, phoneRuntime } from './state.js';
@@ -21,9 +22,9 @@ function isRenderableScreen(screen, renderToken, state = getPhoneCoreState()) {
         && isActiveRouteRender(renderToken, state);
 }
 
-async function loadRouteRenderer(route) {
+async function loadRouteRenderer(route, renderToken) {
     if (route === 'home') {
-        const { renderHomeScreen } = await import('../phone-home.js');
+        const { renderHomeScreen } = await import('../phone-home/render.js');
         return {
             routeType: 'home',
             render(page) {
@@ -35,7 +36,7 @@ async function loadRouteRenderer(route) {
 
     if (route.startsWith('app:')) {
         const sheetKey = route.replace('app:', '');
-        const { renderTableViewer } = await import('../phone-table-viewer.js');
+        const { renderTableViewer } = await import('../table-viewer/render.js');
         return {
             routeType: 'app',
             render(page) {
@@ -44,8 +45,19 @@ async function loadRouteRenderer(route) {
         };
     }
 
+    if (isTheaterRoute(route)) {
+        const sceneId = normalizeTheaterSceneId(route);
+        const { renderTheaterScene } = await import('../phone-theater/render.js');
+        return {
+            routeType: 'theater',
+            render(page) {
+                renderTheaterScene(page, sceneId, { renderToken });
+            },
+        };
+    }
+
     if (route === 'settings') {
-        const { renderSettings } = await import('../phone-settings.js');
+        const { renderSettings } = await import('../settings-app/render.js');
         return {
             routeType: 'settings',
             render(page) {
@@ -55,7 +67,7 @@ async function loadRouteRenderer(route) {
     }
 
     if (route === 'fusion') {
-        const { renderFusion } = await import('../phone-fusion.js');
+        const { renderFusion } = await import('../phone-fusion/render.js');
         return {
             routeType: 'fusion',
             render(page) {
@@ -69,7 +81,7 @@ async function loadRouteRenderer(route) {
         return {
             routeType: 'variable-manager',
             render(page) {
-                renderVariableManager(page);
+                renderVariableManager(page, { renderToken });
             },
         };
     }
@@ -79,7 +91,7 @@ async function loadRouteRenderer(route) {
 
 async function resolveRouteRenderer(route, renderToken) {
     try {
-        const routeRenderer = await loadRouteRenderer(route);
+        const routeRenderer = await loadRouteRenderer(route, renderToken);
         if (!routeRenderer) {
             logger.warn({
                 action: 'resolve',
@@ -172,14 +184,6 @@ function activateCommittedRoutePage(page, route, renderToken) {
 function renderResolvedRoutePage(routeRenderer, context) {
     try {
         routeRenderer.render(context.page);
-        logger.debug({
-            action: 'render',
-            message: 'route 页面渲染完成',
-            context: {
-                route: context.route,
-                renderToken: context.renderToken,
-            },
-        });
         return true;
     } catch (error) {
         logger.error({
@@ -197,6 +201,15 @@ function renderResolvedRoutePage(routeRenderer, context) {
 
 function commitRoutePage({ screen, page, oldContent, route, renderToken, isBack }) {
     if (!isRenderableScreen(screen, renderToken)) {
+        logger.warn({
+            action: 'commit.skip',
+            message: 'route 页面提交跳过：screen 不可渲染或 token 已过期',
+            context: {
+                route,
+                renderToken,
+                screenConnected: screen?.isConnected === true,
+            },
+        });
         return false;
     }
 
@@ -207,15 +220,6 @@ function commitRoutePage({ screen, page, oldContent, route, renderToken, isBack 
     schedulePreviousPageRemoval(oldContent, exitClass, renderToken);
     activateCommittedRoutePage(page, route, renderToken);
 
-    logger.debug({
-        action: 'commit',
-        message: 'route 页面已提交',
-        context: {
-            route,
-            renderToken,
-            hasPreviousPage: oldContent instanceof HTMLElement,
-        },
-    });
     return true;
 }
 
@@ -223,7 +227,18 @@ function scheduleRouteCommit({ screen, page, oldContent, route, renderToken, isB
     const delay = oldContent instanceof HTMLElement ? ROUTE_COMMIT_DELAY_MS : 0;
 
     phoneRuntime.setTimeout(() => {
-        if (!isRenderableScreen(screen, renderToken)) return;
+        if (!isRenderableScreen(screen, renderToken)) {
+            logger.warn({
+                action: 'commit.schedule.skip',
+                message: 'route 页面延迟提交跳过：screen 不可渲染或 token 已过期',
+                context: {
+                    route,
+                    renderToken,
+                    screenConnected: screen?.isConnected === true,
+                },
+            });
+            return;
+        }
         commitRoutePage({ screen, page, oldContent, route, renderToken, isBack });
     }, delay);
 
@@ -233,11 +248,42 @@ function scheduleRouteCommit({ screen, page, oldContent, route, renderToken, isB
 export async function renderPhoneRoute(route, opts = {}) {
     const context = createRouteRenderContext(route, opts);
     if (!context) {
+        logger.warn({
+            action: 'render.skip',
+            message: 'route 渲染失败：无法创建渲染上下文',
+            context: {
+                route,
+                renderToken: opts.renderToken,
+            },
+        });
         return false;
     }
 
     const routeRenderer = await resolveRouteRenderer(context.route, context.renderToken);
-    if (!routeRenderer || !isRenderableScreen(context.screen, context.renderToken, context.state)) {
+    if (!routeRenderer) {
+        logger.warn({
+            action: 'render.skip',
+            message: 'route 渲染失败：未找到 route renderer',
+            context: {
+                route: context.route,
+                renderToken: context.renderToken,
+            },
+        });
+        return false;
+    }
+
+    if (!isRenderableScreen(context.screen, context.renderToken, context.state)) {
+        logger.warn({
+            action: 'render.skip',
+            message: 'route 渲染失败：screen 不可渲染或 render token 已过期',
+            context: {
+                route: context.route,
+                renderToken: context.renderToken,
+                activeRenderToken: context.state?.routeRenderToken,
+                screenConnected: context.screen?.isConnected === true,
+                isDestroying: context.state?.isDestroying === true,
+            },
+        });
         return false;
     }
 

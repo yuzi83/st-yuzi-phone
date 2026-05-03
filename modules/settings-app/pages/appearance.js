@@ -1,18 +1,33 @@
 import { buildAppearancePageHtml } from '../layout/frame.js';
 
+export function createAppearancePage(ctx) {
+    return {
+        mount() {
+            renderAppearancePage(ctx);
+        },
+        update() {
+            renderAppearancePage(ctx);
+        },
+        dispose() {},
+    };
+}
+
 export function renderAppearancePage(ctx) {
     const {
         container,
         state,
         render,
-        getLayoutValue,
-        getPhoneSettings,
-        setupBgUpload,
-        setupIconLayoutSettings,
-        setupAppearanceToggles,
-        renderHiddenTableAppsList,
-        renderIconUploadList,
+        registerCleanup,
+        pageRuntime,
+        appearancePageService,
     } = ctx;
+    const getLayoutValue = appearancePageService.getLayoutValue;
+    const getPhoneSettings = appearancePageService.getPhoneSettings;
+    const setupBgUpload = appearancePageService.setupBgUpload;
+    const setupIconLayoutSettings = appearancePageService.setupIconLayoutSettings;
+    const setupAppearanceToggles = appearancePageService.setupAppearanceToggles;
+    const renderHiddenTableAppsList = appearancePageService.renderHiddenTableAppsList;
+    const renderIconUploadList = appearancePageService.renderIconUploadList;
 
     const layoutValues = {
         appGridColumns: getLayoutValue('appGridColumns', 4),
@@ -27,14 +42,30 @@ export function renderAppearancePage(ctx) {
         hideTableCountBadge: !!getPhoneSettings().hideTableCountBadge,
     });
 
-    container.querySelector('.phone-nav-back')?.addEventListener('click', () => {
+    const runtime = pageRuntime && typeof pageRuntime === 'object' ? pageRuntime : null;
+    const bindEvent = (target, type, listener, options) => {
+        if (!runtime?.addEventListener) {
+            return () => {};
+        }
+        return runtime.addEventListener(target, type, listener, options);
+    };
+
+    bindEvent(container.querySelector('.phone-nav-back'), 'click', () => {
         state.mode = 'home';
         render();
     });
 
-    setupBgUpload(container);
-    setupIconLayoutSettings(container);
-    setupAppearanceToggles(container);
-    renderHiddenTableAppsList(container.querySelector('#phone-hidden-table-apps'));
-    renderIconUploadList(container.querySelector('#phone-icon-upload-list'));
+    if (runtime?.registerCleanup) {
+        runtime.registerCleanup(setupBgUpload(container, { runtime }));
+        runtime.registerCleanup(setupIconLayoutSettings(container));
+        runtime.registerCleanup(setupAppearanceToggles(container));
+        runtime.registerCleanup(renderHiddenTableAppsList(container.querySelector('#phone-hidden-table-apps')));
+        runtime.registerCleanup(renderIconUploadList(container.querySelector('#phone-icon-upload-list'), { runtime }));
+    } else if (typeof registerCleanup === 'function') {
+        registerCleanup(setupBgUpload(container));
+        registerCleanup(setupIconLayoutSettings(container));
+        registerCleanup(setupAppearanceToggles(container));
+        registerCleanup(renderHiddenTableAppsList(container.querySelector('#phone-hidden-table-apps')));
+        registerCleanup(renderIconUploadList(container.querySelector('#phone-icon-upload-list')));
+    }
 }

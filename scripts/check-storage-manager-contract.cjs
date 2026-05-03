@@ -3,15 +3,21 @@ const path = require('path');
 
 const ROOT = process.cwd();
 
+// 注：阶段二 step_12 已删除 modules/storage-manager.js façade。
+// feed 专属视图删除后，原 choice-store 调用方也已移除，本检查只覆盖 storage-manager 自身边界。
 const FILES = {
-    facade: 'modules/storage-manager.js',
     core: 'modules/storage-manager/core.js',
     manager: 'modules/storage-manager/manager.js',
-    choiceStore: 'modules/table-viewer/special/choice-store.js',
 };
+
+const FACADE_RELATIVE_PATH = 'modules/storage-manager.js';
 
 function read(relativePath) {
     return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
+}
+
+function exists(relativePath) {
+    return fs.existsSync(path.join(ROOT, relativePath));
 }
 
 function has(content, snippet) {
@@ -29,9 +35,12 @@ function main() {
 
     const results = [];
 
-    check(results, 'facade', '继续 re-export createStorageManager()', has(contents.facade, 'createStorageManager,'));
-    check(results, 'facade', '继续 re-export getSessionStorageNamespace()', has(contents.facade, 'getSessionStorageNamespace,'));
-    check(results, 'facade', '继续 re-export detectStorageErrorType()', has(contents.facade, 'detectStorageErrorType,'));
+    // façade 已删除：物理校验
+    results.push({
+        file: FACADE_RELATIVE_PATH,
+        description: 'storage-manager façade 已删除',
+        ok: !exists(FACADE_RELATIVE_PATH),
+    });
 
     check(results, 'core', '存在 detectStorageErrorType()', has(contents.core, 'export function detectStorageErrorType('));
     check(results, 'core', '存在 loadIndex()', has(contents.core, 'export function loadIndex('));
@@ -40,10 +49,6 @@ function main() {
 
     check(results, 'manager', '存在 createStorageManager()', has(contents.manager, 'export function createStorageManager('));
     check(results, 'manager', '存在 getSessionStorageNamespace()', has(contents.manager, 'export function getSessionStorageNamespace('));
-
-    check(results, 'choiceStore', '继续从 façade 导入 createStorageManager 与 getSessionStorageNamespace', has(contents.choiceStore, "from '../../storage-manager.js';"));
-    check(results, 'choiceStore', '继续调用 createStorageManager()', has(contents.choiceStore, 'createStorageManager({'));
-    check(results, 'choiceStore', '继续调用 getSessionStorageNamespace()', has(contents.choiceStore, "getSessionStorageNamespace('specialChoices')"));
 
     const failed = results.filter(item => !item.ok);
     if (failed.length > 0) {

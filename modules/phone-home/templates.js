@@ -1,4 +1,5 @@
-import { escapeHtml, escapeHtmlAttr } from '../utils.js';
+import { buildShellRegionHtml } from '../view-regions.js';
+import { escapeHtml, escapeHtmlAttr } from '../utils/dom-escape.js';
 
 export function buildHomeShellStyleText({ bgStyle, appIconSize, appIconRadius, appGridColumns, appGridGap, dockIconSize }) {
     const styleChunks = [];
@@ -18,10 +19,17 @@ export function buildHomeShellStyleText({ bgStyle, appIconSize, appIconRadius, a
 
 export function buildHomeShellHtml(styleText) {
     return `
-        <div class="phone-home" style="${escapeHtmlAttr(String(styleText || ''))}">
+        <div class="phone-home" data-home-shell="root" style="${escapeHtmlAttr(String(styleText || ''))}">
             <div class="phone-home-overlay"></div>
-            <div class="phone-app-grid"></div>
-            <div class="phone-dock" data-dock-count="4"></div>
+            ${buildShellRegionHtml({
+                region: 'home-grid',
+                className: 'phone-app-grid',
+            })}
+            ${buildShellRegionHtml({
+                region: 'home-dock',
+                className: 'phone-dock',
+                attrs: 'data-dock-count="4"',
+            })}
         </div>
     `;
 }

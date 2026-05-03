@@ -1,41 +1,68 @@
-import { renderAiInstructionPresetsPage as renderAiInstructionPresetsPagePage } from '../pages/ai-instruction-presets.js';
-import { renderApiPromptConfigPage as renderApiPromptConfigPagePage } from '../pages/api-prompt-config.js';
-import { renderDatabasePage as renderDatabasePagePage } from '../pages/database.js';
+import {
+    createAiInstructionPresetsPage,
+    renderAiInstructionPresetsPage as renderAiInstructionPresetsPagePage,
+} from '../pages/ai-instruction-presets.js';
+import {
+    createApiPromptConfigPage,
+    renderApiPromptConfigPage as renderApiPromptConfigPagePage,
+} from '../pages/api-prompt-config.js';
+import { createDatabasePage, renderDatabasePage as renderDatabasePagePage } from '../pages/database.js';
+import {
+    buildAiInstructionPresetsPageContext,
+    buildApiPromptConfigPageContext,
+    buildDatabasePageContext,
+} from './page-context-builders.js';
 
 /**
- * @param {import('../../../types').SettingsPageRendererGroupedDeps} deps
+ * @param {{
+ *   deps?: import('../../../types').SettingsPageRendererGroupedDeps,
+ *   pageContexts?: Record<string, any>,
+ * } | import('../../../types').SettingsPageRendererGroupedDeps} rendererScope
  */
-export function createDataConfigPageRenderers(deps = {}) {
-    const common = /** @type {import('../../../types').SettingsPageRendererCommonDeps} */ (deps.common || {});
-    const scroll = /** @type {import('../../../types').SettingsPageRendererScrollDeps} */ (deps.scroll || {});
-    const feedback = /** @type {import('../../../types').SettingsPageRendererFeedbackDeps} */ (deps.feedback || {});
-    const dataConfig = /** @type {import('../../../types').SettingsDataConfigPageRendererDeps} */ (deps.dataConfig || {});
-    const apiPrompt = /** @type {import('../../../types').SettingsApiPromptPageRendererDeps} */ (deps.apiPrompt || {});
+export function createDataConfigPageRenderers(rendererScope = {}) {
+    const pageContexts = rendererScope?.pageContexts && typeof rendererScope.pageContexts === 'object'
+        ? rendererScope.pageContexts
+        : {};
+    const deps = rendererScope?.deps && typeof rendererScope.deps === 'object'
+        ? rendererScope.deps
+        : rendererScope;
+
+    const databaseContext = pageContexts.database || buildDatabasePageContext(deps);
+    const apiPromptConfigContext = pageContexts.apiPromptConfig || buildApiPromptConfigPageContext(deps);
+    const aiInstructionPresetsContext = pageContexts.aiInstructionPresets || buildAiInstructionPresetsPageContext(deps);
+
+    const renderDatabasePage = () => {
+        renderDatabasePagePage(databaseContext);
+    };
+
+    const renderApiPromptConfigPage = () => {
+        renderApiPromptConfigPagePage(apiPromptConfigContext);
+    };
+
+    const renderAiInstructionPresetsPage = () => {
+        renderAiInstructionPresetsPagePage(aiInstructionPresetsContext);
+    };
 
     return {
-        renderDatabasePage() {
-            renderDatabasePagePage({
-                ...common,
-                ...dataConfig,
-                showToast: feedback.showToast,
-                rerenderDatabaseKeepScroll: scroll.rerenderDatabaseKeepScroll,
-            });
+        pages: {
+            database: {
+                createPage() {
+                    return createDatabasePage(databaseContext);
+                },
+            },
+            api_prompt_config: {
+                createPage() {
+                    return createApiPromptConfigPage(apiPromptConfigContext);
+                },
+            },
+            ai_instruction_presets: {
+                createPage() {
+                    return createAiInstructionPresetsPage(aiInstructionPresetsContext);
+                },
+            },
         },
-
-        renderApiPromptConfigPage() {
-            renderApiPromptConfigPagePage({
-                ...common,
-                ...apiPrompt,
-                rerenderApiPromptConfigKeepScroll: scroll.rerenderApiPromptConfigKeepScroll,
-            });
-        },
-
-        renderAiInstructionPresetsPage() {
-            renderAiInstructionPresetsPagePage({
-                ...common,
-                ...apiPrompt,
-                rerenderApiPromptConfigKeepScroll: scroll.rerenderApiPromptConfigKeepScroll,
-            });
-        },
+        renderDatabasePage,
+        renderApiPromptConfigPage,
+        renderAiInstructionPresetsPage,
     };
 }

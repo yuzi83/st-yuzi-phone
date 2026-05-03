@@ -12,17 +12,10 @@
 - `10-scroll-generic-patches.css`：滚动与 generic patch 层
 - `11-api-dialog-worldbook.css`：API / worldbook 对话框补层
 
-## legacy archive
-- `03-table-legacy.css`：旧表格卡片层，默认不加载；现代替代层为 `09-table-manage-detail.css`
-- `04-settings-legacy.css`：旧设置页层，默认不加载；现代替代层为 `07-settings-modern.css`
-
-## Phase B 目标 legacy 目录
-- 未来目标归档目录：`styles/legacy/phone-base/`
-- 在真正迁移前，legacy 文件继续保留在当前目录，避免破坏历史文档锚点、脚本检查与人工检索路径。
-- 详见 `../legacy/phone-base/README.md` 中的目标归档约定。
+## 历史 legacy 清理
+- 旧 `03-table-legacy.css`、`04-settings-legacy.css` 已于 2026-04 物理删除，对应现代替代层分别为 `09-table-manage-detail.css`、`07-settings-modern.css`。
+- 历史回滚请通过版本控制取回旧文件，不再在仓库内常驻 legacy 副本。
 
 ## 当前策略
-1. legacy 文件只保留历史参考 / 回滚比对价值，不再作为默认入口的一部分。
-2. 顶层入口与聚合入口继续保持 `style.css`、`styles/01-phone-base.css` 两层契约稳定。
-3. 若后续迁移到独立 `legacy/` 目录，应先保留文件名映射与归档说明，再处理物理移动。
-4. 原路径桥接说明移除前，必须先完成一轮护栏与文档回归验证。
+1. modern 层是默认入口的唯一组成部分，新增层级统一接入 `01-phone-base.css`。
+2. 顶层入口 `style.css` 与聚合入口 `styles/01-phone-base.css` 的契约保持稳定，由 `scripts/check-style-entry-contract.cjs` 静态护栏。

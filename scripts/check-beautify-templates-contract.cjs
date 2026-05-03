@@ -3,21 +3,28 @@ const path = require('path');
 
 const ROOT = process.cwd();
 
+// 注：facade modules/phone-beautify-templates.js 已在阶段一清理篇删除，
+// 本脚本不再读取该 façade，只校验「子模块 API 表面 + types.d.ts 接口 + 调用方直接从子模块导入」三段长期契约。
 const FILES = {
-    facade: 'modules/phone-beautify-templates.js',
     shared: 'modules/phone-beautify-templates/shared.js',
     cache: 'modules/phone-beautify-templates/cache.js',
     repository: 'modules/phone-beautify-templates/repository.js',
     importExport: 'modules/phone-beautify-templates/import-export.js',
     matcher: 'modules/phone-beautify-templates/matcher.js',
     types: 'types.d.ts',
-    phoneTableViewer: 'modules/phone-table-viewer.js',
+    tableViewerRender: 'modules/table-viewer/render.js',
     beautifyPage: 'modules/settings-app/pages/beautify.js',
     editorBuilders: 'modules/settings-app/layout/page-builders/editor-builders.js',
 };
 
+const FACADE_RELATIVE_PATH = 'modules/phone-beautify-templates.js';
+
 function read(relativePath) {
     return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
+}
+
+function exists(relativePath) {
+    return fs.existsSync(path.join(ROOT, relativePath));
 }
 
 function has(content, snippet) {
@@ -35,16 +42,17 @@ function main() {
 
     const results = [];
 
-    check(results, 'facade', '继续从 shared re-export 模板常量', has(contents.facade, "from './phone-beautify-templates/shared.js';"));
-    check(results, 'facade', '继续从 repository re-export 仓库能力', has(contents.facade, "from './phone-beautify-templates/repository.js';"));
-    check(results, 'facade', '继续从 import-export re-export 导入导出能力', has(contents.facade, "from './phone-beautify-templates/import-export.js';"));
-    check(results, 'facade', '继续从 matcher re-export 模板匹配能力', has(contents.facade, "from './phone-beautify-templates/matcher.js';"));
+    // façade 已删除：物理校验
+    results.push({
+        file: FACADE_RELATIVE_PATH,
+        description: 'phone-beautify-templates façade 已删除',
+        ok: !exists(FACADE_RELATIVE_PATH),
+    });
 
-    check(results, 'shared', 'shared 改为直接从 settings 导入设置能力', has(contents.shared, "from '../settings.js';"));
-    check(results, 'shared', 'shared 保留 serializeTemplateForExport() 共享实现', has(contents.shared, 'export function serializeTemplateForExport('));
-    check(results, 'shared', 'shared 保留 scoreTemplateMatcher() 共享实现', has(contents.shared, 'export function scoreTemplateMatcher('));
-    check(results, 'shared', 'shared 不再直接暴露 exportPhoneBeautifyPack() 实现', !has(contents.shared, 'export function exportPhoneBeautifyPack('));
-    check(results, 'shared', 'shared 不再直接暴露 detectSpecialTemplateForTable() 实现', !has(contents.shared, 'export function detectSpecialTemplateForTable('));
+    check(results, 'shared', 'shared 继续通过 pack-helpers re-export serializeTemplateForExport', has(contents.shared, 'serializeTemplateForExport,') && has(contents.shared, "from './pack-helpers.js';"));
+    check(results, 'shared', 'shared 继续通过 matcher-helpers re-export scoreTemplateMatcher', has(contents.shared, 'scoreTemplateMatcher,') && has(contents.shared, "from './matcher-helpers.js';"));
+    check(results, 'shared', 'shared 不再直接定义 exportPhoneBeautifyPack() 实现', !has(contents.shared, 'export function exportPhoneBeautifyPack('));
+    check(results, 'shared', 'shared 不再直接定义 detectSpecialTemplateForTable() 实现', !has(contents.shared, 'export function detectSpecialTemplateForTable('));
 
     check(results, 'cache', 'cache 暴露 getCachedAllPhoneBeautifyTemplates()', has(contents.cache, 'export function getCachedAllPhoneBeautifyTemplates('));
     check(results, 'cache', 'cache 暴露 getCachedPhoneBeautifyTemplatesByType()', has(contents.cache, 'export function getCachedPhoneBeautifyTemplatesByType('));
@@ -77,8 +85,8 @@ function main() {
     check(results, 'types', 'types.d.ts 新增 PhoneBeautifyTemplateActivationResult 接口', has(contents.types, 'export interface PhoneBeautifyTemplateActivationResult {'));
     check(results, 'types', 'types.d.ts 收紧 PhoneSettings beautifyTemplateSourceModeSpecial', has(contents.types, 'beautifyTemplateSourceModeSpecial: BeautifySourceMode;'));
 
-    check(results, 'phoneTableViewer', 'phone-table-viewer 改为直接从 matcher 导入模板匹配能力', has(contents.phoneTableViewer, "from './phone-beautify-templates/matcher.js';"));
-    check(results, 'phoneTableViewer', 'phone-table-viewer 不再直接从 phone-beautify-templates façade 导入', !has(contents.phoneTableViewer, "from './phone-beautify-templates.js';"));
+    check(results, 'tableViewerRender', 'table-viewer render 改为直接从 matcher 导入模板匹配能力', has(contents.tableViewerRender, "from '../phone-beautify-templates/matcher.js';"));
+    check(results, 'tableViewerRender', 'table-viewer render 不再直接从 phone-beautify-templates façade 导入', !has(contents.tableViewerRender, "from '../phone-beautify-templates.js';"));
     check(results, 'beautifyPage', 'beautify 页面改为直接从 shared 导入模板常量', has(contents.beautifyPage, "from '../../phone-beautify-templates/shared.js';"));
     check(results, 'beautifyPage', 'beautify 页面改为直接从 repository 导入模板仓库能力', has(contents.beautifyPage, "from '../../phone-beautify-templates/repository.js';"));
     check(results, 'beautifyPage', 'beautify 页面改为直接从 import-export 导入模板导入导出能力', has(contents.beautifyPage, "from '../../phone-beautify-templates/import-export.js';"));

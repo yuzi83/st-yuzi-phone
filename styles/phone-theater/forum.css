@@ -1,0 +1,297 @@
+/* ========================================
+   Phone Theater 论坛场景（小红书 + 贴吧混合）
+   ======================================== */
+
+.phone-app-page.phone-theater-page[data-theater-scene="forum"] {
+    background: #f5f4ef;
+    box-shadow: inset 0 0 0 1px rgba(245, 244, 239, 0.96);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="forum"] .phone-theater-nav {
+    background: #f5f4ef;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="forum"] .phone-theater-body {
+    background: #f5f4ef;
+    color: #1d1d1f;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="forum"] .phone-theater-nav .phone-nav-title,
+.phone-app-page.phone-theater-page[data-theater-scene="forum"] .phone-theater-nav .phone-nav-back {
+    color: #1d1d1f;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-home {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-channel-bar {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 4px 2px;
+    scrollbar-width: none;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-channel-bar::-webkit-scrollbar {
+    display: none;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-channel-pill {
+    flex: 0 0 auto;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.04);
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 12.5px;
+    line-height: 1.4;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-hot-panel {
+    position: relative;
+    background: #eef2f7;
+    border-radius: 14px;
+    padding: 12px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-hot-head {
+    margin-bottom: 8px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-hot-kicker {
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.45);
+    line-height: 1.4;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-hot-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1d1d1f;
+    margin: 2px 0 0;
+    line-height: 1.4;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-hot-topic-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-hot-topic {
+    padding: 3px 9px;
+    background: #ffffff;
+    border-radius: 999px;
+    font-size: 12px;
+    color: #4b6584;
+    line-height: 1.45;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-hot-topic.is-empty {
+    color: rgba(0, 0, 0, 0.35);
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-thread-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-note-card {
+    position: relative;
+    background: #ffffff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 6px 14px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    padding-bottom: 12px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-cover {
+    height: 110px;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 10px 12px;
+    color: #ffffff;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-cover.phone-theater-cover-mist {
+    background: linear-gradient(135deg, #b9c8d6 0%, #8aa4be 100%);
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-cover.phone-theater-cover-cream {
+    background: linear-gradient(135deg, #f0d9a8 0%, #d8b783 100%);
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-cover.phone-theater-cover-sage {
+    background: linear-gradient(135deg, #a8c8b0 0%, #6e9c80 100%);
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-cover.phone-theater-cover-rose {
+    background: linear-gradient(135deg, #e8b1bd 0%, #c87b8d 100%);
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-cover-kicker {
+    font-weight: 500;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-cover-status {
+    background: rgba(0, 0, 0, 0.28);
+    color: #ffffff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-thread-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 12px 14px 0;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-board {
+    font-size: 11.5px;
+    color: rgba(0, 0, 0, 0.55);
+    background: rgba(0, 0, 0, 0.04);
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-thread-type {
+    font-size: 11.5px;
+    color: #4b6584;
+    background: #eef2f7;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-thread-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1d1d1f;
+    line-height: 1.45;
+    margin: 8px 14px 4px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-thread-body {
+    font-size: 14px;
+    line-height: 1.7;
+    color: rgba(0, 0, 0, 0.8);
+    margin: 0 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-topic-row {
+    margin: 10px 14px 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-topic-pill {
+    padding: 2px 9px;
+    background: #eef2f7;
+    color: #4b6584;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-author-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 14px 0;
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.55);
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-author-name {
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.78);
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-author-tag {
+    color: rgba(0, 0, 0, 0.45);
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-author-time {
+    margin-left: auto;
+    color: rgba(0, 0, 0, 0.4);
+    font-size: 11.5px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-stats-row {
+    margin: 8px 14px 0;
+    font-size: 11.5px;
+    color: rgba(0, 0, 0, 0.45);
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-featured-floors {
+    margin: 12px 12px 0;
+    background: #f5f7fa;
+    border-radius: 12px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-floor-reply {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 10px 12px 10px 14px;
+    border-left: 2px solid #b9c8d6;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-floor-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-floor-index {
+    font-size: 11px;
+    font-weight: 600;
+    color: #4b6584;
+    letter-spacing: 0.5px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-floor-author {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.85);
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-floor-tag {
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.45);
+    background: rgba(0, 0, 0, 0.04);
+    padding: 1px 6px;
+    border-radius: 999px;
+}
+
+.phone-theater-page[data-theater-scene="forum"] .phone-theater-forum-floor-body {
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: rgba(0, 0, 0, 0.78);
+    white-space: pre-wrap;
+    word-break: break-word;
+}

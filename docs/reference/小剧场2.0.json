@@ -1,0 +1,638 @@
+{
+  "mate": {
+    "type": "chatSheets",
+    "version": 1,
+    "updateConfigUiSentinel": -1,
+    "globalInjectionConfig": {
+      "readableEntryPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99981
+      },
+      "wrapperPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99982
+      }
+    }
+  },
+  "sheet_IVu96w0X": {
+    "uid": "sheet_IVu96w0X",
+    "name": "消息记录表",
+    "sourceData": {
+      "note": "消息记录表是小手机微信聊天的最终记录仓库。一行代表一条真实聊天气泡，不是发送中状态表，也不是临时草稿表。实时聊天成功后会把用户消息与角色回复批量归档到这里；填表 AI 也可以在合适剧情时机插入 NPC 主动消息或接续已有会话。\n\n【核心记录原则】\n1. 一条气泡一行。用户消息、角色消息、系统提示若需要展示，都必须各占一行。\n2. 同一会话内消息必须按真实聊天顺序连续记录，保证前端可以直接还原聊天记录。\n3. NPC 连发多条气泡时，必须新增多行，不要把多条气泡塞进同一个消息内容格子。\n4. 本表只记录已成立的聊天内容，不记录发送中、生成中、归档失败等 UI 临时状态。\n5. 不应改写既有消息正文的核心语义；如需补充新话题，应新增消息行。\n\n【字段使用说明】\n- 会话ID：用于区分不同聊天线程。同一聊天线程必须保持一致；同一会话结尾后，NPC 可以在同一会话ID下开启新话题。\n- 会话标题：用于前端会话列表显示，尽量稳定。\n- 发送者：显示在聊天气泡中的名称。主角发送时允许写“主角”或“我”；NPC 发送时写角色姓名。\n- 发送者身份：推荐使用 user / assistant / system；NPC 消息使用 assistant。\n- 聊天对象：记录这条消息所属对话的目标角色名称，同一会话线程内应保持一致。\n- 消息内容：只写这一条气泡真正显示给用户看的微信文字，不写旁白、动作描写、内心分析或多条正文拼接。\n- 消息发送时间：展示用时间文本或 ISO 时间，保持同一会话内顺序合理。\n- 请求ID：每条消息必须唯一。实时回复中，用户消息使用基础请求ID，NPC 多气泡可使用 基础请求ID_reply_1、基础请求ID_reply_2。填表 AI 主动消息建议使用 npc_push_角色名_时间戳_序号。\n- 回复到消息ID：如果是在回复某条消息，填写被回复消息的请求ID；如果是同一会话的新话题，可留空。\n\n【NPC 主动消息与接续规则】\n1. 填表 AI 可以让 NPC 主动开启新会话，也可以接续已有会话结尾，或在同一会话ID下开启新话题。\n2. 发送者必须是已离场、不在当前面对面现场、快要离场，或有明确异步联系理由的角色。\n3. 当前正站在用户面前的角色，不要无理由突然在微信里发同样的话。\n4. 不允许把旁白、系统叙述、剧情总结伪装成 NPC 私聊。\n5. NPC 连发多条气泡时，新增多行；这些行应使用同一会话ID、同一聊天对象、唯一请求ID，必要时让回复到消息ID 指向同一条被回复消息。\n\n【微信聊天文风】\n这是微信聊天，不是小说正文。消息必须符合发送者的人设、性格、口癖、关系距离和当前心理状态。可以短句、断句、犹豫、补发、口语化；禁止刻板客套、翻译腔、舞台动作和内心旁白。\n\n【多媒体描述】\n若消息包含图片或视频，应在对应字段描述内容；若没有则写 none。",
+      "initNode": "故事开始时，可预置一些符合双方关系的初始微信消息。每行只记录一条真实气泡。",
+      "deleteNode": "默认不主动删除历史消息；如需清理，请由后续归档或摘要策略处理。",
+      "updateNode": "默认不更新既有消息正文。除非修正明显格式错误，否则应通过新增消息行表达后续补充、解释或新话题。",
+      "insertNode": "插入新消息时触发。每次可新增 1 到 4 行真实微信气泡；NPC 多气泡回复必须一气泡一行。优先保证 会话ID、会话标题、发送者、发送者身份、聊天对象、消息内容、消息发送时间、请求ID、回复到消息ID 的一致性。",
+      "ddl": "CREATE TABLE message_records (\n  row_id INTEGER PRIMARY KEY, -- 行号\n  session_id TEXT, -- 会话ID\n  session_title TEXT, -- 会话标题\n  sender TEXT, -- 发送者\n  sender_role TEXT, -- 发送者身份\n  chat_target TEXT, -- 聊天对象\n  content TEXT, -- 消息内容\n  send_time TEXT, -- 消息发送时间\n  image_desc TEXT, -- 图片描述\n  video_desc TEXT, -- 视频描述\n  request_id TEXT, -- 请求ID\n  reply_to_id TEXT -- 回复到消息ID\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "会话ID",
+        "会话标题",
+        "发送者",
+        "发送者身份",
+        "聊天对象",
+        "消息内容",
+        "消息发送时间",
+        "图片描述",
+        "视频描述",
+        "请求ID",
+        "回复到消息ID"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": -1,
+      "updateFrequency": 3,
+      "batchSize": -1,
+      "skipFloors": -1,
+      "groupId": 9
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "消息记录表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "消息记录表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 99990
+      },
+      "fixedIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 99991
+      },
+      "injectIntoWorldbook": false
+    },
+    "orderNo": 0
+  },
+  "sheet_square_posts": {
+    "uid": "sheet_square_posts",
+    "name": "广场主贴表",
+    "sourceData": {
+      "note": "记录当前广场页面中最主要的动态帖子。一行代表一条完整可展示的主贴，标题可为空，但正文必须能单独成立。整体基调默认偏友好、热闹、可围观，允许少量分歧与轻微拱火，但不以持续恶意攻击为主。row_id 由框架自动维护，无需生成；下面的列编号从业务列开始计数。\n- 列0: 帖子ID - 当前主贴唯一标识，必须唯一且稳定，建议使用如“post_001”“post_002”的格式。\n- 列1: 发帖账号名 - 当前帖子显示的昵称，不额外承诺完整主页内容。\n- 列2: 账号标签 - 用于表现账号气质，如“认证用户”“热心网友”“路人投稿”“围观群众”。\n- 列3: 帖子标题 - 可为空；若填写，需与正文共同构成完整内容。\n- 列4: 帖子正文 - 当前主戏内容，应保留完整文本，不使用分号压缩。\n- 列5: 话题/附加信息 - 轻聚合信息，可写成分号分隔短项，如“同城话题;今日热议”。\n- 列6: 媒体信息 - 如“无图”“单图”“三图”“九宫格”“截图流”。\n- 列7: 热度标签 - 只能填写普通、小热、热门、置顶、讨论中。\n- 列8: 互动数据 - 使用聚合文本，如“点赞1.2w;评论864;转发302”。\n- 列9: 时间文本 - 直接写展示文本，如“刚刚”“3分钟前”“今天 14:20”。\n- 列10: 状态标签 - 如“正常”“已编辑”“评论较多”“持续发酵”。",
+      "initNode": "初始化时插入 2 到 3 条当前页面主贴，形成首页已有内容的基础氛围。帖子风格应尽量有差异，如轻松分享、普通讨论、围观焦点。",
+      "deleteNode": "默认禁止删除；只有明确需要表现“内容消失”“原帖不可见”时，才允许删除或改写状态。",
+      "updateNode": "当已有帖子热度变化、状态变化、正文补充、附加信息变化时更新。优先更新互动数据、热度标签、状态标签，正文只在确有补充时修改。",
+      "insertNode": "当剧情出现新的公共话题、人物发言、围观焦点或讨论点时新增。同一轮允许新增 1 到 3 条，模拟刷新后出现新帖。",
+      "ddl": "CREATE TABLE square_posts ( -- 广场主贴表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  post_id TEXT NOT NULL UNIQUE, -- 帖子唯一标识\n  author_name TEXT NOT NULL, -- 发帖账号名\n  author_tag TEXT NOT NULL, -- 账号标签\n  post_title TEXT, -- 帖子标题\n  post_body TEXT NOT NULL, -- 帖子正文\n  topic_meta TEXT, -- 话题/附加信息\n  media_info TEXT NOT NULL CHECK(media_info IN ('无图', '单图', '三图', '九宫格', '截图流')), -- 媒体信息\n  heat_tag TEXT NOT NULL CHECK(heat_tag IN ('普通', '小热', '热门', '置顶', '讨论中')), -- 热度标签\n  interaction_text TEXT NOT NULL CHECK(TRIM(interaction_text) <> ''), -- 互动数据\n  time_text TEXT NOT NULL, -- 时间文本\n  status_tag TEXT NOT NULL CHECK(status_tag IN ('正常', '已编辑', '评论较多', '持续发酵')) -- 状态标签\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "帖子ID",
+        "发帖账号名",
+        "账号标签",
+        "帖子标题",
+        "帖子正文",
+        "话题/附加信息",
+        "媒体信息",
+        "热度标签",
+        "互动数据",
+        "时间文本",
+        "状态标签"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": 5,
+      "updateFrequency": -1,
+      "batchSize": 5,
+      "skipFloors": -1,
+      "groupId": 1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "广场主贴表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "广场主贴表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99982
+      }
+    },
+    "orderNo": 1
+  },
+  "sheet_square_featured_comments": {
+    "uid": "sheet_square_featured_comments",
+    "name": "广场精选评论表",
+    "sourceData": {
+      "note": "记录广场主贴下最值得展示、最有存在感的评论。一行代表一条精选评论，承担金句、神回复、轻冲突、高赞补充的作用。整体基调默认偏友好，允许少量轻微反对、玩梗、求证，但不宜长期恶意化。row_id 由框架自动维护，无需生成；下面的列编号从业务列开始计数。\n- 列0: 关联帖子ID - 必须对应当前广场主贴表中已存在的帖子ID。\n- 列1: 评论账号名 - 当前评论显示昵称，不额外承诺主页。\n- 列2: 账号标签 - 用于表现评论者气质，如“热心回复”“老观众”“认真补充”“会接梗的人”。\n- 列3: 评论正文 - 完整保留，不做分号压缩。\n- 列4: 评论立场 - 只能填写支持、补充、吃瓜、玩梗、轻微反对、求证。\n- 列5: 点赞/回复数据 - 聚合文本，如“点赞892;回复34”。\n- 列6: 时间文本 - 直接展示文本。\n- 列7: 状态标签 - 如“高赞”“被楼主回应”“讨论较多”“封神评论”；其中金句、神回复可优先使用“封神评论”。",
+      "initNode": "初始化时可为主贴补 2 到 4 条精选评论，形成已有讨论感。",
+      "deleteNode": "默认禁止删除。",
+      "updateNode": "当精选评论的点赞、回复、状态变化时更新。若评论因围观增多而更像高赞评论，可更新状态标签与互动数据。",
+      "insertNode": "当某条帖子出现高存在感评论、精彩补充、明显被围观的回复时新增。每轮建议新增 1 到 3 条。",
+      "ddl": "CREATE TABLE square_featured_comments ( -- 广场精选评论表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  post_ref TEXT NOT NULL, -- 关联帖子ID\n  commenter_name TEXT NOT NULL, -- 评论账号名\n  commenter_tag TEXT NOT NULL, -- 账号标签\n  comment_body TEXT NOT NULL, -- 评论正文\n  stance_tag TEXT NOT NULL CHECK(stance_tag IN ('支持', '补充', '吃瓜', '玩梗', '轻微反对', '求证')), -- 评论立场\n  interaction_text TEXT NOT NULL CHECK(TRIM(interaction_text) <> ''), -- 点赞/回复数据\n  time_text TEXT NOT NULL, -- 时间文本\n  status_tag TEXT NOT NULL CHECK(status_tag IN ('高赞', '被楼主回应', '讨论较多', '封神评论')) -- 状态标签\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "关联帖子ID",
+        "评论账号名",
+        "账号标签",
+        "评论正文",
+        "评论立场",
+        "点赞/回复数据",
+        "时间文本",
+        "状态标签"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": 5,
+      "updateFrequency": -1,
+      "batchSize": 5,
+      "skipFloors": -1,
+      "groupId": 1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "广场精选评论表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "广场精选评论表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99982
+      }
+    },
+    "orderNo": 2
+  },
+  "sheet_square_comment_bands": {
+    "uid": "sheet_square_comment_bands",
+    "name": "广场普通评论分栏表",
+    "sourceData": {
+      "note": "用并列压缩方式表现广场主贴下的普通评论区密度。一行对应一条主贴下的一组普通评论切片，前端按英文分号拆分为多条评论。整体默认以友好、热闹、围观为主，杂音和拱火只作调味。row_id 由框架自动维护，无需生成；下面的列编号从业务列开始计数。\n- 列0: 关联帖子ID - 必须对应当前广场主贴表中已存在的帖子ID。\n- 列1: 前排普通评论串 - 一格 3 到 5 条，偏常规回应、轻吐槽、感叹、接梗，使用英文分号分隔。\n- 列2: 路人评论串 - 一格 2 到 4 条，偏路过围观、补前情、随手评价，使用英文分号分隔。\n- 列3: 杂音/拱火评论串 - 一格 1 到 3 条，偏轻阴阳、拱火、乐子人，但只作调味，使用英文分号分隔。\n- 列4: 时间文本 - 当前这一组评论切片的展示时间。\n- 列5: 状态标签 - 如“评论活跃”“路人增多”“节奏轻微上升”。",
+      "initNode": "初始化时可为主贴配 1 到 2 条分栏评论切片，形成评论区已有滚动感。",
+      "deleteNode": "默认禁止删除。",
+      "updateNode": "当某一类评论声量变化明显时更新对应评论串与状态标签。优先调整评论串与状态，而非频繁新增过多行。",
+      "insertNode": "当主贴进入围观状态、评论数明显增多时新增。一条主贴通常只需配 1 行分栏评论切片即可。",
+      "ddl": "CREATE TABLE square_comment_bands ( -- 广场普通评论分栏表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  post_ref TEXT NOT NULL, -- 关联帖子ID\n  front_comments TEXT NOT NULL CHECK(TRIM(front_comments) <> ''), -- 前排普通评论串\n  passerby_comments TEXT NOT NULL CHECK(TRIM(passerby_comments) <> ''), -- 路人评论串\n  noise_comments TEXT, -- 杂音/拱火评论串\n  time_text TEXT NOT NULL, -- 时间文本\n  status_tag TEXT NOT NULL CHECK(status_tag IN ('评论活跃', '路人增多', '节奏轻微上升')) -- 状态标签\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "关联帖子ID",
+        "前排普通评论串",
+        "路人评论串",
+        "杂音/拱火评论串",
+        "时间文本",
+        "状态标签"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": 5,
+      "updateFrequency": -1,
+      "batchSize": 5,
+      "skipFloors": -1,
+      "groupId": 1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "广场普通评论分栏表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "广场普通评论分栏表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99982
+      }
+    },
+    "orderNo": 3
+  },
+  "sheet_forum_threads": {
+    "uid": "sheet_forum_threads",
+    "name": "论坛主贴表",
+    "sourceData": {
+      "note": "记录当前论坛页面最主要的帖子。一行代表一条完整主楼，重点是阅读感、慢节奏讨论感、社区感。整体基调默认偏理性、友好、慢热。row_id 由框架自动维护，无需生成；下面的列编号从业务列开始计数。\n- 列0: 分区/版面名 - 当前帖子所属的版面，如“生活闲谈”“观剧交流”“同城杂谈”。\n- 列1: 发帖账号名 - 当前主楼作者昵称。\n- 列2: 账号标签 - 用于表现作者气质，如“老用户”“热心楼主”“认真整理”“经验分享”。\n- 列3: 帖子类型 - 只能填写求助、吐槽、长文分析、观后感、生活记录、经验贴。\n- 列4: 帖子标题 - 必须成立，承担论坛入口吸引力。\n- 列5: 帖子正文 - 完整保留，不做压缩。\n- 列6: 附加信息 - 轻聚合信息，可写成分号分隔短项，如“楼主补充中;含后续更新”。\n- 列7: 热度/回应数据 - 聚合文本，如“回应57;有用128;收藏39”。\n- 列8: 时间文本 - 直接展示文本。\n- 列9: 状态标签 - 如“正常”“持续讨论”“楼主更新”“友好交流中”。",
+      "initNode": "初始化时插入 1 到 2 条论坛主贴，形成已有版面氛围。",
+      "deleteNode": "默认禁止删除。",
+      "updateNode": "当楼主补充、热度变化、状态变化时更新。可适度更新附加信息与热度数据。",
+      "insertNode": "出现新讨论点、求助需求、经验总结、版面热帖时新增。每轮建议新增 1 到 2 条。",
+      "ddl": "CREATE TABLE forum_threads ( -- 论坛主贴表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  board_name TEXT NOT NULL, -- 分区/版面名\n  author_name TEXT NOT NULL, -- 发帖账号名\n  author_tag TEXT NOT NULL, -- 账号标签\n  thread_type TEXT NOT NULL CHECK(thread_type IN ('求助', '吐槽', '长文分析', '观后感', '生活记录', '经验贴')), -- 帖子类型\n  thread_title TEXT NOT NULL UNIQUE, -- 帖子标题\n  thread_body TEXT NOT NULL, -- 帖子正文\n  meta_text TEXT, -- 附加信息\n  interaction_text TEXT NOT NULL CHECK(TRIM(interaction_text) <> ''), -- 热度/回应数据\n  time_text TEXT NOT NULL, -- 时间文本\n  status_tag TEXT NOT NULL CHECK(status_tag IN ('正常', '持续讨论', '楼主更新', '友好交流中')) -- 状态标签\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "分区/版面名",
+        "发帖账号名",
+        "账号标签",
+        "帖子类型",
+        "帖子标题",
+        "帖子正文",
+        "附加信息",
+        "热度/回应数据",
+        "时间文本",
+        "状态标签"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": 5,
+      "updateFrequency": -1,
+      "batchSize": 5,
+      "skipFloors": -1,
+      "groupId": 1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "论坛主贴表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "论坛主贴表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99982
+      }
+    },
+    "orderNo": 4
+  },
+  "sheet_forum_featured_replies": {
+    "uid": "sheet_forum_featured_replies",
+    "name": "论坛精选回应表",
+    "sourceData": {
+      "note": "记录论坛主贴下最值得阅读的回应。一行代表一条完整回应，承接认真讨论、礼貌反驳、经验补充、共鸣表达。整体基调默认偏友好、认真、带一点论坛感的冷幽默。row_id 由框架自动维护，无需生成；下面的列编号从业务列开始计数。\n- 列0: 关联帖子标题 - 必须对应当前论坛主贴表中已存在的帖子标题。\n- 列1: 回应账号名 - 当前回应显示昵称。\n- 列2: 账号标签 - 用于表现回应者气质，如“认真回复”“版面常驻”“补充资料”“共鸣用户”。\n- 列3: 回应正文 - 完整保留，不做压缩。\n- 列4: 回应立场 - 只能填写共鸣、补充、礼貌反对、经验分享、轻微质疑。\n- 列5: 有用/回应数据 - 聚合文本，如“有用34;回应9”。\n- 列6: 时间文本 - 直接展示文本。\n- 列7: 状态标签 - 如“高赞回应”“楼主已读”“讨论继续中”。",
+      "initNode": "初始化时可给论坛主贴补 2 到 4 条精选回应。",
+      "deleteNode": "默认禁止删除。",
+      "updateNode": "当有用数、回应数、状态变化时更新。",
+      "insertNode": "出现值得展示的补充、共鸣、礼貌反驳或经验分享时新增。每轮建议 1 到 3 条。",
+      "ddl": "CREATE TABLE forum_featured_replies ( -- 论坛精选回应表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  thread_title TEXT NOT NULL, -- 关联帖子标题\n  replier_name TEXT NOT NULL, -- 回应账号名\n  replier_tag TEXT NOT NULL, -- 账号标签\n  reply_body TEXT NOT NULL, -- 回应正文\n  stance_tag TEXT NOT NULL CHECK(stance_tag IN ('共鸣', '补充', '礼貌反对', '经验分享', '轻微质疑')), -- 回应立场\n  interaction_text TEXT NOT NULL CHECK(TRIM(interaction_text) <> ''), -- 有用/回应数据\n  time_text TEXT NOT NULL, -- 时间文本\n  status_tag TEXT NOT NULL CHECK(status_tag IN ('高赞回应', '楼主已读', '讨论继续中')) -- 状态标签\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "关联帖子标题",
+        "回应账号名",
+        "账号标签",
+        "回应正文",
+        "回应立场",
+        "有用/回应数据",
+        "时间文本",
+        "状态标签"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": 5,
+      "updateFrequency": -1,
+      "batchSize": 5,
+      "skipFloors": -1,
+      "groupId": 1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "论坛精选回应表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "论坛精选回应表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99982
+      }
+    },
+    "orderNo": 5
+  },
+  "sheet_forum_sidebar": {
+    "uid": "sheet_forum_sidebar",
+    "name": "论坛小组侧栏表",
+    "sourceData": {
+      "note": "记录论坛页面右侧或侧边的信息块。这不是“更多帖子入口”，而是当前页面的侧栏氛围与公告信息。适合用单格多条、英文分号分隔的写法压缩非核心正文内容。row_id 由框架自动维护，无需生成；下面的列编号从业务列开始计数。\n- 列0: 分区/版面名 - 当前侧栏块所属版面。\n- 列1: 栏目类型 - 只能填写热门讨论、版面公告、今日活跃、相关话题、版规提醒。\n- 列2: 栏目标题 - 当前侧栏块的标题。\n- 列3: 栏目内容串 - 一格 3 到 6 条短内容，使用英文分号分隔，由前端拆分。\n- 列4: 热度文本 - 如“讨论升温”“今日活跃”“新帖较多”。\n- 列5: 时间文本 - 直接展示文本。\n- 列6: 状态标签 - 如“正常显示”“公告中”“侧栏更新”。",
+      "initNode": "初始化时插入 1 到 2 条侧栏块，形成页面结构。",
+      "deleteNode": "默认禁止删除。",
+      "updateNode": "当栏目内容串、热度文本、状态标签变化时更新。",
+      "insertNode": "当版面出现新的热门方向、公告、提醒时新增。无需过多新增，通常保持 1 到 3 条即可。",
+      "ddl": "CREATE TABLE forum_sidebar ( -- 论坛小组侧栏表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  board_name TEXT NOT NULL, -- 分区/版面名\n  section_type TEXT NOT NULL CHECK(section_type IN ('热门讨论', '版面公告', '今日活跃', '相关话题', '版规提醒')), -- 栏目类型\n  section_title TEXT NOT NULL, -- 栏目标题\n  section_items TEXT NOT NULL CHECK(TRIM(section_items) <> ''), -- 栏目内容串\n  heat_text TEXT NOT NULL, -- 热度文本\n  time_text TEXT NOT NULL, -- 时间文本\n  status_tag TEXT NOT NULL CHECK(status_tag IN ('正常显示', '公告中', '侧栏更新')) -- 状态标签\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "分区/版面名",
+        "栏目类型",
+        "栏目标题",
+        "栏目内容串",
+        "热度文本",
+        "时间文本",
+        "状态标签"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": 5,
+      "updateFrequency": -1,
+      "batchSize": 5,
+      "skipFloors": -1,
+      "groupId": 1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "论坛小组侧栏表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "论坛小组侧栏表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99982
+      }
+    },
+    "orderNo": 6
+  },
+  "sheet_livestream_rooms": {
+    "uid": "sheet_livestream_rooms",
+    "name": "直播间主表",
+    "sourceData": {
+      "note": "记录当前直播间的房间头部信息与整体氛围。通常一行即可代表一个正在展示的直播间，不延展到完整主播主页或历史动态。整体基调默认偏友好、热闹、熟人感。row_id 由框架自动维护，无需生成；下面的列编号从业务列开始计数。\n- 列0: 直播间名 - 当前房间标题区名称。\n- 列1: 主播名 - 当前出场的主播昵称。\n- 列2: 主播标签 - 用于表现主播气质，如“轻松聊天”“会接梗”“稳场型”“熟人局”。\n- 列3: 直播标题 - 当前直播标题。\n- 列4: 当前状态 - 只能填写刚开播、正在直播、中场闲聊、临近下播。\n- 列5: 直播内容概述 - 当前直播在聊什么、做什么，保留完整但不宜过长。\n- 列6: 房间气氛 - 只能填写轻松、热闹、熟人感、轻微对线、弹幕活跃、冷场救场。\n- 列7: 观看/互动数据 - 聚合文本，如“在线1.3w;点赞24.6w;礼物值8.7w;分享1.2k”。\n- 列8: 时间文本 - 直接展示文本或开播时长。\n- 列9: 状态标签 - 如“正常”“高能片段中”“弹幕活跃”。",
+      "initNode": "初始化时插入 1 条直播间主信息。",
+      "deleteNode": "默认禁止删除。",
+      "updateNode": "当当前状态、房间气氛、互动数据、直播内容概述变化时更新。通常只维护 1 行。",
+      "insertNode": "通常不需要频繁新增，只有明确切换到另一个直播间时才新增。",
+      "ddl": "CREATE TABLE livestream_rooms ( -- 直播间主表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  room_name TEXT NOT NULL UNIQUE, -- 直播间名\n  streamer_name TEXT NOT NULL, -- 主播名\n  streamer_tag TEXT NOT NULL, -- 主播标签\n  stream_title TEXT NOT NULL, -- 直播标题\n  live_status TEXT NOT NULL CHECK(live_status IN ('刚开播', '正在直播', '中场闲聊', '临近下播')), -- 当前状态\n  stream_summary TEXT NOT NULL, -- 直播内容概述\n  room_mood TEXT NOT NULL CHECK(room_mood IN ('轻松', '热闹', '熟人感', '轻微对线', '弹幕活跃', '冷场救场')), -- 房间气氛\n  interaction_text TEXT NOT NULL CHECK(TRIM(interaction_text) <> ''), -- 观看/互动数据\n  time_text TEXT NOT NULL, -- 时间文本\n  status_tag TEXT NOT NULL CHECK(status_tag IN ('正常', '高能片段中', '弹幕活跃')) -- 状态标签\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "直播间名",
+        "主播名",
+        "主播标签",
+        "直播标题",
+        "当前状态",
+        "直播内容概述",
+        "房间气氛",
+        "观看/互动数据",
+        "时间文本",
+        "状态标签"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": 5,
+      "updateFrequency": -1,
+      "batchSize": 5,
+      "skipFloors": -1,
+      "groupId": 1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "直播间主表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "直播间主表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99982
+      }
+    },
+    "orderNo": 7
+  },
+  "sheet_livestream_barrage_bands": {
+    "uid": "sheet_livestream_barrage_bands",
+    "name": "直播间弹幕分栏表",
+    "sourceData": {
+      "note": "用并列压缩方式表现当前直播间的弹幕声部。一行对应当前时段的一组弹幕切片，前端按英文分号拆分为多条弹幕。默认粉丝弹幕最多，黑子最少，整体氛围仍偏友好、热闹、可玩。row_id 由框架自动维护，无需生成；下面的列编号从业务列开始计数。\n- 列0: 所属直播间名 - 必须对应当前直播间主表中的直播间名。\n- 列1: 粉丝弹幕串 - 一格 6 到 8 条，承担主声部，偏夸赞、接梗、护主、兴奋反应，使用英文分号分隔；若节奏标签为“高能刷屏”，可放宽到 10 条以内。\n- 列2: 黑子弹幕串 - 一格 0 到 2 条，只作轻微冲突点缀，不主导全局，使用英文分号分隔。\n- 列3: 其他弹幕串 - 一格 2 到 5 条，包含路人、乐子人、理中客、补前情者，使用英文分号分隔。\n- 列4: 节奏标签 - 只能填写轻松聊天、气氛升温、轻微对线、高能刷屏。\n- 列5: 时间文本 - 当前弹幕切片的时间。\n- 列6: 状态标签 - 如“正常滚动”“刷屏中”“气氛友好”“轻微拉扯”。",
+      "initNode": "初始化时插入 1 到 2 条弹幕切片，形成直播间已有滚动感。",
+      "deleteNode": "默认禁止删除。",
+      "updateNode": "当某类弹幕声量变化明显时更新对应弹幕串与节奏标签。优先在现有行上更新，不需要无限追加。",
+      "insertNode": "当房间进入新话题、新高能片段、新互动节奏时新增。每轮只需维护少量切片即可。",
+      "ddl": "CREATE TABLE livestream_barrage_bands ( -- 直播间弹幕分栏表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  room_name TEXT NOT NULL, -- 所属直播间名\n  fan_barrage TEXT NOT NULL CHECK(TRIM(fan_barrage) <> ''), -- 粉丝弹幕串\n  hater_barrage TEXT, -- 黑子弹幕串\n  other_barrage TEXT NOT NULL CHECK(TRIM(other_barrage) <> ''), -- 其他弹幕串\n  rhythm_tag TEXT NOT NULL CHECK(rhythm_tag IN ('轻松聊天', '气氛升温', '轻微对线', '高能刷屏')), -- 节奏标签\n  time_text TEXT NOT NULL, -- 时间文本\n  status_tag TEXT NOT NULL CHECK(status_tag IN ('正常滚动', '刷屏中', '气氛友好', '轻微拉扯')) -- 状态标签\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "所属直播间名",
+        "粉丝弹幕串",
+        "黑子弹幕串",
+        "其他弹幕串",
+        "节奏标签",
+        "时间文本",
+        "状态标签"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": 5,
+      "updateFrequency": -1,
+      "batchSize": 5,
+      "skipFloors": -1,
+      "groupId": 1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "直播间弹幕分栏表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "直播间弹幕分栏表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_char",
+        "depth": 2,
+        "order": 99982
+      }
+    },
+    "orderNo": 8
+  }
+}

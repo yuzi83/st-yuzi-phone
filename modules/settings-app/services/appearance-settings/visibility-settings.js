@@ -6,9 +6,13 @@ import {
     getPhoneSettings,
     savePhoneSetting,
 } from '../../../settings.js';
-import { escapeHtml, escapeHtmlAttr } from '../../../utils.js';
+import { getAvailableTheaterScenes, getGroupedTheaterSheetKeys } from '../../../phone-theater/data.js';
+import { escapeHtml, escapeHtmlAttr } from '../../../utils/dom-escape.js';
+import { Logger } from '../../../error-handler.js';
 import { showToast } from '../../ui/toast.js';
 import { VARIABLE_MANAGER_APP } from '../../../variable-manager/index.js';
+
+const logger = Logger.withScope({ scope: 'settings-app/services/appearance-settings/visibility-settings', feature: 'settings-app' });
 
 function normalizeHiddenTableApps(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
@@ -22,36 +26,59 @@ function normalizeHiddenTableApps(raw) {
 
 export function setupAppearanceToggles(container) {
     const badgeToggle = container.querySelector('#phone-hide-table-count-badge');
-    if (badgeToggle) {
-        badgeToggle.addEventListener('change', () => {
-            savePhoneSetting('hideTableCountBadge', !!badgeToggle.checked);
-            showToast(container, badgeToggle.checked ? '已隐藏数量徽标' : '已显示数量徽标');
-        });
+    if (!badgeToggle) {
+        return () => {};
     }
+
+    const onChange = () => {
+        savePhoneSetting('hideTableCountBadge', !!badgeToggle.checked);
+        showToast(container, badgeToggle.checked ? '已隐藏数量徽标' : '已显示数量徽标');
+    };
+
+    badgeToggle.addEventListener('change', onChange);
+    return () => {
+        badgeToggle.removeEventListener('change', onChange);
+    };
 }
 
 export function renderHiddenTableAppsList(listEl) {
-    if (!listEl) return;
+    if (!listEl) return () => {};
     const rawData = getTableData();
     const hiddenMap = normalizeHiddenTableApps(getPhoneSettings().hiddenTableApps);
+    const cleanups = [];
+
+    const addCleanup = (cleanup) => {
+        if (typeof cleanup === 'function') {
+            cleanups.push(cleanup);
+        }
+    };
 
     if (!rawData) {
         listEl.innerHTML = '<div class="phone-empty-msg">暂无表格可配置</div>';
-        return;
+        return () => {};
     }
 
     const sheetKeys = getSheetKeys(rawData);
-    const allItems = [
-        { key: VARIABLE_MANAGER_APP.id, name: VARIABLE_MANAGER_APP.name },
-        ...sheetKeys.map((sheetKey) => ({
+    const groupedTheaterSheetKeys = getGroupedTheaterSheetKeys(rawData);
+    const theaterItems = getAvailableTheaterScenes(rawData).map((scene) => ({
+        key: scene.appKey,
+        name: scene.name,
+    }));
+    const tableItems = sheetKeys
+        .filter(sheetKey => !groupedTheaterSheetKeys.has(sheetKey))
+        .map((sheetKey) => ({
             key: sheetKey,
             name: String(rawData?.[sheetKey]?.name || sheetKey),
-        })),
+        }));
+    const allItems = [
+        { key: VARIABLE_MANAGER_APP.id, name: VARIABLE_MANAGER_APP.name },
+        ...theaterItems,
+        ...tableItems,
     ];
 
     if (allItems.length === 0) {
         listEl.innerHTML = '<div class="phone-empty-msg">暂无表格可配置</div>';
-        return;
+        return () => {};
     }
 
     listEl.innerHTML = allItems.map((item) => {
@@ -69,7 +96,7 @@ export function renderHiddenTableAppsList(listEl) {
         const sheetKey = itemEl.getAttribute('data-sheet-key') || '';
         if (!checkbox || !sheetKey) return;
 
-        checkbox.addEventListener('change', () => {
+        const onChange = () => {
             const current = normalizeHiddenTableApps(getPhoneSettings().hiddenTableApps);
             if (checkbox.checked) {
                 current[sheetKey] = true;
@@ -78,6 +105,21 @@ export function renderHiddenTableAppsList(listEl) {
             }
             savePhoneSetting('hiddenTableApps', current);
             showToast(listEl, checkbox.checked ? '已屏蔽图标' : '已恢复图标');
-        });
+        };
+
+        checkbox.addEventListener('change', onChange);
+        addCleanup(() => checkbox.removeEventListener('change', onChange));
     });
+
+    return () => {
+        const tasks = [...cleanups];
+        cleanups.length = 0;
+        tasks.reverse().forEach((cleanup) => {
+            try {
+                cleanup();
+            } catch (error) {
+                logger.warn('visibility cleanup 执行失败', error);
+            }
+        });
+    };
 }

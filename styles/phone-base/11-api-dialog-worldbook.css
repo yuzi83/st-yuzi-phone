@@ -134,14 +134,14 @@
 }
 
 .phone-settings-page .phone-settings-btn-primary {
-    background: linear-gradient(180deg, rgba(123, 147, 255, 0.96), rgba(95, 123, 255, 0.96)) !important;
-    border-color: rgba(94, 121, 255, 0.98) !important;
-    color: #ffffff !important;
-    box-shadow: 0 10px 20px rgba(95, 123, 255, 0.2) !important;
+    background: linear-gradient(180deg, rgba(91, 122, 106, 0.92), rgba(75, 102, 88, 0.96)) !important;
+    border-color: rgba(75, 102, 88, 0.96) !important;
+    color: #F5F3EF !important;
+    box-shadow: none !important;
 }
 
 .phone-settings-page .phone-settings-btn-primary:hover {
-    background: linear-gradient(180deg, rgba(111, 137, 250, 0.98), rgba(87, 114, 245, 0.98)) !important;
+    background: linear-gradient(180deg, rgba(91, 122, 106, 0.96), rgba(75, 102, 88, 0.98)) !important;
 }
 
 /* ===== 确认弹窗样式 ===== */
@@ -164,26 +164,26 @@
 }
 
 .phone-confirm-dialog {
-    background: rgba(255, 255, 255, 0.98);
-    border-radius: 22px;
+    background: rgba(245, 243, 239, 0.98);
+    border-radius: 6px;
     padding: 22px 20px;
     max-width: 296px;
     width: calc(100% - 32px);
-    box-shadow: var(--yuzi-settings-shadow-strong, 0 18px 44px rgba(38, 52, 77, 0.16));
-    border: 1px solid rgba(220, 228, 238, 0.98);
+    box-shadow: 0 8px 24px rgba(58, 55, 49, 0.08);
+    border: 1px solid rgba(58, 55, 49, 0.06);
 }
 
 .phone-confirm-dialog-title {
     font-size: 17px;
     font-weight: 700;
-    color: var(--yuzi-settings-text-primary, #152033);
+    color: #3A3731;
     margin-bottom: 10px;
     text-align: center;
 }
 
 .phone-confirm-dialog-message {
     font-size: 13px;
-    color: var(--yuzi-settings-text-secondary, #4d5b71);
+    color: #7A7772;
     margin-bottom: 18px;
     text-align: center;
     line-height: 1.6;
@@ -200,34 +200,34 @@
     padding: 10px 16px;
     font-size: 13px;
     font-weight: 600;
-    border: 1px solid rgba(203, 213, 226, 0.96);
-    border-radius: 14px;
+    border: 1px solid rgba(58, 55, 49, 0.08);
+    border-radius: 4px;
     cursor: pointer;
-    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .phone-confirm-dialog-btn:hover {
-    transform: translateY(-1px);
+    transform: none;
 }
 
 .phone-confirm-dialog-cancel {
-    background: rgba(247, 249, 252, 0.98);
-    color: var(--yuzi-settings-text-secondary, #4d5b71);
+    background: rgba(245, 243, 239, 0.8);
+    color: #7A7772;
 }
 
 .phone-confirm-dialog-cancel:hover {
-    background: rgba(241, 245, 250, 0.98);
+    background: rgba(232, 229, 223, 0.8);
 }
 
 .phone-confirm-dialog-confirm {
-    background: rgba(255, 244, 244, 0.98);
-    border-color: rgba(236, 197, 197, 0.96);
-    color: var(--yuzi-settings-danger, #dc7575);
+    background: rgba(139, 94, 94, 0.08);
+    border-color: rgba(139, 94, 94, 0.16);
+    color: #8B5E5E;
 }
 
 .phone-confirm-dialog-confirm:hover {
-    background: rgba(255, 238, 238, 0.98);
-    border-color: rgba(230, 176, 176, 0.98);
+    background: rgba(139, 94, 94, 0.14);
+    border-color: rgba(139, 94, 94, 0.24);
 }
 
 /* ========================================
@@ -319,9 +319,9 @@
     height: 28px;
     align-items: center;
     justify-content: center;
-    border-radius: 999px;
-    background: rgba(123, 147, 255, 0.14);
-    color: var(--yuzi-settings-accent, #5d7bff);
+    border-radius: 3px;
+    background: rgba(91, 122, 106, 0.1);
+    color: #5B7A6A;
     font-size: 12px;
     font-weight: 700;
 }

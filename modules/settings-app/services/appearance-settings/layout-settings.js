@@ -1,7 +1,10 @@
 import { getPhoneSettings, savePhoneSetting } from '../../../settings.js';
 import { createDebouncedTask } from '../../../runtime-manager.js';
-import { clampNumber } from '../../../utils.js';
+import { clampNumber } from '../../../utils/object.js';
+import { Logger } from '../../../error-handler.js';
 import { showToast } from '../../ui/toast.js';
+
+const logger = Logger.withScope({ scope: 'settings-app/services/appearance-settings/layout-settings', feature: 'settings-app' });
 
 export function setupIconLayoutSettings(container) {
     const map = [
@@ -12,6 +15,20 @@ export function setupIconLayoutSettings(container) {
         { id: '#phone-dock-icon-size', key: 'dockIconSize', min: 32, max: 72, fallback: 48 },
     ];
 
+    const cleanups = [];
+    const addCleanup = (cleanup) => {
+        if (typeof cleanup === 'function') {
+            cleanups.push(cleanup);
+        }
+    };
+    const addListener = (target, type, listener, options) => {
+        if (!target || typeof target.addEventListener !== 'function' || typeof listener !== 'function') {
+            return;
+        }
+        target.addEventListener(type, listener, options);
+        addCleanup(() => target.removeEventListener(type, listener, options));
+    };
+
     map.forEach((item) => {
         const input = container.querySelector(item.id);
         if (!input) return;
@@ -20,12 +37,13 @@ export function setupIconLayoutSettings(container) {
             const value = clampNumber(raw, item.min, item.max, item.fallback);
             savePhoneSetting(item.key, value);
         }, 220);
+        addCleanup(() => debouncedSave.flush?.());
 
-        input.addEventListener('input', () => {
+        addListener(input, 'input', () => {
             debouncedSave(input.value);
         });
 
-        input.addEventListener('change', () => {
+        addListener(input, 'change', () => {
             debouncedSave.flush?.();
             const value = clampNumber(input.value, item.min, item.max, item.fallback);
             input.value = String(value);
@@ -33,6 +51,18 @@ export function setupIconLayoutSettings(container) {
             showToast(container, '图标布局已更新');
         });
     });
+
+    return () => {
+        const tasks = [...cleanups];
+        cleanups.length = 0;
+        tasks.reverse().forEach((cleanup) => {
+            try {
+                cleanup();
+            } catch (error) {
+                logger.warn('layout cleanup 执行失败', error);
+            }
+        });
+    };
 }
 
 export function getLayoutValue(key, fallback) {

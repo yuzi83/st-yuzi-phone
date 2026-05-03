@@ -3,62 +3,193 @@
  * 导出 renderVariableManager 供路由系统调用
  */
 
+import { createRuntimeScope } from '../runtime-manager.js';
+import { navigateBack } from '../phone-core/routing.js';
+import { getPhoneCoreState } from '../phone-core/state.js';
 import { getFloorVariables, getLastMessageId, isMvuAvailable } from './variable-api.js';
 import { flattenToGroups, renderGroupsHtml } from './flat-view.js';
 import { buildVariableManagerPageHtml } from './templates.js';
 import { bindVariableManagerInteractions } from './interactions.js';
-import { navigateBack } from '../phone-core/routing.js';
 
-/** 当前页面状态 */
-let currentMessageId = -1;
-/** 底部操作栏高度同步清理函数 */
-let bottomBarSyncCleanup = null;
+const VARIABLE_MANAGER_PAGE_INSTANCE_KEY = '__yuziVariableManagerPageInstance';
+
+function getVariableManagerPageInstance(container) {
+    if (!(container instanceof HTMLElement)) return null;
+    const instance = container[VARIABLE_MANAGER_PAGE_INSTANCE_KEY];
+    return instance && typeof instance === 'object' ? instance : null;
+}
+
+function setVariableManagerPageInstance(container, instance) {
+    if (!(container instanceof HTMLElement)) return;
+    if (instance && typeof instance === 'object') {
+        container[VARIABLE_MANAGER_PAGE_INSTANCE_KEY] = instance;
+        return;
+    }
+    delete container[VARIABLE_MANAGER_PAGE_INSTANCE_KEY];
+}
+
+function disposeVariableManagerPageInstance(container) {
+    const instance = getVariableManagerPageInstance(container);
+    if (!instance || typeof instance.dispose !== 'function') return;
+    instance.dispose();
+}
+
+function normalizeRenderToken(value) {
+    const token = Number(value);
+    return Number.isFinite(token) ? token : null;
+}
+
+function createVariableManagerPageInstance(container, options = {}) {
+    const runtime = createRuntimeScope('variable-manager-page');
+    const renderToken = normalizeRenderToken(options.renderToken);
+    const state = {
+        currentMessageId: -1,
+    };
+    let disposed = false;
+
+    const isActive = (expectedMessageId = null) => {
+        if (disposed) return false;
+        if (typeof runtime.isDisposed === 'function' && runtime.isDisposed()) return false;
+        if (!(container instanceof HTMLElement) || !container.isConnected) return false;
+        if (renderToken !== null && getPhoneCoreState().routeRenderToken !== renderToken) return false;
+        if (expectedMessageId !== null && state.currentMessageId !== expectedMessageId) return false;
+        return true;
+    };
+
+    const lifecycle = Object.freeze({
+        renderToken,
+        runtime,
+        isActive,
+    });
+
+    const dispose = () => {
+        if (disposed) return;
+        disposed = true;
+        runtime.dispose();
+        if (getVariableManagerPageInstance(container) === instance) {
+            setVariableManagerPageInstance(container, null);
+        }
+    };
+
+    const renderContent = () => {
+        if (!isActive()) return;
+        renderVariableContent(container, state.currentMessageId);
+    };
+
+    const refreshView = () => {
+        if (!isActive()) return;
+        state.currentMessageId = getLastMessageId();
+        const isMvu = isMvuAvailable();
+
+        if (!isActive()) return;
+        updateFloorLabel(container, state.currentMessageId);
+        updateMvuBadge(container, isMvu);
+        renderContent();
+        syncBottomBarInset(container);
+    };
+
+    const mount = () => {
+        if (disposed) return;
+        state.currentMessageId = getLastMessageId();
+        const isMvu = isMvuAvailable();
+
+        container.innerHTML = buildVariableManagerPageHtml(state.currentMessageId, isMvu);
+        bindBottomBarInsetSync(container, runtime);
+        renderContent();
+
+        const cleanupInteractions = bindVariableManagerInteractions(container, {
+            runtime,
+            lifecycle,
+            navigateBack: () => navigateBack(),
+            refreshView,
+            getMessageId: () => state.currentMessageId,
+        });
+        runtime.registerCleanup(cleanupInteractions);
+
+        observePageDisconnectionAfterMount(container, runtime, dispose);
+    };
+
+    const instance = {
+        mount,
+        refreshView,
+        dispose,
+        runtime,
+        lifecycle,
+        state,
+    };
+
+    return instance;
+}
+
+function observePageDisconnectionAfterMount(container, runtime, dispose) {
+    if (!(container instanceof HTMLElement) || !runtime || typeof dispose !== 'function') return;
+
+    const MAX_WAIT_FRAMES = 30;
+    let disposed = false;
+    let frameCount = 0;
+
+    const registerObserver = () => {
+        if (disposed || runtime.isDisposed?.()) return;
+        runtime.observeDisconnection(container, dispose, {
+            observerRoot: document.body,
+            childList: true,
+            subtree: true,
+        });
+    };
+
+    const waitForConnection = () => {
+        if (disposed || runtime.isDisposed?.()) return;
+        if (container.isConnected) {
+            registerObserver();
+            return;
+        }
+        frameCount += 1;
+        if (frameCount >= MAX_WAIT_FRAMES) {
+            dispose();
+            return;
+        }
+        runtime.requestAnimationFrame(waitForConnection);
+    };
+
+    runtime.registerCleanup(() => {
+        disposed = true;
+    });
+
+    if (container.isConnected) {
+        registerObserver();
+        return;
+    }
+
+    runtime.requestAnimationFrame(waitForConnection);
+}
 
 /**
  * 渲染变量管理器页面
  * @param {HTMLElement} container 页面容器（phone-page）
  */
-export function renderVariableManager(container) {
+export function renderVariableManager(container, options = {}) {
     if (!(container instanceof HTMLElement)) return;
 
-    // 获取最新楼层
-    currentMessageId = getLastMessageId();
-    const isMvu = isMvuAvailable();
-
-    // 渲染页面骨架
-    container.innerHTML = buildVariableManagerPageHtml(currentMessageId, isMvu);
-
-    if (typeof bottomBarSyncCleanup === 'function') {
-        bottomBarSyncCleanup();
-        bottomBarSyncCleanup = null;
-    }
-    bottomBarSyncCleanup = bindBottomBarInsetSync(container);
-
-    // 加载变量数据并渲染
-    renderVariableContent(container);
-
-    // 绑定交互
-    bindVariableManagerInteractions(container, {
-        navigateBack: () => navigateBack(),
-        refreshView: () => refreshVariableView(container),
-        getMessageId: () => currentMessageId,
-    });
+    disposeVariableManagerPageInstance(container);
+    const instance = createVariableManagerPageInstance(container, options);
+    setVariableManagerPageInstance(container, instance);
+    instance.mount();
 }
 
 /**
  * 渲染变量内容区域
  */
-function renderVariableContent(container) {
+function renderVariableContent(container, messageId) {
     const contentEl = container.querySelector('.vm-content');
-    if (!contentEl) return;
+    if (!(contentEl instanceof HTMLElement)) return;
 
-    if (currentMessageId < 0) {
+    if (messageId < 0) {
         contentEl.innerHTML = '<div class="vm-empty-state">当前没有聊天消息</div>';
         return;
     }
 
-    const result = getFloorVariables(currentMessageId);
-    const data = result.data;
+    const result = getFloorVariables(messageId);
+    const data = result?.data;
 
     if (!data || Object.keys(data).length === 0) {
         contentEl.innerHTML = '<div class="vm-empty-state">当前楼层没有变量数据</div>';
@@ -69,8 +200,10 @@ function renderVariableContent(container) {
     contentEl.innerHTML = renderGroupsHtml(groups);
 }
 
-function bindBottomBarInsetSync(container) {
-    const syncInFrame = () => requestAnimationFrame(() => syncBottomBarInset(container));
+function bindBottomBarInsetSync(container, runtime) {
+    if (!(container instanceof HTMLElement) || !runtime) return;
+
+    const syncInFrame = () => runtime.requestAnimationFrame(() => syncBottomBarInset(container));
     const bars = [
         container.querySelector('.vm-footer'),
         container.querySelector('.vm-delete-bar'),
@@ -78,18 +211,13 @@ function bindBottomBarInsetSync(container) {
 
     syncInFrame();
 
-    let resizeObserver = null;
     if (typeof ResizeObserver === 'function') {
-        resizeObserver = new ResizeObserver(() => syncInFrame());
+        const resizeObserver = new ResizeObserver(() => syncInFrame());
         bars.forEach((bar) => resizeObserver.observe(bar));
+        runtime.registerCleanup(() => resizeObserver.disconnect());
     }
 
-    window.addEventListener('resize', syncInFrame);
-
-    return () => {
-        resizeObserver?.disconnect();
-        window.removeEventListener('resize', syncInFrame);
-    };
+    runtime.addEventListener(window, 'resize', syncInFrame);
 }
 
 function syncBottomBarInset(container) {
@@ -110,24 +238,19 @@ function syncBottomBarInset(container) {
 
     if (bottomBarHeight > 0) {
         page.style.setProperty('--vm-bottom-bar-height', `${bottomBarHeight}px`);
+    } else {
+        page.style.removeProperty('--vm-bottom-bar-height');
     }
 }
 
-/**
- * 刷新变量视图（重新获取数据并渲染）
- */
-function refreshVariableView(container) {
-    // 重新获取最新楼层
-    currentMessageId = getLastMessageId();
-    const isMvu = isMvuAvailable();
-
-    // 更新楼层标签
+function updateFloorLabel(container, messageId) {
     const floorLabel = container.querySelector('.vm-floor-label');
     if (floorLabel) {
-        floorLabel.textContent = currentMessageId >= 0 ? `第${currentMessageId}楼` : '无数据';
+        floorLabel.textContent = messageId >= 0 ? `第${messageId}楼` : '无数据';
     }
+}
 
-    // 更新 MVU 标记
+function updateMvuBadge(container, isMvu) {
     const mvuBadge = container.querySelector('.vm-mvu-badge');
     if (isMvu && !mvuBadge) {
         const titleEl = container.querySelector('.vm-nav-title');
@@ -140,12 +263,6 @@ function refreshVariableView(container) {
     } else if (!isMvu && mvuBadge) {
         mvuBadge.remove();
     }
-
-    // 重新渲染内容
-    renderVariableContent(container);
-
-    // 重新绑定分组折叠（因为内容被替换了）
-    // interactions 中的事件委托会自动处理
 }
 
 /**

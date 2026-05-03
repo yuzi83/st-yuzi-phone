@@ -16,6 +16,19 @@ export function isThenable(result) {
         && typeof result.then === 'function';
 }
 
+export function hasDbApiMethod(api, methodName) {
+    return !!api && typeof methodName === 'string' && typeof api[methodName] === 'function';
+}
+
+export function isDbBooleanSuccess(value) {
+    return value === true;
+}
+
+export function normalizeDbInsertedRowIndex(value) {
+    const rowIndex = Number(value);
+    return Number.isInteger(rowIndex) && rowIndex >= 0 ? rowIndex : -1;
+}
+
 /**
  * @template T
  * @param {() => T | Promise<T>} apiCall

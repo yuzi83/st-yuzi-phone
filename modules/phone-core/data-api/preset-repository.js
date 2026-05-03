@@ -1,5 +1,5 @@
 import { Logger } from '../../error-handler.js';
-import { getDB } from '../db-bridge.js';
+import { getDB, isDbBooleanSuccess } from '../db-bridge.js';
 
 const logger = Logger.withScope({ scope: 'phone-core/data-api/preset-repository', feature: 'db-api' });
 
@@ -43,7 +43,7 @@ export function setTableApiPreset(presetName) {
         return false;
     }
     try {
-        return !!api.setTableApiPreset(presetName);
+        return isDbBooleanSuccess(api.setTableApiPreset(presetName));
     } catch (error) {
         logger.warn({
             action: 'table-api-preset.set',
@@ -78,7 +78,7 @@ export function setPlotApiPreset(presetName) {
         return false;
     }
     try {
-        return !!api.setPlotApiPreset(presetName);
+        return isDbBooleanSuccess(api.setPlotApiPreset(presetName));
     } catch (error) {
         logger.warn({
             action: 'plot-api-preset.set',
@@ -96,7 +96,7 @@ export function loadApiPreset(presetName) {
         return false;
     }
     try {
-        return !!api.loadApiPreset(presetName);
+        return isDbBooleanSuccess(api.loadApiPreset(presetName));
     } catch (error) {
         logger.warn({
             action: 'api-preset.load',

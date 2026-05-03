@@ -1,4 +1,4 @@
-import { escapeHtml, escapeHtmlAttr } from '../../utils.js';
+import { escapeHtml } from '../../utils/dom-escape.js';
 
 export function buildConversations(rows, readSpecialField, styleOptions = {}) {
     const conversations = {};

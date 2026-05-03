@@ -3,7 +3,8 @@ import {
     buildSettingsPageFrame,
     buildSettingsSectionHtml,
 } from '../primitives.js';
-import { escapeHtml, escapeHtmlAttr } from '../../../utils.js';
+import { buildShellRegionHtml } from '../../../view-regions.js';
+import { escapeHtml, escapeHtmlAttr } from '../../../utils/dom-escape.js';
 
 export function buildDatabaseTableChecklistHtml(tableEntries, selectedSet, apiAvailability) {
     if (tableEntries.length === 0) {
@@ -37,15 +38,23 @@ export function buildDatabasePageHtml({
             { text: manualSelectionMeta.includes('默认全选') ? '同步范围：默认全选' : '同步范围：自定义', tone: 'neutral' },
         ],
     });
+    const heroRegionHtml = buildShellRegionHtml({
+        region: 'database-hero',
+        contentHtml: heroHtml,
+    });
 
-    const bodyHtml = `
-        ${buildSettingsSectionHtml({
+    const apiStatusSectionHtml = buildShellRegionHtml({
+        region: 'database-api-status',
+        contentHtml: buildSettingsSectionHtml({
             title: '接口状态',
             desc: '当前页面严格使用 AutoCardUpdaterAPI 的数据库配置接口读写数据。',
             bodyHtml: `<div class="phone-db-api-status ${apiAvailability.ok ? 'is-ok' : 'is-error'}">${escapeHtml(apiAvailability.message || '')}</div>`,
-        })}
+        }),
+    });
 
-        ${buildSettingsSectionHtml({
+    const presetSectionHtml = buildShellRegionHtml({
+        region: 'database-preset-section',
+        contentHtml: buildSettingsSectionHtml({
             id: 'phone-db-preset-section',
             title: '预设中心',
             desc: '预设同时保存更新配置参数与手动表选择，适合在不同工作模式间快速切换。',
@@ -72,9 +81,12 @@ export function buildDatabasePageHtml({
 
                 <div class="phone-settings-inline-meta" id="phone-db-preset-current-meta">当前激活：${activePresetName ? escapeHtml(activePresetName) : '未绑定预设'}</div>
             `,
-        })}
+        }),
+    });
 
-        ${buildSettingsSectionHtml({
+    const updateConfigSectionHtml = buildShellRegionHtml({
+        region: 'database-update-config-section',
+        contentHtml: buildSettingsSectionHtml({
             id: 'phone-db-update-config-section',
             title: '更新策略',
             desc: '控制上下文读取、自动更新频率、批量大小与保留楼层范围。',
@@ -103,9 +115,12 @@ export function buildDatabasePageHtml({
                     <button type="button" class="phone-settings-btn" id="phone-db-update-config-reload-btn" ${disabledAttr}>重新读取</button>
                 </div>
             `,
-        })}
+        }),
+    });
 
-        ${buildSettingsSectionHtml({
+    const manualSelectionSectionHtml = buildShellRegionHtml({
+        region: 'database-manual-selection-section',
+        contentHtml: buildSettingsSectionHtml({
             id: 'phone-db-manual-selection-section',
             title: '同步范围',
             desc: '选择哪些表参与手动更新；全部勾选时会自动恢复为默认全选模式。',
@@ -122,12 +137,20 @@ export function buildDatabasePageHtml({
                     <button type="button" class="phone-settings-btn phone-settings-btn-danger" id="phone-db-manual-reset-btn">恢复默认全选</button>
                 </div>
             `,
-        })}
+        }),
+    });
+
+    const bodyHtml = `
+        ${apiStatusSectionHtml}
+
+        ${presetSectionHtml}
+        ${updateConfigSectionHtml}
+        ${manualSelectionSectionHtml}
     `;
 
     return buildSettingsPageFrame({
         title: '数据与同步',
-        heroHtml,
+        heroHtml: heroRegionHtml,
         bodyClass: 'phone-app-body phone-settings-scroll phone-settings-open',
         rightActionHtml: `
             <button type="button" class="phone-settings-btn phone-settings-btn-ghost phone-settings-nav-action" id="phone-db-refresh-btn">

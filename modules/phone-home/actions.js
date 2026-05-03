@@ -1,4 +1,33 @@
-export function showHomeToast(container, msg, isError = false) {
+function createHomeToastRuntime(runtime) {
+    if (runtime && typeof runtime.setTimeout === 'function') {
+        return runtime;
+    }
+
+    const cleanups = [];
+    return {
+        isDisposed() {
+            return false;
+        },
+        registerCleanup(cleanup) {
+            if (typeof cleanup === 'function') cleanups.push(cleanup);
+            return () => {};
+        },
+        setTimeout(callback, delay) {
+            const id = window.setTimeout(callback, delay);
+            cleanups.push(() => window.clearTimeout(id));
+            return id;
+        },
+    };
+}
+
+function isRuntimeDisposed(runtime) {
+    return Boolean(runtime && typeof runtime.isDisposed === 'function' && runtime.isDisposed());
+}
+
+export function showHomeToast(container, msg, isError = false, runtime = null) {
+    if (!(container instanceof HTMLElement)) return;
+
+    const runtimeApi = createHomeToastRuntime(runtime);
     const existing = container.querySelector('.phone-toast');
     if (existing) existing.remove();
 
@@ -6,11 +35,17 @@ export function showHomeToast(container, msg, isError = false) {
     toast.className = `phone-toast ${isError ? 'phone-toast-error' : 'phone-toast-success'}`;
     toast.textContent = String(msg || '');
     (container.querySelector('.phone-home') || container).appendChild(toast);
+    runtimeApi.registerCleanup?.(() => toast.remove());
 
-    setTimeout(() => toast.classList.add('phone-toast-show'), 10);
-    setTimeout(() => {
+    runtimeApi.setTimeout(() => {
+        if (!isRuntimeDisposed(runtimeApi) && toast.isConnected) {
+            toast.classList.add('phone-toast-show');
+        }
+    }, 10);
+    runtimeApi.setTimeout(() => {
+        if (isRuntimeDisposed(runtimeApi) || !toast.isConnected) return;
         toast.classList.remove('phone-toast-show');
-        setTimeout(() => toast.remove(), 300);
+        runtimeApi.setTimeout(() => toast.remove(), 300);
     }, 1900);
 }
 
@@ -19,6 +54,7 @@ export async function handleDockAction(app, container, deps = {}) {
         navigateTo,
         openVisualizerWithStatus,
         openDatabaseSettingsWithStatus,
+        runtime = null,
     } = deps;
 
     if (!app || app.action !== 'invoke') {
@@ -28,7 +64,8 @@ export async function handleDockAction(app, container, deps = {}) {
         return;
     }
 
-    showHomeToast(container, app.pendingMessage || '处理中...');
+    if (isRuntimeDisposed(runtime)) return;
+    showHomeToast(container, app.pendingMessage || '处理中...', false, runtime);
 
     let result = { ok: false, message: '操作失败' };
     try {
@@ -46,5 +83,6 @@ export async function handleDockAction(app, container, deps = {}) {
         };
     }
 
-    showHomeToast(container, result.message, !result.ok);
+    if (isRuntimeDisposed(runtime)) return;
+    showHomeToast(container, result.message, !result.ok, runtime);
 }

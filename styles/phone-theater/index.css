@@ -1,0 +1,5 @@
+/* Phone Theater scene style registry. Core must be imported before scene files. */
+@import url('./00-core.css');
+@import url('./square.css');
+@import url('./forum.css');
+@import url('./live.css');

@@ -3,8 +3,8 @@ import {
     buildSettingsPageFrame,
     buildSettingsSectionHtml,
 } from '../primitives.js';
-import { PHONE_ICONS } from '../../../phone-home.js';
-import { escapeHtmlAttr } from '../../../utils.js';
+import { PHONE_ICONS } from '../../../phone-home/icons.js';
+import { escapeHtmlAttr } from '../../../utils/dom-escape.js';
 
 export function buildAppearancePageHtml({ layoutValues, hideTableCountBadge }) {
     const heroHtml = buildSettingsHeroHtml({

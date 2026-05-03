@@ -9,24 +9,70 @@ const STORE_TEMPLATES = 'templates';
 const STORE_IMAGES = 'images';
 const STORE_SETTINGS = 'settings';
 
+let dbPromise = null;
+
+function initializeStores(db) {
+    if (!db.objectStoreNames.contains(STORE_TEMPLATES)) {
+        db.createObjectStore(STORE_TEMPLATES);
+    }
+    if (!db.objectStoreNames.contains(STORE_IMAGES)) {
+        db.createObjectStore(STORE_IMAGES);
+    }
+    if (!db.objectStoreNames.contains(STORE_SETTINGS)) {
+        db.createObjectStore(STORE_SETTINGS);
+    }
+}
+
+function clearCachedDbPromise(promise) {
+    if (dbPromise === promise) {
+        dbPromise = null;
+    }
+}
+
 function openDb() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onerror = () => reject(request.error);
-        request.onupgradeneeded = () => {
-            const db = request.result;
-            if (!db.objectStoreNames.contains(STORE_TEMPLATES)) {
-                db.createObjectStore(STORE_TEMPLATES);
-            }
-            if (!db.objectStoreNames.contains(STORE_IMAGES)) {
-                db.createObjectStore(STORE_IMAGES);
-            }
-            if (!db.objectStoreNames.contains(STORE_SETTINGS)) {
-                db.createObjectStore(STORE_SETTINGS);
-            }
+    if (dbPromise) {
+        return dbPromise;
+    }
+
+    let nextPromise;
+    nextPromise = new Promise((resolve, reject) => {
+        let request;
+        try {
+            request = indexedDB.open(DB_NAME, DB_VERSION);
+        } catch (error) {
+            reject(error);
+            return;
+        }
+
+        request.onerror = () => {
+            reject(request.error);
         };
-        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = () => {
+            initializeStores(request.result);
+        };
+        request.onsuccess = () => {
+            const db = request.result;
+            db.onversionchange = () => {
+                db.close();
+                clearCachedDbPromise(nextPromise);
+            };
+            resolve(db);
+        };
     });
+
+    nextPromise.catch(() => {
+        clearCachedDbPromise(nextPromise);
+    });
+    dbPromise = nextPromise;
+    return dbPromise;
+}
+
+function isIdbRequestLike(value) {
+    return Boolean(value)
+        && typeof value === 'object'
+        && 'onsuccess' in value
+        && 'onerror' in value
+        && 'result' in value;
 }
 
 function withStore(storeName, mode, handler) {
@@ -34,15 +80,38 @@ function withStore(storeName, mode, handler) {
         const tx = db.transaction(storeName, mode);
         const store = tx.objectStore(storeName);
         let result;
+        let settled = false;
+
+        const rejectOnce = (error) => {
+            if (settled) return;
+            settled = true;
+            reject(error);
+        };
+
         try {
-            result = handler(store);
+            const operation = handler(store);
+            if (isIdbRequestLike(operation)) {
+                operation.addEventListener('success', () => {
+                    result = operation.result;
+                }, { once: true });
+                operation.addEventListener('error', () => {
+                    rejectOnce(operation.error || tx.error);
+                }, { once: true });
+            } else {
+                result = operation;
+            }
         } catch (e) {
-            reject(e);
+            rejectOnce(e);
             return;
         }
-        tx.oncomplete = () => resolve(result);
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error);
+
+        tx.oncomplete = () => {
+            if (settled) return;
+            settled = true;
+            resolve(result);
+        };
+        tx.onerror = () => rejectOnce(tx.error);
+        tx.onabort = () => rejectOnce(tx.error);
     }));
 }
 

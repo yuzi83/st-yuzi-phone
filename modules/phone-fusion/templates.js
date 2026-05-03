@@ -1,9 +1,9 @@
-import { PHONE_ICONS } from '../phone-home.js';
-import { escapeHtml, escapeHtmlAttr } from '../utils.js';
+import { PHONE_ICONS } from '../phone-home/icons.js';
+import { escapeHtml, escapeHtmlAttr } from '../utils/dom-escape.js';
 
 export function buildFusionPageHtml() {
     return `
-        <div class="phone-app-page">
+        <div class="phone-app-page phone-fusion-page">
             <div class="phone-nav-bar">
                 <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
                 <span class="phone-nav-title">模板缝合</span>

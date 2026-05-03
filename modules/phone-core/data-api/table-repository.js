@@ -3,6 +3,8 @@ import {
     DEFAULT_API_TIMEOUT,
     callApiWithTimeout,
     getDB,
+    isDbBooleanSuccess,
+    normalizeDbInsertedRowIndex,
     sleep,
 } from '../db-bridge.js';
 import { enqueueTableMutation } from './mutation-queue.js';
@@ -146,7 +148,7 @@ async function persistInsertedTableSnapshot(api, tableName) {
             DEFAULT_API_TIMEOUT,
             'insertTableRow.persistSnapshot',
         );
-        persisted = persistResult === true || persistResult === 'true' || persistResult !== null;
+        persisted = isDbBooleanSuccess(persistResult);
     } catch (error) {
         logger.warn({
             action: 'insert-row.persist-import-error',
@@ -255,7 +257,7 @@ async function fallbackPersistUpdatedRow(api, tableName, rowIndex, data) {
         DEFAULT_API_TIMEOUT,
         'updateTableRow.fallbackSave',
     );
-    const persisted = persistResult === true || persistResult === 'true' || persistResult !== null;
+    const persisted = isDbBooleanSuccess(persistResult);
     let refreshed = false;
 
     if (persisted && typeof api.refreshDataAndWorldbook === 'function') {
@@ -273,6 +275,116 @@ async function fallbackPersistUpdatedRow(api, tableName, rowIndex, data) {
         refreshed,
         snapshotSummary,
         fallbackUsed: true,
+    };
+}
+
+function isRowIdHeader(header) {
+    return /^row[\s_-]*id$/i.test(String(header ?? '').trim());
+}
+
+function resolveNextRowId(content, rowIdColIndex) {
+    if (!Array.isArray(content) || rowIdColIndex < 0) return '';
+    const maxRowId = content.slice(1).reduce((max, row) => {
+        if (!Array.isArray(row)) return max;
+        const numeric = Number(row[rowIdColIndex]);
+        return Number.isFinite(numeric) && numeric > max ? numeric : max;
+    }, 0);
+    return String(maxRowId + 1);
+}
+
+function buildInsertedRowFromPayload(headerRow, content, data) {
+    const safeData = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    const dataEntries = Object.entries(safeData);
+    const rowIdColIndex = headerRow.findIndex((header) => isRowIdHeader(header));
+
+    return headerRow.map((header, colIndex) => {
+        if (colIndex === rowIdColIndex) {
+            return resolveNextRowId(content, rowIdColIndex);
+        }
+
+        const headerText = String(header ?? '').trim();
+        const matchedEntry = dataEntries.find(([key]) => String(key ?? '').trim() === headerText);
+        if (!matchedEntry) return '';
+        const [, value] = matchedEntry;
+        return value === undefined || value === null ? '' : value;
+    });
+}
+
+async function fallbackPersistInsertedRow(api, tableName, data) {
+    if (!api || typeof api.exportTableAsJson !== 'function' || typeof api.importTableAsJson !== 'function') {
+        return {
+            persisted: false,
+            refreshed: false,
+            snapshotSummary: readTableSnapshotSummaryFromApi(api, tableName, 'insert-row.fallback-read-error'),
+            fallbackUsed: false,
+            rowIndex: undefined,
+        };
+    }
+
+    const rawData = cloneRawTableData(api.exportTableAsJson());
+    const matchedEntry = findSheetEntryByTableName(rawData, tableName);
+    if (!matchedEntry) {
+        logger.warn({
+            action: 'insert-row.fallback-sheet-missing',
+            message: 'insertRow fallback 未找到目标表',
+            context: { tableName, payloadKeys: Object.keys(data || {}) },
+        });
+        return {
+            persisted: false,
+            refreshed: false,
+            snapshotSummary: readTableSnapshotSummaryFromApi(api, tableName, 'insert-row.fallback-read-error'),
+            fallbackUsed: false,
+            rowIndex: undefined,
+        };
+    }
+
+    const [, sheet] = matchedEntry;
+    const content = Array.isArray(sheet?.content) ? sheet.content : null;
+    const headerRow = Array.isArray(content?.[0]) ? content[0] : null;
+    if (!content || !headerRow) {
+        logger.warn({
+            action: 'insert-row.fallback-content-invalid',
+            message: 'insertRow fallback 目标表 content 或表头无效',
+            context: { tableName, payloadKeys: Object.keys(data || {}) },
+        });
+        return {
+            persisted: false,
+            refreshed: false,
+            snapshotSummary: readTableSnapshotSummaryFromApi(api, tableName, 'insert-row.fallback-read-error'),
+            fallbackUsed: false,
+            rowIndex: undefined,
+        };
+    }
+
+    const insertedRow = buildInsertedRowFromPayload(headerRow, content, data);
+    content.push(insertedRow);
+    const fallbackRowIndex = content.length - 1;
+
+    const jsonString = JSON.stringify(rawData);
+    const persistResult = await callApiWithTimeout(
+        () => api.importTableAsJson(jsonString),
+        DEFAULT_API_TIMEOUT,
+        'insertTableRow.fallbackSave',
+    );
+    const persisted = isDbBooleanSuccess(persistResult);
+    let refreshed = false;
+
+    if (persisted && typeof api.refreshDataAndWorldbook === 'function') {
+        refreshed = !!(await callApiWithTimeout(
+            () => api.refreshDataAndWorldbook(),
+            12000,
+            'insertTableRow.fallbackRefresh',
+        ));
+    }
+
+    const snapshotSummary = readTableSnapshotSummaryFromApi(api, tableName, 'insert-row.fallback-read-error');
+
+    return {
+        persisted,
+        refreshed,
+        snapshotSummary,
+        fallbackUsed: true,
+        rowIndex: fallbackRowIndex,
     };
 }
 
@@ -317,7 +429,7 @@ export async function saveTableData(rawData, timeout = DEFAULT_API_TIMEOUT) {
                 timeout,
                 'saveTableData',
             );
-            return result === true || result === 'true' || result !== null;
+            return isDbBooleanSuccess(result);
         } catch (error) {
             logger.warn({
                 action: 'table-data.save',
@@ -367,7 +479,8 @@ export async function updateTableCell(tableName, rowIndex, colIdentifier, value)
 
         try {
             const result = await api.updateCell(tableName, rowIndex, colIdentifier, value);
-            return { ok: !!result, code: result ? 'ok' : 'failed' };
+            const ok = isDbBooleanSuccess(result);
+            return { ok, code: ok ? 'ok' : 'failed' };
         } catch (error) {
             return { ok: false, code: 'error', message: error?.message || '未知错误' };
         }
@@ -384,6 +497,7 @@ export async function updateTableRow(tableName, rowIndex, data) {
 
         try {
             const apiResult = await api.updateRow(tableName, rowIndex, data);
+            const apiUpdated = isDbBooleanSuccess(apiResult);
             let persistResult = {
                 persisted: false,
                 refreshed: false,
@@ -391,7 +505,7 @@ export async function updateTableRow(tableName, rowIndex, data) {
                 fallbackUsed: false,
             };
 
-            if (apiResult) {
+            if (apiUpdated) {
                 persistResult = {
                     ...await persistInsertedTableSnapshot(api, tableName),
                     fallbackUsed: false,
@@ -400,11 +514,11 @@ export async function updateTableRow(tableName, rowIndex, data) {
                 persistResult = await fallbackPersistUpdatedRow(api, tableName, rowIndex, data);
             }
 
-            const finalOk = (apiResult || persistResult.fallbackUsed) && (persistResult.persisted || typeof api.importTableAsJson !== 'function');
+            const finalOk = (apiUpdated || persistResult.fallbackUsed) && (persistResult.persisted || typeof api.importTableAsJson !== 'function');
 
             return {
                 ok: finalOk,
-                code: apiResult
+                code: apiUpdated
                     ? (persistResult.persisted ? 'ok' : 'persist_failed')
                     : (persistResult.persisted ? 'ok_fallback' : 'failed'),
                 persisted: persistResult.persisted,
@@ -450,52 +564,80 @@ export async function insertTableRow(tableName, data) {
         const beforeSnapshotSummary = readTableSnapshotSummaryFromApi(api, tableName, 'insert-row.snapshot-before-error');
 
         try {
-            const rowIndex = await api.insertRow(tableName, data);
+            const rawRowIndex = await api.insertRow(tableName, data);
+            const rowIndex = normalizeDbInsertedRowIndex(rawRowIndex);
             let snapshotSummary = readTableSnapshotSummaryFromApi(api, tableName, 'insert-row.snapshot-error');
             let snapshotVerifiedInsert = false;
+            let fallbackResult = {
+                persisted: false,
+                refreshed: false,
+                snapshotSummary: null,
+                fallbackUsed: false,
+                rowIndex: undefined,
+            };
 
             if (rowIndex < 0) {
                 const verifyResult = await verifyInsertedRowBySnapshot(api, tableName, beforeSnapshotSummary, snapshotSummary);
                 snapshotSummary = verifyResult.snapshotSummary ?? snapshotSummary;
                 snapshotVerifiedInsert = verifyResult.snapshotVerifiedInsert;
+
+                if (!snapshotVerifiedInsert) {
+                    fallbackResult = await fallbackPersistInsertedRow(api, tableName, data);
+                    snapshotSummary = fallbackResult.snapshotSummary ?? snapshotSummary;
+                }
             }
 
+            const fallbackInserted = !!fallbackResult.fallbackUsed && !!fallbackResult.persisted;
             const resolvedRowIndex = rowIndex >= 0
                 ? rowIndex
                 : (snapshotVerifiedInsert && Number.isInteger(snapshotSummary?.rowCount)
                     ? snapshotSummary.rowCount
-                    : undefined);
-            const insertDetected = rowIndex >= 0 || snapshotVerifiedInsert;
+                    : (fallbackInserted ? fallbackResult.rowIndex : undefined));
+            const insertDetected = rowIndex >= 0 || snapshotVerifiedInsert || fallbackInserted;
             let persistResult = {
-                persisted: false,
-                refreshed: false,
+                persisted: fallbackResult.persisted,
+                refreshed: fallbackResult.refreshed,
                 snapshotSummary,
             };
 
-            if (insertDetected) {
+            if (insertDetected && !fallbackInserted) {
                 persistResult = await persistInsertedTableSnapshot(api, tableName);
                 snapshotSummary = persistResult.snapshotSummary ?? snapshotSummary;
             }
 
-            const finalOk = insertDetected && (persistResult.persisted || typeof api.importTableAsJson !== 'function');
+            const finalOk = insertDetected;
             const resultCode = !insertDetected
                 ? 'failed'
-                : (persistResult.persisted
-                    ? (rowIndex >= 0 ? 'ok' : 'ok_snapshot_verified')
-                    : 'persist_failed');
+                : (fallbackInserted
+                    ? 'ok_fallback'
+                    : (persistResult.persisted
+                        ? (rowIndex >= 0 ? 'ok' : 'ok_snapshot_verified')
+                        : 'ok_persist_unconfirmed'));
             const resultMessage = !insertDetected
-                ? undefined
-                : (persistResult.persisted
-                    ? (snapshotVerifiedInsert ? 'insertRow 返回 -1，但快照确认已插入成功并已持久化' : undefined)
-                    : '插入已发生，但重新写回持久化失败');
+                ? 'insertRow 未确认插入成功'
+                : (fallbackInserted
+                    ? 'insertRow 原接口返回失败，已通过整表追加兜底成功'
+                    : (persistResult.persisted
+                        ? (snapshotVerifiedInsert ? 'insertRow 返回 -1，但快照确认已插入成功并已持久化' : undefined)
+                        : '插入已确认，但二次持久化或刷新未确认'));
 
             return {
                 ok: finalOk,
                 code: resultCode,
                 rowIndex: resolvedRowIndex,
+                rawRowIndex,
                 persisted: persistResult.persisted,
                 refreshed: persistResult.refreshed,
                 message: resultMessage,
+                diagnostics: {
+                    tableName,
+                    payloadKeys,
+                    beforeSnapshot: beforeSnapshotSummary,
+                    afterInsertSnapshot: snapshotSummary,
+                    persistedSnapshot: persistResult.snapshotSummary,
+                    snapshotVerifiedInsert,
+                    fallbackUsed: !!fallbackResult.fallbackUsed,
+                },
             };
         } catch (error) {
             logger.warn({
@@ -522,7 +664,8 @@ export async function deleteTableRowViaApi(tableName, rowIndex) {
 
         try {
             const result = await api.deleteRow(tableName, rowIndex);
-            return { ok: !!result, code: result ? 'ok' : 'failed' };
+            const ok = isDbBooleanSuccess(result);
+            return { ok, code: ok ? 'ok' : 'failed' };
         } catch (error) {
             return { ok: false, code: 'error', message: error?.message || '未知错误' };
         }

@@ -164,12 +164,53 @@ export async function compressDataUrl(rawDataUrl, { maxWidth = 1440, maxHeight =
     return canvas.toDataURL('image/jpeg', clampNumber(quality, 0.5, 0.9, 0.82));
 }
 
+function createCropRuntimeAdapter(runtime) {
+    const safeRuntime = runtime && typeof runtime === 'object' ? runtime : null;
+    const cleanups = [];
+    return {
+        addEventListener(target, type, handler, options) {
+            if (!target || typeof target.addEventListener !== 'function' || typeof handler !== 'function') return () => {};
+            if (safeRuntime?.addEventListener) {
+                return safeRuntime.addEventListener(target, type, handler, options);
+            }
+            target.addEventListener(type, handler, options);
+            const cleanup = () => target.removeEventListener(type, handler, options);
+            cleanups.push(cleanup);
+            return cleanup;
+        },
+        setTimeout(callback, delay) {
+            if (safeRuntime?.setTimeout) return safeRuntime.setTimeout(callback, delay);
+            const id = window.setTimeout(callback, delay);
+            cleanups.push(() => window.clearTimeout(id));
+            return id;
+        },
+        requestAnimationFrame(callback) {
+            if (safeRuntime?.requestAnimationFrame) return safeRuntime.requestAnimationFrame(callback);
+            const id = window.requestAnimationFrame(callback);
+            cleanups.push(() => window.cancelAnimationFrame(id));
+            return id;
+        },
+        registerCleanup(cleanup) {
+            if (typeof cleanup !== 'function') return () => {};
+            if (safeRuntime?.registerCleanup) return safeRuntime.registerCleanup(cleanup);
+            cleanups.push(cleanup);
+            return () => {};
+        },
+        cleanupAll() {
+            cleanups.splice(0).forEach((cleanup) => {
+                try { cleanup(); } catch {}
+            });
+        },
+    };
+}
+
 export async function openImageCropDialog(rawDataUrl, options = {}) {
     const sourceImage = await loadImage(rawDataUrl);
     const title = String(options.cropTitle || '裁剪图片').trim() || '裁剪图片';
     const description = String(options.cropDescription || '拖动裁剪框与边缘圆点，确认后再保存。').trim();
     const preset = String(options.cropPreset || '').trim();
     const initialCoverage = normalizeCoverage(options.cropInitialCoverage);
+    const runtime = createCropRuntimeAdapter(options.runtime || options.pageRuntime);
 
     const overlay = document.createElement('div');
     overlay.className = 'phone-image-crop-overlay';
@@ -293,13 +334,10 @@ export async function openImageCropDialog(rawDataUrl, options = {}) {
 
     const closeDialog = (result) => {
         stopDragging();
-        window.removeEventListener('pointermove', handlePointerMove);
-        window.removeEventListener('pointerup', stopDragging);
-        window.removeEventListener('keydown', handleKeydown);
-        window.removeEventListener('resize', syncDisplayRect);
+        runtime.cleanupAll();
 
         overlay.classList.remove('is-visible');
-        setTimeout(() => {
+        runtime.setTimeout(() => {
             try {
                 overlay.remove();
             } catch {}
@@ -314,14 +352,14 @@ export async function openImageCropDialog(rawDataUrl, options = {}) {
         }
     };
 
-    boxEl?.addEventListener('pointerdown', (event) => {
+    runtime.addEventListener(boxEl, 'pointerdown', (event) => {
         const target = event.target;
         if (target instanceof HTMLElement && target.closest('.phone-image-crop-handle')) return;
         startDragging('move', event);
     });
 
     handleEls.forEach((handle) => {
-        handle.addEventListener('pointerdown', (event) => {
+        runtime.addEventListener(handle, 'pointerdown', (event) => {
             const type = String(handle.dataset.handle || '').trim();
             if (!type) return;
             event.stopPropagation();
@@ -329,19 +367,19 @@ export async function openImageCropDialog(rawDataUrl, options = {}) {
         });
     });
 
-    resetBtn?.addEventListener('click', () => {
+    runtime.addEventListener(resetBtn, 'click', () => {
         cropRect = buildInitialCropRect(preset, naturalWidth, naturalHeight, initialCoverage);
         renderCropBox();
     });
 
-    cancelBtn?.addEventListener('click', () => closeDialog(null));
-    overlay.addEventListener('click', (event) => {
+    runtime.addEventListener(cancelBtn, 'click', () => closeDialog(null));
+    runtime.addEventListener(overlay, 'click', (event) => {
         if (event.target === overlay) {
             closeDialog(null);
         }
     });
 
-    confirmBtn?.addEventListener('click', () => {
+    runtime.addEventListener(confirmBtn, 'click', () => {
         try {
             const croppedDataUrl = buildCropDataUrl(sourceImage, cropRect);
             closeDialog(croppedDataUrl);
@@ -355,24 +393,25 @@ export async function openImageCropDialog(rawDataUrl, options = {}) {
     });
 
     document.body.appendChild(overlay);
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', stopDragging);
-    window.addEventListener('keydown', handleKeydown);
-    window.addEventListener('resize', syncDisplayRect);
+    runtime.addEventListener(window, 'pointermove', handlePointerMove);
+    runtime.addEventListener(window, 'pointerup', stopDragging);
+    runtime.addEventListener(window, 'keydown', handleKeydown);
+    runtime.addEventListener(window, 'resize', syncDisplayRect);
+    runtime.registerCleanup(() => overlay.remove());
 
-    requestAnimationFrame(() => {
+    runtime.requestAnimationFrame(() => {
         overlay.classList.add('is-visible');
         syncDisplayRect();
-        setTimeout(syncDisplayRect, 30);
+        runtime.setTimeout(syncDisplayRect, 30);
     });
 
     if (imageEl instanceof HTMLImageElement) {
         if (imageEl.complete) {
-            requestAnimationFrame(syncDisplayRect);
+            runtime.requestAnimationFrame(syncDisplayRect);
         } else {
-            imageEl.addEventListener('load', () => {
-                requestAnimationFrame(syncDisplayRect);
-                setTimeout(syncDisplayRect, 30);
+            runtime.addEventListener(imageEl, 'load', () => {
+                runtime.requestAnimationFrame(syncDisplayRect);
+                runtime.setTimeout(syncDisplayRect, 30);
             }, { once: true });
         }
     }

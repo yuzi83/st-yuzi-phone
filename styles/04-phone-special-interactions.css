@@ -1,24 +1,21 @@
 /* ========================================
-   Phone 三张表交互样式补丁（模板变量驱动）
+   Phone 消息记录表交互样式补丁（模板变量驱动）
    作用域严格限制在 .phone-special-app.phone-special-template-scope
    ======================================== */
 
 .phone-special-app.phone-special-template-scope .phone-special-conversation-list,
-.phone-special-app.phone-special-template-scope .phone-special-message-list,
-.phone-special-app.phone-special-template-scope .phone-special-moments-list {
+.phone-special-app.phone-special-template-scope .phone-special-message-list {
     scrollbar-color: var(--sp-scrollbar-thumb) var(--sp-scrollbar-track);
 }
 
 .phone-special-app.phone-special-template-scope .phone-special-conversation-list::-webkit-scrollbar,
 .phone-special-app.phone-special-template-scope .phone-special-message-list::-webkit-scrollbar,
-.phone-special-app.phone-special-template-scope .phone-special-moments-list::-webkit-scrollbar,
 .phone-special-app.phone-special-template-scope .phone-special-media-preview-modal::-webkit-scrollbar {
     width: 6px;
 }
 
 .phone-special-app.phone-special-template-scope .phone-special-conversation-list::-webkit-scrollbar-thumb,
 .phone-special-app.phone-special-template-scope .phone-special-message-list::-webkit-scrollbar-thumb,
-.phone-special-app.phone-special-template-scope .phone-special-moments-list::-webkit-scrollbar-thumb,
 .phone-special-app.phone-special-template-scope .phone-special-media-preview-modal::-webkit-scrollbar-thumb {
     background: var(--sp-scrollbar-thumb);
     border-radius: 999px;
@@ -26,7 +23,6 @@
 
 .phone-special-app.phone-special-template-scope .phone-special-conversation-list::-webkit-scrollbar-track,
 .phone-special-app.phone-special-template-scope .phone-special-message-list::-webkit-scrollbar-track,
-.phone-special-app.phone-special-template-scope .phone-special-moments-list::-webkit-scrollbar-track,
 .phone-special-app.phone-special-template-scope .phone-special-media-preview-modal::-webkit-scrollbar-track {
     background: var(--sp-scrollbar-track);
 }
@@ -409,21 +405,18 @@
     cursor: not-allowed;
 }
 
-.phone-special-app.phone-special-template-scope .phone-special-message-manage-row,
-.phone-special-app.phone-special-template-scope .phone-special-feed-manage-row {
+.phone-special-app.phone-special-template-scope .phone-special-message-manage-row {
     display: flex;
     align-items: flex-start;
     gap: var(--sp-gap-sm);
 }
 
-.phone-special-app.phone-special-template-scope .phone-special-message-manage-main,
-.phone-special-app.phone-special-template-scope .phone-special-feed-manage-main {
+.phone-special-app.phone-special-template-scope .phone-special-message-manage-main {
     flex: 1;
     min-width: 0;
 }
 
-.phone-special-app.phone-special-template-scope .phone-special-message-select-toggle,
-.phone-special-app.phone-special-template-scope .phone-special-feed-select-toggle {
+.phone-special-app.phone-special-template-scope .phone-special-message-select-toggle {
     width: 24px;
     height: 24px;
     margin-top: 10px;
@@ -436,15 +429,13 @@
     transition: all var(--sp-duration-fast) var(--sp-ease-standard);
 }
 
-.phone-special-app.phone-special-template-scope .phone-special-message-select-toggle.is-selected,
-.phone-special-app.phone-special-template-scope .phone-special-feed-select-toggle.is-selected {
+.phone-special-app.phone-special-template-scope .phone-special-message-select-toggle.is-selected {
     background: var(--sp-bubble-right-bg);
     color: var(--sp-bubble-right-text);
     border-color: transparent;
 }
 
-.phone-special-app.phone-special-template-scope .phone-special-message-select-toggle:focus,
-.phone-special-app.phone-special-template-scope .phone-special-feed-select-toggle:focus {
+.phone-special-app.phone-special-template-scope .phone-special-message-select-toggle:focus {
     outline: none;
     box-shadow: 0 0 0 3px rgba(44, 167, 102, 0.14);
 }
@@ -605,128 +596,6 @@
     cursor: not-allowed;
 }
 
-.phone-special-app.phone-special-template-scope .phone-special-reply-options-container {
-    margin: 2px 0 var(--sp-gap-md);
-    padding: 0 var(--sp-gap-xs);
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-gap-sm);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-reply-option-item {
-    background: var(--sp-btn-bg);
-    border: 1px solid var(--sp-btn-border);
-    color: var(--sp-btn-text);
-    border-radius: var(--sp-radius-sm);
-    padding: calc(var(--sp-gap-sm) + 1px) var(--sp-gap-md);
-    font-size: var(--sp-font-size-sm);
-    cursor: pointer;
-    transition: all var(--sp-duration-normal) var(--sp-ease-standard);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-reply-option-item:hover {
-    background: var(--sp-bubble-right-bg);
-    color: var(--sp-bubble-right-text);
-    transform: translateX(2px);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moments-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-gap-md);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-header {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-gap-sm);
-    padding: var(--sp-gap-md) calc(var(--sp-gap-md) + 2px);
-    border-bottom: 1px solid var(--sp-list-divider);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-user {
-    min-width: 0;
-    flex: 1;
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-name {
-    font-size: var(--sp-font-size-md);
-    font-weight: var(--sp-font-weight-medium);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-time,
-.phone-special-app.phone-special-template-scope .phone-special-moment-meta {
-    font-size: var(--sp-font-size-xs);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-title {
-    padding: var(--sp-gap-sm) calc(var(--sp-gap-md) + 2px) 0;
-    font-size: calc(var(--sp-font-size-md) + 1px);
-    font-weight: var(--sp-font-weight-medium);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-meta.forum {
-    padding: var(--sp-gap-xs) calc(var(--sp-gap-md) + 2px) var(--sp-gap-sm);
-    border-bottom: 1px solid var(--sp-list-divider);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-content {
-    padding: var(--sp-gap-sm) calc(var(--sp-gap-md) + 2px);
-    font-size: var(--sp-font-size-md);
-    line-height: var(--sp-line-height-normal);
-    white-space: pre-wrap;
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-media-wrap {
-    padding: 0 calc(var(--sp-gap-md) + 2px) var(--sp-gap-sm);
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-gap-sm);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-moment-stats {
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
-    padding: var(--sp-gap-sm) var(--sp-gap-md);
-    border-top: 1px solid var(--sp-list-divider);
-    border-bottom: 1px solid var(--sp-list-divider);
-    font-size: var(--sp-font-size-sm);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-comments-section {
-    padding: var(--sp-gap-sm) calc(var(--sp-gap-md) + 2px);
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-gap-sm);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-comment {
-    font-size: var(--sp-font-size-sm);
-    line-height: var(--sp-line-height-normal);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-comment-author-row {
-    margin-bottom: 2px;
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-comment-author {
-    display: inline-block;
-    font-weight: var(--sp-font-weight-medium);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-comment-text {
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-reply-actions {
-    display: flex;
-    justify-content: flex-end;
-    padding: var(--sp-gap-sm) calc(var(--sp-gap-md) + 2px) var(--sp-gap-md);
-}
-
-.phone-special-app.phone-special-template-scope .phone-special-reply-reset-btn,
 .phone-special-app.phone-special-template-scope .phone-special-media-preview-close {
     border: 1px solid var(--sp-btn-border);
     background: var(--sp-btn-bg);
@@ -739,7 +608,6 @@
     transition: all var(--sp-duration-fast) var(--sp-ease-standard);
 }
 
-.phone-special-app.phone-special-template-scope .phone-special-reply-reset-btn:hover,
 .phone-special-app.phone-special-template-scope .phone-special-media-preview-close:hover {
     background: var(--sp-bubble-right-bg);
     color: var(--sp-bubble-right-text);

@@ -1,5 +1,5 @@
-import { PHONE_ICONS } from '../../phone-home.js';
-import { escapeHtml, escapeHtmlAttr } from '../../utils.js';
+import { PHONE_ICONS } from '../../phone-home/icons.js';
+import { escapeHtml, escapeHtmlAttr } from '../../utils/dom-escape.js';
 
 export const SETTINGS_ENTRY_META = {
     appearance: {

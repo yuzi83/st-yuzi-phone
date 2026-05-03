@@ -1,4 +1,4 @@
-import { PHONE_ICONS } from '../phone-home.js';
+import { PHONE_ICONS } from '../phone-home/icons.js';
 import {
     getPhoneSettings,
     savePhoneSetting,
@@ -6,7 +6,9 @@ import {
     isMobileDevice,
     constrainPosition,
 } from '../settings.js';
-import { clampNumber, escapeCssUrl, EventManager } from '../utils.js';
+import { clampNumber } from '../utils/object.js';
+import { escapeCssUrl } from '../utils/sanitize.js';
+import { EventManager } from '../utils/event-manager.js';
 import { Logger } from '../error-handler.js';
 
 export const DOM_IDS = Object.freeze({

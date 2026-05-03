@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-check:
+    name: Build and Contract Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run contract checks
+        run: npm run check:ci
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Verify dist artifacts exist
+        run: |
+          test -s dist/yuzi-phone.bundle.js
+          test -s dist/yuzi-phone.bundle.css
+
+      - name: Verify dist artifacts are committed
+        run: |
+          if [ -n "$(git status --porcelain dist/)" ]; then
+            echo "::error::dist/ has uncommitted changes after npm run build. Run npm run build locally and commit dist/."
+            git status --porcelain dist/
+            exit 1
+          fi
+
+      - name: Verify version contract
+        run: node scripts/check-extension-version-contract.cjs

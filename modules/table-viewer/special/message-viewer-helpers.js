@@ -3,7 +3,7 @@ import {
     materializePhoneAiInstructionPresetMessages,
     resolvePhoneAiInstructionMediaMarkers,
 } from '../../phone-core/chat-support.js';
-import { escapeHtml, escapeHtmlAttr } from '../../utils.js';
+import { escapeHtml, escapeHtmlAttr } from '../../utils/dom-escape.js';
 import {
     resolveConversationDisplayName,
     normalizeMediaDesc,
@@ -59,12 +59,11 @@ export function buildPhoneChatConversationMessages(threadRows, readSpecialField,
         .map((row) => {
             const sender = normalizeSenderName(readSpecialField(row, 'sender', ''));
             const senderRole = String(readSpecialField(row, 'senderRole', '') || '').trim().toLowerCase();
-            const messageStatus = String(readSpecialField(row, 'messageStatus', '') || '').trim();
             const content = buildPromptContentFromRow(row, readSpecialField, mediaMarkers);
             if (!content) return null;
 
             const isSelf = sender === '我' || ['user', 'self', '主角'].includes(senderRole);
-            if (!isSelf && shouldSkipAssistantMessageForPrompt(content, messageStatus)) {
+            if (!isSelf && shouldSkipAssistantMessageForPrompt(content)) {
                 return null;
             }
 
@@ -100,13 +99,11 @@ function buildPromptContentFromRow(row, readSpecialField, mediaMarkers = {}) {
     return parts.join('\n').trim();
 }
 
-function shouldSkipAssistantMessageForPrompt(content, messageStatus = '') {
+function shouldSkipAssistantMessageForPrompt(content) {
     const safeContent = String(content || '').trim();
-    const safeStatus = String(messageStatus || '').trim();
     if (!safeContent) return true;
     if (/^[.…]+$/.test(safeContent)) return true;
     if (/^（回复失败|^（发送异常/.test(safeContent)) return true;
-    if (/生成中/.test(safeStatus)) return true;
     return false;
 }
 
@@ -177,22 +174,7 @@ export function findRowIndexByRequestId(rows, requestId, readSpecialField, { key
     return null;
 }
 
-export function getRetryTarget(threadRows, readSpecialField) {
-    for (let index = threadRows.length - 1; index >= 0; index--) {
-        const row = threadRows[index];
-        const sender = normalizeSenderName(readSpecialField(row, 'sender', ''));
-        const senderRole = String(readSpecialField(row, 'senderRole', '') || '').trim().toLowerCase();
-        const messageStatus = String(readSpecialField(row, 'messageStatus', '') || '').trim();
-        const requestId = String(readSpecialField(row, 'requestId', '') || '').trim();
-        const isSelf = sender === '我' || ['user', 'self', '主角'].includes(senderRole);
-        if (!isSelf) continue;
-        if (!requestId) continue;
-        if (!/待重试|失败/.test(messageStatus)) continue;
-        return {
-            requestId,
-            messageStatus,
-        };
-    }
+export function getRetryTarget() {
     return null;
 }
 
@@ -313,6 +295,7 @@ export function renderOneMessageRow({ row, sourceRowIndex, readSpecialField, sty
                     <button
                         type="button"
                         class="phone-special-media-item phone-special-message-media-btn"
+                        data-action="open-media-preview"
                         data-media-label="${escapeHtmlAttr(item.label)}"
                         data-description="${escapeHtmlAttr(item.text)}"
                         title="${escapeHtmlAttr(item.actionText)}"
@@ -345,7 +328,7 @@ export function renderOneMessageRow({ row, sourceRowIndex, readSpecialField, sty
 
     return `
         <div class="phone-special-message-manage-row ${selected ? 'is-selected' : ''}">
-            <button type="button" class="phone-special-message-select-toggle ${selected ? 'is-selected' : ''}" data-row-index="${escapeHtmlAttr(String(sourceRowIndex))}" aria-pressed="${selected ? 'true' : 'false'}">${selected ? '✓' : ''}</button>
+            <button type="button" class="phone-special-message-select-toggle ${selected ? 'is-selected' : ''}" data-action="toggle-row-selection" data-row-index="${escapeHtmlAttr(String(sourceRowIndex))}" aria-pressed="${selected ? 'true' : 'false'}">${selected ? '✓' : ''}</button>
             <div class="phone-special-message-manage-main">${contentHtml}</div>
         </div>
     `;

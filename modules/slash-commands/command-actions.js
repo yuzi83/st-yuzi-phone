@@ -121,24 +121,63 @@ function showPhoneStatus() {
 }
 
 function showPhoneHelp() {
-    Logger.info('[玉子手机] Slash 命令帮助:\n/phone\n/phone open\n/phone close\n/phone toggle\n/phone reset\n/phone status\n/phone help\n/phone-table <表名>\n/phone-tables\n/phone-settings reset\n/phone-settings export\n/phone-settings import');
+    Logger.info('[玉子手机] Slash 命令帮助:\n/phone\n/phone open\n/phone close\n/phone toggle\n/phone reset\n/phone status\n/phone help\n/phone-table <表名>\n/phone-tables\n/phone-settings reset\n/phone-settings export\n/phone-settings import <JSON>');
     showNotification('Slash 命令帮助已输出到控制台', 'info');
+}
+
+function parseSettingsCommandArgs(args) {
+    const raw = String(args ?? '').trim();
+    if (!raw) {
+        return { action: '', payload: '' };
+    }
+
+    const firstWhitespaceIndex = raw.search(/\s/);
+    if (firstWhitespaceIndex < 0) {
+        return {
+            action: raw.toLowerCase(),
+            payload: '',
+        };
+    }
+
+    const action = raw.slice(0, firstWhitespaceIndex).trim().toLowerCase();
+    const payload = raw.slice(firstWhitespaceIndex).trim();
+    return { action, payload };
+}
+
+function normalizeCommandResult(result, defaultSuccessMessage = '操作已完成') {
+    if (result && typeof result === 'object' && !Array.isArray(result)) {
+        return {
+            ok: result.ok === true,
+            message: String(result.message || defaultSuccessMessage),
+        };
+    }
+
+    if (result === true) {
+        return { ok: true, message: defaultSuccessMessage };
+    }
+
+    if (result === false) {
+        return { ok: false, message: '操作失败' };
+    }
+
+    return { ok: true, message: defaultSuccessMessage };
 }
 
 export function handleTableCommand(args) {
     const tableName = String(args ?? '').trim();
 
     if (!tableName) {
-        showNotification('请指定表格名称: /phone-table <表名>', 'warning');
+        showNotification('请指定表格名称: /phone-table <表名或sheetKey>', 'warning');
         return;
     }
 
     try {
         const handler = getCommandHandler('open-table');
         if (handler) {
-            handler(tableName);
+            const result = normalizeCommandResult(handler(tableName), `已打开表格「${tableName}」`);
+            showNotification(result.message, result.ok ? 'success' : 'warning');
         } else {
-            showNotification(`打开表格: ${tableName}`, 'info');
+            showNotification('表格打开功能暂不可用', 'warning');
         }
     } catch (error) {
         handleError(error, `打开表格失败: ${tableName}`);
@@ -164,23 +203,23 @@ export function handleListTablesCommand() {
     }
 }
 
-export function handleSettingsCommand(args) {
-    const action = String(args ?? '').trim().toLowerCase();
+export async function handleSettingsCommand(args) {
+    const { action, payload } = parseSettingsCommandArgs(args);
 
     switch (action) {
         case 'reset':
-            resetPhoneSettings();
+            await resetPhoneSettings();
             break;
         case 'export':
             exportPhoneSettings();
             break;
         case 'import':
-            importPhoneSettings();
+            importPhoneSettings(payload);
             break;
         case '':
         case 'help':
             showNotification(
-                '设置命令:\n/phone-settings reset - 重置设置\n/phone-settings export - 导出设置\n/phone-settings import - 导入设置',
+                '设置命令:\n/phone-settings reset - 重置设置\n/phone-settings export - 导出设置\n/phone-settings import <JSON> - 导入设置',
                 'info'
             );
             break;
@@ -189,12 +228,12 @@ export function handleSettingsCommand(args) {
     }
 }
 
-function resetPhoneSettings() {
+async function resetPhoneSettings() {
     try {
         const handler = getCommandHandler('reset-settings');
         if (handler) {
-            handler();
-            showNotification('设置已重置', 'success');
+            const result = normalizeCommandResult(await handler(), '设置已重置');
+            showNotification(result.message, result.ok ? 'success' : 'warning');
         } else {
             showNotification('未检测到设置重置处理器，无法安全重置扩展设置', 'warning');
         }
@@ -219,8 +258,25 @@ function exportPhoneSettings() {
     }
 }
 
-function importPhoneSettings() {
-    showNotification('请使用 /phone-settings import <JSON> 导入设置', 'info');
+function importPhoneSettings(rawPayload = '') {
+    const payload = String(rawPayload ?? '').trim();
+    if (!payload) {
+        showNotification('请使用 /phone-settings import <JSON> 导入设置', 'warning');
+        return;
+    }
+
+    try {
+        const handler = getCommandHandler('import-settings');
+        if (!handler) {
+            showNotification('未检测到设置导入处理器，无法导入扩展设置', 'warning');
+            return;
+        }
+
+        const result = normalizeCommandResult(handler(payload), '设置已导入');
+        showNotification(result.message, result.ok ? 'success' : 'warning');
+    } catch (error) {
+        handleError(error, '导入设置失败');
+    }
 }
 
 function copyToClipboard(text) {

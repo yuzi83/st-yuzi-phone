@@ -1,4 +1,6 @@
 import { Logger } from '../error-handler.js';
+import { resolveTheaterSceneBySheetKey } from '../phone-theater/data.js';
+import { escapeHtml } from '../utils/dom-escape.js';
 import { getPhoneCoreState, phoneRuntime } from './state.js';
 import { processTableData, getTableData } from './data-api.js';
 import { navigateTo } from './routing.js';
@@ -96,38 +98,50 @@ function triggerPushNotification(tableName, sheetKey, lastRow, newCount) {
         summary = lastRow[1] || lastRow[0] || summary;
     }
 
+    const rawData = getTableData();
+    const theaterScene = resolveTheaterSceneBySheetKey(rawData, sheetKey);
+    const targetBadgeKey = theaterScene?.appKey || sheetKey;
+    const targetRoute = theaterScene?.route || `app:${sheetKey}`;
+    const displayTitle = theaterScene
+        ? `${theaterScene.name} · ${tableName}`
+        : tableName;
+
     const state = getPhoneCoreState();
-    state.unreadCounts[sheetKey] = (state.unreadCounts[sheetKey] || 0) + newCount;
-    updateBadgeUI(sheetKey);
+    state.unreadCounts[targetBadgeKey] = (state.unreadCounts[targetBadgeKey] || 0) + newCount;
+    updateBadgeUI(targetBadgeKey);
 
     const notif = document.createElement('div');
     notif.className = 'phone-notif-bubble';
 
-    const firstChar = (tableName || '新').trim().charAt(0).toUpperCase();
+    const firstChar = (theaterScene?.name || tableName || '新').trim().charAt(0).toUpperCase();
     const iconHtml = buildPhoneNotificationIconHtml(firstChar);
 
-    const safeTitle = String(tableName || '').replace(/</g, '<').replace(/>/g, '>');
-    const safeSummary = String(summary || '').replace(/</g, '<').replace(/>/g, '>');
+    const safeTitle = escapeHtml(String(displayTitle || ''));
+    const safeSummary = escapeHtml(String(summary || ''));
 
     notif.innerHTML = buildPhoneNotificationContentHtml(iconHtml, safeTitle, safeSummary);
 
-    notif.addEventListener('click', () => {
+    const dismissNotification = () => {
+        if (!notif.isConnected) return;
         notif.classList.remove('show');
         phoneRuntime.setTimeout(() => notif.remove(), 300);
-        clearUnreadBadge(sheetKey);
-        navigateTo(`app:${sheetKey}`);
+    };
+
+    phoneRuntime.addEventListener(notif, 'click', () => {
+        dismissNotification();
+        clearUnreadBadge(targetBadgeKey);
+        navigateTo(targetRoute);
     });
 
     container.appendChild(notif);
 
     phoneRuntime.requestAnimationFrame(() => {
-        notif.classList.add('show');
+        if (notif.isConnected) {
+            notif.classList.add('show');
+        }
     });
 
     phoneRuntime.setTimeout(() => {
-        if (notif.parentNode) {
-            notif.classList.remove('show');
-            phoneRuntime.setTimeout(() => notif.remove(), 300);
-        }
+        dismissNotification();
     }, 4000);
 }

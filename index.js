@@ -1,7 +1,7 @@
 // index.js
 /**
  * 玉子手机 - 独立扩展入口
- * @version 1.2.2
+ * @version 1.4.0
  * @description 集成 SillyTavern 事件系统、TavernHelper API、Slash 命令、错误处理等
  * @fix P0-001 修复 innerHTML XSS 风险
  * @fix P0-002 修复事件监听器内存泄漏
@@ -9,23 +9,24 @@
  * @fix P1-002 修复异步初始化竞态条件
  */
 
-import { onPhoneActivated, onPhoneDeactivated, destroyPhoneRuntime } from './modules/phone-core.js';
+import { onPhoneActivated, onPhoneDeactivated, destroyPhoneRuntime } from './modules/phone-core/lifecycle.js';
 import {
     getPhoneSettings,
     resetPhoneSettingsToDefault,
     migrateLegacyPhoneSettings,
     flushPhoneSettingsSave,
+    savePhoneSettingsPatch,
 } from './modules/settings.js';
 import { createPhoneSettingsPanel } from './modules/settings-panel.js';
-import { EventManager } from './modules/utils.js';
+import { EventManager } from './modules/utils/event-manager.js';
+import { cleanupIntegration } from './modules/integration/cleanup.js';
+import { showNotification } from './modules/integration/toast-bridge.js';
 import {
-    cleanupIntegration,
-    showNotification,
     getChatMessages,
     getLastMessageId,
     getVariables,
     setVariables,
-} from './modules/integration.js';
+} from './modules/integration/tavern-helper-bridge.js';
 import {
     registerSlashCommands,
     unregisterSlashCommands,
@@ -43,14 +44,17 @@ import {
     initializePhoneBootstrapUi,
     setPhoneBootstrapEnabledState,
     togglePhoneBootstrapVisibility,
+    unmountPhoneBootstrapUi,
 } from './modules/bootstrap/app-bootstrap.js';
 import { registerPhoneSlashCommandHandlers } from './modules/bootstrap/command-registry.js';
 import {
     bindPhoneBootstrapWindowEvents,
     registerPhoneEventListeners,
 } from './modules/bootstrap/event-registry.js';
+import { repairActiveBeautifyTemplateSettings } from './modules/phone-beautify-templates/repository.js';
 
 // 全局事件管理器 - 用于统一管理事件监听器的清理
+const EXTENSION_VERSION = '1.4.0';
 const globalEventManager = new EventManager();
 const logger = Logger.withScope({ scope: 'index' });
 let initRetryTimeoutId = null;
@@ -98,6 +102,8 @@ function setupSlashCommandHandlers() {
         destroyPhoneRuntime,
         resetPhoneSettingsToDefault,
         getPhoneSettings,
+        savePhoneSettingsPatch,
+        flushPhoneSettingsSave,
         setPhoneEnabledWithUI,
     });
 }
@@ -183,6 +189,8 @@ async function doInitialize() {
         onToggle: togglePhone,
     });
 
+    repairActiveBeautifyTemplateSettings();
+
     // 6. 注册 Slash 命令
     if (registerSlashCommands()) {
         setupSlashCommandHandlers();
@@ -203,9 +211,9 @@ async function doInitialize() {
         feature: 'lifecycle',
         action: 'initialize.complete',
         message: '扩展初始化完成',
-        context: { version: '1.2.2' },
+        context: { version: EXTENSION_VERSION },
     });
-    showNotification('玉子手机已加载 (v1.2.2)', 'success');
+    showNotification(`玉子手机已加载 (v${EXTENSION_VERSION})`, 'success');
 }
 
 /**
@@ -339,9 +347,6 @@ export {
     configureErrorHandler,
 };
 
-// 导出虚拟滚动（按需使用）
-export { VirtualScroll, createVirtualScroll, renderVirtualList } from './modules/virtual-scroll.js';
-
 // 导出工具函数
 export {
     debounce,
@@ -350,15 +355,8 @@ export {
     cancelIdleCallback,
     createBatchHandler,
     createSingletonPromise,
-    deepMerge,
-    generateUniqueId,
-    formatFileSize,
-    isMobileDevice,
-    isTouchDevice,
-    createVisibilityObserver,
-    createLazyLoader,
-    createInfiniteScroll,
-    createPerformanceTimer,
-    createFPSMonitor,
-    getMemoryUsage,
-} from './modules/utils.js';
+} from './modules/utils/timing.js';
+export { deepMerge, generateUniqueId } from './modules/utils/object.js';
+export { formatFileSize, isMobileDevice, isTouchDevice } from './modules/utils/device.js';
+export { createVisibilityObserver, createLazyLoader, createInfiniteScroll } from './modules/utils/observers.js';
+export { createPerformanceTimer, createFPSMonitor, getMemoryUsage } from './modules/utils/performance.js';

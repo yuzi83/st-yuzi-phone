@@ -1,4 +1,4 @@
-import { escapeHtmlAttr } from '../utils.js';
+import { escapeHtmlAttr } from '../utils/dom-escape.js';
 import { resolveTemplateWithDraftForViewer, buildScopedCustomCss } from './template-runtime.js';
 import { normalizeGenericFieldBindingsForViewer } from './row-view-model.js';
 

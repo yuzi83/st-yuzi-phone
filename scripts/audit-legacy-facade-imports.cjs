@@ -8,6 +8,7 @@ const TARGET_FACADES = new Set([
     'phone-core.js',
     'phone-settings.js',
     'phone-table-viewer.js',
+    'phone-fusion.js',
     'integration.js',
     'phone-beautify-templates.js',
     'window.js',

@@ -1,4 +1,4 @@
-import { escapeHtml, escapeHtmlAttr } from '../utils.js';
+import { escapeHtml, escapeHtmlAttr } from '../utils/dom-escape.js';
 
 export const PHONE_ICONS = {
     signal: `<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><rect x="1" y="16" width="4" height="6" rx="1" opacity="0.4"/><rect x="7" y="12" width="4" height="10" rx="1" opacity="0.6"/><rect x="13" y="7" width="4" height="15" rx="1" opacity="0.8"/><rect x="19" y="2" width="4" height="20" rx="1"/></svg>`,

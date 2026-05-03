@@ -1,25 +1,28 @@
 import { getPhoneSettings, savePhoneSetting } from '../settings.js';
 import {
+    BEAUTIFY_ACTIVE_TEMPLATE_IDS_SETTING_KEY_SPECIAL,
+    BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC,
+    BEAUTIFY_SOURCE_MODE_BUILTIN,
+    BEAUTIFY_SOURCE_MODE_SETTING_KEY_SPECIAL,
+    BEAUTIFY_SOURCE_MODE_SETTING_KEY_GENERIC,
+    BEAUTIFY_SOURCE_MODE_USER,
     PHONE_TEMPLATE_TYPE_SPECIAL,
     PHONE_TEMPLATE_TYPE_GENERIC,
-    BUILTIN_TEMPLATES,
+    SPECIAL_RENDERER_KEYS,
+} from './constants.js';
+import {
     deepClone,
     nowTs,
     normalizeString,
     sanitizeId,
-    normalizeTemplateType,
-    normalizeTemplateMeta,
+} from './core.js';
+import {
     normalizeTemplate,
-    saveTemplateStore,
-    ensureUniqueTemplateId,
-    SPECIAL_RENDERER_KEYS,
-    BEAUTIFY_SOURCE_MODE_SETTING_KEY_SPECIAL,
-    BEAUTIFY_SOURCE_MODE_SETTING_KEY_GENERIC,
-    BEAUTIFY_SOURCE_MODE_BUILTIN,
-    BEAUTIFY_SOURCE_MODE_USER,
-    BEAUTIFY_ACTIVE_TEMPLATE_IDS_SETTING_KEY_SPECIAL,
-    BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC,
-} from './shared.js';
+    normalizeTemplateMeta,
+    normalizeTemplateType,
+} from './normalize.js';
+import { saveTemplateStore } from './store.js';
+import { ensureUniqueTemplateId } from './template-id.js';
 import {
     getCachedAllPhoneBeautifyTemplates,
     getCachedBeautifyTemplateSourceRuntime,
@@ -106,6 +109,11 @@ function getSourceModeSettingKey(templateType) {
     return '';
 }
 
+function saveBeautifyTemplateSettingAndInvalidate(settingKey, value) {
+    savePhoneSetting(settingKey, value);
+    invalidatePhoneBeautifyTemplateCache();
+}
+
 function normalizeSpecialActiveTemplateIds(rawMap) {
     const src = rawMap && typeof rawMap === 'object' && !Array.isArray(rawMap)
         ? rawMap
@@ -137,6 +145,95 @@ function getSpecialActiveTemplateIdsRaw() {
 function getGenericActiveTemplateIdRaw() {
     const raw = getPhoneSettings()?.[BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC];
     return normalizeGenericActiveTemplateId(raw);
+}
+
+function resolveActiveCleanupValue(deletedTemplateId, fallbackTemplateId) {
+    const safeDeletedId = sanitizeId(deletedTemplateId, '');
+    const safeFallbackId = sanitizeId(fallbackTemplateId, '');
+    return safeFallbackId && safeFallbackId !== safeDeletedId ? safeFallbackId : '';
+}
+
+function areSpecialActiveTemplateIdsEqual(leftMap, rightMap) {
+    const left = normalizeSpecialActiveTemplateIds(leftMap);
+    const right = normalizeSpecialActiveTemplateIds(rightMap);
+    const leftKeys = Object.keys(left).sort();
+    const rightKeys = Object.keys(right).sort();
+
+    if (leftKeys.length !== rightKeys.length) return false;
+    return leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key]);
+}
+
+function cleanupActiveSettingsForDeletedTemplate(template) {
+    const safeDeletedId = sanitizeId(template?.id, '');
+    const safeType = normalizeTemplateType(template?.templateType, '');
+    if (!safeDeletedId || !safeType) {
+        return {
+            activeSettingsUpdated: false,
+            genericActiveTemplateId: '',
+            specialActiveTemplateIds: null,
+        };
+    }
+
+    if (safeType === PHONE_TEMPLATE_TYPE_GENERIC) {
+        const currentActiveId = getGenericActiveTemplateIdRaw();
+        if (currentActiveId !== safeDeletedId) {
+            return {
+                activeSettingsUpdated: false,
+                genericActiveTemplateId: currentActiveId,
+                specialActiveTemplateIds: null,
+            };
+        }
+
+        const nextActiveId = resolveActiveCleanupValue(safeDeletedId, getDefaultGenericTemplateId());
+        saveBeautifyTemplateSettingAndInvalidate(BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC, nextActiveId);
+        return {
+            activeSettingsUpdated: true,
+            genericActiveTemplateId: nextActiveId,
+            specialActiveTemplateIds: null,
+        };
+    }
+
+    if (safeType === PHONE_TEMPLATE_TYPE_SPECIAL) {
+        const currentMap = getSpecialActiveTemplateIdsRaw();
+        let changed = false;
+        const nextMap = { ...currentMap };
+
+        Object.entries(currentMap).forEach(([rendererKey, activeTemplateId]) => {
+            if (activeTemplateId !== safeDeletedId) return;
+
+            const fallbackId = resolveActiveCleanupValue(
+                safeDeletedId,
+                getDefaultSpecialTemplateIdByRenderer(rendererKey),
+            );
+            if (fallbackId) {
+                nextMap[rendererKey] = fallbackId;
+            } else {
+                delete nextMap[rendererKey];
+            }
+            changed = true;
+        });
+
+        if (!changed) {
+            return {
+                activeSettingsUpdated: false,
+                genericActiveTemplateId: '',
+                specialActiveTemplateIds: currentMap,
+            };
+        }
+
+        saveBeautifyTemplateSettingAndInvalidate(BEAUTIFY_ACTIVE_TEMPLATE_IDS_SETTING_KEY_SPECIAL, nextMap);
+        return {
+            activeSettingsUpdated: true,
+            genericActiveTemplateId: '',
+            specialActiveTemplateIds: nextMap,
+        };
+    }
+
+    return {
+        activeSettingsUpdated: false,
+        genericActiveTemplateId: '',
+        specialActiveTemplateIds: null,
+    };
 }
 
 function getSpecialTemplatesByRendererKey(rendererKey, options = {}) {
@@ -249,8 +346,7 @@ export function setBeautifyTemplateSourceMode(templateType, sourceMode) {
     }
 
     const normalized = normalizeSourceModeForTemplateType(templateType, sourceMode);
-    savePhoneSetting(settingKey, normalized);
-    invalidatePhoneBeautifyTemplateCache();
+    saveBeautifyTemplateSettingAndInvalidate(settingKey, normalized);
     return {
         success: true,
         mode: normalized,
@@ -266,11 +362,7 @@ export function getActiveBeautifyTemplateIdByType(templateType, options = {}) {
         const valid = ensureValidGenericActiveTemplateId(getGenericActiveTemplateIdRaw());
         if (valid) return valid;
 
-        const fallback = options.withFallback === false ? '' : getDefaultGenericTemplateId();
-        if (fallback && options.persist !== false) {
-            savePhoneSetting(BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC, fallback);
-        }
-        return fallback;
+        return options.withFallback === false ? '' : getDefaultGenericTemplateId();
     }
 
     return '';
@@ -283,21 +375,48 @@ export function getActiveBeautifyTemplateIdsForSpecial(options = {}) {
     if (!withFallback) return valid;
 
     const merged = { ...valid };
-    let changed = false;
 
     SPECIAL_RENDERER_KEYS.forEach((rendererKey) => {
         if (merged[rendererKey]) return;
         const fallbackId = getDefaultSpecialTemplateIdByRenderer(rendererKey);
         if (!fallbackId) return;
         merged[rendererKey] = fallbackId;
-        changed = true;
     });
 
-    if (changed && options.persist !== false) {
-        savePhoneSetting(BEAUTIFY_ACTIVE_TEMPLATE_IDS_SETTING_KEY_SPECIAL, merged);
+    return merged;
+}
+
+export function repairActiveBeautifyTemplateSettings() {
+    const result = {
+        genericUpdated: false,
+        specialUpdated: false,
+        genericActiveTemplateId: '',
+        specialActiveTemplateIds: {},
+    };
+
+    const rawGenericId = getGenericActiveTemplateIdRaw();
+    const validGenericId = ensureValidGenericActiveTemplateId(rawGenericId);
+    const nextGenericId = validGenericId || getDefaultGenericTemplateId();
+    result.genericActiveTemplateId = nextGenericId;
+
+    if (rawGenericId !== nextGenericId) {
+        saveBeautifyTemplateSettingAndInvalidate(BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC, nextGenericId);
+        result.genericUpdated = true;
     }
 
-    return merged;
+    const rawSpecialMap = getSpecialActiveTemplateIdsRaw();
+    const nextSpecialMap = getActiveBeautifyTemplateIdsForSpecial({
+        withFallback: true,
+        persist: false,
+    });
+    result.specialActiveTemplateIds = nextSpecialMap;
+
+    if (!areSpecialActiveTemplateIdsEqual(rawSpecialMap, nextSpecialMap)) {
+        saveBeautifyTemplateSettingAndInvalidate(BEAUTIFY_ACTIVE_TEMPLATE_IDS_SETTING_KEY_SPECIAL, nextSpecialMap);
+        result.specialUpdated = true;
+    }
+
+    return result;
 }
 
 export function setActiveBeautifyTemplateIdByType(templateType, templateId) {
@@ -321,7 +440,7 @@ export function setActiveBeautifyTemplateIdByType(templateType, templateId) {
             return { success: false, message: '通用模板渲染器无效' };
         }
 
-        savePhoneSetting(BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC, safeTemplateId);
+        saveBeautifyTemplateSettingAndInvalidate(BEAUTIFY_ACTIVE_TEMPLATE_ID_SETTING_KEY_GENERIC, safeTemplateId);
         return {
             success: true,
             templateId: safeTemplateId,
@@ -341,7 +460,7 @@ export function setActiveBeautifyTemplateIdByType(templateType, templateId) {
             [rendererKey]: safeTemplateId,
         };
 
-        savePhoneSetting(BEAUTIFY_ACTIVE_TEMPLATE_IDS_SETTING_KEY_SPECIAL, nextMap);
+        saveBeautifyTemplateSettingAndInvalidate(BEAUTIFY_ACTIVE_TEMPLATE_IDS_SETTING_KEY_SPECIAL, nextMap);
         return {
             success: true,
             rendererKey,
@@ -367,7 +486,10 @@ export function getBeautifyTemplateSourceModeRuntime(templateType, options = {})
             const safeType = normalizeTemplateType(templateType, '');
 
             if (safeType === PHONE_TEMPLATE_TYPE_SPECIAL) {
-                const activeMap = getActiveBeautifyTemplateIdsForSpecial({ withFallback: true, persist: true });
+                const activeMap = getActiveBeautifyTemplateIdsForSpecial({
+                    withFallback: true,
+                    persist: false,
+                });
                 const selected = templates.filter((t) => {
                     const rendererKey = normalizeString(t?.render?.rendererKey, 48);
                     if (!SPECIAL_RENDERER_KEYS.has(rendererKey)) return false;
@@ -388,7 +510,7 @@ export function getBeautifyTemplateSourceModeRuntime(templateType, options = {})
             if (safeType === PHONE_TEMPLATE_TYPE_GENERIC) {
                 const activeTemplateId = getActiveBeautifyTemplateIdByType(PHONE_TEMPLATE_TYPE_GENERIC, {
                     withFallback: true,
-                    persist: true,
+                    persist: false,
                 });
 
                 const selected = activeTemplateId
@@ -466,7 +588,7 @@ export function validatePhoneBeautifyTemplate(rawTemplate) {
     if (normalized.templateType === PHONE_TEMPLATE_TYPE_SPECIAL) {
         const rendererKey = normalizeString(normalized.render?.rendererKey, 48);
         if (!SPECIAL_RENDERER_KEYS.has(rendererKey)) {
-            errors.push('专属模板的 rendererKey 必须是 special_message/special_moments/special_forum');
+            errors.push('专属模板的 rendererKey 必须是 special_message');
         }
     }
 
@@ -572,13 +694,12 @@ export function deletePhoneBeautifyUserTemplate(templateId) {
     }
 
     const store = getCachedPhoneBeautifyTemplateStore();
-    const prevLength = store.templates.length;
-
-    const nextTemplates = store.templates.filter((template) => template.id !== safeId);
-    if (nextTemplates.length === prevLength) {
+    const removedTemplate = store.templates.find((template) => template.id === safeId) || null;
+    if (!removedTemplate) {
         return { success: false, message: '未找到可删除的用户模板' };
     }
 
+    const nextTemplates = store.templates.filter((template) => template.id !== safeId);
     const nextBindings = { ...store.bindings };
     Object.entries(nextBindings).forEach(([sheetKey, bindTemplateId]) => {
         if (bindTemplateId === safeId) {
@@ -593,5 +714,16 @@ export function deletePhoneBeautifyUserTemplate(templateId) {
     });
     invalidatePhoneBeautifyTemplateCache();
 
-    return { success: true, message: '模板已删除' };
+    const activeCleanup = cleanupActiveSettingsForDeletedTemplate(removedTemplate);
+
+    return {
+        success: true,
+        message: '模板已删除',
+        templateId: safeId,
+        templateType: normalizeTemplateType(removedTemplate?.templateType, ''),
+        rendererKey: normalizeString(removedTemplate?.render?.rendererKey, 48),
+        activeSettingsUpdated: activeCleanup.activeSettingsUpdated,
+        genericActiveTemplateId: activeCleanup.genericActiveTemplateId,
+        specialActiveTemplateIds: activeCleanup.specialActiveTemplateIds,
+    };
 }

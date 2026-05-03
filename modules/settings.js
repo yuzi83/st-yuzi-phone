@@ -10,9 +10,17 @@ import { getSettingsContext } from './settings/context.js';
 import {
     extensionName,
     defaultSettings,
+    PHONE_CONTAINER_SIZE_LIMITS,
+    PHONE_CHAT_NUMERIC_LIMITS,
+    PHONE_AI_MEDIA_MARKER_DEFAULTS,
+    WORLDBOOK_SELECTION_DEFAULTS,
     cloneSettingsValue,
     validateSetting,
     validateSettings,
+    normalizePhoneChatSettings,
+    normalizePhoneAiInstructionSettings,
+    normalizePhoneAiInstructionMediaMarkers,
+    normalizeWorldbookSelectionSettings,
 } from './settings/schema.js';
 import { createSettingsRepository } from './settings/repository.js';
 import { migrateLegacyPhoneSettingsWith } from './settings/migration.js';
@@ -88,6 +96,14 @@ export {
 export {
     extensionName,
     defaultSettings,
+    PHONE_CONTAINER_SIZE_LIMITS,
+    PHONE_CHAT_NUMERIC_LIMITS,
+    PHONE_AI_MEDIA_MARKER_DEFAULTS,
+    WORLDBOOK_SELECTION_DEFAULTS,
+    normalizePhoneChatSettings,
+    normalizePhoneAiInstructionSettings,
+    normalizePhoneAiInstructionMediaMarkers,
+    normalizeWorldbookSelectionSettings,
 };
 
 export { SettingsError };

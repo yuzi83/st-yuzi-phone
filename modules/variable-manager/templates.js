@@ -3,7 +3,7 @@
  * 使用项目现有的 phone-nav-bar / phone-app-page / phone-app-body 结构
  */
 
-import { escapeHtml } from '../utils.js';
+import { escapeHtml, escapeHtmlAttr } from '../utils/dom-escape.js';
 
 /**
  * 变量管理器页面主模板
@@ -15,14 +15,14 @@ export function buildVariableManagerPageHtml(messageId, isMvu) {
     return `
         <div class="phone-app-page vm-page">
             <div class="phone-nav-bar vm-navbar">
-                <button type="button" class="phone-nav-back vm-nav-back" aria-label="返回">
+                <button type="button" class="phone-nav-back vm-nav-back" data-vm-action="nav-back" aria-label="返回">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M15 19l-7-7 7-7"/></svg>
                     <span>返回</span>
                 </button>
                 <div class="phone-nav-title vm-nav-title">变量管理器 ${mvuBadge}</div>
                 <div class="vm-nav-right-group">
                     <span class="vm-floor-label">${escapeHtml(floorLabel)}</span>
-                    <button type="button" class="vm-nav-refresh" aria-label="刷新">
+                    <button type="button" class="vm-nav-refresh" data-vm-action="refresh" aria-label="刷新">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16">
                             <path d="M1 4v6h6"/><path d="M23 20v-6h-6"/>
                             <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/>
@@ -34,14 +34,14 @@ export function buildVariableManagerPageHtml(messageId, isMvu) {
                 <div class="vm-content"></div>
             </div>
             <div class="vm-footer">
-                <button type="button" class="vm-add-btn">
+                <button type="button" class="vm-add-btn" data-vm-action="add-variable">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     <span>添加变量</span>
                 </button>
             </div>
             <div class="vm-delete-bar vm-delete-bar-hidden">
-                <button type="button" class="vm-delete-cancel-btn">完成</button>
-                <button type="button" class="vm-delete-confirm-btn">
+                <button type="button" class="vm-delete-cancel-btn" data-vm-action="exit-delete-mode">完成</button>
+                <button type="button" class="vm-delete-confirm-btn" data-vm-action="confirm-delete">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                     <span>删除选中 (<span class="vm-delete-count">0</span>)</span>
                 </button>
@@ -55,13 +55,13 @@ export function buildVariableManagerPageHtml(messageId, isMvu) {
  */
 export function buildEditCardHtml(path, key, displayValue, valueType) {
     return `
-        <div class="vm-card vm-card-editing" data-var-path="${escapeHtml(path)}" data-var-type="${escapeHtml(valueType)}">
+        <div class="vm-card vm-card-editing" data-var-path="${escapeHtmlAttr(path)}" data-var-type="${escapeHtmlAttr(valueType)}">
             <div class="vm-card-edit-inner">
                 <div class="vm-card-edit-label">${escapeHtml(key)}</div>
                 <textarea class="vm-edit-input" rows="2" autocomplete="off" spellcheck="false">${escapeHtml(displayValue)}</textarea>
                 <div class="vm-edit-actions">
-                    <button type="button" class="vm-edit-cancel">取消</button>
-                    <button type="button" class="vm-edit-save">保存</button>
+                    <button type="button" class="vm-edit-cancel" data-vm-action="cancel-edit">取消</button>
+                    <button type="button" class="vm-edit-save" data-vm-action="save-edit">保存</button>
                 </div>
             </div>
         </div>
@@ -89,8 +89,8 @@ export function buildAddVariableDialogHtml() {
                     </div>
                 </div>
                 <div class="vm-dialog-buttons">
-                    <button type="button" class="vm-dialog-btn vm-dialog-cancel">取消</button>
-                    <button type="button" class="vm-dialog-btn vm-dialog-confirm">添加</button>
+                    <button type="button" class="vm-dialog-btn vm-dialog-cancel" data-vm-dialog-action="cancel">取消</button>
+                    <button type="button" class="vm-dialog-btn vm-dialog-confirm" data-vm-dialog-action="confirm">添加</button>
                 </div>
             </div>
         </div>
@@ -107,8 +107,8 @@ export function buildConfirmDialogHtml(title, bodyHtml, confirmText = '确认', 
                 <div class="vm-dialog-title">${escapeHtml(title)}</div>
                 <div class="vm-dialog-body vm-dialog-body-confirm">${bodyHtml}</div>
                 <div class="vm-dialog-buttons">
-                    <button type="button" class="vm-dialog-btn vm-dialog-cancel">取消</button>
-                    <button type="button" class="vm-dialog-btn vm-dialog-confirm ${confirmClass}">${escapeHtml(confirmText)}</button>
+                    <button type="button" class="vm-dialog-btn vm-dialog-cancel" data-vm-dialog-action="cancel">取消</button>
+                    <button type="button" class="vm-dialog-btn vm-dialog-confirm ${escapeHtmlAttr(confirmClass)}" data-vm-dialog-action="confirm">${escapeHtml(confirmText)}</button>
                 </div>
             </div>
         </div>

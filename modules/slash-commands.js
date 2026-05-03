@@ -18,6 +18,27 @@ import {
     setSlashCommandsRegistered,
 } from './slash-commands/state.js';
 
+function rollbackPartialSlashCommandRegistration() {
+    const registeredCommands = getRegisteredCommandsSnapshot();
+    const hasPartialCommands = registeredCommands.length > 0;
+
+    try {
+        const unregisterSlashCommand = getSillyTavernSlashCommandUnregistrar();
+        if (hasPartialCommands && typeof unregisterSlashCommand === 'function') {
+            unregisterSlashCommandDefinitions(unregisterSlashCommand);
+            Logger.warn(`Slash 命令注册失败，已回滚 ${registeredCommands.length} 个半注册命令`);
+        } else if (hasPartialCommands) {
+            Logger.warn(`Slash 命令注册失败，但未检测到 Slash 注销接口；已清空本地状态，宿主可能残留 ${registeredCommands.length} 个命令`);
+        } else {
+            Logger.debug('Slash 命令注册失败时未检测到半注册命令');
+        }
+    } finally {
+        clearRegisteredCommands();
+        clearCommandHandlers();
+        setSlashCommandsRegistered(false);
+    }
+}
+
 /**
  * 注册 Slash 命令
  * @returns {boolean} 是否成功注册
@@ -45,6 +66,7 @@ export function registerSlashCommands() {
         return true;
     } catch (error) {
         handleError(error, '注册 Slash 命令失败');
+        rollbackPartialSlashCommandRegistration();
         return false;
     }
 }

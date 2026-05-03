@@ -34,20 +34,62 @@ export function createDbConfigRuntime(deps = {}) {
         };
     };
 
+    const normalizeWriteResult = (result, fallbackMessage) => {
+        if (result && typeof result === 'object') {
+            return {
+                ok: result.ok === true,
+                message: String(result.message || fallbackMessage || '').trim(),
+            };
+        }
+
+        return {
+            ok: false,
+            message: String(fallbackMessage || '').trim(),
+        };
+    };
+
+    const buildRollbackFailureMessage = (rollbackResult) => {
+        const failures = [];
+        if (rollbackResult?.updateResult?.ok !== true) {
+            failures.push(rollbackResult?.updateResult?.message || '更新配置回滚失败');
+        }
+        if (rollbackResult?.manualResult?.ok !== true) {
+            failures.push(rollbackResult?.manualResult?.message || '手动表选择回滚失败');
+        }
+        return failures.filter(Boolean).join('；');
+    };
+
     const rollbackDbSnapshot = (snapshot) => {
         const normalized = normalizeDbConfigSnapshot(snapshot);
-        writeDbUpdateConfigViaApi(normalized.updateConfig);
-        if (normalized.manualSelection.hasManualSelection) {
-            writeManualTableSelectionViaApi(normalized.manualSelection.selectedTables);
-        } else {
-            clearManualTableSelectionViaApi();
-        }
+        const updateResult = normalizeWriteResult(
+            writeDbUpdateConfigViaApi(normalized.updateConfig),
+            '更新配置回滚失败',
+        );
+        const manualResult = normalized.manualSelection.hasManualSelection
+            ? normalizeWriteResult(
+                writeManualTableSelectionViaApi(normalized.manualSelection.selectedTables),
+                '手动表选择回滚失败',
+            )
+            : normalizeWriteResult(
+                clearManualTableSelectionViaApi(),
+                '手动表选择回滚失败',
+            );
+        const ok = updateResult.ok && manualResult.ok;
+        return {
+            ok,
+            updateResult,
+            manualResult,
+            message: ok ? '数据库配置已回滚' : buildRollbackFailureMessage({ updateResult, manualResult }),
+        };
     };
 
     const applyDbSnapshot = (targetSnapshot, rollbackSnapshot = null) => {
         const normalized = normalizeDbConfigSnapshot(targetSnapshot);
 
-        const updateWrite = writeDbUpdateConfigViaApi(normalized.updateConfig);
+        const updateWrite = normalizeWriteResult(
+            writeDbUpdateConfigViaApi(normalized.updateConfig),
+            '更新配置写入失败',
+        );
         if (!updateWrite.ok) {
             return {
                 ok: false,
@@ -56,16 +98,30 @@ export function createDbConfigRuntime(deps = {}) {
         }
 
         const manualWrite = normalized.manualSelection.hasManualSelection
-            ? writeManualTableSelectionViaApi(normalized.manualSelection.selectedTables)
-            : clearManualTableSelectionViaApi();
+            ? normalizeWriteResult(
+                writeManualTableSelectionViaApi(normalized.manualSelection.selectedTables),
+                '手动更新表选择写入失败',
+            )
+            : normalizeWriteResult(
+                clearManualTableSelectionViaApi(),
+                '手动更新表选择写入失败',
+            );
 
         if (!manualWrite.ok) {
-            if (rollbackSnapshot) {
-                rollbackDbSnapshot(rollbackSnapshot);
+            const rollbackResult = rollbackSnapshot ? rollbackDbSnapshot(rollbackSnapshot) : null;
+            const baseMessage = manualWrite.message || '手动更新表选择写入失败';
+            if (rollbackResult && !rollbackResult.ok) {
+                const rollbackMessage = rollbackResult.message || buildRollbackFailureMessage(rollbackResult);
+                return {
+                    ok: false,
+                    message: `${baseMessage}；回滚也失败，当前配置可能部分写入${rollbackMessage ? `：${rollbackMessage}` : ''}`,
+                    rollbackResult,
+                };
             }
             return {
                 ok: false,
-                message: manualWrite.message || '手动更新表选择写入失败',
+                message: baseMessage,
+                rollbackResult,
             };
         }
 

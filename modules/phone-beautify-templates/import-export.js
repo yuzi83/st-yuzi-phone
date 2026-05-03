@@ -1,21 +1,25 @@
 import {
-    PHONE_BEAUTIFY_TEMPLATE_FORMAT,
-    PHONE_BEAUTIFY_TEMPLATE_SCHEMA_VERSION,
-    PHONE_BEAUTIFY_TEMPLATE_MIN_COMPAT_SCHEMA_VERSION,
-    PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_RUNTIME,
-    PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
     MAX_IMPORTED_TEMPLATES,
+    PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_ANNOTATED,
+    PHONE_BEAUTIFY_TEMPLATE_EXPORT_MODE_RUNTIME,
+    PHONE_BEAUTIFY_TEMPLATE_FORMAT,
+    PHONE_BEAUTIFY_TEMPLATE_MIN_COMPAT_SCHEMA_VERSION,
+    PHONE_BEAUTIFY_TEMPLATE_SCHEMA_VERSION,
+} from './constants.js';
+import {
     deepClone,
-    nowTs,
     normalizeString,
-    normalizeTemplateType,
+    nowTs,
     sanitizeId,
-    parsePackInput,
+} from './core.js';
+import { normalizeTemplateType } from './normalize.js';
+import {
     compareSemver,
-    ensureUniqueTemplateId,
+    parsePackInput,
     serializeTemplateForExport,
-    saveTemplateStore,
-} from './shared.js';
+} from './pack-helpers.js';
+import { saveTemplateStore } from './store.js';
+import { ensureUniqueTemplateId } from './template-id.js';
 import {
     getCachedPhoneBeautifyTemplateStore,
     invalidatePhoneBeautifyTemplateCache,

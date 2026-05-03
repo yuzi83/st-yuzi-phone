@@ -1,5 +1,5 @@
 import { getTableData } from '../phone-core/data-api.js';
-import { escapeHtml } from '../utils.js';
+import { escapeHtml } from '../utils/dom-escape.js';
 
 export function resolveTableViewerContext(sheetKey) {
     const rawData = getTableData();
@@ -33,6 +33,7 @@ export function renderTableViewerLoadError(container, options = {}) {
         message = '无法加载表格数据',
         backIconHtml = '',
         navigateBack,
+        runtime = null,
     } = options;
 
     container.innerHTML = `
@@ -47,8 +48,13 @@ export function renderTableViewerLoadError(container, options = {}) {
         </div>
     `;
 
-    if (typeof navigateBack === 'function') {
-        container.querySelector('.phone-nav-back')?.addEventListener('click', navigateBack);
+    const backButton = container.querySelector('.phone-nav-back');
+    if (backButton instanceof HTMLElement && typeof navigateBack === 'function') {
+        if (runtime && typeof runtime.addEventListener === 'function' && typeof runtime.isDisposed === 'function' && !runtime.isDisposed()) {
+            runtime.addEventListener(backButton, 'click', navigateBack);
+        } else {
+            backButton.addEventListener('click', navigateBack);
+        }
     }
 
     return true;

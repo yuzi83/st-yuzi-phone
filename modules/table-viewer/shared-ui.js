@@ -1,4 +1,18 @@
 import { bindPhoneScrollGuards } from '../phone-core/scroll-guards.js';
+import { resolveViewerRuntime } from './runtime.js';
+
+function resolveToastTimerApi(container) {
+    const runtime = resolveViewerRuntime(container);
+    if (runtime && typeof runtime.setTimeout === 'function') {
+        return {
+            setTimeout: runtime.setTimeout.bind(runtime),
+        };
+    }
+
+    return {
+        setTimeout: window.setTimeout.bind(window),
+    };
+}
 
 export function showInlineToast(container, msg, isError = false) {
     const root = container.querySelector('.phone-app-page') || container;
@@ -10,10 +24,11 @@ export function showInlineToast(container, msg, isError = false) {
     el.textContent = String(msg || '');
     root.appendChild(el);
 
-    setTimeout(() => el.classList.add('show'), 10);
-    setTimeout(() => {
+    const timerApi = resolveToastTimerApi(root instanceof HTMLElement ? root : container);
+    timerApi.setTimeout(() => el.classList.add('show'), 10);
+    timerApi.setTimeout(() => {
         el.classList.remove('show');
-        setTimeout(() => el.remove(), 220);
+        timerApi.setTimeout(() => el.remove(), 220);
     }, 1600);
 }
 

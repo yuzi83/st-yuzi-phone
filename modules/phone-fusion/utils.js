@@ -14,30 +14,41 @@ export function extractSheets(template) {
         });
 }
 
-export function pickJsonFile(callback, onError) {
+export function pickJsonFile(callback, onError, runtime = null) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
     input.style.display = 'none';
     document.body.appendChild(input);
 
+    const addListener = runtime?.addEventListener
+        ? (...args) => runtime.addEventListener(...args)
+        : (target, type, handler, options) => {
+            target.addEventListener(type, handler, options);
+            return () => target.removeEventListener(type, handler, options);
+        };
+    const setManagedTimeout = runtime?.setTimeout
+        ? (...args) => runtime.setTimeout(...args)
+        : (...args) => window.setTimeout(...args);
+
     const cleanupInput = () => {
         if (input.parentNode) {
             input.remove();
         }
     };
+    runtime?.registerCleanup?.(cleanupInput);
 
     const handleWindowFocus = () => {
-        window.setTimeout(() => {
+        setManagedTimeout(() => {
             if (!input.files?.length) {
                 cleanupInput();
             }
         }, 300);
     };
 
-    window.addEventListener('focus', handleWindowFocus, { once: true });
+    addListener(window, 'focus', handleWindowFocus, { once: true });
 
-    input.addEventListener('change', () => {
+    addListener(input, 'change', () => {
         const file = input.files?.[0];
         if (!file) {
             cleanupInput();

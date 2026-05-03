@@ -1,0 +1,178 @@
+/* ========================================
+   Phone Theater 核心容器与通用控件
+   - 只放所有 scene 共用的 shell、删除态、通用标签与空态
+   - scene 专属视觉在同目录独立文件维护
+   ======================================== */
+
+.phone-app-page.phone-theater-page {
+    color: #1d1d1f;
+    background: transparent;
+    background-clip: padding-box;
+    isolation: isolate;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-nav {
+    background: transparent;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.phone-app-page.phone-theater-page .phone-theater-body {
+    padding: 12px;
+    box-sizing: border-box;
+    background: transparent;
+    background-clip: padding-box;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-delete-toggle {
+    margin-left: auto;
+    padding: 4px 10px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.78);
+    color: rgba(0, 0, 0, 0.72);
+    font-size: 12px;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-delete-toggle.is-active {
+    color: #b13a32;
+    background: #fff1ef;
+    border-color: rgba(177, 58, 50, 0.22);
+}
+
+.phone-app-page.phone-theater-page .phone-theater-delete-toggle:disabled,
+.phone-app-page.phone-theater-page .phone-theater-manage-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-manage-bar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: -2px 0 10px;
+    padding: 8px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.phone-app-page.phone-theater-page .phone-theater-manage-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    background: #ffffff;
+    color: rgba(0, 0, 0, 0.72);
+    font-size: 12px;
+    line-height: 1.35;
+    cursor: pointer;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-manage-btn.is-danger {
+    color: #ffffff;
+    background: #c94a3f;
+    border-color: #c94a3f;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-select-toggle {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 8;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    background: rgba(255, 255, 255, 0.92);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 24px;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.phone-app-page.phone-theater-page .phone-theater-select-toggle.is-selected {
+    background: #c94a3f;
+    border-color: #c94a3f;
+}
+
+.phone-app-page.phone-theater-page.is-theater-delete-mode [data-theater-delete-key]:not(.phone-theater-select-toggle) {
+    position: relative;
+}
+
+.phone-app-page.phone-theater-page .is-delete-selected {
+    outline: 2px solid rgba(201, 74, 63, 0.62);
+    outline-offset: 2px;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-empty {
+    margin: 24px auto;
+    padding: 16px;
+    text-align: center;
+    color: rgba(0, 0, 0, 0.45);
+    font-size: 13px;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-card {
+    box-sizing: border-box;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-meta-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.5);
+    margin-top: 4px;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-meta-line span {
+    line-height: 1.5;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-meta-line span + span::before {
+    content: '·';
+    margin-right: 6px;
+    color: rgba(0, 0, 0, 0.25);
+}
+
+.phone-app-page.phone-theater-page .phone-theater-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid transparent;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-tag.is-heat {
+    color: #c0590f;
+    background: #fff2e5;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-tag.is-status {
+    color: #4b6584;
+    background: #eef2f7;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-tag.is-stance {
+    color: #2f5d62;
+    background: #e6f1ee;
+}
+
+.phone-app-page.phone-theater-page .phone-theater-tag.is-mood {
+    color: #b14b6c;
+    background: #fbe7ec;
+}

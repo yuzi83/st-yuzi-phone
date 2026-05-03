@@ -1,20 +1,34 @@
 import { createDebouncedTask } from '../../runtime-manager.js';
-import { clampNumber, escapeHtmlAttr } from '../../utils.js';
+import { escapeHtmlAttr } from '../../utils/dom-escape.js';
+import { clampNumber } from '../../utils/object.js';
 import { STORAGE_BUDGETS } from '../constants.js';
 import { buildButtonStylePageHtml } from '../layout/frame.js';
 import { pickImageFile, estimateBase64Bytes } from '../services/media-upload.js';
-import { showToast } from '../ui/toast.js';
+
+export function createButtonStylePage(ctx) {
+    return {
+        mount() {
+            renderButtonStylePage(ctx);
+        },
+        update() {
+            renderButtonStylePage(ctx);
+        },
+        dispose() {},
+    };
+}
 
 export function renderButtonStylePage(ctx) {
     const {
         container,
         state,
         render,
-        getPhoneSettings,
-        savePhoneSetting,
-        savePhoneSettingsPatch,
-        rerenderButtonStyleKeepScroll,
+        registerCleanup,
+        pageRuntime,
+        buttonStylePageService,
     } = ctx;
+    const getPhoneSettings = buttonStylePageService.getPhoneSettings;
+    const savePhoneSetting = buttonStylePageService.savePhoneSetting;
+    const showToast = buttonStylePageService.showToast;
 
     const settings = getPhoneSettings();
     const currentSize = clampNumber(settings.phoneToggleStyleSize, 32, 72, 44);
@@ -29,7 +43,40 @@ export function renderButtonStylePage(ctx) {
         currentCover,
     });
 
-    container.querySelector('.phone-nav-back')?.addEventListener('click', () => {
+    const runtime = pageRuntime && typeof pageRuntime === 'object' ? pageRuntime : null;
+    const addCleanup = (cleanup) => {
+        if (typeof cleanup !== 'function') {
+            return () => {};
+        }
+        if (runtime?.registerCleanup) {
+            return runtime.registerCleanup(cleanup);
+        }
+        if (typeof registerCleanup === 'function') {
+            registerCleanup(cleanup);
+            return () => {};
+        }
+        return () => {};
+    };
+    const addListener = (target, type, handler, options) => {
+        if (runtime?.addEventListener) {
+            return runtime.addEventListener(target, type, handler, options);
+        }
+        if (!target || typeof target.addEventListener !== 'function' || typeof handler !== 'function') {
+            return () => {};
+        }
+        target.addEventListener(type, handler, options);
+        return addCleanup(() => target.removeEventListener(type, handler, options));
+    };
+    const isPageDisposed = () => {
+        if (runtime && typeof runtime.isDisposed === 'function') {
+            return runtime.isDisposed();
+        }
+        return false;
+    };
+    const isPageActive = () => !isPageDisposed();
+
+    const backBtn = container.querySelector('.phone-nav-back');
+    addListener(backBtn, 'click', () => {
         state.mode = 'home';
         render();
     });
@@ -49,6 +96,7 @@ export function renderButtonStylePage(ctx) {
         savePhoneSetting('phoneToggleStyleSize', next);
         emitToggleStyleUpdated();
     }, 180);
+    addCleanup(() => saveToggleSizeDebounced.flush?.());
 
     const setSizeValue = (raw, withToast = false, immediate = false) => {
         const next = clampNumber(raw, 32, 72, 44);
@@ -66,20 +114,20 @@ export function renderButtonStylePage(ctx) {
         if (withToast) showToast(container, `按钮大小已调整为 ${next}px`);
     };
 
-    sizeRange?.addEventListener('input', () => {
+    addListener(sizeRange, 'input', () => {
         setSizeValue(sizeRange.value, false, false);
     });
 
-    sizeInput?.addEventListener('input', () => {
+    addListener(sizeInput, 'input', () => {
         setSizeValue(sizeInput.value, false, false);
     });
 
-    sizeInput?.addEventListener('change', () => {
+    addListener(sizeInput, 'change', () => {
         setSizeValue(sizeInput.value, true, true);
     });
 
     shapeRadios.forEach((radio) => {
-        radio.addEventListener('change', () => {
+        addListener(radio, 'change', () => {
             const nextShape = radio.checked && radio.value === 'circle' ? 'circle' : 'rounded';
             savePhoneSetting('phoneToggleStyleShape', nextShape);
             emitToggleStyleUpdated();
@@ -87,8 +135,10 @@ export function renderButtonStylePage(ctx) {
         });
     });
 
-    uploadBtn?.addEventListener('click', () => {
+    addListener(uploadBtn, 'click', () => {
         pickImageFile((dataUrl) => {
+            if (!isPageActive()) return;
+
             const safeDataUrl = String(dataUrl || '').trim();
             if (!safeDataUrl) {
                 showToast(container, '封面读取失败：空数据', true);
@@ -110,15 +160,19 @@ export function renderButtonStylePage(ctx) {
             }
             showToast(container, '按钮封面已更新');
         }, {
+            runtime,
             maxSizeMB: 8,
             cropTitle: '裁剪悬浮按钮图片',
             cropDescription: '可自由调整按钮封面区域，建议保留主体在中心位置。',
             cropPreset: 'button-cover',
-            onError: (msg) => showToast(container, msg || '按钮封面上传失败', true),
+            onError: (msg) => {
+                if (!isPageActive()) return;
+                showToast(container, msg || '按钮封面上传失败', true);
+            },
         });
     });
 
-    clearBtn?.addEventListener('click', () => {
+    addListener(clearBtn, 'click', () => {
         savePhoneSetting('phoneToggleCoverImage', null);
         emitToggleStyleUpdated();
         if (preview) {

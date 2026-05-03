@@ -2,6 +2,10 @@ import { ErrorCodes, assert } from '../error-handler.js';
 import { createDataConfigPageRenderers } from './page-renderers/data-config-renderers.js';
 import { createEditorPageRenderers } from './page-renderers/editor-renderers.js';
 import { createPersonalizationPageRenderers } from './page-renderers/personalization-renderers.js';
+import {
+    createSettingsPageContexts,
+    createSettingsRendererServices,
+} from './page-renderers/page-context-builders.js';
 
 function assertFunctionDeps(groupName, group, keys = []) {
     const safeGroup = group && typeof group === 'object' ? group : {};
@@ -41,18 +45,10 @@ function validateSettingsRendererDeps(deps = {}) {
         'restoreScroll',
         'rerenderHomeKeepScroll',
         'rerenderDatabaseKeepScroll',
-        'rerenderButtonStyleKeepScroll',
+        'rerenderBeautifyKeepScroll',
         'rerenderApiPromptConfigKeepScroll',
     ]);
     assertFunctionDeps('home', deps.home, [
-        'getDbConfigApiAvailability',
-        'getDbPresets',
-        'getActiveDbPresetName',
-        'getApiPresets',
-        'getTableApiPreset',
-        'setTableApiPreset',
-        'getCurrentPhoneAiInstructionPresetName',
-        'switchPresetByName',
         'setupManualUpdateBtn',
     ]);
     assertFunctionDeps('appearance', deps.appearance, [
@@ -85,7 +81,6 @@ function validateSettingsRendererDeps(deps = {}) {
     assertFunctionDeps('buttonStyle', deps.buttonStyle, [
         'getPhoneSettings',
         'savePhoneSetting',
-        'savePhoneSettingsPatch',
     ]);
     assertFunctionDeps('apiPrompt', deps.apiPrompt, [
         'getDbConfigApiAvailability',
@@ -115,28 +110,26 @@ function validateSettingsRendererDeps(deps = {}) {
  */
 export function createSettingsPageRenderers(deps = {}) {
     validateSettingsRendererDeps(deps);
+    const services = createSettingsRendererServices(deps);
+    const pageContexts = createSettingsPageContexts(services);
+    const rendererScope = {
+        deps,
+        services,
+        pageContexts,
+    };
+
+    const { pages: personalizationPages = {}, ...personalizationRenderers } = createPersonalizationPageRenderers(rendererScope);
+    const { pages: dataConfigPages = {}, ...dataConfigRenderers } = createDataConfigPageRenderers(rendererScope);
+    const { pages: editorPages = {}, ...editorRenderers } = createEditorPageRenderers(rendererScope);
 
     return {
-        ...createPersonalizationPageRenderers({
-            common: deps.common,
-            navigation: deps.navigation,
-            scroll: deps.scroll,
-            feedback: deps.feedback,
-            home: deps.home,
-            appearance: deps.appearance,
-            buttonStyle: deps.buttonStyle,
-        }),
-        ...createDataConfigPageRenderers({
-            common: deps.common,
-            scroll: deps.scroll,
-            feedback: deps.feedback,
-            dataConfig: deps.dataConfig,
-            apiPrompt: deps.apiPrompt,
-        }),
-        ...createEditorPageRenderers({
-            common: deps.common,
-            scroll: deps.scroll,
-            promptEditor: deps.promptEditor,
-        }),
+        pages: {
+            ...personalizationPages,
+            ...dataConfigPages,
+            ...editorPages,
+        },
+        ...personalizationRenderers,
+        ...dataConfigRenderers,
+        ...editorRenderers,
     };
 }

@@ -1,5 +1,5 @@
 import { Logger } from '../../error-handler.js';
-import { getDB } from '../db-bridge.js';
+import { getDB, isDbBooleanSuccess } from '../db-bridge.js';
 
 const logger = Logger.withScope({ scope: 'phone-core/data-api/lock-repository', feature: 'db-api' });
 
@@ -35,6 +35,40 @@ function normalizeLockState(lockState) {
     };
 }
 
+function isLockWriteSuccess(value) {
+    return isDbBooleanSuccess(value);
+}
+
+function remapLockStateAfterRowDelete(lockState, deletedRowIndex) {
+    const idx = Number(deletedRowIndex);
+    const current = normalizeLockState(lockState);
+    if (!Number.isInteger(idx) || idx < 0) {
+        return current;
+    }
+
+    const rowsNext = current.rows
+        .filter(rowIdx => rowIdx !== idx)
+        .map(rowIdx => (rowIdx > idx ? rowIdx - 1 : rowIdx));
+
+    const cellsNext = current.cells
+        .map((key) => {
+            const [rowPart, colPart] = String(key).split(':');
+            const rowIdx = Number(rowPart);
+            const colIdx = Number(colPart);
+            if (!Number.isInteger(rowIdx) || !Number.isInteger(colIdx)) return null;
+            if (rowIdx === idx) return null;
+            const nextRowIdx = rowIdx > idx ? rowIdx - 1 : rowIdx;
+            return `${nextRowIdx}:${colIdx}`;
+        })
+        .filter(Boolean);
+
+    return {
+        rows: Array.from(new Set(rowsNext)),
+        cols: current.cols,
+        cells: Array.from(new Set(cellsNext)),
+    };
+}
+
 function isTableColLocked(sheetKey, colIndex) {
     const lockState = getTableLockState(sheetKey);
     if (!lockState) return false;
@@ -47,7 +81,7 @@ function setTableColLock(sheetKey, colIndex, locked) {
 
     try {
         if (typeof api.lockTableCol === 'function') {
-            return !!api.lockTableCol(sheetKey, colIndex, locked);
+            return isLockWriteSuccess(api.lockTableCol(sheetKey, colIndex, locked));
         }
 
         if (typeof api.getTableLockState === 'function' && typeof api.setTableLockState === 'function') {
@@ -59,11 +93,11 @@ function setTableColLock(sheetKey, colIndex, locked) {
                 nextCols.delete(Number(colIndex));
             }
 
-            return !!api.setTableLockState(sheetKey, {
+            return isLockWriteSuccess(api.setTableLockState(sheetKey, {
                 rows: current.rows,
                 cols: Array.from(nextCols).filter(Number.isInteger),
                 cells: current.cells,
-            }, { merge: false });
+            }, { merge: false }));
         }
     } catch (error) {
         logger.warn({
@@ -98,12 +132,33 @@ export function getTableLockState(sheetKey) {
     }
 }
 
+export function remapTableLockStateAfterRowDelete(sheetKey, deletedRowIndex) {
+    const api = getDB();
+    if (!api || typeof api.getTableLockState !== 'function' || typeof api.setTableLockState !== 'function') {
+        return false;
+    }
+
+    try {
+        const current = api.getTableLockState(sheetKey);
+        const next = remapLockStateAfterRowDelete(current, deletedRowIndex);
+        return isLockWriteSuccess(api.setTableLockState(sheetKey, next, { merge: false }));
+    } catch (error) {
+        logger.warn({
+            action: 'lock.state.remap-after-row-delete',
+            message: '删除后重排锁状态失败',
+            context: { sheetKey, deletedRowIndex },
+            error,
+        });
+        return false;
+    }
+}
+
 export function setTableCellLock(sheetKey, rowIndex, colIndex, locked) {
     const api = getDB();
     if (!api || typeof api.lockTableCell !== 'function') return false;
 
     try {
-        return !!api.lockTableCell(sheetKey, rowIndex, colIndex, locked);
+        return isLockWriteSuccess(api.lockTableCell(sheetKey, rowIndex, colIndex, locked));
     } catch (error) {
         logger.warn({
             action: 'lock.cell.set',
@@ -121,7 +176,7 @@ export function setTableRowLock(sheetKey, rowIndex, locked) {
 
     try {
         if (typeof api.lockTableRow === 'function') {
-            return !!api.lockTableRow(sheetKey, rowIndex, !!locked);
+            return isLockWriteSuccess(api.lockTableRow(sheetKey, rowIndex, !!locked));
         }
 
         if (typeof api.getTableLockState === 'function' && typeof api.setTableLockState === 'function') {
@@ -133,11 +188,11 @@ export function setTableRowLock(sheetKey, rowIndex, locked) {
                 nextRows.delete(Number(rowIndex));
             }
 
-            return !!api.setTableLockState(sheetKey, {
+            return isLockWriteSuccess(api.setTableLockState(sheetKey, {
                 rows: Array.from(nextRows).filter(Number.isInteger),
                 cols: current.cols,
                 cells: current.cells,
-            }, { merge: false });
+            }, { merge: false }));
         }
     } catch (error) {
         logger.warn({

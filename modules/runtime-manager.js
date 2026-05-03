@@ -19,6 +19,7 @@ const RuntimeErrorType = {
     INTERVAL: 'interval',
     RAF: 'requestAnimationFrame',
     LISTENER: 'listener',
+    OBSERVER: 'observer',
     CLEANUP: 'cleanup',
 };
 
@@ -50,6 +51,7 @@ export function createRuntimeScope(scopeName = 'yuzi-runtime') {
     const rafIds = new Set();
     const listenerRecords = new Set();
     const cleanups = new Set();
+    let disposed = false;
 
     const safeInvoke = (fn, type = RuntimeErrorType.CLEANUP) => {
         if (!isFn(fn)) return;
@@ -59,6 +61,8 @@ export function createRuntimeScope(scopeName = 'yuzi-runtime') {
             logError(scopeName, type, e);
         }
     };
+
+    const isDisposed = () => disposed;
 
     const setManagedTimeout = (callback, delay = 0) => {
         const timeout = Number(delay);
@@ -155,7 +159,115 @@ export function createRuntimeScope(scopeName = 'yuzi-runtime') {
         };
     };
 
+    const observeManagedMutation = (target, callback, options = {}) => {
+        if (typeof MutationObserver !== 'function' || !target || !isFn(callback)) {
+            return null;
+        }
+
+        const observer = new MutationObserver((mutations, instance) => {
+            try {
+                callback(mutations, instance);
+            } catch (e) {
+                logError(scopeName, RuntimeErrorType.OBSERVER, e, { phase: 'callback' });
+            }
+        });
+
+        try {
+            observer.observe(target, options);
+        } catch (e) {
+            logError(scopeName, RuntimeErrorType.OBSERVER, e, { phase: 'observe' });
+            return null;
+        }
+
+        const unregisterCleanup = registerCleanup(() => {
+            try {
+                observer.disconnect();
+            } catch (e) {
+                logError(scopeName, RuntimeErrorType.OBSERVER, e, { phase: 'disconnect' });
+            }
+        });
+
+        return {
+            observer,
+            disconnect: () => {
+                unregisterCleanup();
+                try {
+                    observer.disconnect();
+                } catch (e) {
+                    logError(scopeName, RuntimeErrorType.OBSERVER, e, { phase: 'manual-disconnect' });
+                }
+            },
+        };
+    };
+
+    const observeManagedDisconnection = (target, callback, options = {}) => {
+        if (!target || !isFn(callback)) {
+            return null;
+        }
+
+        const observerRoot = options.observerRoot ?? document.body;
+        if (target.isConnected === false) {
+            try {
+                callback(target);
+            } catch (e) {
+                logError(scopeName, RuntimeErrorType.OBSERVER, e, { phase: 'pre-disconnected' });
+            }
+            return {
+                observer: null,
+                disconnect: () => {},
+            };
+        }
+        if (!observerRoot || !isFn(observerRoot.contains)) {
+            return null;
+        }
+
+        let disconnected = false;
+        /** @type {{ observer: MutationObserver | null, disconnect: Function } | null} */
+        let observerHandle = null;
+
+        const triggerDisconnect = (phase = 'disconnect') => {
+            if (disconnected) return;
+            disconnected = true;
+            try {
+                observerHandle?.disconnect?.();
+            } catch (e) {
+                logError(scopeName, RuntimeErrorType.OBSERVER, e, { phase: `${phase}.disconnect` });
+            }
+            try {
+                callback(target);
+            } catch (e) {
+                logError(scopeName, RuntimeErrorType.OBSERVER, e, { phase });
+            }
+        };
+
+        observerHandle = observeManagedMutation(observerRoot, (mutations) => {
+            if (target.isConnected === false) {
+                triggerDisconnect('disconnected-flag');
+                return;
+            }
+
+            for (const mutation of mutations) {
+                for (const node of mutation.removedNodes) {
+                    if (node === target || node?.contains?.(target)) {
+                        triggerDisconnect('removed-node');
+                        return;
+                    }
+                }
+            }
+        }, {
+            childList: options.childList !== false,
+            subtree: options.subtree !== false,
+        });
+
+        return observerHandle;
+    };
+
     const dispose = () => {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+
         timeoutIds.forEach((id) => window.clearTimeout(id));
         timeoutIds.clear();
 
@@ -190,9 +302,24 @@ export function createRuntimeScope(scopeName = 'yuzi-runtime') {
         requestAnimationFrame: requestManagedAnimationFrame,
         cancelAnimationFrame: cancelManagedAnimationFrame,
         addEventListener: addManagedEventListener,
+        observeMutation: observeManagedMutation,
+        observeDisconnection: observeManagedDisconnection,
         registerCleanup,
         dispose,
+        isDisposed,
     };
+}
+
+export function createManagedPageRuntime(scopeName = 'yuzi-page-runtime', registerCleanup) {
+    const runtime = createRuntimeScope(scopeName);
+
+    if (typeof registerCleanup === 'function') {
+        registerCleanup(() => {
+            runtime.dispose();
+        });
+    }
+
+    return runtime;
 }
 
 export function scheduleIdleTask(task, options = {}) {

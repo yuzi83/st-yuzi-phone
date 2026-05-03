@@ -1,0 +1,7 @@
+/* ========================================
+   Phone Theater 样式兼容入口
+   - 真实样式已拆分到 styles/phone-theater/
+   - 保留本文件以兼容 style.css 现有 import
+   ======================================== */
+
+@import url('./phone-theater/index.css');

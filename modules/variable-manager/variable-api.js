@@ -142,7 +142,7 @@ export async function deleteFloorVariable(messageId, path) {
                     _.unset(mvuData.display_data, path);
                     _.unset(mvuData.delta_data, path);
                 } else {
-                    deleteNestedValue(mvuData.stat_data, path);
+                    deleteMvuVariablePath(mvuData, path);
                 }
                 await window.Mvu.replaceMvuData(mvuData, { type: 'message', message_id: messageId });
                 return true;
@@ -192,7 +192,15 @@ function setNestedValue(obj, path, value) {
     current[keys[keys.length - 1]] = value;
 }
 
+function deleteMvuVariablePath(mvuData, path) {
+    deleteNestedValue(mvuData?.stat_data, path);
+    deleteNestedValue(mvuData?.display_data, path);
+    deleteNestedValue(mvuData?.delta_data, path);
+}
+
 function deleteNestedValue(obj, path) {
+    if (!obj || typeof obj !== 'object') return;
+
     const keys = path.split('.');
     let current = obj;
     for (let i = 0; i < keys.length - 1; i++) {

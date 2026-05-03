@@ -1,10 +1,10 @@
+import { BUILTIN_TEMPLATES } from './defaults.js';
 import {
-    BUILTIN_TEMPLATES,
     deepClone,
-    normalizeTemplateType,
-    readTemplateStore,
     sanitizeId,
-} from './shared.js';
+} from './core.js';
+import { normalizeTemplateType } from './normalize.js';
+import { readTemplateStore } from './store.js';
 
 const storeCache = {
     key: '',
@@ -20,6 +20,7 @@ const derivedCache = {
     templatesByType: new Map(),
     templateById: new Map(),
     sourceRuntime: new Map(),
+    generation: 0,
 };
 
 function resetDerivedCache() {
@@ -27,6 +28,7 @@ function resetDerivedCache() {
     derivedCache.templatesByType.clear();
     derivedCache.templateById.clear();
     derivedCache.sourceRuntime.clear();
+    derivedCache.generation += 1;
 }
 
 function getStoreVersion(store) {
@@ -164,8 +166,15 @@ export function getCachedBeautifyTemplateSourceRuntime(cacheKey, producer) {
 
     const safeKey = String(cacheKey || 'default');
     if (!derivedCache.sourceRuntime.has(safeKey)) {
+        const generationBeforeProducer = derivedCache.generation;
         const result = typeof producer === 'function' ? producer() : null;
-        derivedCache.sourceRuntime.set(safeKey, deepClone(result));
+        const clonedResult = deepClone(result);
+
+        if (derivedCache.generation === generationBeforeProducer) {
+            derivedCache.sourceRuntime.set(safeKey, clonedResult);
+        } else {
+            return clonedResult;
+        }
     }
 
     return deepClone(derivedCache.sourceRuntime.get(safeKey));

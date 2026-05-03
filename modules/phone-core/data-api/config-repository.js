@@ -2,6 +2,7 @@ import {
     clampNonNegativeInteger,
     clampPositiveInteger,
     getDB,
+    isDbBooleanSuccess,
 } from '../db-bridge.js';
 
 function normalizeUpdateConfig(raw) {
@@ -142,7 +143,7 @@ export function writeDbUpdateConfigViaApi(config = {}) {
     }
 
     try {
-        const success = !!pack.api.setUpdateConfigParams(payload);
+        const success = isDbBooleanSuccess(pack.api.setUpdateConfigParams(payload));
         return success
             ? { ok: true, code: 'ok', message: '更新配置已保存' }
             : { ok: false, code: 'failed', message: '更新配置保存失败' };
@@ -201,7 +202,7 @@ export function writeManualTableSelectionViaApi(selectedKeys = []) {
         : [];
 
     try {
-        const success = !!pack.api.setManualSelectedTables(normalizedKeys);
+        const success = isDbBooleanSuccess(pack.api.setManualSelectedTables(normalizedKeys));
         return success
             ? { ok: true, code: 'ok', message: '手动更新表选择已保存' }
             : { ok: false, code: 'failed', message: '手动更新表选择保存失败' };
@@ -226,7 +227,7 @@ export function clearManualTableSelectionViaApi() {
     }
 
     try {
-        const success = !!pack.api.clearManualSelectedTables();
+        const success = isDbBooleanSuccess(pack.api.clearManualSelectedTables());
         return success
             ? { ok: true, code: 'ok', message: '已恢复默认全选' }
             : { ok: false, code: 'failed', message: '恢复默认全选失败' };

@@ -1,0 +1,41 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "es2022": true,
+    "node": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "globals": {
+    "$": "readonly",
+    "toastr": "readonly",
+    "eventSource": "readonly",
+    "event_types": "readonly",
+    "extension_settings": "readonly",
+    "saveSettingsDebounced": "readonly",
+    "getContext": "readonly",
+    "TavernHelper": "readonly",
+    "SillyTavern": "readonly",
+    "_": "readonly"
+  },
+  "rules": {
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-undef": "error",
+    "no-unreachable": "error",
+    "no-dupe-keys": "error",
+    "no-dupe-args": "error",
+    "no-cond-assign": "error",
+    "no-constant-condition": "warn",
+    "no-debugger": "error"
+  },
+  "ignorePatterns": [
+    "dist/",
+    "node_modules/",
+    ".analysis-archive/",
+    "docs/",
+    "scripts/check-*.cjs"
+  ]
+}

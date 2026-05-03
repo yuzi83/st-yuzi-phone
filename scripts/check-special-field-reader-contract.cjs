@@ -9,7 +9,6 @@ const FILES = {
     normalizers: 'modules/table-viewer/special/field-reader-normalizers.js',
     runtime: 'modules/table-viewer/special/field-reader-runtime.js',
     messageViewer: 'modules/table-viewer/special/message-viewer.js',
-    feedViewer: 'modules/table-viewer/special/feed-viewer.js',
     specialRuntime: 'modules/table-viewer/special/runtime.js',
 };
 
@@ -50,7 +49,6 @@ function main() {
     check(results, 'runtime', '存在 getCellByHeaders()', has(contents.runtime, 'export function getCellByHeaders('));
 
     check(results, 'messageViewer', '继续从 façade 导入 createSpecialFieldReader 与 buildHeaderIndexMap', has(contents.messageViewer, "from './field-reader.js';"));
-    check(results, 'feedViewer', '继续从 façade 导入 createSpecialFieldReader 与 buildHeaderIndexMap', has(contents.feedViewer, "from './field-reader.js';"));
     check(results, 'specialRuntime', '继续从 façade 导入 normalizeSpecialStyleOptionsForViewer', has(contents.specialRuntime, "from './field-reader.js';"));
 
     const failed = results.filter(item => !item.ok);

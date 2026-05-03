@@ -2,7 +2,17 @@ import { createRuntimeScope } from '../runtime-manager.js';
 import { Logger, handleError } from '../error-handler.js';
 import { getSillyTavernContext, clearSillyTavernContextCache } from './context-bridge.js';
 
-const runtime = createRuntimeScope('yuzi-integration');
+function createIntegrationRuntimeScope() {
+    return createRuntimeScope('yuzi-integration');
+}
+
+let runtime = createIntegrationRuntimeScope();
+
+function resetIntegrationRuntimeScope() {
+    runtime.dispose();
+    runtime = createIntegrationRuntimeScope();
+    return runtime;
+}
 
 let eventSource = null;
 let eventTypes = null;
@@ -308,7 +318,7 @@ export async function onSettingsLoaded(callback, options = {}) {
 }
 
 export function clearEventBridgeState() {
-    runtime.dispose();
+    resetIntegrationRuntimeScope();
     eventSource = null;
     eventTypes = null;
     isInitialized = false;

@@ -8,14 +8,17 @@ export function createApiPromptWorldbookRuntime(ctx = {}) {
         ...ctx,
         ...renderers,
     });
-    const subscription = createWorldbookSubscription({
-        state: ctx.state,
+    const {
+        bindWorldbookSubscription,
+        cleanupWorldbookSubscription,
+    } = createWorldbookSubscription({
         handleWorldbookUpdate: stateActions.handleWorldbookUpdate,
     });
 
     return {
         ...renderers,
         ...stateActions,
-        ...subscription,
+        bindWorldbookSubscription,
+        cleanupWorldbookSubscription,
     };
 }

@@ -159,12 +159,61 @@ export function createSettingsPersistenceTools(options = {}) {
     }
 
     function savePhoneSettingsPatch(patch = {}) {
-        const ctx = typeof getContext === 'function' ? getContext() : null;
-        const settings = typeof ensureNamespace === 'function' ? ensureNamespace() : null;
-        if (!ctx?.extensionSettings || !settings) return;
+        try {
+            const ctx = typeof getContext === 'function' ? getContext() : null;
+            const settings = typeof ensureNamespace === 'function' ? ensureNamespace() : null;
+            if (!ctx?.extensionSettings || !settings) {
+                logger.warn({
+                    action: 'settings.patch',
+                    message: '无法批量保存设置：上下文或命名空间不可用',
+                });
+                return false;
+            }
 
-        Object.assign(settings, patch);
-        schedulePersistSettings(ctx);
+            if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+                logger.warn({
+                    action: 'settings.patch.validate',
+                    message: '批量设置验证失败：patch 必须是对象',
+                    context: { patchType: Array.isArray(patch) ? 'array' : typeof patch },
+                });
+                showNotification?.('批量设置保存失败：数据格式错误', 'warning');
+                return false;
+            }
+
+            const entries = Object.entries(patch);
+            if (entries.length === 0) {
+                return true;
+            }
+
+            let hasInvalid = false;
+            entries.forEach(([key, value]) => {
+                const result = validateSetting(key, value);
+                if (!result.valid) {
+                    hasInvalid = true;
+                    logger.warn({
+                        action: 'settings.patch.validate',
+                        message: '批量设置项验证失败，已写入归一化值',
+                        context: { key, validationError: result.error },
+                    });
+                }
+                settings[key] = result.value;
+            });
+
+            if (hasInvalid) {
+                showNotification?.('部分设置已按默认规则修正', 'warning');
+            }
+
+            schedulePersistSettings(ctx);
+            return !hasInvalid;
+        } catch (error) {
+            logger.error({
+                action: 'settings.patch',
+                message: '批量保存设置失败',
+                error,
+            });
+            showNotification?.('保存设置失败', 'error');
+            return false;
+        }
     }
 
     function resetPhoneSettingsToDefault() {

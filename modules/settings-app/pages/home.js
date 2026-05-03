@@ -1,24 +1,41 @@
 import { buildSettingsHomePageHtml } from '../layout/frame.js';
-import { escapeHtml, escapeHtmlAttr } from '../../utils.js';
+import { escapeHtml, escapeHtmlAttr } from '../../utils/dom-escape.js';
+
+export function createHomePage(ctx) {
+    return {
+        mount() {
+            renderHomePage(ctx);
+        },
+        update() {
+            renderHomePage(ctx);
+        },
+        dispose() {},
+    };
+}
 
 export function renderHomePage(ctx) {
     const {
         container,
         state,
         render,
-        rerenderHomeKeepScroll,
         navigateBack,
-        getDbConfigApiAvailability,
-        getDbPresets,
-        getActiveDbPresetName,
-        getApiPresets,
-        getTableApiPreset,
-        setTableApiPreset,
-        getCurrentPhoneAiInstructionPresetName,
-        switchPresetByName,
         showToast,
-        setupManualUpdateBtn,
+        registerCleanup,
+        pageRuntime,
+        databasePresetService,
+        apiPromptService,
+        aiInstructionPresetService,
+        manualUpdateService,
     } = ctx;
+    const getDbConfigApiAvailability = databasePresetService.getDbConfigApiAvailability;
+    const getDbPresets = databasePresetService.getDbPresets;
+    const getActiveDbPresetName = databasePresetService.getActiveDbPresetName;
+    const switchPresetByName = databasePresetService.switchPresetByName;
+    const getApiPresets = apiPromptService.getApiPresets;
+    const getTableApiPreset = apiPromptService.getTableApiPreset;
+    const setTableApiPreset = apiPromptService.setTableApiPreset;
+    const getCurrentPhoneAiInstructionPresetName = aiInstructionPresetService.getCurrentPhoneAiInstructionPresetName;
+    const setupManualUpdateBtn = manualUpdateService.setupManualUpdateBtn;
 
     const apiAvailability = getDbConfigApiAvailability();
     const presets = getDbPresets();
@@ -50,10 +67,18 @@ export function renderHomePage(ctx) {
         currentAiInstructionPresetName,
     });
 
-    container.querySelector('.phone-nav-back')?.addEventListener('click', navigateBack);
+    const runtime = pageRuntime && typeof pageRuntime === 'object' ? pageRuntime : null;
+    const bindEvent = (target, type, listener, options) => {
+        if (!runtime?.addEventListener) {
+            return () => {};
+        }
+        return runtime.addEventListener(target, type, listener, options);
+    };
+
+    bindEvent(container.querySelector('.phone-nav-back'), 'click', navigateBack);
 
     container.querySelectorAll('.phone-settings-home-trigger').forEach((btn) => {
-        btn.addEventListener('click', () => {
+        bindEvent(btn, 'click', () => {
             const entry = String(btn.dataset.entry || '').trim();
             if (!entry) return;
             state.mode = entry;
@@ -64,17 +89,16 @@ export function renderHomePage(ctx) {
     const quickSelect = container.querySelector('#phone-db-preset-quick-select');
     if (quickSelect) {
         const stopBubble = (e) => e.stopPropagation();
-        quickSelect.addEventListener('click', stopBubble);
-        quickSelect.addEventListener('mousedown', stopBubble);
-        quickSelect.addEventListener('touchstart', stopBubble, { passive: true });
+        bindEvent(quickSelect, 'click', stopBubble);
+        bindEvent(quickSelect, 'mousedown', stopBubble);
+        bindEvent(quickSelect, 'touchstart', stopBubble, { passive: true });
 
-        quickSelect.addEventListener('change', () => {
+        bindEvent(quickSelect, 'change', () => {
             const prevActive = getActiveDbPresetName();
             const targetName = String(quickSelect.value || '');
             const ok = switchPresetByName(targetName, container);
             if (!ok) {
                 quickSelect.value = prevActive;
-                return;
             }
         });
     }
@@ -82,11 +106,11 @@ export function renderHomePage(ctx) {
     const apiPresetQuickSelect = container.querySelector('#phone-api-preset-quick-select');
     if (apiPresetQuickSelect) {
         const stopBubbleApi = (e) => e.stopPropagation();
-        apiPresetQuickSelect.addEventListener('click', stopBubbleApi);
-        apiPresetQuickSelect.addEventListener('mousedown', stopBubbleApi);
-        apiPresetQuickSelect.addEventListener('touchstart', stopBubbleApi, { passive: true });
+        bindEvent(apiPresetQuickSelect, 'click', stopBubbleApi);
+        bindEvent(apiPresetQuickSelect, 'mousedown', stopBubbleApi);
+        bindEvent(apiPresetQuickSelect, 'touchstart', stopBubbleApi, { passive: true });
 
-        apiPresetQuickSelect.addEventListener('change', () => {
+        bindEvent(apiPresetQuickSelect, 'change', () => {
             const targetName = String(apiPresetQuickSelect.value || '');
             const success = setTableApiPreset(targetName);
             if (success) {
@@ -98,5 +122,9 @@ export function renderHomePage(ctx) {
         });
     }
 
-    setupManualUpdateBtn(container, '#phone-top-trigger-update', null);
+    if (runtime?.registerCleanup) {
+        setupManualUpdateBtn(container, '#phone-top-trigger-update', null, runtime);
+    } else if (typeof registerCleanup === 'function') {
+        registerCleanup(setupManualUpdateBtn(container, '#phone-top-trigger-update', null));
+    }
 }

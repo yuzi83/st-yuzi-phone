@@ -1,78 +1,27 @@
 import { Logger } from '../../error-handler.js';
 import { getCharacterData, getCurrentCharacterWorldbooks, getWorldbook } from '../../integration/tavern-helper-bridge.js';
 import { getPhoneSettings, savePhoneSettingsPatch } from '../../settings.js';
+import {
+    defaultSettings,
+    PHONE_CHAT_NUMERIC_LIMITS,
+    normalizePhoneChatSettings,
+} from '../../settings/schema.js';
 import { normalizeWorldbookSelection, resolveEntrySelectionState } from '../../settings-app/services/worldbook-selection.js';
 import { clampNonNegativeInteger, getDB } from '../db-bridge.js';
 
 const logger = Logger.withScope({ scope: 'phone-core/chat-support/settings-context', feature: 'chat-support' });
 
-export const PHONE_CHAT_DEFAULT_SETTINGS = Object.freeze({
-    useStoryContext: true,
-    storyContextTurns: 3,
-    apiPresetName: '',
-    maxHistoryMessages: 12,
-    maxReplyTokens: 900,
-    requestTimeoutMs: 90000,
-    worldbookMaxEntries: 24,
-    worldbookMaxChars: 6000,
-});
+export const PHONE_CHAT_DEFAULT_SETTINGS = Object.freeze({ ...defaultSettings.phoneChat });
 
-const PHONE_CHAT_NUMERIC_LIMITS = Object.freeze({
-    storyContextTurns: { min: 0, max: 20 },
-    maxHistoryMessages: { min: 0, max: 500 },
-    maxReplyTokens: { min: 64, max: 4096 },
-    requestTimeoutMs: { min: 15000, max: 300000 },
-    worldbookMaxEntries: { min: 0, max: 1000 },
-    worldbookMaxChars: { min: 0, max: 200000 },
-});
+function normalizePhoneWorldbookSettings(raw) {
+    return normalizeWorldbookSelection(raw);
+}
 
 function clampPhoneChatInteger(value, fallback, limits = {}) {
     const min = Number.isFinite(Number(limits.min)) ? Number(limits.min) : 0;
     const max = Number.isFinite(Number(limits.max)) ? Number(limits.max) : Number.MAX_SAFE_INTEGER;
     const next = clampNonNegativeInteger(value, fallback);
     return Math.max(min, Math.min(max, next));
-}
-
-export function normalizePhoneChatSettings(raw) {
-    const src = raw && typeof raw === 'object' ? raw : {};
-    return {
-        useStoryContext: src.useStoryContext !== false,
-        storyContextTurns: clampPhoneChatInteger(
-            src.storyContextTurns,
-            PHONE_CHAT_DEFAULT_SETTINGS.storyContextTurns,
-            PHONE_CHAT_NUMERIC_LIMITS.storyContextTurns,
-        ),
-        apiPresetName: String(src.apiPresetName || '').trim(),
-        maxHistoryMessages: clampPhoneChatInteger(
-            src.maxHistoryMessages,
-            PHONE_CHAT_DEFAULT_SETTINGS.maxHistoryMessages,
-            PHONE_CHAT_NUMERIC_LIMITS.maxHistoryMessages,
-        ),
-        maxReplyTokens: clampPhoneChatInteger(
-            src.maxReplyTokens,
-            PHONE_CHAT_DEFAULT_SETTINGS.maxReplyTokens,
-            PHONE_CHAT_NUMERIC_LIMITS.maxReplyTokens,
-        ),
-        requestTimeoutMs: clampPhoneChatInteger(
-            src.requestTimeoutMs,
-            PHONE_CHAT_DEFAULT_SETTINGS.requestTimeoutMs,
-            PHONE_CHAT_NUMERIC_LIMITS.requestTimeoutMs,
-        ),
-        worldbookMaxEntries: clampPhoneChatInteger(
-            src.worldbookMaxEntries,
-            PHONE_CHAT_DEFAULT_SETTINGS.worldbookMaxEntries,
-            PHONE_CHAT_NUMERIC_LIMITS.worldbookMaxEntries,
-        ),
-        worldbookMaxChars: clampPhoneChatInteger(
-            src.worldbookMaxChars,
-            PHONE_CHAT_DEFAULT_SETTINGS.worldbookMaxChars,
-            PHONE_CHAT_NUMERIC_LIMITS.worldbookMaxChars,
-        ),
-    };
-}
-
-function normalizePhoneWorldbookSettings(raw) {
-    return normalizeWorldbookSelection(raw);
 }
 
 function dedupeTextList(list) {

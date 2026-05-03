@@ -1,0 +1,19 @@
+# Node.js
+node_modules/
+
+# 构建产物
+# 注意：这里不忽略 dist/，因为 SillyTavern auto_update 拉仓库后不会自动 npm install / npm run build。
+# dist/
+
+# 编辑器
+.vscode/.history/
+.idea/
+*.swp
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 临时分析缓存
+.analysis-cache
+.analysis-cache.md

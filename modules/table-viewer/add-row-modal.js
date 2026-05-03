@@ -1,8 +1,10 @@
 import { Logger } from '../error-handler.js';
-import { PHONE_ICONS } from '../phone-home.js';
+import { PHONE_ICONS } from '../phone-home/icons.js';
 import { dispatchPhoneTableUpdated, refreshPhoneTableProjection } from '../phone-core/chat-support.js';
 import { sleep } from '../phone-core/db-bridge.js';
-import { escapeHtml, EventManager } from '../utils.js';
+import { escapeHtml } from '../utils/dom-escape.js';
+import { EventManager } from '../utils/event-manager.js';
+import { resolveViewerRuntime } from './runtime.js';
 
 const logger = Logger.withScope({ scope: 'table-viewer/add-row-modal', feature: 'table-viewer' });
 
@@ -21,10 +23,29 @@ function summarizeSheetSnapshot(rawData, sheetKey) {
     };
 }
 
+function isAutoManagedRowIdHeader(header) {
+    return /^row[\s_-]*id$/i.test(String(header ?? '').trim());
+}
+
+function shouldSkipAddRowField(header, rawHeader, idx, shouldHideLeadingPlaceholder) {
+    const normalizedHeader = String(header ?? '').trim();
+    const normalizedRawHeader = String(rawHeader ?? '').trim();
+    if (shouldHideLeadingPlaceholder && idx === 0 && normalizedRawHeader === '') {
+        return true;
+    }
+    return isAutoManagedRowIdHeader(normalizedRawHeader) || isAutoManagedRowIdHeader(normalizedHeader);
+}
+
 function buildOptimisticRow(headers = [], rawHeaders = [], data = {}) {
+    const firstRawHeader = String(rawHeaders[0] ?? '').trim();
+    const shouldHideLeadingPlaceholder = firstRawHeader === '';
+
     return headers.map((header, idx) => {
         const rawHeader = String(rawHeaders[idx] ?? '').trim();
-        if (idx === 0 && rawHeader === '') {
+        if (shouldHideLeadingPlaceholder && idx === 0 && rawHeader === '') {
+            return '';
+        }
+        if (isAutoManagedRowIdHeader(rawHeader) || isAutoManagedRowIdHeader(header)) {
             return '';
         }
 
@@ -56,17 +77,24 @@ function syncRowsFromSheetSnapshot(rows = [], rawData, sheetKey) {
     };
 }
 
+function isRuntimeDisposed(runtime) {
+    return !!(runtime && typeof runtime.isDisposed === 'function' && runtime.isDisposed());
+}
+
+function isRuntimeActive(runtime) {
+    return !isRuntimeDisposed(runtime);
+}
+
 async function reconcileInsertedRow(options = {}) {
     const {
-        tableName = '',
         sheetKey = '',
-        rowIndex,
         rows = [],
         state,
         getTableData,
         getTableLockState,
         renderKeepScroll,
         expectedMinRowCount = 0,
+        viewerRuntime,
     } = options;
 
     const retrySteps = [
@@ -80,9 +108,23 @@ async function reconcileInsertedRow(options = {}) {
     for (let attemptIndex = 0; attemptIndex < retrySteps.length && !reachedExpected; attemptIndex++) {
         const step = retrySteps[attemptIndex];
         await sleep(step.waitMs);
+        if (!isRuntimeActive(viewerRuntime)) {
+            return {
+                reachedExpected,
+                latestSummary,
+                aborted: true,
+            };
+        }
 
         if (step.refreshProjection) {
             await refreshPhoneTableProjection();
+            if (!isRuntimeActive(viewerRuntime)) {
+                return {
+                    reachedExpected,
+                    latestSummary,
+                    aborted: true,
+                };
+            }
         }
 
         const latestData = getTableData();
@@ -91,12 +133,14 @@ async function reconcileInsertedRow(options = {}) {
         reachedExpected = syncResult.rowCount >= expectedMinRowCount;
 
         if (syncResult.synced && state) {
-            state.lockState = getTableLockState(sheetKey);
+            state.syncLockState(getTableLockState(sheetKey));
             renderKeepScroll();
         }
     }
 
-    dispatchPhoneTableUpdated(sheetKey);
+    if (isRuntimeActive(viewerRuntime)) {
+        dispatchPhoneTableUpdated(sheetKey);
+    }
 
     return {
         reachedExpected,
@@ -119,11 +163,28 @@ export function showGenericAddRowModal(options = {}) {
         getTableLockState,
         showInlineToast,
         renderKeepScroll,
+        refreshListAfterDataMutation,
+        viewerRuntime: providedViewerRuntime,
     } = options;
+
+    const refreshAfterDataMutation = typeof refreshListAfterDataMutation === 'function'
+        ? refreshListAfterDataMutation
+        : renderKeepScroll;
 
     if (!(container instanceof HTMLElement) || !state) return;
     if (typeof insertTableRow !== 'function' || typeof getTableData !== 'function' || typeof getTableLockState !== 'function') return;
-    if (typeof showInlineToast !== 'function' || typeof renderKeepScroll !== 'function') return;
+    if (typeof showInlineToast !== 'function' || typeof refreshAfterDataMutation !== 'function') return;
+
+    const viewerRuntime = providedViewerRuntime && typeof providedViewerRuntime === 'object'
+        ? providedViewerRuntime
+        : resolveViewerRuntime(container);
+    const isViewerActive = () => isRuntimeActive(viewerRuntime);
+    const setManagedTimeout = viewerRuntime && typeof viewerRuntime.setTimeout === 'function'
+        ? viewerRuntime.setTimeout.bind(viewerRuntime)
+        : window.setTimeout.bind(window);
+    const clearManagedTimeout = viewerRuntime && typeof viewerRuntime.clearTimeout === 'function'
+        ? viewerRuntime.clearTimeout.bind(viewerRuntime)
+        : window.clearTimeout.bind(window);
 
     const candidateMountRoot = container.matches('.phone-app-page')
         ? container
@@ -134,8 +195,7 @@ export function showGenericAddRowModal(options = {}) {
     const overlayModeClass = mountRoot === document.body ? 'phone-modal-overlay-fixed' : 'phone-modal-overlay-local';
 
     if (state.lockManageMode || state.deleteManageMode) {
-        state.lockManageMode = false;
-        state.deleteManageMode = false;
+        state.clearListManageModes();
     }
 
     const existingModal = document.getElementById(addRowModalId);
@@ -160,13 +220,16 @@ export function showGenericAddRowModal(options = {}) {
     const firstRawHeader = String(rawHeaders[0] ?? '').trim();
     const shouldHideLeadingPlaceholder = firstRawHeader === '';
 
-    const editableHeaders = [];
+    const editableFields = [];
     headers.forEach((header, idx) => {
         const rawHeader = String(rawHeaders[idx] ?? '').trim();
-        if (shouldHideLeadingPlaceholder && idx === 0 && rawHeader === '') {
+        if (shouldSkipAddRowField(header, rawHeader, idx, shouldHideLeadingPlaceholder)) {
             return;
         }
-        editableHeaders.push(header);
+        editableFields.push({
+            header,
+            rawIdx: idx,
+        });
     });
 
     const draftData = {};
@@ -178,14 +241,12 @@ export function showGenericAddRowModal(options = {}) {
                 <button type="button" class="phone-modal-close" id="phone-modal-close-btn">${PHONE_ICONS.close || '×'}</button>
             </div>
             <div class="phone-modal-body">
-                ${editableHeaders.map((header, idx) => {
-                    const rawIdx = shouldHideLeadingPlaceholder ? idx + 1 : idx;
-                    return `
+                ${editableFields.map((field) => `
                     <div class="phone-modal-field">
-                        <label class="phone-modal-field-label">${escapeHtml(header)}</label>
-                        <textarea class="phone-modal-field-input" data-field-idx="${rawIdx}" placeholder="请输入${escapeHtml(header)}" rows="1"></textarea>
+                        <label class="phone-modal-field-label">${escapeHtml(field.header)}</label>
+                        <textarea class="phone-modal-field-input" data-field-idx="${field.rawIdx}" placeholder="请输入${escapeHtml(field.header)}" rows="1"></textarea>
                     </div>
-                `;}).join('')}
+                `).join('')}
             </div>
             <div class="phone-modal-footer">
                 <button type="button" class="phone-modal-btn phone-modal-btn-cancel" id="phone-modal-cancel-btn">取消</button>
@@ -201,18 +262,18 @@ export function showGenericAddRowModal(options = {}) {
         modalClosed = true;
         modalEventManager.dispose();
         if (focusTimerId !== null) {
-            window.clearTimeout(focusTimerId);
+            clearManagedTimeout(focusTimerId);
             focusTimerId = null;
         }
         if (closeTimerId !== null) {
-            window.clearTimeout(closeTimerId);
+            clearManagedTimeout(closeTimerId);
             closeTimerId = null;
         }
         if (modalAny.__yuziCleanup === closeModal) {
             delete modalAny.__yuziCleanup;
         }
         modal.classList.remove('show');
-        closeTimerId = window.setTimeout(() => {
+        closeTimerId = setManagedTimeout(() => {
             modal.remove();
             closeTimerId = null;
         }, 200);
@@ -221,7 +282,7 @@ export function showGenericAddRowModal(options = {}) {
 
     const firstInput = /** @type {HTMLTextAreaElement | null} */ (modal.querySelector('.phone-modal-field-input'));
     if (firstInput) {
-        focusTimerId = window.setTimeout(() => {
+        focusTimerId = setManagedTimeout(() => {
             focusTimerId = null;
             if (modal.isConnected) {
                 firstInput.focus();
@@ -267,7 +328,7 @@ export function showGenericAddRowModal(options = {}) {
             const newData = {};
             headers.forEach((header, idx) => {
                 const rawHeader = String(rawHeaders[idx] ?? '').trim();
-                if (shouldHideLeadingPlaceholder && idx === 0 && rawHeader === '') {
+                if (shouldSkipAddRowField(header, rawHeader, idx, shouldHideLeadingPlaceholder)) {
                     return;
                 }
                 const value = draftData[idx] ?? '';
@@ -276,6 +337,19 @@ export function showGenericAddRowModal(options = {}) {
 
             const localRowsBefore = rows.length;
             const result = await insertTableRow(tableName, newData);
+            if (!isViewerActive()) {
+                logger.warn({
+                    action: 'add-row.insert.viewer-inactive',
+                    message: '新增条目写入后 viewer 已失活，跳过弹窗状态更新',
+                    context: {
+                        tableName,
+                        sheetKey,
+                        ok: !!result?.ok,
+                        rowIndex: result?.rowIndex,
+                    },
+                });
+                return;
+            }
 
             if (result.ok) {
                 closeModal();
@@ -290,9 +364,12 @@ export function showGenericAddRowModal(options = {}) {
                     rows.push(buildOptimisticRow(headers, rawHeaders, newData));
                 }
 
-                state.lockState = getTableLockState(sheetKey);
-                renderKeepScroll();
-                showInlineToast(container, '新增成功');
+                state.syncLockState(getTableLockState(sheetKey));
+                refreshAfterDataMutation();
+                const successMessage = result.persisted === false
+                    ? '新增成功，但持久化或刷新未确认，稍后会自动对账'
+                    : '新增成功';
+                showInlineToast(container, successMessage, result.persisted === false || result.refreshed === false);
 
                 Promise.resolve(reconcileInsertedRow({
                     tableName,
@@ -302,8 +379,9 @@ export function showGenericAddRowModal(options = {}) {
                     state,
                     getTableData,
                     getTableLockState,
-                    renderKeepScroll,
+                    renderKeepScroll: refreshAfterDataMutation,
                     expectedMinRowCount,
+                    viewerRuntime,
                 })).catch((reconcileError) => {
                     logger.warn({
                         action: 'add-row.reconcile-error',
@@ -318,7 +396,14 @@ export function showGenericAddRowModal(options = {}) {
                     });
                 });
             } else {
-                showInlineToast(container, `新增失败: ${result.message || '未知错误'}`);
+                const failureParts = [];
+                if (result?.message) failureParts.push(result.message);
+                if (result?.code && result.code !== 'failed') failureParts.push(`错误码：${result.code}`);
+                if (Number.isInteger(result?.rawRowIndex)) failureParts.push(`insertRow返回：${result.rawRowIndex}`);
+                if (result?.persisted === false) failureParts.push('写入未确认');
+                if (result?.refreshed === false) failureParts.push('刷新未确认');
+                const failureMessage = failureParts.length > 0 ? failureParts.join('；') : '未知错误';
+                showInlineToast(container, `新增失败: ${failureMessage}`);
                 if (confirmBtn) {
                     confirmBtn.disabled = false;
                     confirmBtn.textContent = '确定';
@@ -334,6 +419,18 @@ export function showGenericAddRowModal(options = {}) {
                 },
                 error: err,
             });
+            if (!isViewerActive()) {
+                logger.warn({
+                    action: 'add-row.exception.viewer-inactive',
+                    message: '新增异常后 viewer 已失活，跳过弹窗按钮恢复',
+                    context: {
+                        tableName,
+                        sheetKey,
+                    },
+                    error: err,
+                });
+                return;
+            }
             showInlineToast(container, `新增异常: ${err?.message || '未知错误'}`);
             if (confirmBtn) {
                 confirmBtn.disabled = false;

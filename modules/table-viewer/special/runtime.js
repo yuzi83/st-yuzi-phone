@@ -1,19 +1,17 @@
-import { escapeHtmlAttr } from '../../utils.js';
+import { Logger } from '../../error-handler.js';
+import { escapeHtmlAttr } from '../../utils/dom-escape.js';
 import {
-    bindTemplateDraftPreviewForViewer,
     resolveTemplateWithDraftForViewer,
     buildScopedCustomCss,
 } from '../template-runtime.js';
 import { normalizeSpecialStyleOptionsForViewer } from './field-reader.js';
 import { renderMessageTable as renderMessageTablePage } from './message-viewer.js';
-import { renderFeedTable as renderFeedTablePage } from './feed-viewer.js';
 
+const logger = Logger.withScope({ scope: 'table-viewer/special-runtime', feature: 'table-viewer' });
 const SPECIAL_SCOPE_CLASS = 'phone-special-template-scope';
 
 const SPECIAL_TABLE_TYPES = {
     '消息记录表': 'message',
-    '动态表': 'moments',
-    '论坛表': 'forum',
 };
 
 function getPlainTemplateOptionGroup(rawGroup) {
@@ -70,9 +68,6 @@ export function createSpecialTemplateStylePayload(templateMatch, specialType, vi
     const conversationListOptions = getPlainTemplateOptionGroup(structureOptions.conversationList);
     const detailHeaderOptions = getPlainTemplateOptionGroup(structureOptions.detailHeader);
     const composeBarOptions = getPlainTemplateOptionGroup(structureOptions.composeBar);
-    const postMetaOptions = getPlainTemplateOptionGroup(structureOptions.postMeta);
-    const forumMetaOptions = getPlainTemplateOptionGroup(structureOptions.forumMeta);
-    const commentListOptions = getPlainTemplateOptionGroup(structureOptions.commentList);
 
     const safeVarEntries = Object.entries(styleTokens)
         .map(([rawKey, rawValue]) => {
@@ -100,12 +95,6 @@ export function createSpecialTemplateStylePayload(templateMatch, specialType, vi
         ['--sp-typo-message-line-height', normalizeCssVarValue(typographyOptions.messageLineHeight)],
         ['--sp-typo-message-meta-size', normalizeCssVarValue(typographyOptions.messageMetaFontSize)],
         ['--sp-typo-compose-status-size', normalizeCssVarValue(typographyOptions.composeStatusFontSize)],
-        ['--sp-typo-post-title-size', normalizeCssVarValue(typographyOptions.postTitleFontSize)],
-        ['--sp-typo-post-title-weight', normalizeCssVarValue(typographyOptions.postTitleFontWeight)],
-        ['--sp-typo-post-meta-size', normalizeCssVarValue(typographyOptions.postMetaFontSize)],
-        ['--sp-typo-post-body-size', normalizeCssVarValue(typographyOptions.postBodyFontSize)],
-        ['--sp-typo-post-body-line-height', normalizeCssVarValue(typographyOptions.postBodyLineHeight)],
-        ['--sp-typo-comment-size', normalizeCssVarValue(typographyOptions.commentFontSize)],
         ['--sp-motion-fast-duration', normalizeCssVarValue(motionOptions.fastDuration)],
         ['--sp-motion-normal-duration', normalizeCssVarValue(motionOptions.normalDuration)],
         ['--sp-motion-hover-lift-y', normalizeCssVarValue(motionOptions.hoverLiftY)],
@@ -128,21 +117,12 @@ export function createSpecialTemplateStylePayload(templateMatch, specialType, vi
         ['data-special-type', specialTypeSafe],
         ['data-special-view-mode', String(viewMode || 'list').trim() || 'list'],
         ['data-style-density', String(styleOptions.density || '')],
-        ['data-style-reply-mode', String(styleOptions.replyOptionMode || '')],
-        ['data-style-stats-mode', String(styleOptions.statsMode || '')],
-        ['data-style-card-style', String(styleOptions.cardStyle || '')],
         ['data-structure-show-conversation-subtitle', conversationListOptions.showSubtitle === false ? '0' : '1'],
         ['data-structure-show-last-message', conversationListOptions.showLastMessage === false ? '0' : '1'],
         ['data-structure-show-detail-subtitle', detailHeaderOptions.showSubtitle === false ? '0' : '1'],
         ['data-structure-show-compose-status', composeBarOptions.showStatusText === false ? '0' : '1'],
         ['data-structure-show-compose-template-note', composeBarOptions.showTemplateNote === false ? '0' : '1'],
         ['data-structure-show-compose-retry', composeBarOptions.showRetryButton === false ? '0' : '1'],
-        ['data-structure-show-topic-tag', postMetaOptions.showTopicTag ? '1' : '0'],
-        ['data-structure-show-location', postMetaOptions.showLocation ? '1' : '0'],
-        ['data-structure-show-view-count', postMetaOptions.showViewCount ? '1' : '0'],
-        ['data-structure-show-post-time', postMetaOptions.showTime === false ? '0' : '1'],
-        ['data-structure-show-forum-prefix', forumMetaOptions.showPrefix === false ? '0' : '1'],
-        ['data-structure-show-comment-count', commentListOptions.showCount ? '1' : '0'],
     ];
 
     const dataAttrs = dataAttrEntries
@@ -177,20 +157,25 @@ export function createSpecialTableViewerRuntime(container, context, deps = {}) {
     const viewerRuntime = deps.viewerRuntime;
     const viewerEventManager = deps.viewerEventManager || viewerRuntime?.viewerEventManager;
     const renderMessageTable = deps.renderMessageTable || renderMessageTablePage;
-    const renderFeedTable = deps.renderFeedTable || renderFeedTablePage;
     const createStylePayload = deps.createSpecialTemplateStylePayload || createSpecialTemplateStylePayload;
 
     const start = () => {
-        if (type === 'message') {
-            renderMessageTable(container, { sheetKey, tableName, rows, headers, templateMatch, type }, {
-                createSpecialTemplateStylePayload: createStylePayload,
-                viewerEventManager,
+        if (type !== 'message') {
+            logger.warn({
+                action: 'start.skip',
+                message: '专属表 runtime 跳过：未支持的专属类型',
+                context: {
+                    sheetKey: String(sheetKey || ''),
+                    tableName: String(tableName || ''),
+                    type: String(type || ''),
+                },
             });
-            return true;
+            return false;
         }
 
-        renderFeedTable(container, { sheetKey, tableName, rows, headers, type, templateMatch }, {
+        renderMessageTable(container, { sheetKey, tableName, rows, headers, templateMatch, type }, {
             createSpecialTemplateStylePayload: createStylePayload,
+            viewerRuntime,
             viewerEventManager,
         });
         return true;

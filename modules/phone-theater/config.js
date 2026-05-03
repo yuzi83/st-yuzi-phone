@@ -1,0 +1,15 @@
+export {
+    THEATER_APP_KEYS,
+    THEATER_ROUTE_PREFIX,
+    THEATER_SCENE_IDS,
+    THEATER_SCENES as THEATER_SCENE_DEFINITIONS,
+    buildTheaterRoute,
+    getTheaterChildTableNames,
+    getTheaterSceneDefinition,
+    getTheaterSceneDefinitionByAppKey,
+    getTheaterSceneDefinitionByRoute,
+    getTheaterSceneDefinitionByTableName,
+    getTheaterSceneDefinitions,
+    isTheaterRoute,
+    normalizeTheaterSceneId,
+} from './scenes/index.js';

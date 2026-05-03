@@ -11,12 +11,12 @@ import {
 
 const { renderIconUploadList: renderIconUploadListImpl } = createIconUploadService();
 
-export function setupBgUpload(container) {
-    return setupBgUploadImpl(container);
+export function setupBgUpload(container, options = {}) {
+    return setupBgUploadImpl(container, options);
 }
 
-export function renderIconUploadList(listEl) {
-    return renderIconUploadListImpl(listEl);
+export function renderIconUploadList(listEl, options = {}) {
+    return renderIconUploadListImpl(listEl, options);
 }
 
 export function setupAppearanceToggles(container) {

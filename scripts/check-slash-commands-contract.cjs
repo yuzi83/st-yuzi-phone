@@ -19,6 +19,11 @@ function has(content, snippet) {
     return content.includes(snippet);
 }
 
+function hasExportedFunction(content, functionName) {
+    const escapedName = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`export\\s+(?:async\\s+)?function\\s+${escapedName}\\s*\\(`).test(content);
+}
+
 function push(results, fileKey, description, ok) {
     results.push({ file: FILES[fileKey], description, ok });
 }
@@ -30,29 +35,29 @@ function main() {
 
     const results = [];
 
-    push(results, 'facade', '继续导出 registerSlashCommands()', has(contents.facade, 'export function registerSlashCommands('));
-    push(results, 'facade', '继续导出 unregisterSlashCommands()', has(contents.facade, 'export function unregisterSlashCommands('));
-    push(results, 'facade', '继续导出 registerCommandHandler()', has(contents.facade, 'export function registerCommandHandler('));
-    push(results, 'facade', '继续导出 getRegisteredCommands()', has(contents.facade, 'export function getRegisteredCommands('));
+    push(results, 'facade', '继续导出 registerSlashCommands()', hasExportedFunction(contents.facade, 'registerSlashCommands'));
+    push(results, 'facade', '继续导出 unregisterSlashCommands()', hasExportedFunction(contents.facade, 'unregisterSlashCommands'));
+    push(results, 'facade', '继续导出 registerCommandHandler()', hasExportedFunction(contents.facade, 'registerCommandHandler'));
+    push(results, 'facade', '继续导出 getRegisteredCommands()', hasExportedFunction(contents.facade, 'getRegisteredCommands'));
 
-    push(results, 'hostAdapter', '存在 getSillyTavernSlashCommandRegistrar()', has(contents.hostAdapter, 'export function getSillyTavernSlashCommandRegistrar('));
-    push(results, 'hostAdapter', '存在 getSillyTavernSlashCommandUnregistrar()', has(contents.hostAdapter, 'export function getSillyTavernSlashCommandUnregistrar('));
-    push(results, 'hostAdapter', '存在 registerFallbackSlashCommands()', has(contents.hostAdapter, 'export function registerFallbackSlashCommands('));
-    push(results, 'hostAdapter', '存在 clearFallbackSlashCommands()', has(contents.hostAdapter, 'export function clearFallbackSlashCommands('));
+    push(results, 'hostAdapter', '存在 getSillyTavernSlashCommandRegistrar()', hasExportedFunction(contents.hostAdapter, 'getSillyTavernSlashCommandRegistrar'));
+    push(results, 'hostAdapter', '存在 getSillyTavernSlashCommandUnregistrar()', hasExportedFunction(contents.hostAdapter, 'getSillyTavernSlashCommandUnregistrar'));
+    push(results, 'hostAdapter', '存在 registerFallbackSlashCommands()', hasExportedFunction(contents.hostAdapter, 'registerFallbackSlashCommands'));
+    push(results, 'hostAdapter', '存在 clearFallbackSlashCommands()', hasExportedFunction(contents.hostAdapter, 'clearFallbackSlashCommands'));
 
-    push(results, 'state', '存在 hasSlashCommandsRegistered()', has(contents.state, 'export function hasSlashCommandsRegistered('));
-    push(results, 'state', '存在 getRegisteredCommandsSnapshot()', has(contents.state, 'export function getRegisteredCommandsSnapshot('));
-    push(results, 'state', '存在 getCommandHandler()', has(contents.state, 'export function getCommandHandler('));
-    push(results, 'state', '存在 clearCommandHandlers()', has(contents.state, 'export function clearCommandHandlers('));
+    push(results, 'state', '存在 hasSlashCommandsRegistered()', hasExportedFunction(contents.state, 'hasSlashCommandsRegistered'));
+    push(results, 'state', '存在 getRegisteredCommandsSnapshot()', hasExportedFunction(contents.state, 'getRegisteredCommandsSnapshot'));
+    push(results, 'state', '存在 getCommandHandler()', hasExportedFunction(contents.state, 'getCommandHandler'));
+    push(results, 'state', '存在 clearCommandHandlers()', hasExportedFunction(contents.state, 'clearCommandHandlers'));
 
-    push(results, 'commandActions', '存在 handlePhoneCommand()', has(contents.commandActions, 'export function handlePhoneCommand('));
-    push(results, 'commandActions', '存在 handleTableCommand()', has(contents.commandActions, 'export function handleTableCommand('));
-    push(results, 'commandActions', '存在 handleSettingsCommand()', has(contents.commandActions, 'export function handleSettingsCommand('));
-    push(results, 'commandActions', '存在 createFallbackSlashCommands()', has(contents.commandActions, 'export function createFallbackSlashCommands('));
+    push(results, 'commandActions', '存在 handlePhoneCommand()', hasExportedFunction(contents.commandActions, 'handlePhoneCommand'));
+    push(results, 'commandActions', '存在 handleTableCommand()', hasExportedFunction(contents.commandActions, 'handleTableCommand'));
+    push(results, 'commandActions', '存在 handleSettingsCommand()', hasExportedFunction(contents.commandActions, 'handleSettingsCommand'));
+    push(results, 'commandActions', '存在 createFallbackSlashCommands()', hasExportedFunction(contents.commandActions, 'createFallbackSlashCommands'));
 
-    push(results, 'commandRegistration', '存在 registerSlashCommandDefinitions()', has(contents.commandRegistration, 'export function registerSlashCommandDefinitions('));
-    push(results, 'commandRegistration', '存在 registerFallbackCommandSet()', has(contents.commandRegistration, 'export function registerFallbackCommandSet('));
-    push(results, 'commandRegistration', '存在 unregisterSlashCommandDefinitions()', has(contents.commandRegistration, 'export function unregisterSlashCommandDefinitions('));
+    push(results, 'commandRegistration', '存在 registerSlashCommandDefinitions()', hasExportedFunction(contents.commandRegistration, 'registerSlashCommandDefinitions'));
+    push(results, 'commandRegistration', '存在 registerFallbackCommandSet()', hasExportedFunction(contents.commandRegistration, 'registerFallbackCommandSet'));
+    push(results, 'commandRegistration', '存在 unregisterSlashCommandDefinitions()', hasExportedFunction(contents.commandRegistration, 'unregisterSlashCommandDefinitions'));
 
     const failed = results.filter((item) => !item.ok);
     if (failed.length > 0) {

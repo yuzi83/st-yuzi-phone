@@ -3,16 +3,23 @@ const path = require('path');
 
 const ROOT = process.cwd();
 
+// 注：阶段二 step_12 已删除 modules/window.js façade。
+// 调用方 phone-core/lifecycle.js 改为直接从 window/runtime.js / drag.js / resize.js 导入。
 const FILES = {
-    facade: 'modules/window.js',
     runtime: 'modules/window/runtime.js',
     drag: 'modules/window/drag.js',
     resize: 'modules/window/resize.js',
     lifecycle: 'modules/phone-core/lifecycle.js',
 };
 
+const FACADE_RELATIVE_PATH = 'modules/window.js';
+
 function read(relativePath) {
     return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
+}
+
+function exists(relativePath) {
+    return fs.existsSync(path.join(ROOT, relativePath));
 }
 
 function has(content, snippet) {
@@ -30,9 +37,12 @@ function main() {
 
     const results = [];
 
-    check(results, 'facade', '继续 re-export destroyPhoneWindowInteractions()', has(contents.facade, "export { destroyPhoneWindowInteractions } from './window/runtime.js';"));
-    check(results, 'facade', '继续 re-export initPhoneShellDrag()', has(contents.facade, "export { initPhoneShellDrag } from './window/drag.js';"));
-    check(results, 'facade', '继续 re-export initPhoneShellResize()', has(contents.facade, "export { initPhoneShellResize } from './window/resize.js';"));
+    // façade 已删除：物理校验
+    results.push({
+        file: FACADE_RELATIVE_PATH,
+        description: 'window façade 已删除',
+        ok: !exists(FACADE_RELATIVE_PATH),
+    });
 
     check(results, 'runtime', '存在 getWindowInteractionRuntime()', has(contents.runtime, 'export function getWindowInteractionRuntime('));
     check(results, 'runtime', '存在 destroyPhoneWindowInteractions()', has(contents.runtime, 'export function destroyPhoneWindowInteractions('));
@@ -49,7 +59,11 @@ function main() {
     check(results, 'resize', '继续写入 phoneContainerWidth 设置', has(contents.resize, "savePhoneSetting('phoneContainerWidth'"));
     check(results, 'resize', '继续写入 phoneContainerHeight 设置', has(contents.resize, "savePhoneSetting('phoneContainerHeight'"));
 
-    check(results, 'lifecycle', '继续从 façade 导入窗口交互 API', has(contents.lifecycle, "from '../window.js';"));
+    // lifecycle 改为直接从 window 子模块导入
+    check(results, 'lifecycle', 'lifecycle 改为直接从 window/runtime 导入 destroyPhoneWindowInteractions()', has(contents.lifecycle, "from '../window/runtime.js';"));
+    check(results, 'lifecycle', 'lifecycle 改为直接从 window/drag 导入 initPhoneShellDrag()', has(contents.lifecycle, "from '../window/drag.js';"));
+    check(results, 'lifecycle', 'lifecycle 改为直接从 window/resize 导入 initPhoneShellResize()', has(contents.lifecycle, "from '../window/resize.js';"));
+    check(results, 'lifecycle', 'lifecycle 不再从 window façade 导入', !has(contents.lifecycle, "from '../window.js';"));
     check(results, 'lifecycle', '继续初始化拖拽', has(contents.lifecycle, 'initPhoneShellDrag();'));
     check(results, 'lifecycle', '继续初始化缩放', has(contents.lifecycle, 'initPhoneShellResize();'));
     check(results, 'lifecycle', '继续销毁窗口交互', has(contents.lifecycle, 'destroyPhoneWindowInteractions();'));

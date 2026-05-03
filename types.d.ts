@@ -151,10 +151,10 @@ export interface SillyTavernContextLike {
  */
 export type BeautifyTemplateType = 'special_app_template' | 'generic_table_template';
 export type BeautifySourceMode = 'builtin' | 'user';
-export type PhoneBeautifySpecialRendererKey = 'special_message' | 'special_moments' | 'special_forum';
+export type PhoneBeautifySpecialRendererKey = 'special_message';
 export type PhoneBeautifyGenericRendererKey = 'generic_table';
 export type PhoneBeautifyRendererKey = PhoneBeautifySpecialRendererKey | PhoneBeautifyGenericRendererKey;
-export type PhoneBeautifySpecialType = 'message' | 'moments' | 'forum';
+export type PhoneBeautifySpecialType = 'message';
 export type PhoneBeautifyTemplateSource = 'builtin' | 'user';
 export type PhoneBeautifyTemplateBindings = Record<string, string>;
 export type PhoneBeautifyTemplateExportMode = 'runtime' | 'annotated';
@@ -493,27 +493,6 @@ export interface SlashCommandDefinition {
     helpText?: string;
 }
 
-// ===== 虚拟滚动类型定义 =====
-
-/**
- * 虚拟滚动选项
- */
-export interface VirtualScrollOptions {
-    itemHeight: number;
-    bufferSize?: number;
-    containerHeight?: number;
-    onScroll?: (scrollTop: number) => void;
-    onItemRender?: (item: any, element: HTMLElement) => void;
-}
-
-/**
- * 虚拟滚动项
- */
-export interface VirtualScrollItem {
-    id: string | number;
-    [key: string]: any;
-}
-
 // ===== 模块导出类型定义 =====
 
 /**
@@ -602,13 +581,16 @@ export interface SettingsAppState {
     promptEditorContent: string;
     promptEditorIsNew: boolean;
     promptEditorOriginalName: string;
+    promptEditorMediaMarkers: {
+        imagePrefix: string;
+        videoPrefix: string;
+    } | null;
     aiInstructionSelectedPresetName?: string;
     aiInstructionDraftName?: string;
     aiInstructionDraftOriginalName?: string;
     aiInstructionDraftImagePrefix?: string;
     aiInstructionDraftVideoPrefix?: string;
     aiInstructionDraftPromptGroup?: any[];
-    apiPromptConfigSelectedTemplate: string;
     worldbookLoading: boolean;
     worldbookError: string | null;
     worldbookList: string[];
@@ -617,7 +599,6 @@ export interface SettingsAppState {
     boundWorldbookNames: string[];
     worldbookEntries: any[];
     worldbookSearchQuery: string;
-    worldbookEventCleanup: (() => void) | null;
 }
 
 export interface SettingsRuntimeStatus {
@@ -633,10 +614,31 @@ export interface NamedSettingsEntry {
 
 export type SettingsToastHandler = (host: unknown, message: string, isError?: boolean) => void;
 
+export interface SettingsPageRuntime {
+    setTimeout?: (callback: () => void, delay?: number) => number | null;
+    clearTimeout?: (timeoutId: number | null) => void;
+    setInterval?: (callback: () => void, delay?: number) => number | null;
+    clearInterval?: (intervalId: number | null) => void;
+    requestAnimationFrame?: (callback: FrameRequestCallback) => number | null;
+    cancelAnimationFrame?: (frameId: number | null) => void;
+    addEventListener?: (target: EventTarget | null | undefined, type: string, listener: EventListenerOrEventListenerObject | (() => void), options?: AddEventListenerOptions | boolean) => (() => void);
+    observeMutation?: (target: Node | null | undefined, callback: MutationCallback, options?: MutationObserverInit) => { observer: MutationObserver | null; disconnect: () => void } | null;
+    observeDisconnection?: (target: Node | null | undefined, callback: (target: Node) => void, options?: { observerRoot?: ParentNode | null; childList?: boolean; subtree?: boolean }) => { observer: MutationObserver | null; disconnect: () => void } | null;
+    registerCleanup?: (cleanup: () => void) => (() => void);
+    isDisposed?: () => boolean;
+}
+
+export interface SettingsPageRuntimeHandle extends SettingsPageRuntime {
+    dispose?: () => void;
+}
+
 export interface SettingsPageRendererCommonDeps {
     container: HTMLElement;
     state: SettingsAppState;
     render: () => void;
+    registerCleanup?: (cleanup: () => void) => void;
+    bindPageEvent?: (target: EventTarget | null | undefined, type: string, listener: EventListenerOrEventListenerObject | (() => void), options?: AddEventListenerOptions | boolean) => (() => void);
+    pageRuntime?: SettingsPageRuntime;
 }
 
 export interface SettingsPageRendererNavigationDeps {
@@ -648,7 +650,7 @@ export interface SettingsPageRendererScrollDeps {
     restoreScroll: (key: string) => void;
     rerenderHomeKeepScroll: () => void;
     rerenderDatabaseKeepScroll: () => void;
-    rerenderButtonStyleKeepScroll: () => void;
+    rerenderBeautifyKeepScroll: () => void;
     rerenderApiPromptConfigKeepScroll: () => void;
 }
 
@@ -656,19 +658,20 @@ export interface SettingsPageRendererFeedbackDeps {
     showToast: SettingsToastHandler;
 }
 
-export interface SettingsHomePageRendererDeps {
+export interface SettingsDatabasePresetService {
     getDbConfigApiAvailability: () => SettingsRuntimeStatus;
     getDbPresets: () => NamedSettingsEntry[];
     getActiveDbPresetName: () => string;
-    getApiPresets: () => NamedSettingsEntry[];
-    getTableApiPreset: () => string;
-    setTableApiPreset: (presetName: string) => boolean;
-    getCurrentPhoneAiInstructionPresetName: () => string;
     switchPresetByName: (presetName: string, toastHost?: unknown) => boolean;
+}
+
+export interface SettingsManualUpdateService {
     setupManualUpdateBtn: (container: HTMLElement, btnSelector?: string, statusSelector?: string | null) => void;
 }
 
-export interface SettingsAppearancePageRendererDeps {
+export interface SettingsHomePageRendererDeps extends SettingsManualUpdateService {}
+
+export interface SettingsAppearancePageService {
     getLayoutValue: (key: string, fallback: number) => string;
     getPhoneSettings: SettingsModule['getPhoneSettings'];
     setupBgUpload: (container: HTMLElement) => void;
@@ -678,14 +681,12 @@ export interface SettingsAppearancePageRendererDeps {
     renderIconUploadList: (listEl: Element | null) => void;
 }
 
-export interface SettingsDataConfigPageRendererDeps {
+export interface SettingsAppearancePageRendererDeps extends SettingsAppearancePageService {}
+
+export interface SettingsDatabaseConfigService extends SettingsDatabasePresetService {
     getTableData: () => Record<string, any> | null;
     getSheetKeys: (rawData?: Record<string, any> | null) => string[];
-    getDbConfigApiAvailability: () => SettingsRuntimeStatus;
     readDbSnapshot: () => { ready: boolean; snapshot: Record<string, any>; apiAvailability?: SettingsRuntimeStatus; [key: string]: any };
-    getDbPresets: () => NamedSettingsEntry[];
-    getActiveDbPresetName: () => string;
-    switchPresetByName: (presetName: string, toastHost?: unknown) => boolean;
     clearActivePresetBindingIfNeeded: () => boolean;
     normalizeDbManualSelection: (raw: any) => { hasManualSelection: boolean; selectedTables: string[] };
     normalizeDbUpdateConfig: (raw: any) => Record<string, any>;
@@ -697,19 +698,29 @@ export interface SettingsDataConfigPageRendererDeps {
     clearManualTableSelectionViaApi: () => SettingsRuntimeStatus;
 }
 
+export interface SettingsDataConfigPageRendererDeps extends SettingsDatabaseConfigService {}
+
+export interface SettingsButtonStylePageService {
+    getPhoneSettings: SettingsModule['getPhoneSettings'];
+    savePhoneSetting: SettingsModule['savePhoneSetting'];
+    showToast: SettingsToastHandler;
+}
+
 export interface SettingsButtonStylePageRendererDeps {
     getPhoneSettings: SettingsModule['getPhoneSettings'];
     savePhoneSetting: SettingsModule['savePhoneSetting'];
-    savePhoneSettingsPatch: SettingsModule['savePhoneSettingsPatch'];
 }
 
-export interface SettingsApiPromptPageRendererDeps {
+export interface SettingsApiPromptService {
     getDbConfigApiAvailability: () => SettingsRuntimeStatus;
     getApiPresets: () => NamedSettingsEntry[];
     getTableApiPreset: () => string;
     setTableApiPreset: (presetName: string) => boolean;
     getPlotApiPreset: () => string;
     setPlotApiPreset: (presetName: string) => boolean;
+}
+
+export interface SettingsAiInstructionPresetService {
     getPhoneAiInstructionPresets: () => NamedSettingsEntry[];
     getPhoneAiInstructionPreset: (name: string) => any;
     getCurrentPhoneAiInstructionPresetName: () => string;
@@ -720,10 +731,14 @@ export interface SettingsApiPromptPageRendererDeps {
     exportAllPhoneAiInstructionPresetsPack: () => any;
 }
 
-export interface SettingsPromptEditorPageRendererDeps {
+export interface SettingsPromptEditorService {
     getPhoneAiInstructionPreset: (name: string) => any;
     savePhoneAiInstructionPreset: (...args: any[]) => any;
 }
+
+export interface SettingsApiPromptPageRendererDeps extends SettingsApiPromptService, SettingsAiInstructionPresetService {}
+
+export interface SettingsPromptEditorPageRendererDeps extends SettingsPromptEditorService {}
 
 export interface SettingsPageRendererGroupedDeps {
     common?: SettingsPageRendererCommonDeps;
@@ -738,7 +753,20 @@ export interface SettingsPageRendererGroupedDeps {
     promptEditor?: SettingsPromptEditorPageRendererDeps;
 }
 
+export interface SettingsPageInstance {
+    mount(): void;
+    update?(): void;
+    dispose?(): void;
+}
+
+export interface SettingsPageDefinition {
+    createPage: () => SettingsPageInstance;
+}
+
+export type SettingsPageRegistry = Record<SettingsPageMode, SettingsPageDefinition>;
+
 export interface SettingsPageRenderers {
+    pages: SettingsPageRegistry;
     renderHomePage(): void;
     renderAppearancePage(): void;
     renderDatabasePage(): void;
@@ -857,11 +885,6 @@ export interface YuziPhoneExtension {
     YuziPhoneError: ErrorHandlerModule['YuziPhoneError'];
     ErrorCodes: ErrorHandlerModule['ErrorCodes'];
     configureErrorHandler: ErrorHandlerModule['configureErrorHandler'];
-
-    // 虚拟滚动
-    VirtualScroll: typeof import('./modules/virtual-scroll.js').VirtualScroll;
-    createVirtualScroll: typeof import('./modules/virtual-scroll.js').createVirtualScroll;
-    renderVirtualList: typeof import('./modules/virtual-scroll.js').renderVirtualList;
 
     // 工具函数
     debounce: UtilsModule['debounce'];

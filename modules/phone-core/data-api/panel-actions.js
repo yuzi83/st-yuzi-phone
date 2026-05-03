@@ -3,10 +3,41 @@ import { getDB, sleep, withTimeout } from '../db-bridge.js';
 
 const logger = Logger.withScope({ scope: 'phone-core/data-api/panel-actions', feature: 'db-api' });
 
+async function warmDatabaseSettingsRuntimeBeforeManualUpdate(api) {
+    if (!api || typeof api.openSettings !== 'function') {
+        return false;
+    }
+
+    try {
+        const result = await withTimeout(
+            Promise.resolve(api.openSettings()),
+            4000,
+            '打开数据库设置面板超时',
+        );
+        if (result === false) {
+            logger.warn({
+                action: 'manual-update.settings-warmup-failed',
+                message: '数据库设置面板打开返回失败，将继续尝试 manualUpdate',
+            });
+            return false;
+        }
+        await sleep(160);
+        return true;
+    } catch (error) {
+        logger.warn({
+            action: 'manual-update.settings-warmup-error',
+            message: '手动更新前打开数据库设置面板失败，将继续尝试 manualUpdate',
+            error,
+        });
+        return false;
+    }
+}
+
 export async function triggerManualUpdate() {
     const api = getDB();
     if (api && typeof api.manualUpdate === 'function') {
         try {
+            await warmDatabaseSettingsRuntimeBeforeManualUpdate(api);
             return await api.manualUpdate();
         } catch (error) {
             logger.warn({

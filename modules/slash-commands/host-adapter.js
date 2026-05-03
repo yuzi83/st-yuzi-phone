@@ -1,4 +1,5 @@
 import { Logger } from '../error-handler.js';
+import { getSillyTavernContext } from '../integration/context-bridge.js';
 
 const FALLBACK_COMMANDS_KEY = 'yuziPhoneCommands';
 
@@ -17,22 +18,11 @@ const HOST_FUNCTION_POLICY = Object.freeze({
 
 function getSlashCommandContextRoot() {
     try {
-        if (typeof window !== 'undefined' && window.SillyTavern && typeof window.SillyTavern.getContext === 'function') {
-            return window.SillyTavern.getContext();
-        }
-
-        if (typeof getContext === 'function') {
-            return getContext();
-        }
-
-        if (typeof window !== 'undefined' && typeof window.getContext === 'function') {
-            return window.getContext();
-        }
+        return getSillyTavernContext();
     } catch (error) {
         Logger.debug('获取 Slash 上下文失败:', error);
+        return null;
     }
-
-    return null;
 }
 
 function getSlashCommandParserRegistry() {

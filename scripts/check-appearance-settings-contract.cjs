@@ -9,7 +9,9 @@ const FILES = {
     iconUpload: 'modules/settings-app/services/appearance-settings/icon-upload-service.js',
     visibility: 'modules/settings-app/services/appearance-settings/visibility-settings.js',
     layout: 'modules/settings-app/services/appearance-settings/layout-settings.js',
-    phoneSettings: 'modules/phone-settings.js',
+    settingsRender: 'modules/settings-app/render.js',
+    pageRenderers: 'modules/settings-app/page-renderers.js',
+    contextBuilders: 'modules/settings-app/page-renderers/page-context-builders.js',
     appearancePage: 'modules/settings-app/pages/appearance.js',
 };
 
@@ -46,11 +48,28 @@ function main() {
     check(results, 'layout', '存在 setupIconLayoutSettings()', has(contents.layout, 'export function setupIconLayoutSettings('));
     check(results, 'layout', '存在 getLayoutValue()', has(contents.layout, 'export function getLayoutValue('));
 
-    check(results, 'phoneSettings', '继续从 façade 导入 appearance settings 服务', has(contents.phoneSettings, "from './settings-app/services/appearance-settings.js';"));
-    check(results, 'appearancePage', '继续调用 setupBgUpload()', has(contents.appearancePage, 'setupBgUpload(container);'));
-    check(results, 'appearancePage', '继续调用 renderIconUploadList()', has(contents.appearancePage, "renderIconUploadList(container.querySelector('#phone-icon-upload-list'));"));
-    check(results, 'appearancePage', '继续调用 renderHiddenTableAppsList()', has(contents.appearancePage, "renderHiddenTableAppsList(container.querySelector('#phone-hidden-table-apps'));"));
-    check(results, 'appearancePage', '继续调用 setupIconLayoutSettings()', has(contents.appearancePage, 'setupIconLayoutSettings(container);'));
+    check(results, 'settingsRender', 'settings render 从 appearance-settings façade 导入服务', has(contents.settingsRender, "from './services/appearance-settings.js';"));
+    check(results, 'settingsRender', 'settings render 将 appearance 服务注入 grouped deps', has(contents.settingsRender, 'appearance: {')
+        && has(contents.settingsRender, 'setupBgUpload,')
+        && has(contents.settingsRender, 'setupIconLayoutSettings,')
+        && has(contents.settingsRender, 'setupAppearanceToggles,')
+        && has(contents.settingsRender, 'renderHiddenTableAppsList,')
+        && has(contents.settingsRender, 'renderIconUploadList,'));
+    check(results, 'pageRenderers', 'page renderer 校验 appearance 服务依赖', has(contents.pageRenderers, "assertFunctionDeps('appearance', deps.appearance,")
+        && has(contents.pageRenderers, "'setupBgUpload',")
+        && has(contents.pageRenderers, "'renderIconUploadList',"));
+    check(results, 'contextBuilders', 'appearance context 通过 appearancePageService 注入页面', has(contents.contextBuilders, 'function buildAppearancePageService(services)')
+        && has(contents.contextBuilders, 'appearancePageService,')
+        && has(contents.contextBuilders, 'setupBgUpload: services.appearance.setupBgUpload'));
+
+    check(results, 'appearancePage', '外观页从 appearancePageService 读取 setupBgUpload()', has(contents.appearancePage, 'const setupBgUpload = appearancePageService.setupBgUpload;'));
+    check(results, 'appearancePage', '外观页从 appearancePageService 读取 renderIconUploadList()', has(contents.appearancePage, 'const renderIconUploadList = appearancePageService.renderIconUploadList;'));
+    check(results, 'appearancePage', '外观页通过 pageRuntime 托管背景上传 cleanup', has(contents.appearancePage, 'runtime.registerCleanup(setupBgUpload(container, { runtime }));'));
+    check(results, 'appearancePage', '外观页通过 pageRuntime 托管图标上传 cleanup', has(contents.appearancePage, "runtime.registerCleanup(renderIconUploadList(container.querySelector('#phone-icon-upload-list'), { runtime }));"));
+    check(results, 'appearancePage', '外观页保留 registerCleanup fallback', has(contents.appearancePage, "registerCleanup(setupBgUpload(container));")
+        && has(contents.appearancePage, "registerCleanup(renderIconUploadList(container.querySelector('#phone-icon-upload-list')));"));
+    check(results, 'appearancePage', '外观页继续渲染隐藏表格与布局设置入口', has(contents.appearancePage, "renderHiddenTableAppsList(container.querySelector('#phone-hidden-table-apps'))")
+        && has(contents.appearancePage, 'setupIconLayoutSettings(container)'));
 
     const failed = results.filter(item => !item.ok);
     if (failed.length > 0) {

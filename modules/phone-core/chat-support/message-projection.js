@@ -5,18 +5,18 @@ import { deleteTableRowViaApi, getTableData, insertTableRow, saveTableData, upda
 const logger = Logger.withScope({ scope: 'phone-core/chat-support/message-projection', feature: 'chat-support' });
 
 const PHONE_MESSAGE_HEADER_CANDIDATES = Object.freeze({
-    threadId: ['会话ID', '会话Id', '会话编号', '对话ID'],
-    threadTitle: ['会话标题', '会话名称', '群聊标题', '标题'],
-    sender: ['发送者', '发言者', '作者'],
-    senderRole: ['发送者身份', '角色', '身份'],
-    chatTarget: ['聊天对象', '对话目标'],
-    content: ['消息内容', '三人消息内容', '文案', '正文'],
-    sentAt: ['消息发送时间', '发送时间', '时间'],
-    messageStatus: ['消息状态', '状态'],
-    imageDesc: ['图片描述'],
-    videoDesc: ['视频描述'],
-    requestId: ['请求ID', '请求Id', '请求编号'],
-    replyToMessageId: ['回复到消息ID', '回复消息ID', '回复到'],
+    threadId: ['threadId', '会话ID', '会话Id', '会话编号', '对话ID'],
+    threadTitle: ['threadTitle', '会话标题', '会话名称', '群聊标题', '标题'],
+    sender: ['sender', '发送者', '发言者', '作者'],
+    senderRole: ['senderRole', '发送者身份', '角色', '身份'],
+    chatTarget: ['chatTarget', '聊天对象', '对话目标'],
+    content: ['content', '消息内容', '三人消息内容', '文案', '正文'],
+    sentAt: ['sentAt', '消息发送时间', '发送时间', '时间'],
+    messageStatus: ['messageStatus', '消息状态', '状态'],
+    imageDesc: ['imageDesc', '图片描述'],
+    videoDesc: ['videoDesc', '视频描述'],
+    requestId: ['requestId', '请求ID', '请求Id', '请求编号'],
+    replyToMessageId: ['replyToMessageId', '回复到消息ID', '回复消息ID', '回复到'],
 });
 
 function pickExistingHeader(headers, candidates = []) {
@@ -78,13 +78,21 @@ export function getSheetDataByKey(sheetKey) {
     return buildSheetDataSnapshot(rawData, sheetKey);
 }
 
-export function buildPhoneMessagePayload(sheetKey, message = {}) {
-    const snapshot = getSheetDataByKey(sheetKey);
-    if (!snapshot) {
-        return null;
-    }
+function isRowIdHeader(header) {
+    return /^row[\s_-]*id$/i.test(String(header ?? '').trim());
+}
 
-    const headers = snapshot.headers;
+function resolveNextRowId(content, rowIdColIndex, offset = 0) {
+    if (!Array.isArray(content) || rowIdColIndex < 0) return '';
+    const maxRowId = content.slice(1).reduce((max, row) => {
+        if (!Array.isArray(row)) return max;
+        const numeric = Number(row[rowIdColIndex]);
+        return Number.isFinite(numeric) && numeric > max ? numeric : max;
+    }, 0);
+    return String(maxRowId + 1 + Math.max(0, Number(offset) || 0));
+}
+
+export function buildPhoneMessagePayloadFromHeaders(headers, message = {}) {
     const payload = {};
     assignMessageField(payload, headers, PHONE_MESSAGE_HEADER_CANDIDATES.threadId, message.threadId);
     assignMessageField(payload, headers, PHONE_MESSAGE_HEADER_CANDIDATES.threadTitle, message.threadTitle);
@@ -93,11 +101,37 @@ export function buildPhoneMessagePayload(sheetKey, message = {}) {
     assignMessageField(payload, headers, PHONE_MESSAGE_HEADER_CANDIDATES.chatTarget, message.chatTarget);
     assignMessageField(payload, headers, PHONE_MESSAGE_HEADER_CANDIDATES.content, message.content);
     assignMessageField(payload, headers, PHONE_MESSAGE_HEADER_CANDIDATES.sentAt, message.sentAt);
-    assignMessageField(payload, headers, PHONE_MESSAGE_HEADER_CANDIDATES.messageStatus, message.messageStatus);
     assignMessageField(payload, headers, PHONE_MESSAGE_HEADER_CANDIDATES.imageDesc, message.imageDesc);
     assignMessageField(payload, headers, PHONE_MESSAGE_HEADER_CANDIDATES.videoDesc, message.videoDesc);
     assignMessageField(payload, headers, PHONE_MESSAGE_HEADER_CANDIDATES.requestId, message.requestId);
     assignMessageField(payload, headers, PHONE_MESSAGE_HEADER_CANDIDATES.replyToMessageId, message.replyToMessageId);
+    return payload;
+}
+
+function materializeMessageRowFromPayload(headers, content, payload = {}, rowOffset = 0) {
+    const headerRow = Array.isArray(headers) ? headers : [];
+    const rowIdColIndex = headerRow.findIndex((header) => isRowIdHeader(header));
+
+    return headerRow.map((header, colIndex) => {
+        if (colIndex === rowIdColIndex) {
+            return resolveNextRowId(content, rowIdColIndex, rowOffset);
+        }
+
+        const key = String(header ?? '').trim();
+        if (!Object.prototype.hasOwnProperty.call(payload, key)) return '';
+        const value = payload[key];
+        return value === undefined || value === null ? '' : String(value);
+    });
+}
+
+export function buildPhoneMessagePayload(sheetKey, message = {}) {
+    const snapshot = getSheetDataByKey(sheetKey);
+    if (!snapshot) {
+        return null;
+    }
+
+    const headers = snapshot.headers;
+    const payload = buildPhoneMessagePayloadFromHeaders(headers, message);
 
     return {
         tableName: snapshot.tableName,
@@ -135,6 +169,116 @@ export async function updatePhoneMessageRecord(sheetKey, rowIndex, message = {})
     }
 
     return updateTableRow(built.tableName, rowIndex, built.payload);
+}
+
+export async function appendPhoneMessageRecordsBatch(sheetKey, messages = [], options = {}) {
+    const safeSheetKey = String(sheetKey || '').trim();
+    const sourceMessages = Array.isArray(messages) ? messages : [];
+    const normalizedMessages = sourceMessages.filter((message) => message && typeof message === 'object' && !Array.isArray(message));
+
+    if (!safeSheetKey) {
+        return {
+            ok: false,
+            code: 'sheet_key_missing',
+            message: '批量归档失败：缺少消息记录表标识',
+            payloads: [],
+            rows: [],
+            rowIndexes: [],
+            refreshed: false,
+        };
+    }
+
+    if (normalizedMessages.length === 0) {
+        return {
+            ok: false,
+            code: 'empty_messages',
+            message: '批量归档失败：没有可归档的消息',
+            payloads: [],
+            rows: [],
+            rowIndexes: [],
+            refreshed: false,
+        };
+    }
+
+    const rawData = cloneRawTableData(getTableData(), '批量消息归档基线快照');
+    if (!rawData) {
+        return {
+            ok: false,
+            code: 'snapshot_clone_failed',
+            message: '批量归档失败：无法创建表格快照',
+            payloads: [],
+            rows: [],
+            rowIndexes: [],
+            refreshed: false,
+        };
+    }
+
+    const snapshot = buildSheetDataSnapshot(rawData, safeSheetKey);
+    if (!snapshot) {
+        return {
+            ok: false,
+            code: 'sheet_not_found',
+            message: '批量归档失败：未找到消息记录表',
+            payloads: [],
+            rows: [],
+            rowIndexes: [],
+            refreshed: false,
+        };
+    }
+
+    const sheet = rawData[safeSheetKey];
+    if (!sheet?.content || !Array.isArray(sheet.content) || sheet.content.length === 0) {
+        return {
+            ok: false,
+            code: 'invalid_sheet_content',
+            message: '批量归档失败：消息记录表内容格式无效',
+            tableName: snapshot.tableName,
+            payloads: [],
+            rows: [],
+            rowIndexes: [],
+            refreshed: false,
+        };
+    }
+
+    const headers = snapshot.headers;
+    const content = sheet.content;
+    const payloads = normalizedMessages.map((message) => buildPhoneMessagePayloadFromHeaders(headers, message));
+    const rows = payloads.map((payload, index) => materializeMessageRowFromPayload(headers, content, payload, index));
+    const firstRowIndex = Math.max(1, content.length);
+    const rowIndexes = rows.map((_, index) => firstRowIndex + index);
+
+    sheet.content = [
+        ...content,
+        ...rows,
+    ];
+
+    const saved = await saveTableData(rawData, options.timeoutMs);
+    if (!saved) {
+        return {
+            ok: false,
+            code: 'save_failed',
+            message: '批量归档失败：数据库写入失败',
+            tableName: String(options.tableName || snapshot.tableName || safeSheetKey).trim(),
+            payloads,
+            rows,
+            rowIndexes,
+            refreshed: false,
+        };
+    }
+
+    const refreshed = options.refreshProjection === false ? true : await refreshPhoneMessageProjection();
+    dispatchPhoneTableUpdated(safeSheetKey);
+
+    return {
+        ok: true,
+        code: refreshed ? 'ok' : 'ok_refresh_failed',
+        message: refreshed ? '批量归档成功' : '批量归档成功，但投影刷新失败',
+        tableName: String(options.tableName || snapshot.tableName || safeSheetKey).trim(),
+        payloads,
+        rows,
+        rowIndexes,
+        refreshed,
+    };
 }
 
 export async function refreshPhoneTableProjection() {

@@ -2,7 +2,18 @@ import { createRuntimeScope } from '../runtime-manager.js';
 
 export const PHONE_DEFAULT_ROUTE = 'home';
 export const MAX_ROUTE_HISTORY = 30;
-export const phoneRuntime = createRuntimeScope('phone-core');
+
+function createPhoneRuntimeScope() {
+    return createRuntimeScope('phone-core');
+}
+
+export let phoneRuntime = createPhoneRuntimeScope();
+
+export function resetPhoneRuntimeScope() {
+    phoneRuntime.dispose();
+    phoneRuntime = createPhoneRuntimeScope();
+    return phoneRuntime;
+}
 
 function createInitialState() {
     return {

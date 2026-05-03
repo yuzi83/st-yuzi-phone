@@ -1,34 +1,20 @@
 import {
     deletePhoneSheetRows,
-    getCurrentCharacterDisplayName,
-    getCurrentPhoneAiInstructionPresetName,
-    getPhoneAiInstructionPresets,
     getSheetDataByKey,
-    setCurrentPhoneAiInstructionPresetName,
 } from '../../phone-core/chat-support.js';
-import { navigateBack } from '../../phone-core/routing.js';
-import { PHONE_ICONS } from '../../phone-home.js';
-import { escapeHtml, escapeHtmlAttr } from '../../utils.js';
 import { showConfirmDialog } from '../../settings-app/ui/confirm-dialog.js';
-import { bindWheelBridge, showInlineToast } from '../shared-ui.js';
+import { showInlineToast } from '../shared-ui.js';
 import { createSpecialFieldReader, buildHeaderIndexMap } from './field-reader.js';
 import {
     getConversationRows,
-    getConversationRowEntries,
-    resolveConversationHeaderLabel,
-    detectChatTargetFromRows,
-    getRetryTarget,
     scrollMessageDetailToBottom,
-    renderOneMessageRow,
 } from './message-viewer-helpers.js';
 import { createMessageViewerActions } from './message-viewer-actions.js';
+import { renderMessageConversationView } from './message-viewer/conversation-view.js';
+import { bindMessageDetailController } from './message-viewer/detail-controller.js';
+import { renderMessageDetailView } from './message-viewer/detail-view.js';
 import {
-    buildConversations,
     normalizeMediaDesc,
-    renderInPhoneMediaPreview,
-    getAvatarText,
-    formatTimeLike,
-    generateColor,
 } from './view-utils.js';
 
 /**
@@ -56,7 +42,7 @@ import {
 
 
 export function renderMessageTable(container, context, deps = {}) {
-    const { createSpecialTemplateStylePayload, viewerEventManager } = deps;
+    const { createSpecialTemplateStylePayload, viewerRuntime, viewerEventManager } = deps;
     if (!(container instanceof HTMLElement) || typeof createSpecialTemplateStylePayload !== 'function') return;
 
     const { sheetKey, tableName, rows, headers, templateMatch, type } = context;
@@ -84,24 +70,23 @@ export function renderMessageTable(container, context, deps = {}) {
         deleteManageMode: false,
         deletingSelection: false,
         selectedMessageRowIndexes: [],
+        pendingArchive: null,
         skipSheetSyncOnce: false,
         stableTapGuards: Object.create(null),
     };
 
-    const getStableTapGuard = (selector) => {
-        const guardKey = String(selector || '').trim() || '__default__';
-        const existingGuard = state.stableTapGuards[guardKey];
-        if (existingGuard && typeof existingGuard === 'object') {
-            return existingGuard;
-        }
-
-        const guard = {
-            lastPointerHandledAt: -Infinity,
-            lastPointerType: 'unknown',
-        };
-        state.stableTapGuards[guardKey] = guard;
-        return guard;
-    };
+    const runtime = viewerRuntime && typeof viewerRuntime === 'object' ? viewerRuntime : null;
+    const addRuntimeListener = runtime?.addEventListener
+        ? (...args) => runtime.addEventListener(...args)
+        : viewerEventManager?.add
+            ? (...args) => viewerEventManager.add(...args)
+            : (target, type, handler, options) => {
+                target.addEventListener(type, handler, options);
+                return () => target.removeEventListener(type, handler, options);
+            };
+    const requestRuntimeFrame = runtime?.requestAnimationFrame
+        ? (callback) => runtime.requestAnimationFrame(callback)
+        : (callback) => requestAnimationFrame(callback);
 
     const setSelectedMessageRowIndexes = (rowIndexes = []) => {
         state.selectedMessageRowIndexes = Array.from(new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
@@ -109,14 +94,6 @@ export function renderMessageTable(container, context, deps = {}) {
             .filter(Number.isInteger)
             .filter(value => value >= 0)))
             .sort((a, b) => a - b);
-    };
-
-    const removeMessageRowsFromState = (rowIndexes = []) => {
-        const removeSet = new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
-            .map(value => Number(value))
-            .filter(Number.isInteger));
-        if (removeSet.size === 0) return;
-        state.rowsData = state.rowsData.filter((_, rowIndex) => !removeSet.has(rowIndex));
     };
 
     const clearDeleteManageState = () => {
@@ -150,7 +127,7 @@ export function renderMessageTable(container, context, deps = {}) {
         body.scrollTop = clampBodyScrollTop(body, targetTop);
         if (remainingFrames <= 0) return;
 
-        requestAnimationFrame(() => {
+        requestRuntimeFrame(() => {
             restoreBodyScrollInFrames(targetTop, remainingFrames - 1);
         });
     };
@@ -168,8 +145,8 @@ export function renderMessageTable(container, context, deps = {}) {
             render();
         } finally {
             restoreBodyScrollInFrames(prevTop, 2);
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
+            requestRuntimeFrame(() => {
+                requestRuntimeFrame(() => {
                     if (!container.isConnected) return;
                     container.style.removeProperty('min-height');
                 });
@@ -196,6 +173,14 @@ export function renderMessageTable(container, context, deps = {}) {
     const getLiveMessageTableName = () => {
         const latestSheet = getSheetDataByKey(sheetKey);
         return String(latestSheet?.tableName || tableName || sheetKey || '').trim();
+    };
+
+    const clearDeleteSelectionAfterExternalSync = () => {
+        if (!state.deleteManageMode || state.deletingSelection) return false;
+        if (!Array.isArray(state.selectedMessageRowIndexes) || state.selectedMessageRowIndexes.length === 0) return false;
+
+        setSelectedMessageRowIndexes([]);
+        return true;
     };
 
     const createDraftConversationId = () => `phone_thread_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -244,12 +229,6 @@ export function renderMessageTable(container, context, deps = {}) {
         }
     };
 
-    const getCurrentAiInstructionPresetNameText = () => {
-        const safeName = String(getCurrentPhoneAiInstructionPresetName() || '').trim();
-        return safeName || '默认实时回复预设';
-    };
-
-
     const patchMessageManageUi = () => {
         if (state.mode !== 'detail' || !state.deleteManageMode) return;
 
@@ -296,127 +275,40 @@ export function renderMessageTable(container, context, deps = {}) {
         syncRowsFromSheet,
         markLocalTableMutation,
         createDraftConversationId,
+        viewerRuntime: runtime,
     });
 
     const handleExternalTableUpdate = (event) => {
         if (event?.detail?.sheetKey !== sheetKey) return;
         if (Date.now() < state.suppressExternalUpdateUntil) return;
         if (!syncRowsFromSheet()) return;
+
+        const selectionReset = clearDeleteSelectionAfterExternalSync();
         renderKeepScroll();
+        if (selectionReset) {
+            showInlineToast(container, '表格已刷新，已清空删除选择，请重新选择');
+        }
     };
 
-    if (viewerEventManager && typeof viewerEventManager.add === 'function') {
-        viewerEventManager.add(window, 'yuzi-phone-table-updated', handleExternalTableUpdate);
-    }
+    addRuntimeListener(window, 'yuzi-phone-table-updated', handleExternalTableUpdate);
 
     const renderConversationList = () => {
+        state.pendingArchive = null;
         syncRowsFromSheet();
-        const stylePayload = /** @type {any} */ (createSpecialTemplateStylePayload(templateMatch, type, 'conversation'));
-        const conversations = buildConversations(state.rowsData, readSpecialField, stylePayload.styleOptions);
-        const showAvatar = stylePayload.styleOptions.showAvatar !== false;
-        const titleMode = String(stylePayload.styleOptions.conversationTitleMode || 'auto');
-        const emptyConversationText = String(stylePayload.styleOptions.emptyConversationText || '暂无消息');
-        const timeFallbackText = String(stylePayload.styleOptions.timeFallbackText || '刚刚');
-        const aiInstructionPresets = getPhoneAiInstructionPresets();
-        const activeAiInstructionPresetName = getCurrentAiInstructionPresetNameText();
-        const selectedAiInstructionPresetName = aiInstructionPresets.some((preset) => preset?.name === activeAiInstructionPresetName)
-            ? activeAiInstructionPresetName
-            : String(aiInstructionPresets[0]?.name || '').trim();
-        const showConversationSubtitle = stylePayload.structureOptions?.conversationList?.showSubtitle !== false;
-        const showLastMessage = stylePayload.structureOptions?.conversationList?.showLastMessage !== false;
-        const showTemplateNote = stylePayload.structureOptions?.composeBar?.showTemplateNote !== false;
-
-        container.innerHTML = `
-            <div class="phone-app-page phone-special-app phone-special-message ${stylePayload.className}" ${stylePayload.dataAttrs} style="${stylePayload.styleAttr}">
-                ${stylePayload.scopedCss ? `<style class="phone-special-template-inline-style">${stylePayload.scopedCss}</style>` : ''}
-                <div class="phone-nav-bar">
-                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
-                    <span class="phone-nav-title">${escapeHtml(tableName)}</span>
-                </div>
-                <div class="phone-app-body phone-table-body">
-                    <div class="phone-special-conversation-actions">
-                        <select class="phone-special-prompt-select" ${aiInstructionPresets.length > 0 ? '' : 'disabled'}>
-                            ${aiInstructionPresets.length > 0
-                                ? aiInstructionPresets.map((preset) => `
-                                    <option value="${escapeHtmlAttr(preset.name)}" ${preset.name === selectedAiInstructionPresetName ? 'selected' : ''}>${escapeHtml(preset.name)}</option>
-                                `).join('')
-                                : '<option value="">暂无预设</option>'}
-                        </select>
-                        <button type="button" class="phone-special-new-chat-btn">开始聊天</button>
-                    </div>
-                    ${showTemplateNote ? `<div class="phone-special-conversation-template-note">当前 AI 指令预设：${escapeHtml(selectedAiInstructionPresetName || activeAiInstructionPresetName || '未选择')}</div>` : ''}
-                    ${conversations.length === 0
-                        ? `<div class="phone-empty-msg">${escapeHtml(emptyConversationText)}</div>`
-                        : `<div class="phone-special-conversation-list">
-                            ${conversations.map(conv => {
-                                const displayName = resolveConversationHeaderLabel(conv, titleMode, tableName);
-                                const conversationSubtitle = String(conv.threadSubtitle || '').trim();
-                                return `
-                                    <button type="button" class="phone-special-conversation-item" data-conv-id="${escapeHtmlAttr(conv.id)}">
-                                        ${showAvatar
-                                            ? `<span class="phone-special-conversation-avatar" style="background-color:${escapeHtmlAttr(generateColor(displayName))};">${escapeHtml(getAvatarText(displayName))}</span>`
-                                            : ''}
-                                        <span class="phone-special-conversation-info">
-                                            <span class="phone-special-conversation-name">${escapeHtml(displayName)}</span>
-                                            ${showConversationSubtitle && conversationSubtitle ? `<span class="phone-special-conversation-subtitle">${escapeHtml(conversationSubtitle)}</span>` : ''}
-                                            ${showLastMessage ? `<span class="phone-special-conversation-last">${escapeHtml(conv.lastMessage || '...')}</span>` : ''}
-                                        </span>
-                                        <span class="phone-special-conversation-meta">${escapeHtml(formatTimeLike(conv.lastTime) || timeFallbackText)}</span>
-                                    </button>
-                                `;
-                            }).join('')}
-                        </div>`}
-                </div>
-            </div>
-        `;
-
-        bindWheelBridge(container);
-        container.querySelector('.phone-nav-back')?.addEventListener('click', navigateBack);
-
-        const openConversation = (convId) => {
-            const safeId = String(convId || '').trim() || createDraftConversationId();
-            state.mode = 'detail';
-            state.conversationId = safeId;
-            state.mediaPreview = null;
-            state.errorText = '';
-            state.statusText = '';
-            clearDeleteManageState();
-            const convRows = getConversationRows(state.rowsData, safeId, readSpecialField);
-            const detectedTarget = detectChatTargetFromRows(convRows, readSpecialField);
-            state.selectedTarget = detectedTarget || null;
-            render();
-            scrollMessageDetailToBottom(container);
-        };
-
-        container.querySelectorAll('.phone-special-conversation-item').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const target = /** @type {HTMLElement} */ (btn);
-                openConversation(target.dataset.convId || '');
-            });
+        renderMessageConversationView({
+            container,
+            tableName,
+            state,
+            readSpecialField,
+            createSpecialTemplateStylePayload,
+            templateMatch,
+            type,
+            createDraftConversationId,
+            render,
+            renderKeepScroll,
+            renderContactPicker,
+            viewerRuntime: runtime,
         });
-
-        container.querySelector('.phone-special-prompt-select')?.addEventListener('change', (event) => {
-            const target = event.currentTarget;
-            if (!(target instanceof HTMLSelectElement)) return;
-            const nextName = String(target.value || '').trim();
-            if (!nextName) return;
-            const result = setCurrentPhoneAiInstructionPresetName(nextName);
-            if (result?.success) {
-                showInlineToast(container, `当前实时回复预设已切换为：${nextName}`);
-                renderKeepScroll();
-            } else {
-                showInlineToast(container, result?.message || '切换预设失败', true);
-            }
-        });
-
-        container.querySelector('.phone-special-new-chat-btn')?.addEventListener('click', () => {
-            state.contactPickerVisible = true;
-            renderKeepScroll();
-        });
-
-        if (state.contactPickerVisible) {
-            renderContactPicker();
-        }
     };
 
     const renderContactPicker = () => {
@@ -449,6 +341,7 @@ export function renderMessageTable(container, context, deps = {}) {
             }
             state.selectedTarget = safeName;
             state.contactPickerVisible = false;
+            state.pendingArchive = null;
             const newConvId = createDraftConversationId();
             state.mode = 'detail';
             state.conversationId = newConvId;
@@ -461,31 +354,32 @@ export function renderMessageTable(container, context, deps = {}) {
         };
 
         const inputEl = /** @type {HTMLInputElement|null} */ (pickerEl.querySelector('.phone-special-contact-picker-input'));
-        pickerEl.querySelector('.phone-special-contact-picker-confirm-btn')?.addEventListener('click', () => {
+        addRuntimeListener(pickerEl.querySelector('.phone-special-contact-picker-confirm-btn'), 'click', () => {
             selectContact(inputEl?.value || '');
         });
 
         if (inputEl) {
-            inputEl.addEventListener('keydown', (e) => {
+            addRuntimeListener(inputEl, 'keydown', (e) => {
                 if (e.key === 'Enter' && !e.isComposing) {
                     e.preventDefault();
                     selectContact(inputEl.value || '');
                 }
             });
-            requestAnimationFrame(() => inputEl.focus());
+            requestRuntimeFrame(() => inputEl.focus());
         }
 
-        pickerEl.querySelector('.phone-special-contact-picker-cancel-btn')?.addEventListener('click', () => {
+        addRuntimeListener(pickerEl.querySelector('.phone-special-contact-picker-cancel-btn'), 'click', () => {
             state.contactPickerVisible = false;
             renderKeepScroll();
         });
 
-        pickerEl.addEventListener('click', (e) => {
+        addRuntimeListener(pickerEl, 'click', (e) => {
             if (e.target === pickerEl) {
                 state.contactPickerVisible = false;
                 renderKeepScroll();
             }
         });
+        runtime?.registerCleanup?.(() => pickerEl.remove());
     };
 
     const executeDeleteSelectedMessages = async (conversationId) => {
@@ -546,243 +440,45 @@ export function renderMessageTable(container, context, deps = {}) {
 
     const renderMessageDetail = () => {
         syncRowsFromSheet();
-        const conversationId = String(state.conversationId || 'default_thread').trim() || 'default_thread';
-        const rowEntriesInConv = getConversationRowEntries(state.rowsData, conversationId, readSpecialField);
-        const rowsInConv = rowEntriesInConv.map(entry => entry.row);
-        const stylePayload = /** @type {any} */ (createSpecialTemplateStylePayload(templateMatch, type, 'detail'));
-        const emptyDetailText = String(stylePayload.styleOptions.emptyDetailText || '该会话暂无消息');
-        const allConversations = buildConversations(state.rowsData, readSpecialField, stylePayload.styleOptions);
-        const currentConversation = allConversations.find((conv) => conv.id === conversationId);
-        const detailTitle = state.selectedTarget
-            || (currentConversation
-                ? resolveConversationHeaderLabel(currentConversation, 'auto', tableName)
-                : getCurrentCharacterDisplayName(tableName));
-        const currentDraft = String(state.draftByConversation[conversationId] || '');
-        const retryTarget = getRetryTarget(rowsInConv, readSpecialField);
-        const statusText = String(state.errorText || state.statusText || '').trim();
-        const statusClass = state.errorText
-            ? 'is-error'
-            : (state.sending ? 'is-pending' : (statusText ? 'is-success' : ''));
-        const selectedCount = state.selectedMessageRowIndexes.length;
-        const activeAiInstructionPresetName = getCurrentAiInstructionPresetNameText();
-        const detailSubtitle = String(currentConversation?.threadSubtitle || '').trim();
-        const showDetailSubtitle = stylePayload.structureOptions?.detailHeader?.showSubtitle !== false;
-        const showComposeStatus = stylePayload.structureOptions?.composeBar?.showStatusText !== false;
-        const showComposeTemplateNote = stylePayload.structureOptions?.composeBar?.showTemplateNote !== false;
-        const showRetryButton = stylePayload.structureOptions?.composeBar?.showRetryButton !== false;
-
-        container.innerHTML = `
-            <div class="phone-app-page phone-special-app phone-special-message ${stylePayload.className}" ${stylePayload.dataAttrs} style="${stylePayload.styleAttr}">
-                ${stylePayload.scopedCss ? `<style class="phone-special-template-inline-style">${stylePayload.scopedCss}</style>` : ''}
-                <div class="phone-nav-bar">
-                    <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
-                    <span class="phone-nav-title">${escapeHtml(detailTitle || tableName)}</span>
-                    <button type="button" class="phone-special-nav-action-btn ${state.deleteManageMode ? 'is-active' : ''}">${state.deleteManageMode ? '完成' : '删除'}</button>
-                </div>
-                <div class="phone-app-body phone-table-body phone-special-message-body">
-                    ${showDetailSubtitle && detailSubtitle ? `<div class="phone-special-detail-subtitle">${escapeHtml(detailSubtitle)}</div>` : ''}
-                    <div class="phone-special-message-thread">
-                        ${state.deleteManageMode ? `
-                            <div class="phone-special-manage-bar">
-                                <button type="button" class="phone-special-manage-btn phone-special-manage-select-all-btn" ${state.deletingSelection ? 'disabled' : ''}>全选</button>
-                                <button type="button" class="phone-special-manage-btn phone-special-manage-clear-btn" ${state.deletingSelection ? 'disabled' : ''}>取消全选</button>
-                                <button type="button" class="phone-special-manage-btn phone-special-manage-delete-btn" ${selectedCount === 0 || state.deletingSelection ? 'disabled' : ''}>${state.deletingSelection ? '删除中...' : `删除已选（${selectedCount}）`}</button>
-                            </div>
-                        ` : ''}
-                        <div class="phone-special-message-list">
-                            ${rowEntriesInConv.length === 0 ? `<div class="phone-empty-msg">${escapeHtml(emptyDetailText)}</div>` : rowEntriesInConv.map((entry) => renderOneMessageRow({
-                                row: entry.row,
-                                sourceRowIndex: entry.rowIndex,
-                                readSpecialField,
-                                styleOptions: stylePayload.styleOptions,
-                                deleteManageMode: state.deleteManageMode,
-                                selected: state.selectedMessageRowIndexes.includes(entry.rowIndex),
-                            })).join('')}
-                        </div>
-                    </div>
-                    ${state.deleteManageMode ? '' : `
-                        <div class="phone-special-message-compose">
-                            <div class="phone-special-message-compose-editor">
-                                <textarea
-                                    class="phone-special-message-compose-input"
-                                    rows="1"
-                                    placeholder="输入消息，按 Enter 发送"
-                                    ${state.sending ? 'disabled' : ''}
-                                >${escapeHtml(currentDraft)}</textarea>
-                                <button type="button" class="phone-special-message-send-btn" ${state.sending ? 'disabled' : ''}>${state.sending ? '...' : '发送'}</button>
-                            </div>
-                            <div class="phone-special-message-compose-meta">
-                                ${showComposeTemplateNote ? `<span class="phone-special-message-template-pill">${escapeHtml(activeAiInstructionPresetName)}</span>` : ''}
-                                ${showComposeStatus ? `<div class="phone-special-message-compose-status ${statusClass}">${escapeHtml(statusText || ' ')}</div>` : ''}
-                                ${showRetryButton && retryTarget ? `<button type="button" class="phone-special-message-retry-btn" ${state.sending ? 'disabled' : ''}>重试</button>` : ''}
-                            </div>
-                        </div>
-                    `}
-                </div>
-                ${state.mediaPreview ? renderInPhoneMediaPreview(state.mediaPreview.title, state.mediaPreview.content) : ''}
-            </div>
-        `;
-
-        bindWheelBridge(container);
-
-        const bindStableTapAction = (selector, handler) => {
-            const button = container.querySelector(selector);
-            if (!(button instanceof HTMLElement) || typeof handler !== 'function') return null;
-
-            const guard = getStableTapGuard(selector);
-            const POINTER_CLICK_SUPPRESS_MS = {
-                mouse: 80,
-                touch: 450,
-                pen: 450,
-                unknown: 80,
-            };
-            button.style.touchAction = 'manipulation';
-
-            const getEventTime = (event) => Number.isFinite(event?.timeStamp)
-                ? Number(event.timeStamp)
-                : Date.now();
-
-            button.addEventListener('pointerup', (event) => {
-                const pointerType = String(event.pointerType || 'unknown').trim().toLowerCase() || 'unknown';
-                guard.lastPointerType = pointerType;
-                guard.lastPointerHandledAt = getEventTime(event);
-                event.preventDefault();
-                event.stopPropagation();
-                handler();
-            });
-
-            button.addEventListener('click', (event) => {
-                const suppressWindow = POINTER_CLICK_SUPPRESS_MS[guard.lastPointerType] ?? POINTER_CLICK_SUPPRESS_MS.unknown;
-                const elapsed = getEventTime(event) - guard.lastPointerHandledAt;
-                const shouldSuppressSyntheticClick = elapsed >= 0 && elapsed <= suppressWindow;
-                if (shouldSuppressSyntheticClick) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    return;
-                }
-                event.preventDefault();
-                event.stopPropagation();
-                handler();
-            });
-
-            return button;
-        };
-
-        bindStableTapAction('.phone-nav-back', () => {
-            state.mode = 'conversation';
-            state.conversationId = null;
-            state.mediaPreview = null;
-            state.errorText = '';
-            state.statusText = '';
-            clearDeleteManageState();
-            render();
+        const detailView = renderMessageDetailView({
+            container,
+            tableName,
+            state,
+            readSpecialField,
+            createSpecialTemplateStylePayload,
+            templateMatch,
+            type,
         });
+        if (!detailView) return;
 
-        bindStableTapAction('.phone-special-nav-action-btn', () => {
-            state.deleteManageMode = !state.deleteManageMode;
-            state.deletingSelection = false;
-            state.selectedMessageRowIndexes = [];
-            renderKeepScroll();
-        });
+        const {
+            conversationId,
+            detailTitle,
+            rowEntriesInConv,
+        } = detailView;
 
-        bindStableTapAction('.phone-special-manage-select-all-btn', () => {
-            setSelectedMessageRowIndexes(rowEntriesInConv.map(entry => entry.rowIndex));
-            patchMessageManageUi();
-        });
-
-        bindStableTapAction('.phone-special-manage-clear-btn', () => {
-            setSelectedMessageRowIndexes([]);
-            patchMessageManageUi();
-        });
-
-        bindStableTapAction('.phone-special-manage-delete-btn', () => {
-            if (state.selectedMessageRowIndexes.length === 0 || state.deletingSelection) {
-                showInlineToast(container, '请先选择要删除的消息');
-                return;
-            }
-
-            showConfirmDialog(
-                container,
-                '确认删除',
-                `确定删除已选中的 ${state.selectedMessageRowIndexes.length} 条聊天消息吗？此操作无法撤销。`,
-                () => {
-                    void executeDeleteSelectedMessages(conversationId);
-                },
-                '删除',
-                '取消'
-            );
-        });
-
-        container.querySelectorAll('.phone-special-message-select-toggle').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const target = /** @type {HTMLElement} */ (btn);
-                const rowIndex = Number(target.dataset.rowIndex);
-                if (Number.isNaN(rowIndex) || state.deletingSelection) return;
-                const selectedSet = new Set(state.selectedMessageRowIndexes);
-                if (selectedSet.has(rowIndex)) {
-                    selectedSet.delete(rowIndex);
-                } else {
-                    selectedSet.add(rowIndex);
-                }
-                setSelectedMessageRowIndexes(Array.from(selectedSet));
-                patchMessageManageUi();
-            });
-        });
-
-        container.querySelectorAll('.phone-special-media-item').forEach(mediaEl => {
-            mediaEl.addEventListener('click', () => {
-                const target = /** @type {HTMLElement} */ (mediaEl);
-                const desc = normalizeMediaDesc(target.dataset.description);
-                if (!desc) return;
-                const title = String(target.dataset.mediaLabel || '媒体内容').trim() || '媒体内容';
-                state.mediaPreview = {
-                    title,
-                    content: desc,
-                };
-                renderKeepScroll();
-            });
-        });
-
-        const composeInput = /** @type {HTMLTextAreaElement | null} */ (container.querySelector('.phone-special-message-compose-input'));
-        if (composeInput) {
-            autoResizeComposeInput(composeInput);
-
-            composeInput.addEventListener('input', () => {
-                state.draftByConversation[conversationId] = String(composeInput.value || '');
-                if (state.errorText) {
-                    state.errorText = '';
-                }
-                autoResizeComposeInput(composeInput);
-                patchComposeUi();
-            });
-            composeInput.addEventListener('keydown', (event) => {
-                if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
-                event.preventDefault();
-                void handleSendMessage({
-                    conversationId,
-                    threadTitle: detailTitle || tableName,
-                });
-            });
-        }
-
-        container.querySelector('.phone-special-message-send-btn')?.addEventListener('click', () => {
-            void handleSendMessage({
-                conversationId,
-                threadTitle: detailTitle || tableName,
-            });
-        });
-
-        container.querySelector('.phone-special-message-retry-btn')?.addEventListener('click', () => {
-            void handleRetryMessage({
-                conversationId,
-                threadTitle: detailTitle || tableName,
-            });
-        });
-
-        container.querySelector('.phone-special-media-preview-close')?.addEventListener('click', closeMediaPreview);
-        container.querySelector('.phone-special-media-preview-mask')?.addEventListener('click', (e) => {
-            if (e.target !== e.currentTarget) return;
-            closeMediaPreview();
+        bindMessageDetailController({
+            container,
+            state,
+            conversationId,
+            detailTitle,
+            tableName,
+            rowEntriesInConv,
+            setSelectedMessageRowIndexes,
+            clearDeleteManageState,
+            patchMessageManageUi,
+            patchComposeUi,
+            render,
+            renderKeepScroll,
+            showInlineToast,
+            showConfirmDialog,
+            executeDeleteSelectedMessages,
+            normalizeMediaDesc,
+            autoResizeComposeInput,
+            handleSendMessage,
+            handleRetryMessage,
+            closeMediaPreview,
+            viewerRuntime: runtime,
         });
     };
 

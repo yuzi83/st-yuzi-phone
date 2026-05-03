@@ -1,4 +1,4 @@
-import { constrainPosition, savePhoneSetting } from '../settings.js';
+import { PHONE_CONTAINER_SIZE_LIMITS, constrainPosition, savePhoneSetting } from '../settings.js';
 import { RESIZE_BOUND_ATTR, getWindowInteractionRuntime } from './runtime.js';
 
 const resizeDeps = {
@@ -6,6 +6,22 @@ const resizeDeps = {
     savePhoneSetting,
     getWindowInteractionRuntime,
 };
+
+function resolveResizeBounds(startLeft, startTop) {
+    const widthLimit = PHONE_CONTAINER_SIZE_LIMITS.width;
+    const heightLimit = PHONE_CONTAINER_SIZE_LIMITS.height;
+    const viewportWidth = Number.isFinite(window.innerWidth) ? window.innerWidth : widthLimit.max;
+    const viewportHeight = Number.isFinite(window.innerHeight) ? window.innerHeight : heightLimit.max;
+    const availableWidth = Math.max(0, viewportWidth - startLeft);
+    const availableHeight = Math.max(0, viewportHeight - startTop);
+
+    return {
+        minWidth: widthLimit.min,
+        minHeight: heightLimit.min,
+        maxWidth: Math.max(widthLimit.min, Math.min(widthLimit.max, availableWidth)),
+        maxHeight: Math.max(heightLimit.min, Math.min(heightLimit.max, availableHeight)),
+    };
+}
 
 export function __test__setDeps(overrides = {}) {
     if (!overrides || typeof overrides !== 'object') return;
@@ -63,13 +79,15 @@ export function initPhoneShellResize() {
 
             event.preventDefault();
 
-            const minWidth = Math.min(280, window.innerWidth);
-            const minHeight = Math.min(520, window.innerHeight);
-            const maxWidth = Math.max(minWidth, window.innerWidth - startLeft);
-            const maxHeight = Math.max(minHeight, window.innerHeight - startTop);
+            const {
+                minWidth,
+                minHeight,
+                maxWidth,
+                maxHeight,
+            } = resolveResizeBounds(startLeft, startTop);
 
-            let nextWidth = startWidth;
-            let nextHeight = startHeight;
+            let nextWidth = Math.max(minWidth, Math.min(startWidth, maxWidth));
+            let nextHeight = Math.max(minHeight, Math.min(startHeight, maxHeight));
 
             const deltaX = event.clientX - startX;
             const deltaY = event.clientY - startY;

@@ -20,6 +20,7 @@ import {
     buildSettingsStatGridHtml,
     buildSettingsSummaryListHtml,
 } from './primitives.js';
+import { buildShellRegionHtml } from '../../view-regions.js';
 
 export {
     SETTINGS_ENTRY_META,
@@ -31,6 +32,7 @@ export {
     buildSettingsSectionHtml,
     buildSettingsPageFrame,
     buildSettingsHomeItemHtml,
+    buildShellRegionHtml,
     buildSettingsHomePageHtml,
     buildAppearancePageHtml,
     buildDatabaseTableChecklistHtml,

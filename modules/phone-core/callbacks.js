@@ -23,9 +23,9 @@ export function registerTableUpdateListener(callback) {
 
     const api = getDB();
     if (!api || typeof api.registerTableUpdateCallback !== 'function') {
-        logger.warn({
+        logger.debug({
             action: 'table-update.register',
-            message: '表格更新回调API不可用',
+            message: '表格更新回调API不可用（可选 API 缺失，已降级）',
         });
         return false;
     }
@@ -233,9 +233,9 @@ export function initSmartRefreshListener() {
     });
 
     if (!registered) {
-        logger.warn({
+        logger.debug({
             action: 'smart-refresh.setup',
-            message: 'smart refresh 监听器注册失败',
+            message: 'smart refresh 监听器注册失败（可选 API 缺失，已降级）',
         });
         return false;
     }

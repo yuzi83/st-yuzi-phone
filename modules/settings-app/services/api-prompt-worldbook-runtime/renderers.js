@@ -1,14 +1,17 @@
-import { escapeHtml, escapeHtmlAttr } from '../../../utils.js';
+import { escapeHtml, escapeHtmlAttr } from '../../../utils/dom-escape.js';
 import {
     filterEntries,
     getEntrySelectionState,
     setEntrySelectionState,
 } from '../worldbook-selection.js';
 
+const WORLDBOOK_ENTRIES_DELEGATED_CHANGE_KEY = '__stYuziPhoneWorldbookEntriesDelegatedChange';
+
 export function createWorldbookRenderers(ctx = {}) {
     const {
         container,
         state,
+        pageRuntime,
     } = ctx;
 
     const updateWorldbookStatus = () => {
@@ -61,9 +64,52 @@ export function createWorldbookRenderers(ctx = {}) {
         statusEl.textContent = statusText;
     };
 
+    const bindDelegatedChangeListener = (entriesContainer, listener) => {
+        if (pageRuntime && typeof pageRuntime.addEventListener === 'function') {
+            return pageRuntime.addEventListener(entriesContainer, 'change', listener);
+        }
+
+        entriesContainer.addEventListener('change', listener);
+        return () => {
+            entriesContainer.removeEventListener('change', listener);
+        };
+    };
+
+    const ensureWorldbookEntriesDelegation = (entriesContainer) => {
+        if (!(entriesContainer instanceof HTMLElement)) return;
+        if (typeof entriesContainer[WORLDBOOK_ENTRIES_DELEGATED_CHANGE_KEY] === 'function') return;
+
+        const onEntryCheckboxChange = (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLInputElement)) return;
+            if (!target.classList.contains('phone-worldbook-entry-checkbox')) return;
+
+            const sourceMode = String(state.worldbookSourceMode || 'manual');
+            const uid = parseInt(target.dataset.uid, 10);
+            const worldbookName = String(target.dataset.worldbook || '').trim();
+            const checked = !!target.checked;
+            if (!worldbookName || Number.isNaN(uid)) return;
+
+            setEntrySelectionState(worldbookName, uid, checked, { sourceMode });
+            updateWorldbookStatus();
+        };
+
+        const removeDelegatedChangeListener = bindDelegatedChangeListener(entriesContainer, onEntryCheckboxChange);
+        const cleanupDelegatedChangeListener = () => {
+            if (typeof removeDelegatedChangeListener === 'function') {
+                removeDelegatedChangeListener();
+            }
+            if (entriesContainer[WORLDBOOK_ENTRIES_DELEGATED_CHANGE_KEY] === cleanupDelegatedChangeListener) {
+                delete entriesContainer[WORLDBOOK_ENTRIES_DELEGATED_CHANGE_KEY];
+            }
+        };
+        entriesContainer[WORLDBOOK_ENTRIES_DELEGATED_CHANGE_KEY] = cleanupDelegatedChangeListener;
+    };
+
     const renderWorldbookEntriesList = () => {
         const entriesContainer = container.querySelector('#phone-worldbook-entries');
         if (!entriesContainer) return;
+        ensureWorldbookEntriesDelegation(entriesContainer);
 
         const sourceMode = String(state.worldbookSourceMode || 'manual');
         const filteredEntries = filterEntries(state.worldbookEntries, state.worldbookSearchQuery);
@@ -108,20 +154,12 @@ export function createWorldbookRenderers(ctx = {}) {
             return;
         }
 
-        let selectedCount = 0;
-        let enabledCount = 0;
-
         const entriesHtml = filteredEntries.map((entry) => {
             const uid = entry.uid;
             const name = entry.name || `条目 ${uid}`;
             const enabled = entry.enabled !== false;
             const sourceWorldbook = String(entry.__worldbookName || currentWorldbook || '').trim();
             const checked = sourceWorldbook ? getEntrySelectionState(sourceWorldbook, uid, sourceMode) : false;
-
-            if (enabled) {
-                enabledCount++;
-                if (checked) selectedCount++;
-            }
 
             const disabledClass = enabled ? '' : 'is-disabled';
             const worldbookMeta = sourceMode === 'character_bound' && sourceWorldbook
@@ -141,20 +179,6 @@ export function createWorldbookRenderers(ctx = {}) {
         }).join('');
 
         entriesContainer.innerHTML = entriesHtml;
-
-        entriesContainer.querySelectorAll('.phone-worldbook-entry-checkbox').forEach((checkbox) => {
-            checkbox.addEventListener('change', (event) => {
-                const target = event.target;
-                if (!(target instanceof HTMLInputElement)) return;
-
-                const uid = parseInt(target.dataset.uid, 10);
-                const worldbookName = String(target.dataset.worldbook || '').trim();
-                const checked = !!target.checked;
-                if (!worldbookName || Number.isNaN(uid)) return;
-                setEntrySelectionState(worldbookName, uid, checked, { sourceMode });
-                updateWorldbookStatus();
-            });
-        });
 
         updateWorldbookStatus();
     };

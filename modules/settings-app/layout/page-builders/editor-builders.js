@@ -5,12 +5,13 @@ import {
     buildSettingsStatGridHtml,
     buildSettingsSummaryListHtml,
 } from '../primitives.js';
-import { PHONE_ICONS } from '../../../phone-home.js';
+import { PHONE_ICONS } from '../../../phone-home/icons.js';
 import {
     PHONE_BEAUTIFY_TEMPLATE_FORMAT,
     PHONE_BEAUTIFY_TEMPLATE_SCHEMA_VERSION,
 } from '../../../phone-beautify-templates/shared.js';
-import { escapeHtml, escapeHtmlAttr } from '../../../utils.js';
+import { escapeHtml, escapeHtmlAttr } from '../../../utils/dom-escape.js';
+import { buildShellRegionHtml } from '../../../view-regions.js';
 
 export function buildPromptEditorPageHtml({ title, isNew, promptEditorName, promptEditorContent }) {
     const heroHtml = buildSettingsHeroHtml({
@@ -35,7 +36,7 @@ export function buildPromptEditorPageHtml({ title, isNew, promptEditorName, prom
 
         ${buildSettingsSectionHtml({
             title: '片段 JSON',
-            desc: '推荐返回上一级使用分段片段编辑器；这里仅保留兼容式 JSON 编辑。',
+            desc: '推荐返回上一级使用分段片段编辑器；这里仅保留兼容式 JSON 编辑。未在 JSON 中提供 mediaMarkers 时会保留当前预设媒体标记，导入完整预设 JSON 可覆盖媒体标记。',
             bodyHtml: `
                 <textarea id="phone-prompt-editor-content" class="phone-settings-textarea"
                     placeholder="请输入 AI 指令片段 JSON..." rows="14">${escapeHtml(promptEditorContent || '')}</textarea>
@@ -137,7 +138,7 @@ export function buildAiInstructionPresetsPageHtml({
 
         ${buildSettingsSectionHtml({
             title: '媒体标记',
-            desc: '配置历史消息中图片与视频描述的前缀，避免这些标记继续在运行时写死。',
+            desc: '配置历史消息中图片与视频描述的前缀；这些值会写入实时回复历史 prompt，不只是界面显示文案。',
             bodyHtml: `
                 <div class="phone-ai-preset-media-grid">
                     <label class="phone-ai-preset-segment-field">
@@ -167,6 +168,9 @@ export function buildAiInstructionPresetsPageHtml({
                 </div>
                 <div class="phone-settings-note">
                     主槽位 A / B 会在普通片段之前按顺序拼接；未分配槽位的片段保持原顺序。导入或保存后的片段默认都会参与 prompt。
+                </div>
+                <div class="phone-settings-note">
+                    实时回复支持多气泡输出协议：使用 <code>消息1：</code>、<code>正文：</code>、<code>图片描述：</code>、<code>视频描述：</code>，需要连发时继续写 <code>消息2：</code>，最多 4 条；没有图片或视频时对应描述写 <code>none</code>。
                 </div>
                 <div class="phone-settings-note">
                     <strong>可用占位符：</strong><br>
@@ -219,13 +223,20 @@ export function buildApiPromptConfigPageHtml({
             { text: '预设仓库已独立', tone: 'info' },
         ],
     });
-
-    const bodyHtml = `
-        ${!apiAvailability.ok
+    const heroRegionHtml = buildShellRegionHtml({
+        region: 'api-prompt-hero',
+        contentHtml: heroHtml,
+    });
+    const apiStatusRegionHtml = buildShellRegionHtml({
+        region: 'api-prompt-api-status',
+        contentHtml: !apiAvailability.ok
             ? `<div class="phone-settings-inline-status is-danger"><span class="phone-settings-inline-status-dot"></span><span class="phone-settings-inline-status-text">${escapeHtml(apiAvailability.message || '数据库 API 不可用')}</span></div>`
-            : ''}
+            : '',
+    });
 
-        ${buildSettingsSectionHtml({
+    const apiPresetsSectionHtml = buildShellRegionHtml({
+        region: 'api-prompt-api-presets',
+        contentHtml: buildSettingsSectionHtml({
             title: 'API 预设',
             desc: '分别配置填表与剧情推进所使用的接口预设，方便在不同任务场景间切换。',
             bodyHtml: `
@@ -248,9 +259,12 @@ export function buildApiPromptConfigPageHtml({
                     </select>
                 </div>
             `,
-        })}
+        }),
+    });
 
-        ${buildSettingsSectionHtml({
+    const storyContextSectionHtml = buildShellRegionHtml({
+        region: 'api-prompt-story-context',
+        contentHtml: buildSettingsSectionHtml({
             title: '正文上下文',
             desc: '决定手机聊天是否读取正文最近上下文，以及读取的轮数。',
             bodyHtml: `
@@ -265,9 +279,12 @@ export function buildApiPromptConfigPageHtml({
                 </div>
                 <p class="phone-settings-desc">该页面只负责上下文注入和 API 选择；system 指令内容请到独立的“AI 指令预设”页编辑。</p>
             `,
-        })}
+        }),
+    });
 
-        ${buildSettingsSectionHtml({
+    const runtimeParamsSectionHtml = buildShellRegionHtml({
+        region: 'api-prompt-runtime-params',
+        contentHtml: buildSettingsSectionHtml({
             title: '实时回复 Prompt 参数',
             desc: '这些参数会直接进入消息记录表的实时回复运行时，分别控制历史裁剪、回复长度、超时和世界书裁剪范围。',
             bodyHtml: `
@@ -297,9 +314,12 @@ export function buildApiPromptConfigPageHtml({
                         value="${escapeHtmlAttr(String(phoneChatWorldbookMaxChars))}">
                 </div>
             `,
-        })}
+        }),
+    });
 
-        ${buildSettingsSectionHtml({
+    const worldbookWorkbenchSectionHtml = buildShellRegionHtml({
+        region: 'api-prompt-worldbook-workbench',
+        contentHtml: buildSettingsSectionHtml({
             title: '世界书工作台',
             desc: '切换世界书来源、筛选条目并批量维护选中状态。',
             actionsHtml: `
@@ -339,12 +359,20 @@ export function buildApiPromptConfigPageHtml({
                     <span id="phone-worldbook-status-text">请先选择世界书</span>
                 </div>
             `,
-        })}
+        }),
+    });
+
+    const bodyHtml = `
+        ${apiStatusRegionHtml}
+        ${apiPresetsSectionHtml}
+        ${storyContextSectionHtml}
+        ${runtimeParamsSectionHtml}
+        ${worldbookWorkbenchSectionHtml}
     `;
 
     return buildSettingsPageFrame({
         title: 'AI 上下文与世界书',
-        heroHtml,
+        heroHtml: heroRegionHtml,
         bodyClass: 'phone-app-body phone-settings-scroll phone-settings-open',
         bodyHtml,
     });
@@ -376,25 +404,31 @@ export function buildBeautifyTemplatePageHtml({
         ],
         statsHtml,
     });
+    const heroRegionHtml = buildShellRegionHtml({
+        region: 'beautify-hero',
+        contentHtml: heroHtml,
+    });
 
     const activeSummaryHtml = buildSettingsSummaryListHtml([
         { label: '专属启用', value: activeSpecialSummary },
         { label: '通用启用', value: activeGenericSummary },
     ]);
-
-    const bodyHtml = `
-        ${buildSettingsSectionHtml({
+    const summarySectionHtml = buildShellRegionHtml({
+        region: 'beautify-summary',
+        contentHtml: buildSettingsSectionHtml({
             title: '启用概览',
-            desc: '专属模板按消息 / 动态 / 论坛分别启用，通用模板只会激活一个。',
+            desc: '专属模板仅用于消息记录表，通用模板只会激活一个。',
             bodyHtml: `
                 ${activeSummaryHtml}
                 <div class="phone-settings-note">支持导入、导出、启用与删除用户模板，便于离线维护模板文件。</div>
             `,
-        })}
-
-        ${buildSettingsSectionHtml({
+        }),
+    });
+    const specialSectionHtml = buildShellRegionHtml({
+        region: 'beautify-special-library',
+        contentHtml: buildSettingsSectionHtml({
             title: '专属模板库',
-            desc: '用于“消息记录表 / 动态表 / 论坛表”等专属场景。每个子类型可分别启用一个模板。',
+            desc: '用于“消息记录表”专属场景。该分区只保留消息记录表模板。',
             bodyHtml: `
                 <div class="phone-settings-action phone-settings-action-wrap phone-beautify-toolbar">
                     <button type="button" class="phone-settings-btn" id="phone-beautify-import-special-btn">导入模板</button>
@@ -404,9 +438,11 @@ export function buildBeautifyTemplatePageHtml({
                 <input type="file" id="phone-beautify-import-special-input" accept="application/json,.json" style="display:none">
                 <div class="phone-beautify-list" id="phone-beautify-list-special">${specialListHtml}</div>
             `,
-        })}
-
-        ${buildSettingsSectionHtml({
+        }),
+    });
+    const genericSectionHtml = buildShellRegionHtml({
+        region: 'beautify-generic-library',
+        contentHtml: buildSettingsSectionHtml({
             title: '通用模板库',
             desc: '用于通用表格展示风格，该分区始终只会启用一个模板。',
             bodyHtml: `
@@ -418,12 +454,18 @@ export function buildBeautifyTemplatePageHtml({
                 <input type="file" id="phone-beautify-import-generic-input" accept="application/json,.json" style="display:none">
                 <div class="phone-beautify-list" id="phone-beautify-list-generic">${genericListHtml}</div>
             `,
-        })}
+        }),
+    });
+
+    const bodyHtml = `
+        ${summarySectionHtml}
+        ${specialSectionHtml}
+        ${genericSectionHtml}
     `;
 
     return buildSettingsPageFrame({
         title: '模板工坊',
-        heroHtml,
+        heroHtml: heroRegionHtml,
         bodyClass: 'phone-app-body phone-settings-scroll phone-settings-open',
         bodyHtml,
     });

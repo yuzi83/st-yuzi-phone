@@ -21,8 +21,25 @@ export {
 } from './chat-support/ai-instruction-store.js';
 
 export {
-    PHONE_CHAT_DEFAULT_SETTINGS,
+    PHONE_AI_INSTRUCTION_DEFAULT_MAIN_SLOT,
+    PHONE_AI_INSTRUCTION_MAIN_SLOT_A,
+    PHONE_AI_INSTRUCTION_MAIN_SLOT_B,
+    PHONE_AI_INSTRUCTION_MAIN_SLOT_OPTIONS,
+    PHONE_AI_INSTRUCTION_MAIN_SLOT_ORDER,
+    normalizePhoneAiInstructionMainSlot,
+    normalizePhoneAiInstructionSegmentMainSlot,
+    resolvePhoneAiInstructionMainSlotOrder,
+} from './chat-support/ai-instruction-slots.js';
+
+export {
     normalizePhoneChatSettings,
+    normalizePhoneAiInstructionSettings,
+    normalizePhoneAiInstructionMediaMarkers,
+    normalizeWorldbookSelectionSettings,
+} from '../settings.js';
+
+export {
+    PHONE_CHAT_DEFAULT_SETTINGS,
     getPhoneChatSettings,
     savePhoneChatSettingsPatch,
     getPhoneWorldbookSelectionSettings,
@@ -34,8 +51,10 @@ export {
 export {
     getSheetDataByKey,
     buildPhoneMessagePayload,
+    buildPhoneMessagePayloadFromHeaders,
     insertPhoneMessageRecord,
     updatePhoneMessageRecord,
+    appendPhoneMessageRecordsBatch,
     refreshPhoneTableProjection,
     refreshPhoneMessageProjection,
     dispatchPhoneTableUpdated,

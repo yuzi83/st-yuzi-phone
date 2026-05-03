@@ -4,7 +4,7 @@
  * 文字全部显示，不省略；删除态支持一级/二级标题也可删除
  */
 
-import { escapeHtml } from '../utils.js';
+import { escapeHtml } from '../utils/dom-escape.js';
 
 /**
  * 将嵌套对象扁平化为分组结构
