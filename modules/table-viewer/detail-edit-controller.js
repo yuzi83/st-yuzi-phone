@@ -286,18 +286,7 @@ export function bindGenericDetailEditController(options = {}) {
             });
 
             const success = await saveTableData(nextData);
-            if (!isViewerActive()) {
-                logger.warn({
-                    action: 'row.save.viewer-inactive',
-                    message: '详情行保存持久化后 viewer 已失活，跳过后续 UI 更新',
-                    context: {
-                        sheetKey,
-                        rowIndex: saveRowIndex,
-                        success: !!success,
-                    },
-                });
-                return;
-            }
+            if (!isViewerActive()) return;
 
             if (success) {
                 Object.entries(state.draftValues).forEach(([colKey, draft]) => {
@@ -325,16 +314,6 @@ export function bindGenericDetailEditController(options = {}) {
             if (isViewerActive()) {
                 state.setSaving(false);
                 renderKeepScroll();
-            } else {
-                logger.warn({
-                    action: 'row.save.finish.skip',
-                    message: '详情行保存 finally 执行时 viewer 已失活，无法刷新当前视图',
-                    context: {
-                        sheetKey,
-                        rowIndex: saveRowIndex,
-                        saving: !!state.saving,
-                    },
-                });
             }
         }
     }

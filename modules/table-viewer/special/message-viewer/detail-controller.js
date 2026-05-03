@@ -252,6 +252,7 @@ function dispatchDetailAction(container, context, actionEl) {
         case 'send-message':
             handleSendMessage(context);
             return true;
+        case 'retry-message':
         case 'retry-archive':
             handleRetryArchive(context);
             return true;

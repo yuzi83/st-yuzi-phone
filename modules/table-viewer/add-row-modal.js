@@ -337,19 +337,7 @@ export function showGenericAddRowModal(options = {}) {
 
             const localRowsBefore = rows.length;
             const result = await insertTableRow(tableName, newData);
-            if (!isViewerActive()) {
-                logger.warn({
-                    action: 'add-row.insert.viewer-inactive',
-                    message: '新增条目写入后 viewer 已失活，跳过弹窗状态更新',
-                    context: {
-                        tableName,
-                        sheetKey,
-                        ok: !!result?.ok,
-                        rowIndex: result?.rowIndex,
-                    },
-                });
-                return;
-            }
+            if (!isViewerActive()) return;
 
             if (result.ok) {
                 closeModal();
@@ -419,18 +407,7 @@ export function showGenericAddRowModal(options = {}) {
                 },
                 error: err,
             });
-            if (!isViewerActive()) {
-                logger.warn({
-                    action: 'add-row.exception.viewer-inactive',
-                    message: '新增异常后 viewer 已失活，跳过弹窗按钮恢复',
-                    context: {
-                        tableName,
-                        sheetKey,
-                    },
-                    error: err,
-                });
-                return;
-            }
+            if (!isViewerActive()) return;
             showInlineToast(container, `新增异常: ${err?.message || '未知错误'}`);
             if (confirmBtn) {
                 confirmBtn.disabled = false;

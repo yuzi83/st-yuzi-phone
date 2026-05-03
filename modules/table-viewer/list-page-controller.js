@@ -269,19 +269,7 @@ async function handleDeleteRow(container, el) {
         if (typeof nextContext.setSuppressExternalTableUpdate === 'function') {
             nextContext.setSuppressExternalTableUpdate(false);
         }
-        if (!isGenericListContextActive(nextContext)) {
-            logger.warn({
-                action: 'row.delete.finish.skip',
-                message: '列表行删除 finally 执行时上下文已失活，无法刷新当前视图',
-                context: {
-                    sheetKey: String(nextContext.sheetKey || ''),
-                    rowIndex: idx,
-                    deletingRowIndex: nextContext.state.deletingRowIndex,
-                    outcome: deleteOutcome,
-                },
-            });
-            return;
-        }
+        if (!isGenericListContextActive(nextContext)) return;
 
         nextContext.state.batchUpdate({
             deletingRowIndex: -1,

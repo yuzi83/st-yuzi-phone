@@ -8,6 +8,8 @@ import {
     getPhoneChatSettings,
     getPhoneChatWorldbookContext,
     getPhoneStoryContext,
+    insertPhoneMessageRecord,
+    updatePhoneMessageRecord,
 } from '../../phone-core/chat-support.js';
 import {
     buildPhoneChatConversationMessages,
@@ -28,6 +30,8 @@ const LOCAL_TEMP_KIND_KEY = '__yuziPhoneArchiveKind';
 const defaultMessageViewerActionDeps = {
     appendPhoneMessageRecordsBatch,
     buildPhoneMessagePayloadFromHeaders,
+    insertPhoneMessageRecord,
+    updatePhoneMessageRecord,
     callPhoneChatAI,
     getCurrentPhoneAiInstructionPreset,
     getCurrentCharacterDisplayName,

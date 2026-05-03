@@ -100,10 +100,7 @@ export function renderTheaterScene(container, sceneId, options = {}) {
     const lifecycle = createTheaterLifecycleContext(container, state.sceneId, options);
     const renderCurrentScene = () => {
         if (!lifecycle.isActive()) return;
-        renderTheaterScene(container, state.sceneId, {
-            ...options,
-            allowDetachedInitialRender: false,
-        });
+        renderTheaterScene(container, state.sceneId, options);
     };
     const rawData = getTableData();
     const viewModel = buildTheaterSceneViewModel(rawData, state.sceneId);

@@ -106,7 +106,7 @@ export function renderMessageDetailView(options = {}) {
                         <div class="phone-special-message-compose-meta">
                             ${showComposeTemplateNote ? `<span class="phone-special-message-template-pill">${escapeHtml(activeAiInstructionPresetName)}</span>` : ''}
                             ${showComposeStatus ? `<div class="phone-special-message-compose-status ${statusClass}">${escapeHtml(statusText || ' ')}</div>` : ''}
-                            ${showRetryButton && archiveRetryTarget ? `<button type="button" class="phone-special-message-retry-btn" data-action="retry-archive" ${state.sending ? 'disabled' : ''}>重新归档</button>` : ''}
+                            ${showRetryButton && archiveRetryTarget ? `<button type="button" class="phone-special-message-retry-btn" data-action="retry-message" ${state.sending ? 'disabled' : ''}>重新归档</button>` : ''}
                         </div>
                     </div>
                 `}
