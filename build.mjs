@@ -5,7 +5,7 @@
 //      node build.mjs --watch（开发模式：文件变化自动重建）
 
 import * as esbuild from 'esbuild';
-import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,6 +41,25 @@ function assertBuildOutput(filePath, label) {
         throw new Error(`[build] ${label} 构建产物为空或不是文件: ${filePath}`);
     }
     return stats.size;
+}
+
+function normalizeSourceMapLineEndings(filePath) {
+    if (!existsSync(filePath)) return;
+
+    const raw = readFileSync(filePath, 'utf8');
+    const sourceMap = JSON.parse(raw);
+    if (!Array.isArray(sourceMap.sourcesContent)) return;
+
+    let changed = false;
+    sourceMap.sourcesContent = sourceMap.sourcesContent.map((content) => {
+        if (typeof content !== 'string') return content;
+        const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        if (normalized !== content) changed = true;
+        return normalized;
+    });
+
+    if (!changed) return;
+    writeFileSync(filePath, `${JSON.stringify(sourceMap)}\n`, 'utf8');
 }
 
 const sharedOptions = {
@@ -85,6 +104,8 @@ if (isWatch) {
         esbuild.build(jsBuild),
         esbuild.build(cssBuild),
     ]);
+    normalizeSourceMapLineEndings(`${jsOutfile}.map`);
+    normalizeSourceMapLineEndings(`${cssOutfile}.map`);
 
     const jsSize = assertBuildOutput(jsOutfile, 'JS');
     const cssSize = assertBuildOutput(cssOutfile, 'CSS');
