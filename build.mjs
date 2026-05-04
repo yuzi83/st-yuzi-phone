@@ -50,16 +50,14 @@ function normalizeSourceMapLineEndings(filePath) {
     const sourceMap = JSON.parse(raw);
     if (!Array.isArray(sourceMap.sourcesContent)) return;
 
-    let changed = false;
     sourceMap.sourcesContent = sourceMap.sourcesContent.map((content) => {
         if (typeof content !== 'string') return content;
-        const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-        if (normalized !== content) changed = true;
-        return normalized;
+        return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     });
 
-    if (!changed) return;
-    writeFileSync(filePath, `${JSON.stringify(sourceMap)}\n`, 'utf8');
+    const normalizedRaw = `${JSON.stringify(sourceMap)}\n`;
+    if (normalizedRaw === raw) return;
+    writeFileSync(filePath, normalizedRaw, 'utf8');
 }
 
 const sharedOptions = {
