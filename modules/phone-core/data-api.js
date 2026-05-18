@@ -14,6 +14,7 @@ export {
 export {
     getTableLockState,
     remapTableLockStateAfterRowDelete,
+    remapTableLockStateAfterRowsDelete,
     setTableCellLock,
     setTableRowLock,
     isTableRowLocked,

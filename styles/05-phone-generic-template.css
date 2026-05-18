@@ -409,8 +409,7 @@
 
 .phone-generic-root.phone-generic-template-scope .phone-settings-btn,
 .phone-generic-root.phone-generic-template-scope .phone-cell-lock-btn,
-.phone-generic-root.phone-generic-template-scope .phone-row-lock-chip,
-.phone-generic-root.phone-generic-template-scope .phone-row-delete-chip {
+.phone-generic-root.phone-generic-template-scope .phone-row-lock-chip {
     background: var(--_gt-action-btn-bg);
     border-color: var(--_gt-action-btn-border);
     color: var(--_gt-action-btn-text);
@@ -499,6 +498,67 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-nav-placeholder {
+    flex: 0 0 72px;
+    width: 72px;
+    min-width: 72px;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-actions {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+    max-width: 48%;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    min-width: 42px;
+    padding: 0 9px;
+    border-radius: 999px;
+    border: 1px solid var(--_gt-action-btn-border);
+    background: rgba(255, 255, 255, 0.74);
+    color: var(--_gt-muted-text);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    transition: border-color var(--_gt-motion-fast) ease, background var(--_gt-motion-fast) ease, color var(--_gt-motion-fast) ease, opacity var(--_gt-motion-fast) ease;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn:hover,
+.phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn.is-active {
+    border-color: var(--_gt-accent-border);
+    background: var(--_gt-accent-soft);
+    color: var(--_gt-accent-strong);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn.is-danger {
+    border-color: rgba(220, 38, 38, 0.22);
+    background: rgba(220, 38, 38, 0.08);
+    color: var(--_gt-danger);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn.is-danger:hover {
+    border-color: rgba(220, 38, 38, 0.36);
+    background: rgba(220, 38, 38, 0.14);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn:disabled,
+.phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn:disabled:hover {
+    border-color: var(--_gt-action-btn-border);
+    background: rgba(255, 255, 255, 0.42);
+    color: var(--_gt-muted-text);
+    cursor: not-allowed;
+    opacity: 0.48;
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-slot-body {
@@ -791,6 +851,15 @@
     opacity: 0.74;
 }
 
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-item.is-delete-selected {
+    border-color: rgba(220, 38, 38, 0.24);
+    background: rgba(220, 38, 38, 0.06);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-item.is-delete-selected .phone-generic-slot-list-main {
+    color: var(--_gt-danger);
+}
+
 .phone-generic-root.phone-generic-template-scope .phone-generic-list-item-content {
     display: flex;
     flex: 1;
@@ -852,6 +921,28 @@
     flex-direction: column;
     align-items: flex-end;
     gap: 4px;
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-row-select-circle {
+    border-color: rgba(220, 38, 38, 0.34);
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-row-select-circle:hover,
+.phone-generic-root.phone-generic-template-scope .phone-row-select-circle:focus-visible {
+    border-color: rgba(220, 38, 38, 0.58);
+    background: rgba(220, 38, 38, 0.08);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-row-select-circle.is-selected {
+    border-color: rgba(220, 38, 38, 0.72);
+    background: rgba(220, 38, 38, 0.16);
+    color: var(--_gt-danger);
+}
+
+.phone-generic-root.phone-generic-template-scope .phone-row-select-circle.disabled {
+    border-color: rgba(148, 163, 184, 0.22);
+    background: rgba(248, 250, 252, 0.58);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-arrow {
@@ -1082,6 +1173,27 @@
         padding-top: max(42px, calc(18px + env(safe-area-inset-top)));
     }
 
+    .phone-generic-root.phone-generic-template-scope .phone-generic-slot-nav.is-generic-delete-mode {
+        gap: 8px;
+    }
+
+    .phone-generic-root.phone-generic-template-scope .phone-generic-slot-nav.is-generic-delete-mode .phone-nav-title {
+        padding: 0 4px;
+        font-size: calc(var(--_gt-typo-nav-title-size) - 1px);
+    }
+
+    .phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-actions {
+        gap: 4px;
+        max-width: 52%;
+    }
+
+    .phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn {
+        min-width: 34px;
+        min-height: 28px;
+        padding: 0 7px;
+        font-size: 10px;
+    }
+
     .phone-generic-root.phone-generic-template-scope .phone-generic-slot-body {
         padding: var(--_gt-gap-md);
         padding-bottom: calc(var(--_gt-gap-md) + 92px);
@@ -1227,8 +1339,7 @@
     }
 
     .phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-arrow,
-    .phone-generic-root.phone-generic-template-scope .phone-row-lock-chip,
-    .phone-generic-root.phone-generic-template-scope .phone-row-delete-chip {
+    .phone-generic-root.phone-generic-template-scope .phone-row-lock-chip {
         min-width: 52px;
     }
 }

@@ -2,6 +2,7 @@ import { Logger } from '../error-handler.js';
 import { createGenericTemplateStylePayload } from './generic-style-payload.js';
 import {
     buildGenericListPageHtml,
+    buildGenericListNavHtml,
     buildGenericListToolbarHtml,
     buildGenericListToolbarActionsHtml,
     buildGenericListToolbarInfoHtml,
@@ -20,11 +21,20 @@ import {
 const logger = Logger.withScope({ scope: 'table-viewer/list-page-renderer', feature: 'table-viewer' });
 
 const GENERIC_LIST_ROOT_SELECTOR = '.phone-generic-root';
+const GENERIC_NAV_REGION_SELECTOR = '[data-generic-list-region="nav"]';
 const GENERIC_TOOLBAR_REGION_SELECTOR = '[data-generic-list-region="toolbar"]';
 const GENERIC_TOOLBAR_ACTIONS_REGION_SELECTOR = '[data-generic-toolbar-region="actions"]';
 const GENERIC_TOOLBAR_INFO_REGION_SELECTOR = '[data-generic-toolbar-region="info"]';
 const GENERIC_CONTENT_REGION_SELECTOR = '[data-generic-list-region="content"]';
 const GENERIC_BOTTOM_BAR_REGION_SELECTOR = '[data-generic-list-region="bottom-bar"]';
+
+function normalizeSelectedDeleteRowIndexes(rowIndexes = []) {
+    return Array.from(new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
+        .map((value) => Number(value))
+        .filter(Number.isInteger)
+        .filter((value) => value >= 0)))
+        .sort((a, b) => a - b);
+}
 
 function buildGenericListPageViewModel(options = {}) {
     const {
@@ -33,13 +43,19 @@ function buildGenericListPageViewModel(options = {}) {
         headers = [],
         rawHeaders = [],
         genericMatch,
+        searchQueryOverride,
     } = options;
 
     const totalRowCount = rows.length;
-    const searchQuery = normalizeCellDisplayValue(state.listSearchQuery || '');
+    const searchQuerySource = typeof searchQueryOverride === 'undefined'
+        ? state.listSearchQuery
+        : searchQueryOverride;
+    const searchQuery = normalizeCellDisplayValue(searchQuerySource || '');
     const searchQueryLower = searchQuery.toLowerCase();
     const lockRows = new Set((state.lockState?.rows || []).filter(Number.isInteger));
-    const deletingAny = state.deletingRowIndex >= 0;
+    const selectedDeleteRows = new Set(normalizeSelectedDeleteRowIndexes(state.selectedDeleteRowIndexes || [])
+        .filter((rowIndex) => rowIndex < totalRowCount && !lockRows.has(rowIndex)));
+    const deletingAny = state.deletingRowIndex >= 0 || !!state.deletingSelection;
     const genericStylePayload = createGenericTemplateStylePayload(genericMatch, 'list');
     const toolbarOptions = genericStylePayload.structureOptions?.toolbar || {};
     const listItemOptions = genericStylePayload.structureOptions?.listItem || {};
@@ -67,8 +83,10 @@ function buildGenericListPageViewModel(options = {}) {
         const rowDataSignature = Array.isArray(row)
             ? row.map((value) => normalizeCellDisplayValue(value)).join('\u001f')
             : normalizeCellDisplayValue(row);
+        const deleteSelected = selectedDeleteRows.has(rowIndex);
         return {
             ...rowViewModel,
+            deleteSelected,
             rowKey: `row:${rowIndex}`,
             rowVersion: [
                 rowIndex,
@@ -76,6 +94,7 @@ function buildGenericListPageViewModel(options = {}) {
                 rowViewModel.title,
                 rowViewModel.nonEmptyCount,
                 rowViewModel.rowLocked ? 'locked' : 'unlocked',
+                deleteSelected ? 'delete-selected' : 'delete-unselected',
                 rowViewModel.statusText,
                 rowViewModel.statusTone,
                 rowViewModel.timeText,
@@ -91,6 +110,15 @@ function buildGenericListPageViewModel(options = {}) {
         : filteredRows;
 
     const visibleCount = filteredRows.length;
+    const selectableDeleteRowIndexes = orderedFilteredRows
+        .filter((viewModel) => !viewModel.rowLocked)
+        .map((viewModel) => viewModel.rowIndex);
+    const visibleDeleteRowIndexes = new Set(selectableDeleteRowIndexes);
+    const selectedDeleteCount = Array.from(selectedDeleteRows)
+        .filter((rowIndex) => visibleDeleteRowIndexes.has(rowIndex)).length;
+    const selectableDeleteCount = selectableDeleteRowIndexes.length;
+    const allVisibleDeleteRowsSelected = selectableDeleteCount > 0
+        && selectableDeleteRowIndexes.every((rowIndex) => selectedDeleteRows.has(rowIndex));
     const emptyStateTitle = totalRowCount === 0
         ? '还没有任何条目'
         : '没有匹配到相关条目';
@@ -100,7 +128,7 @@ function buildGenericListPageViewModel(options = {}) {
     const toolbarHint = state.lockManageMode
         ? '锁定管理中：点击右侧标签切换条目锁定状态。'
         : state.deleteManageMode
-            ? '删除管理中：点击右侧删除按钮即可移除条目。'
+            ? '删除管理中：点击右侧圆圈选择条目，可在标题栏全选、清空或批量删除。'
             : '点击条目进入详情页；支持搜索、锁定、删除与新增操作。';
 
     return {
@@ -122,6 +150,11 @@ function buildGenericListPageViewModel(options = {}) {
         showDeleteAction,
         deletingAny,
         deletingRowIndex: state.deletingRowIndex,
+        deletingSelection: !!state.deletingSelection,
+        selectedDeleteCount,
+        selectableDeleteCount,
+        selectableDeleteRowIndexes,
+        allVisibleDeleteRowsSelected,
         emptyStateTitle,
         emptyStateDesc,
         lockManageMode: state.lockManageMode,
@@ -133,6 +166,10 @@ function buildGenericListPageViewModel(options = {}) {
 function buildGenericListRegionHtml(tableName, viewModel) {
     return {
         fullPageHtml: buildGenericListPageHtml({
+            tableName,
+            ...viewModel,
+        }),
+        navHtml: buildGenericListNavHtml({
             tableName,
             ...viewModel,
         }),
@@ -160,6 +197,7 @@ function buildGenericListRowPatchOptions(viewModel) {
         deleteManageMode: viewModel.deleteManageMode,
         deletingAny: viewModel.deletingAny,
         deletingRowIndex: viewModel.deletingRowIndex,
+        deletingSelection: viewModel.deletingSelection,
     };
 }
 
@@ -173,6 +211,8 @@ function buildGenericListRowRenderVersion(rowViewModel, rowPatchOptions) {
         rowPatchOptions.lockManageMode ? 'lock:1' : 'lock:0',
         rowPatchOptions.deleteManageMode ? 'delete:1' : 'delete:0',
         rowPatchOptions.deletingAny ? 'deleting:any' : 'deleting:none',
+        rowPatchOptions.deletingSelection ? 'deleting:selection' : 'deleting:single',
+        rowViewModel.deleteSelected ? 'selected:1' : 'selected:0',
         `deleting:${rowPatchOptions.deletingRowIndex}`,
     ].join('|');
 }
@@ -262,6 +302,7 @@ function resolveGenericListRegionPatchPlan(changedKeys = []) {
     if (!Array.isArray(changedKeys) || changedKeys.length === 0) {
         return {
             preserveToolbarSearch: true,
+            updateNav: true,
             updateToolbarActions: true,
             updateToolbarInfo: true,
             updateContent: true,
@@ -270,16 +311,23 @@ function resolveGenericListRegionPatchPlan(changedKeys = []) {
     }
 
     const changedKeySet = new Set(changedKeys);
+    const deleteSelectionChanged = changedKeySet.has('selectedDeleteRowIndexes') || changedKeySet.has('deletingSelection');
     return {
         preserveToolbarSearch: true,
+        updateNav: changedKeySet.has('deleteManageMode')
+            || changedKeySet.has('listSearchQuery')
+            || changedKeySet.has('listSortDescending')
+            || changedKeySet.has('lockState')
+            || deleteSelectionChanged,
         updateToolbarActions: changedKeySet.has('listSearchQuery') || changedKeySet.has('listSortDescending'),
-        updateToolbarInfo: changedKeySet.has('listSearchQuery') || changedKeySet.has('lockManageMode') || changedKeySet.has('deleteManageMode'),
+        updateToolbarInfo: changedKeySet.has('listSearchQuery') || changedKeySet.has('lockManageMode') || changedKeySet.has('deleteManageMode') || deleteSelectionChanged,
         updateContent: changedKeySet.has('listSearchQuery')
             || changedKeySet.has('listSortDescending')
             || changedKeySet.has('lockManageMode')
             || changedKeySet.has('deleteManageMode')
             || changedKeySet.has('lockState')
-            || changedKeySet.has('deletingRowIndex'),
+            || changedKeySet.has('deletingRowIndex')
+            || deleteSelectionChanged,
         updateBottomBar: changedKeySet.has('lockManageMode') || changedKeySet.has('deleteManageMode'),
     };
 }
@@ -287,12 +335,14 @@ function resolveGenericListRegionPatchPlan(changedKeys = []) {
 function patchGenericListRegions(container, regionHtml, options = {}) {
     const {
         preserveToolbarSearch = false,
+        updateNav = true,
         updateToolbarActions = true,
         updateToolbarInfo = true,
         updateContent = true,
         updateBottomBar = true,
     } = options;
     const root = container.querySelector(GENERIC_LIST_ROOT_SELECTOR);
+    const navRegion = container.querySelector(GENERIC_NAV_REGION_SELECTOR);
     const toolbarRegion = container.querySelector(GENERIC_TOOLBAR_REGION_SELECTOR);
     const toolbarActionsRegion = container.querySelector(GENERIC_TOOLBAR_ACTIONS_REGION_SELECTOR);
     const toolbarInfoRegion = container.querySelector(GENERIC_TOOLBAR_INFO_REGION_SELECTOR);
@@ -300,9 +350,16 @@ function patchGenericListRegions(container, regionHtml, options = {}) {
     const bottomBarRegion = container.querySelector(GENERIC_BOTTOM_BAR_REGION_SELECTOR);
 
     if (!(root instanceof HTMLElement)) return false;
+    if (!(navRegion instanceof HTMLElement)) return false;
     if (!(toolbarRegion instanceof HTMLElement)) return false;
     if (!(contentRegion instanceof HTMLElement)) return false;
     if (!(bottomBarRegion instanceof HTMLElement)) return false;
+
+    root.classList.toggle('is-generic-delete-mode', !!regionHtml.viewModel?.deleteManageMode);
+
+    if (updateNav) {
+        navRegion.outerHTML = regionHtml.navHtml;
+    }
 
     if (preserveToolbarSearch) {
         const searchState = regionHtml.toolbarSearchState || {};
@@ -366,7 +423,7 @@ export function renderGenericListPage(options = {}) {
         refreshListAfterDataMutation,
         captureListScroll,
         navigateBack,
-        deleteRowFromList,
+        deleteRowsFromList,
         toggleTableRowLock,
         getTableLockState,
         isTableRowLocked,
@@ -405,6 +462,15 @@ export function renderGenericListPage(options = {}) {
         });
     };
 
+    const getVisibleDeleteRowIndexes = (searchQueryOverride) => buildGenericListPageViewModel({
+        state,
+        rows,
+        headers,
+        rawHeaders,
+        genericMatch,
+        searchQueryOverride,
+    }).selectableDeleteRowIndexes || [];
+
     const refreshListRegions = (changedKeys = []) => {
         state.syncLockState(getTableLockState(sheetKey));
         const nextViewModel = buildGenericListPageViewModel({
@@ -435,7 +501,8 @@ export function renderGenericListPage(options = {}) {
             refreshListRegions,
             refreshListAfterDataMutation,
             showAddRowModal: openAddRowModal,
-            deleteRowFromList,
+            deleteRowsFromList,
+            getVisibleDeleteRowIndexes,
             toggleTableRowLock,
             getTableLockState,
             isTableRowLocked,
@@ -479,7 +546,8 @@ export function renderGenericListPage(options = {}) {
         refreshListRegions,
         refreshListAfterDataMutation,
         showAddRowModal: openAddRowModal,
-        deleteRowFromList,
+        deleteRowsFromList,
+        getVisibleDeleteRowIndexes,
         toggleTableRowLock,
         getTableLockState,
         isTableRowLocked,

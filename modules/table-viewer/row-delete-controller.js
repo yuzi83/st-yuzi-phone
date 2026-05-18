@@ -1,7 +1,23 @@
-import { remapTableLockStateAfterRowDelete } from '../phone-core/data-api.js';
+import { remapTableLockStateAfterRowsDelete } from '../phone-core/data-api.js';
 
-function applyLockStateAfterRowDelete(sheetKey, deletedRowIndex) {
-    remapTableLockStateAfterRowDelete(sheetKey, deletedRowIndex);
+function normalizeRowIndexes(rowIndexes = []) {
+    return Array.from(new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
+        .map((value) => Number(value))
+        .filter(Number.isInteger)
+        .filter((value) => value >= 0)))
+        .sort((a, b) => b - a);
+}
+
+function remapRemainingRowIndexes(rowIndexes = [], deletedRowIndexes = []) {
+    const deletedSorted = normalizeRowIndexes(deletedRowIndexes).sort((a, b) => a - b);
+    return normalizeRowIndexes(rowIndexes)
+        .map((rowIndex) => rowIndex - deletedSorted.filter((deletedIndex) => deletedIndex < rowIndex).length)
+        .filter((rowIndex) => rowIndex >= 0)
+        .sort((a, b) => a - b);
+}
+
+function applyLockStateAfterRowsDelete(sheetKey, deletedRowIndexes = []) {
+    remapTableLockStateAfterRowsDelete(sheetKey, deletedRowIndexes);
 }
 
 function isRuntimeDisposed(runtime) {
@@ -53,39 +69,51 @@ export function createRowDeleteController(options) {
 
     const isViewerActive = () => isRuntimeActive(viewerRuntime);
 
-    const deleteRowFromList = async (rowIndex) => {
+    const deleteRowsFromList = async (rowIndexes = []) => {
+        const requestedRowIndexes = normalizeRowIndexes(rowIndexes);
+        if (requestedRowIndexes.length === 0) {
+            const message = '未选择可删除的条目';
+            showInlineToast(container, message, true);
+            return createDeleteOutcome({ message });
+        }
+
         const latestSheet = getSheetDataByKey(sheetKey);
         if (!latestSheet?.rows || !Array.isArray(latestSheet.rows)) {
             const message = '删除失败：表格不存在';
             showInlineToast(container, message, true);
-            return createDeleteOutcome({ message });
+            return createDeleteOutcome({ message, requestedRowIndexes, failedRowIndexes: requestedRowIndexes });
         }
 
-        if (!Array.isArray(latestSheet.rows[rowIndex])) {
+        const invalidRowIndexes = requestedRowIndexes.filter((rowIndex) => !Array.isArray(latestSheet.rows[rowIndex]));
+        if (invalidRowIndexes.length > 0) {
             const message = '删除失败：行不存在';
             showInlineToast(container, message, true);
-            return createDeleteOutcome({ message });
+            return createDeleteOutcome({ message, requestedRowIndexes, failedRowIndexes: requestedRowIndexes });
         }
 
-        if (isTableRowLocked(sheetKey, rowIndex)) {
-            const message = '删除失败：条目已锁定';
+        const lockedRowIndexes = requestedRowIndexes.filter((rowIndex) => isTableRowLocked(sheetKey, rowIndex));
+        if (lockedRowIndexes.length > 0) {
+            const message = lockedRowIndexes.length === 1 ? '删除失败：条目已锁定' : `删除失败：${lockedRowIndexes.length} 条已锁定`;
             showInlineToast(container, message, true);
-            return createDeleteOutcome({ message });
+            return createDeleteOutcome({ message, requestedRowIndexes, failedRowIndexes: requestedRowIndexes });
         }
 
         const liveTableName = getLiveTableName();
         if (!liveTableName) {
             const message = '删除失败：缺少表格名称';
             showInlineToast(container, message, true);
-            return createDeleteOutcome({ message });
+            return createDeleteOutcome({ message, requestedRowIndexes, failedRowIndexes: requestedRowIndexes });
         }
 
-        const result = await deletePhoneSheetRows(sheetKey, [rowIndex], {
+        const result = await deletePhoneSheetRows(sheetKey, requestedRowIndexes, {
             tableName: liveTableName,
         });
-        const deletedRowIndexes = Array.isArray(result.deletedRowIndexes) ? result.deletedRowIndexes : [];
-        const deletedCurrentRow = deletedRowIndexes.includes(rowIndex);
-        if (!result.ok && !deletedCurrentRow) {
+        const deletedRowIndexes = normalizeRowIndexes(result.deletedRowIndexes || []);
+        const failedRowIndexes = normalizeRowIndexes(result.failedRowIndexes || requestedRowIndexes.filter((rowIndex) => !deletedRowIndexes.includes(rowIndex)));
+        const hasDeletion = deletedRowIndexes.length > 0;
+        const failedRowIndexesAfterDelete = remapRemainingRowIndexes(failedRowIndexes, deletedRowIndexes);
+
+        if (!result.ok && !hasDeletion) {
             const message = result.message || '删除失败';
             if (isViewerActive()) {
                 syncRowsFromSheet();
@@ -95,64 +123,71 @@ export function createRowDeleteController(options) {
                 message,
                 refreshed: result.refreshed ?? null,
                 deletedCount: result.deletedCount || 0,
-                requestedRowIndexes: result.requestedRowIndexes || [rowIndex],
+                requestedRowIndexes,
                 deletedRowIndexes,
-                failedRowIndexes: result.failedRowIndexes || [rowIndex],
+                failedRowIndexes,
             });
         }
 
-        applyLockStateAfterRowDelete(sheetKey, rowIndex);
+        if (hasDeletion) {
+            applyLockStateAfterRowsDelete(sheetKey, deletedRowIndexes);
+        }
         if (!isViewerActive()) {
             return createDeleteOutcome({
                 ok: !!result.ok,
-                deleted: true,
+                deleted: hasDeletion,
                 message: result.message || (result.ok ? '删除成功' : '删除已部分完成'),
                 refreshed: result.refreshed ?? null,
                 viewSynced: null,
-                deletedCount: result.deletedCount || 1,
-                requestedRowIndexes: result.requestedRowIndexes || [rowIndex],
-                deletedRowIndexes: deletedRowIndexes.length > 0 ? deletedRowIndexes : [rowIndex],
-                failedRowIndexes: result.failedRowIndexes || [],
+                deletedCount: result.deletedCount || deletedRowIndexes.length,
+                requestedRowIndexes,
+                deletedRowIndexes,
+                failedRowIndexes: failedRowIndexesAfterDelete,
             });
         }
 
         const synced = syncRowsFromSheet();
-        const message = result.message || '删除成功';
+        const message = result.message || (deletedRowIndexes.length > 1 ? `已删除 ${deletedRowIndexes.length} 条记录` : '删除成功');
 
         if (!synced) {
             return createDeleteOutcome({
-                ok: true,
-                deleted: true,
+                ok: !!result.ok || hasDeletion,
+                deleted: hasDeletion,
                 message: `${message}，但当前视图未同步到最新表格`,
                 refreshed: result.refreshed ?? null,
                 viewSynced: false,
-                deletedCount: result.deletedCount || 1,
-                requestedRowIndexes: result.requestedRowIndexes || [rowIndex],
-                deletedRowIndexes: deletedRowIndexes.length > 0 ? deletedRowIndexes : [rowIndex],
-                failedRowIndexes: result.failedRowIndexes || [],
+                deletedCount: result.deletedCount || deletedRowIndexes.length,
+                requestedRowIndexes,
+                deletedRowIndexes,
+                failedRowIndexes: failedRowIndexesAfterDelete,
             });
         }
 
         if (rows.length === 0) {
-            state.returnToListMode();
+            state.batchUpdate({
+                rowIndex: -1,
+                selectedDeleteRowIndexes: [],
+            });
+        } else if (failedRowIndexesAfterDelete.length > 0) {
+            state.setSelectedDeleteRowIndexes(failedRowIndexesAfterDelete);
         } else {
-            state.reconcileAfterRowDelete(rowIndex, rows.length);
+            state.clearDeleteSelection();
         }
 
         return createDeleteOutcome({
-            ok: true,
-            deleted: true,
+            ok: !!result.ok,
+            deleted: hasDeletion,
             message,
             refreshed: result.refreshed ?? null,
             viewSynced: true,
-            deletedCount: result.deletedCount || 1,
-            requestedRowIndexes: result.requestedRowIndexes || [rowIndex],
-            deletedRowIndexes: deletedRowIndexes.length > 0 ? deletedRowIndexes : [rowIndex],
-            failedRowIndexes: result.failedRowIndexes || [],
+            deletedCount: result.deletedCount || deletedRowIndexes.length,
+            requestedRowIndexes,
+            deletedRowIndexes,
+            failedRowIndexes: failedRowIndexesAfterDelete,
         });
     };
 
     return {
-        deleteRowFromList,
+        deleteRowsFromList,
     };
 }

@@ -11,7 +11,21 @@ const DIAGNOSTIC_STATE_KEYS = new Set([
     'lockManageMode',
     'deleteManageMode',
     'deletingRowIndex',
+    'selectedDeleteRowIndexes',
+    'deletingSelection',
 ]);
+
+function normalizeRowIndexList(rowIndexes = []) {
+    return Array.from(new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
+        .map((value) => Number(value))
+        .filter(Number.isInteger)
+        .filter((value) => value >= 0)))
+        .sort((a, b) => a - b);
+}
+
+function getClearedRowIndexList(rowIndexes = []) {
+    return normalizeRowIndexList(rowIndexes).length > 0 ? [] : rowIndexes;
+}
 
 function isRecordObject(value) {
     return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -138,6 +152,8 @@ export class TableViewerState {
                             lockManageMode: this._state.lockManageMode,
                             deleteManageMode: this._state.deleteManageMode,
                             deletingRowIndex: this._state.deletingRowIndex,
+                            selectedDeleteRowIndexes: this._state.selectedDeleteRowIndexes,
+                            deletingSelection: this._state.deletingSelection,
                         },
                     },
                 });
@@ -222,6 +238,8 @@ export class TableViewerState {
         return this.set({
             lockManageMode: false,
             deleteManageMode: false,
+            selectedDeleteRowIndexes: getClearedRowIndexList(this._state.selectedDeleteRowIndexes),
+            deletingSelection: false,
         });
     }
 
@@ -235,6 +253,8 @@ export class TableViewerState {
         return this.set({
             lockManageMode: nextEnabled,
             deleteManageMode: nextEnabled ? false : this._state.deleteManageMode,
+            selectedDeleteRowIndexes: nextEnabled ? getClearedRowIndexList(this._state.selectedDeleteRowIndexes) : this._state.selectedDeleteRowIndexes,
+            deletingSelection: nextEnabled ? false : this._state.deletingSelection,
         });
     }
 
@@ -248,6 +268,8 @@ export class TableViewerState {
         return this.set({
             deleteManageMode: nextEnabled,
             lockManageMode: nextEnabled ? false : this._state.lockManageMode,
+            selectedDeleteRowIndexes: getClearedRowIndexList(this._state.selectedDeleteRowIndexes),
+            deletingSelection: false,
         });
     }
 
@@ -270,6 +292,8 @@ export class TableViewerState {
             draftValues: getClearedDraftValues(this._state.draftValues),
             lockManageMode: false,
             deleteManageMode: false,
+            selectedDeleteRowIndexes: getClearedRowIndexList(this._state.selectedDeleteRowIndexes),
+            deletingSelection: false,
             cellLockManageMode: false,
             saving: false,
         });
@@ -287,6 +311,8 @@ export class TableViewerState {
             draftValues: getClearedDraftValues(this._state.draftValues),
             lockManageMode: false,
             deleteManageMode: false,
+            selectedDeleteRowIndexes: getClearedRowIndexList(this._state.selectedDeleteRowIndexes),
+            deletingSelection: false,
             cellLockManageMode: false,
             saving: false,
         });
@@ -384,6 +410,43 @@ export class TableViewerState {
     }
 
     /**
+     * 设置删除态选中行
+     * @param {number[]|number} rowIndexes
+     * @returns {Object}
+     */
+    setSelectedDeleteRowIndexes(rowIndexes = []) {
+        const nextRowIndexes = normalizeRowIndexList(rowIndexes);
+        const currentRowIndexes = normalizeRowIndexList(this._state.selectedDeleteRowIndexes);
+        const unchanged = nextRowIndexes.length === currentRowIndexes.length
+            && nextRowIndexes.every((value, index) => value === currentRowIndexes[index]);
+        if (unchanged) {
+            return this._state;
+        }
+        return this.set('selectedDeleteRowIndexes', nextRowIndexes);
+    }
+
+    /**
+     * 清空删除态选中行
+     * @returns {Object}
+     */
+    clearDeleteSelection() {
+        const currentRowIndexes = normalizeRowIndexList(this._state.selectedDeleteRowIndexes);
+        if (currentRowIndexes.length === 0) {
+            return this._state;
+        }
+        return this.set('selectedDeleteRowIndexes', []);
+    }
+
+    /**
+     * 设置批量删除中状态
+     * @param {boolean} enabled
+     * @returns {Object}
+     */
+    setDeletingSelection(enabled) {
+        return this.set('deletingSelection', !!enabled);
+    }
+
+    /**
      * 删除行后的状态修正
      * @param {number} deletedRowIndex
      * @param {number} remainingRowCount
@@ -464,6 +527,8 @@ export function createTableViewerState(sheetKey) {
         lockManageMode: false,
         deleteManageMode: false,
         deletingRowIndex: -1,
+        selectedDeleteRowIndexes: [],
+        deletingSelection: false,
         listScrollTop: 0,
         listSearchQuery: '',
         listSortDescending: false,

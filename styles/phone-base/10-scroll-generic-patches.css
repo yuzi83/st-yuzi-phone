@@ -188,6 +188,23 @@
         gap: 4px;
     }
 
+    .phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-actions {
+        max-width: 56%;
+        gap: 3px;
+    }
+
+    .phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn {
+        min-width: 32px;
+        padding: 0 6px;
+        font-size: 10px;
+    }
+
+    .phone-generic-root.phone-generic-template-scope .phone-row-select-circle {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+    }
+
     .phone-table-manage-actions .phone-settings-btn {
         padding: 4px 8px;
         font-size: 11px;

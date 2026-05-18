@@ -83,6 +83,36 @@ export function buildGenericListToolbarHtml(options = {}) {
     `;
 }
 
+export function buildGenericListNavHtml(options = {}) {
+    const {
+        tableName = '',
+        deleteManageMode = false,
+        deletingSelection = false,
+        selectedDeleteCount = 0,
+        selectableDeleteCount = 0,
+        allVisibleDeleteRowsSelected = false,
+    } = options;
+    const selectedCount = Math.max(0, Number(selectedDeleteCount || 0));
+    const selectableCount = Math.max(0, Number(selectableDeleteCount || 0));
+    const selectAllDisabled = deletingSelection || selectableCount <= 0;
+    const clearDisabled = deletingSelection || selectedCount <= 0;
+    const deleteDisabled = deletingSelection || selectedCount <= 0;
+
+    return `
+        <div class="phone-nav-bar phone-generic-slot-nav ${deleteManageMode ? 'is-generic-delete-mode' : ''}" data-generic-list-region="nav">
+            <button type="button" class="phone-nav-back" data-action="nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+            <span class="phone-nav-title">${escapeHtml(tableName)}</span>
+            ${deleteManageMode ? `
+                <div class="phone-generic-nav-delete-actions" aria-label="批量删除操作">
+                    <button type="button" class="phone-generic-nav-delete-btn ${allVisibleDeleteRowsSelected ? 'is-active' : ''}" data-action="select-all-delete-rows" aria-pressed="${allVisibleDeleteRowsSelected ? 'true' : 'false'}" ${selectAllDisabled ? 'disabled' : ''}>全选</button>
+                    <button type="button" class="phone-generic-nav-delete-btn" data-action="clear-delete-selection" ${clearDisabled ? 'disabled' : ''}>清空</button>
+                    <button type="button" class="phone-generic-nav-delete-btn is-danger" data-action="delete-selected-rows" ${deleteDisabled ? 'disabled' : ''}>${deletingSelection ? '删除中...' : `删 ${selectedCount}`}</button>
+                </div>
+            ` : '<span class="phone-generic-nav-placeholder" aria-hidden="true"></span>'}
+        </div>
+    `;
+}
+
 export function buildGenericListRowHtml(viewModel, options = {}) {
     const {
         showListIndex = true,
@@ -96,12 +126,13 @@ export function buildGenericListRowHtml(viewModel, options = {}) {
     } = options;
 
     const deletingCurrent = deleteManageMode && viewModel.rowIndex === deletingRowIndex;
+    const deleteSelected = !!viewModel.deleteSelected;
     const deleteDisabled = viewModel.rowLocked || deletingAny;
     const rowKey = viewModel.rowKey || `row:${viewModel.rowIndex}`;
     const rowVersion = viewModel.rowVersion || '';
 
     return `
-        <button type="button" class="phone-nav-list-item phone-generic-slot-list-item ${viewModel.rowLocked ? 'is-row-locked' : ''}" data-action="open-row" data-row-index="${viewModel.rowIndex}" data-row-key="${escapeHtmlAttr(rowKey)}" data-row-version="${escapeHtmlAttr(rowVersion)}">
+        <button type="button" class="phone-nav-list-item phone-generic-slot-list-item ${viewModel.rowLocked ? 'is-row-locked' : ''} ${deleteSelected ? 'is-delete-selected' : ''}" data-action="open-row" data-row-index="${viewModel.rowIndex}" data-row-key="${escapeHtmlAttr(rowKey)}" data-row-version="${escapeHtmlAttr(rowVersion)}">
             <span class="phone-generic-list-item-content">
                 <span class="phone-generic-list-item-head">
                     ${showListIndex ? `<span class="phone-generic-list-index">#${viewModel.rowIndex + 1}</span>` : ''}
@@ -123,7 +154,7 @@ export function buildGenericListRowHtml(viewModel, options = {}) {
                 ${lockManageMode
                     ? `<span class="phone-row-lock-chip ${viewModel.rowLocked ? 'locked' : ''}" data-action="toggle-row-lock" data-row-lock="${viewModel.rowIndex}" role="button" tabindex="0">${viewModel.rowLocked ? '已锁定' : '锁定'}</span>`
                     : deleteManageMode
-                        ? `<span class="phone-row-delete-chip ${viewModel.rowLocked ? 'locked' : ''} ${deletingCurrent ? 'pending' : ''} ${deleteDisabled ? 'disabled' : ''}" data-action="delete-row" data-row-delete="${viewModel.rowIndex}" role="button" tabindex="0" aria-disabled="${deleteDisabled ? 'true' : 'false'}">${viewModel.rowLocked ? '已锁定' : (deletingCurrent ? '删除中...' : '删除')}</span>`
+                        ? `<span class="phone-row-select-circle ${deleteSelected ? 'is-selected' : ''} ${deletingCurrent ? 'pending' : ''} ${deleteDisabled ? 'disabled' : ''}" data-action="toggle-delete-selection" data-row-delete="${viewModel.rowIndex}" role="checkbox" tabindex="0" aria-checked="${deleteSelected ? 'true' : 'false'}" aria-disabled="${deleteDisabled ? 'true' : 'false'}" title="${viewModel.rowLocked ? '条目已锁定' : (deleteSelected ? '取消选择' : '选择删除')}">${deleteSelected ? '✓' : ''}</span>`
                         : (showListArrow ? '<span class="phone-nav-list-arrow phone-generic-slot-list-arrow">查看</span>' : '')
                 }
             </span>
@@ -266,6 +297,10 @@ export function buildGenericListPageHtml(options = {}) {
         showDeleteAction = true,
         deletingAny = false,
         deletingRowIndex = -1,
+        deletingSelection = false,
+        selectedDeleteCount = 0,
+        selectableDeleteCount = 0,
+        allVisibleDeleteRowsSelected = false,
         emptyStateTitle = '',
         emptyStateDesc = '',
         lockManageMode = false,
@@ -274,12 +309,16 @@ export function buildGenericListPageHtml(options = {}) {
     } = options;
 
     return `
-        <div class="phone-app-page phone-generic-root ${genericStylePayload.className}" data-generic-template-id="${escapeHtmlAttr(genericStylePayload.templateId)}" ${genericStylePayload.dataAttrs} style="${genericStylePayload.styleAttr}">
+        <div class="phone-app-page phone-generic-root ${genericStylePayload.className} ${deleteManageMode ? 'is-generic-delete-mode' : ''}" data-generic-template-id="${escapeHtmlAttr(genericStylePayload.templateId)}" ${genericStylePayload.dataAttrs} style="${genericStylePayload.styleAttr}">
             ${genericStylePayload.scopedCss ? `<style class="phone-generic-template-inline-style">${genericStylePayload.scopedCss}</style>` : ''}
-            <div class="phone-nav-bar phone-generic-slot-nav">
-                <button type="button" class="phone-nav-back" data-action="nav-back">${PHONE_ICONS.back}<span>返回</span></button>
-                <span class="phone-nav-title">${escapeHtml(tableName)}</span>
-            </div>
+            ${buildGenericListNavHtml({
+                tableName,
+                deleteManageMode,
+                deletingSelection,
+                selectedDeleteCount,
+                selectableDeleteCount,
+                allVisibleDeleteRowsSelected,
+            })}
             <div class="phone-app-body phone-table-body phone-generic-slot-body">
                 <div class="phone-generic-page-shell">
                     <div data-generic-list-region="toolbar">

@@ -318,7 +318,7 @@ export function bindPhoneScrollGuards(scope) {
 function shouldBlockPointerDefault(target) {
     if (!(target instanceof Element)) return false;
     if (target.closest(PHONE_SCROLL_EDITABLE_SELECTOR)) return false;
-    return !!target.closest('.phone-nav-list-item, .phone-cell-lock-btn, .phone-row-lock-chip, .phone-row-delete-chip, .phone-list-bottom-btn, .phone-detail-bottom-btn');
+    return !!target.closest('.phone-nav-list-item, .phone-cell-lock-btn, .phone-row-lock-chip, .phone-list-bottom-btn, .phone-detail-bottom-btn');
 }
 
 export function hardenPhoneInteractionDefaults(scope) {

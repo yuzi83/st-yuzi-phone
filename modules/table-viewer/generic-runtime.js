@@ -125,6 +125,8 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
         'deleteManageMode',
         'lockState',
         'deletingRowIndex',
+        'selectedDeleteRowIndexes',
+        'deletingSelection',
     ]);
 
     const setListRefreshHandler = (handler) => {
@@ -184,7 +186,7 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
         extra,
     );
 
-    const { deleteRowFromList } = createRowDeleteController({
+    const { deleteRowsFromList } = createRowDeleteController({
         sheetKey,
         rows,
         state,
@@ -250,7 +252,7 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
             refreshListAfterDataMutation,
             captureListScroll,
             navigateBack,
-            deleteRowFromList,
+            deleteRowsFromList,
             toggleTableRowLock,
             getTableLockState,
             isTableRowLocked,
@@ -277,7 +279,11 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
 
     const handleTableUpdate = () => {
         if (!syncRowsFromSheet()) return;
-        state.syncLockState(getTableLockState(sheetKey));
+        state.batchUpdate({
+            lockState: getTableLockState(sheetKey),
+            selectedDeleteRowIndexes: [],
+            deletingSelection: false,
+        });
         refreshListAfterDataMutation();
     };
 

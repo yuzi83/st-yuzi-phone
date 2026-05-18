@@ -56,35 +56,50 @@
     background: var(--yuzi-phone-bg-danger-tint, rgba(239, 83, 80, 0.15));
 }
 
-.phone-row-delete-chip {
+.phone-row-select-circle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 44px;
-    padding: 2px 8px;
-    border-radius: var(--yuzi-phone-radius-pill, 999px);
-    border: 1px solid var(--yuzi-phone-border-danger, rgba(239, 83, 80, 0.45));
-    color: var(--yuzi-phone-color-danger-contrast, rgba(255, 170, 170, 0.95));
-    background: var(--yuzi-phone-bg-danger-tint, rgba(239, 83, 80, 0.14));
-    font-size: 11px;
-    line-height: 1.5;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border-radius: 999px;
+    border: 1.5px solid var(--yuzi-phone-border-danger, rgba(239, 83, 80, 0.45));
+    background: var(--yuzi-phone-bg-surface, rgba(255, 255, 255, 0.06));
+    color: transparent;
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1;
     cursor: pointer;
     user-select: none;
+    transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease, opacity 0.16s ease;
 }
 
-.phone-row-delete-chip.pending {
-    opacity: 0.8;
+.phone-row-select-circle:hover,
+.phone-row-select-circle:focus-visible {
+    border-color: var(--yuzi-phone-border-danger-strong, rgba(239, 83, 80, 0.72));
+    background: var(--yuzi-phone-bg-danger-tint, rgba(239, 83, 80, 0.12));
+    outline: none;
+    transform: scale(1.04);
 }
 
-.phone-row-delete-chip.locked {
-    border-color: var(--yuzi-phone-border-accent, rgba(255, 255, 255, 0.2));
-    color: var(--yuzi-phone-color-text-muted, rgba(255, 255, 255, 0.65));
-    background: var(--yuzi-phone-bg-surface-hover, rgba(255, 255, 255, 0.08));
+.phone-row-select-circle.is-selected {
+    border-color: var(--yuzi-phone-border-danger-strong, rgba(239, 83, 80, 0.78));
+    background: var(--yuzi-phone-bg-danger-tint-strong, rgba(239, 83, 80, 0.22));
+    color: var(--yuzi-phone-color-danger-contrast, #ffe2e2);
 }
 
-.phone-row-delete-chip.disabled {
-    opacity: 0.6;
+.phone-row-select-circle.pending {
+    opacity: 0.72;
+    pointer-events: none;
+}
+
+.phone-row-select-circle.disabled {
+    border-color: var(--yuzi-phone-border-subtle, rgba(255, 255, 255, 0.14));
+    background: var(--yuzi-phone-bg-surface-hover, rgba(255, 255, 255, 0.05));
+    color: transparent;
     cursor: not-allowed;
+    opacity: 0.5;
 }
 
 .phone-row-detail-card {

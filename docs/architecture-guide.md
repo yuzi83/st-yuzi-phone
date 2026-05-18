@@ -322,7 +322,7 @@ viewer runtime 对外提供：
 - 当前详情行：[`rowIndex`](../modules/table-viewer/state.js:425)。
 - 编辑态：[`editMode`](../modules/table-viewer/state.js:426)、[`draftValues`](../modules/table-viewer/state.js:428)、[`saving`](../modules/table-viewer/state.js:430)。
 - 锁管理：[`lockState`](../modules/table-viewer/state.js:429)、[`lockManageMode`](../modules/table-viewer/state.js:431)、[`cellLockManageMode`](../modules/table-viewer/state.js:427)。
-- 删除管理：[`deleteManageMode`](../modules/table-viewer/state.js:432)、[`deletingRowIndex`](../modules/table-viewer/state.js:433)。
+- 删除管理：[`deleteManageMode`](../modules/table-viewer/state.js:432)、[`deletingRowIndex`](../modules/table-viewer/state.js:433)、[`selectedDeleteRowIndexes`](../modules/table-viewer/state.js:417)、[`deletingSelection`](../modules/table-viewer/state.js:445)。
 - 列表 UI：[`listScrollTop`](../modules/table-viewer/state.js:434)、[`listSearchQuery`](../modules/table-viewer/state.js:435)、[`listSortDescending`](../modules/table-viewer/state.js:436)。
 
 [`TableViewerState`](../modules/table-viewer/state.js:48) 通过 allowedKeys 限制未知字段写入，并通过 [`subscribe()`](../modules/table-viewer/state.js:167) 通知局部刷新。列表模式下 [`createGenericTableViewerRuntime()`](../modules/table-viewer/generic-runtime.js:70) 只对搜索、排序、锁、删除等列表相关字段触发局部刷新。
@@ -333,11 +333,11 @@ viewer runtime 对外提供：
 
 - 每行由 [`buildGenericRowViewModel()`](../modules/table-viewer/row-view-model.js:199) 生成标题、状态、时间、摘要、搜索索引。
 - 模板字段绑定来自 [`createGenericTemplateStylePayload()`](../modules/table-viewer/generic-style-payload.js:96) 输出的 `fieldBindings`。
-- 列表 patch 使用 `rowKey` 与 `rowVersion`，见 [`buildGenericListRowRenderVersion()`](../modules/table-viewer/list-page-renderer.js:166)。
-- 搜索基于 [`searchText`](../modules/table-viewer/row-view-model.js:240)，排序通过 [`listSortDescending`](../modules/table-viewer/state.js:436) 控制。
-- 新增、锁定、删除按钮是否显示由模板 `structureOptions.bottomBar` 影响，最终进入 [`buildGenericListBottomBarHtml()`](../modules/table-viewer/list-page-template.js:1)。
+- 列表 patch 使用 `rowKey` 与 `rowVersion`，见 [`buildGenericListRowRenderVersion()`](../modules/table-viewer/list-page-renderer.js:166)。删除选择态会进入 `rowVersion`，否则圆圈勾选变化不会触发行节点替换。
+- 搜索基于 [`searchText`](../modules/table-viewer/row-view-model.js:240)，排序通过 [`listSortDescending`](../modules/table-viewer/state.js:436) 控制。删除态下搜索变化必须把 [`selectedDeleteRowIndexes`](../modules/table-viewer/state.js:417) 约束到当前可见且未锁定行，防止隐藏行被误删。
+- 新增、锁定、删除按钮是否显示由模板 `structureOptions.bottomBar` 影响，最终进入 [`buildGenericListBottomBarHtml()`](../modules/table-viewer/list-page-template.js:257)。删除态下右侧单行删除按钮会替换为圆形选择控件，标题栏右侧由 [`buildGenericListNavHtml()`](../modules/table-viewer/list-page-template.js:86) 渲染全选、清空、批量删除按钮。
 
-列表页事件由 [`bindGenericListPageController()`](../modules/table-viewer/list-page-controller.js:248) 委托处理。新增行弹窗入口是 [`showGenericAddRowModal()`](../modules/table-viewer/add-row-modal.js:126)。删除入口由 [`createRowDeleteController()`](../modules/table-viewer/row-delete-controller.js:93) 生成。
+列表页事件由 [`bindGenericListPageController()`](../modules/table-viewer/list-page-controller.js:544) 委托处理。新增行弹窗入口是 [`showGenericAddRowModal()`](../modules/table-viewer/add-row-modal.js:126)。删除入口由 [`createRowDeleteController()`](../modules/table-viewer/row-delete-controller.js:55) 生成。通用表批量删除通过 [`deleteRowsFromList()`](../modules/table-viewer/row-delete-controller.js:72) 调用行级 [`deletePhoneSheetRows()`](../modules/phone-core/chat-support/message-projection.js:283)，底层进入 [`deleteTableRowsBatch()`](../modules/phone-core/data-api/table-repository.js:588)。成功删除后保留删除管理态并清空本次选择，方便连续清理；部分失败时将失败行索引按成功删除结果重映射后继续选中。
 
 #### 6.2.5 通用表详情页与编辑保存
 
@@ -413,7 +413,9 @@ AI 指令预设的 `mediaMarkers.imagePrefix` 与 `mediaMarkers.videoPrefix` 是
 维护规则：
 
 - 新增专属表类型必须走 special runtime，不要在通用表里塞条件分支。
-- 列表页 patch 依赖 rowKey 和 rowVersion，改 row view model 时要维护版本字段。
+- 列表页 patch 依赖 rowKey 和 rowVersion，改 row view model 时要维护版本字段；新增批量操作状态也必须进入对应 patch 计划和 nav/content region，否则标题栏数量或行选择态会停留在旧 DOM。
+- 通用表批量删除只能删除当前可见且未锁定行；搜索、排序、锁状态变化后必须重新计算可选集合，不能把隐藏行或锁定行留在 [`selectedDeleteRowIndexes`](../modules/table-viewer/state.js:417)。
+- 通用表批量删除必须走 [`deleteRowsFromList()`](../modules/table-viewer/row-delete-controller.js:72) 与行级仓库接口，并在成功删除后调用 [`remapTableLockStateAfterRowsDelete()`](../modules/phone-core/data-api/lock-repository.js:159) 一次性重排锁状态；禁止逐个调用单行重排后再叠加索引偏移。
 - 通用表新增字段展示能力时，应优先扩展模板 fieldBindings 和 row view model，不要硬编码某个表头。
 - 专属消息表新增字段时，要同步 field reader、message projection、AI prompt 构造、列表/详情渲染和模板默认绑定。
 - 所有数据写入都应经 phone-core data-api 或 chat-support 投影层，不要在 UI 控制器里直接访问宿主全局 API。

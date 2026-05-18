@@ -39,16 +39,24 @@ function isLockWriteSuccess(value) {
     return isDbBooleanSuccess(value);
 }
 
-function remapLockStateAfterRowDelete(lockState, deletedRowIndex) {
-    const idx = Number(deletedRowIndex);
+function remapLockStateAfterRowsDelete(lockState, deletedRowIndexes = []) {
     const current = normalizeLockState(lockState);
-    if (!Number.isInteger(idx) || idx < 0) {
+    const deletedSet = new Set((Array.isArray(deletedRowIndexes) ? deletedRowIndexes : [deletedRowIndexes])
+        .map((value) => Number(value))
+        .filter(Number.isInteger)
+        .filter((value) => value >= 0));
+    if (deletedSet.size === 0) {
         return current;
     }
 
+    const deletedSorted = Array.from(deletedSet).sort((a, b) => a - b);
+    const shiftRowIndex = (rowIdx) => rowIdx - deletedSorted.filter((deletedIdx) => deletedIdx < rowIdx).length;
+
     const rowsNext = current.rows
-        .filter(rowIdx => rowIdx !== idx)
-        .map(rowIdx => (rowIdx > idx ? rowIdx - 1 : rowIdx));
+        .filter(rowIdx => !deletedSet.has(rowIdx))
+        .map(shiftRowIndex)
+        .filter(Number.isInteger)
+        .filter(rowIdx => rowIdx >= 0);
 
     const cellsNext = current.cells
         .map((key) => {
@@ -56,8 +64,9 @@ function remapLockStateAfterRowDelete(lockState, deletedRowIndex) {
             const rowIdx = Number(rowPart);
             const colIdx = Number(colPart);
             if (!Number.isInteger(rowIdx) || !Number.isInteger(colIdx)) return null;
-            if (rowIdx === idx) return null;
-            const nextRowIdx = rowIdx > idx ? rowIdx - 1 : rowIdx;
+            if (deletedSet.has(rowIdx)) return null;
+            const nextRowIdx = shiftRowIndex(rowIdx);
+            if (!Number.isInteger(nextRowIdx) || nextRowIdx < 0) return null;
             return `${nextRowIdx}:${colIdx}`;
         })
         .filter(Boolean);
@@ -67,6 +76,10 @@ function remapLockStateAfterRowDelete(lockState, deletedRowIndex) {
         cols: current.cols,
         cells: Array.from(new Set(cellsNext)),
     };
+}
+
+function remapLockStateAfterRowDelete(lockState, deletedRowIndex) {
+    return remapLockStateAfterRowsDelete(lockState, [deletedRowIndex]);
 }
 
 function isTableColLocked(sheetKey, colIndex) {
@@ -147,6 +160,27 @@ export function remapTableLockStateAfterRowDelete(sheetKey, deletedRowIndex) {
             action: 'lock.state.remap-after-row-delete',
             message: '删除后重排锁状态失败',
             context: { sheetKey, deletedRowIndex },
+            error,
+        });
+        return false;
+    }
+}
+
+export function remapTableLockStateAfterRowsDelete(sheetKey, deletedRowIndexes = []) {
+    const api = getDB();
+    if (!api || typeof api.getTableLockState !== 'function' || typeof api.setTableLockState !== 'function') {
+        return false;
+    }
+
+    try {
+        const current = api.getTableLockState(sheetKey);
+        const next = remapLockStateAfterRowsDelete(current, deletedRowIndexes);
+        return isLockWriteSuccess(api.setTableLockState(sheetKey, next, { merge: false }));
+    } catch (error) {
+        logger.warn({
+            action: 'lock.state.remap-after-rows-delete',
+            message: '批量删除后重排锁状态失败',
+            context: { sheetKey, deletedRowIndexes },
             error,
         });
         return false;

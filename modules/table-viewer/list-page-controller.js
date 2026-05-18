@@ -1,4 +1,5 @@
 import { Logger } from '../error-handler.js';
+import { showConfirmDialog } from '../settings-app/ui/confirm-dialog.js';
 
 const logger = Logger.withScope({ scope: 'table-viewer/list-controller', feature: 'table-viewer' });
 const GENERIC_LIST_CONTROLLER_KEY = '__stYuziGenericListController';
@@ -88,7 +89,16 @@ function bindSearchInput(container) {
         if (!nextContext?.state) return;
 
         const searchWasActive = document.activeElement === searchInput;
-        nextContext.state.set('listSearchQuery', nextValue);
+        const visibleRows = new Set(getVisibleDeleteRowIndexesFromContext(nextContext, nextValue));
+        const currentSelection = normalizeRowIndexes(nextContext.state.selectedDeleteRowIndexes || []);
+        const nextSelection = nextContext.state.deleteManageMode
+            ? currentSelection.filter((rowIndex) => visibleRows.has(rowIndex))
+            : currentSelection;
+        const selectionChanged = nextSelection.length !== currentSelection.length
+            || nextSelection.some((value, index) => value !== currentSelection[index]);
+        nextContext.state.set(selectionChanged
+            ? { listSearchQuery: nextValue, selectedDeleteRowIndexes: nextSelection }
+            : { listSearchQuery: nextValue });
 
         if (!searchWasActive) return;
 
@@ -181,6 +191,14 @@ function handleToggleRowLock(container, el) {
     context.showInlineToast(container, nextLocked ? '条目已锁定' : '条目已解锁');
 }
 
+function normalizeRowIndexes(rowIndexes = []) {
+    return Array.from(new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
+        .map((value) => Number(value))
+        .filter(Number.isInteger)
+        .filter((value) => value >= 0)))
+        .sort((a, b) => a - b);
+}
+
 function normalizeDeleteOutcome(result) {
     if (result && typeof result === 'object') {
         return {
@@ -189,6 +207,10 @@ function normalizeDeleteOutcome(result) {
             message: String(result.message || ''),
             refreshed: result.refreshed ?? null,
             viewSynced: result.viewSynced ?? null,
+            deletedCount: Number(result.deletedCount || 0),
+            requestedRowIndexes: normalizeRowIndexes(result.requestedRowIndexes || []),
+            deletedRowIndexes: normalizeRowIndexes(result.deletedRowIndexes || []),
+            failedRowIndexes: normalizeRowIndexes(result.failedRowIndexes || []),
         };
     }
 
@@ -198,29 +220,48 @@ function normalizeDeleteOutcome(result) {
         message: result ? '删除成功' : '',
         refreshed: null,
         viewSynced: null,
+        deletedCount: result ? 1 : 0,
+        requestedRowIndexes: [],
+        deletedRowIndexes: [],
+        failedRowIndexes: [],
     };
 }
 
-async function handleDeleteRow(container, el) {
-    const context = getGenericListControllerContext(container);
-    if (!context?.state) return;
-    if (context.state.deletingRowIndex >= 0) {
-        logger.warn({
-            action: 'row.delete.skip',
-            message: '删除跳过：已有删除进行中',
-            context: {
-                sheetKey: String(context.sheetKey || ''),
-                deletingRowIndex: context.state.deletingRowIndex,
-            },
-        });
-        return;
+function getVisibleDeleteRowIndexesFromContext(context, searchQueryOverride) {
+    if (typeof context?.getVisibleDeleteRowIndexes === 'function') {
+        return normalizeRowIndexes(context.getVisibleDeleteRowIndexes(searchQueryOverride));
     }
+    return [];
+}
+
+function getVisibleSelectedDeleteRowIndexes(context) {
+    const visibleRows = new Set(getVisibleDeleteRowIndexesFromContext(context));
+    return normalizeRowIndexes(context?.state?.selectedDeleteRowIndexes || [])
+        .filter((rowIndex) => visibleRows.has(rowIndex));
+}
+
+function syncDeleteSelectionToVisibleRows(context, searchQueryOverride) {
+    if (!context?.state?.deleteManageMode) return;
+    const visibleRows = new Set(getVisibleDeleteRowIndexesFromContext(context, searchQueryOverride));
+    const currentSelection = normalizeRowIndexes(context.state.selectedDeleteRowIndexes || []);
+    const nextSelection = currentSelection.filter((rowIndex) => visibleRows.has(rowIndex));
+    const unchanged = nextSelection.length === currentSelection.length
+        && nextSelection.every((value, index) => value === currentSelection[index]);
+    if (!unchanged) {
+        context.state.setSelectedDeleteRowIndexes(nextSelection);
+    }
+}
+
+function handleToggleDeleteSelection(container, el) {
+    const context = getGenericListControllerContext(container);
+    if (!context?.state?.deleteManageMode) return;
+    if (context.state.deletingSelection || context.state.deletingRowIndex >= 0) return;
 
     const idx = Number(el.getAttribute('data-row-delete'));
-    if (Number.isNaN(idx)) {
+    if (!Number.isInteger(idx) || idx < 0) {
         logger.warn({
-            action: 'row.delete.skip',
-            message: '删除跳过：行索引无效',
+            action: 'row-delete-selection.skip',
+            message: '删除选择跳过：行索引无效',
             context: {
                 sheetKey: String(context.sheetKey || ''),
                 rawIndex: el.getAttribute('data-row-delete'),
@@ -229,12 +270,66 @@ async function handleDeleteRow(container, el) {
         return;
     }
 
-    if (context.isTableRowLocked(context.sheetKey, idx)) {
-        context.showInlineToast(container, '删除失败：条目已锁定', true);
+    const visibleRows = new Set(getVisibleDeleteRowIndexesFromContext(context));
+    if (!visibleRows.has(idx)) {
+        context.showInlineToast(container, '该条目当前不可删除', true);
+        syncDeleteSelectionToVisibleRows(context);
         return;
     }
 
-    context.state.set('deletingRowIndex', idx);
+    if (context.isTableRowLocked(context.sheetKey, idx)) {
+        context.showInlineToast(container, '删除失败：条目已锁定', true);
+        syncDeleteSelectionToVisibleRows(context);
+        return;
+    }
+
+    const selectedRows = new Set(normalizeRowIndexes(context.state.selectedDeleteRowIndexes || []));
+    if (selectedRows.has(idx)) {
+        selectedRows.delete(idx);
+    } else {
+        selectedRows.add(idx);
+    }
+    context.state.setSelectedDeleteRowIndexes(Array.from(selectedRows));
+}
+
+function handleSelectAllDeleteRows(container) {
+    const context = getGenericListControllerContext(container);
+    if (!context?.state?.deleteManageMode) return;
+    if (context.state.deletingSelection || context.state.deletingRowIndex >= 0) return;
+
+    const visibleRows = getVisibleDeleteRowIndexesFromContext(context);
+    if (visibleRows.length === 0) {
+        context.showInlineToast(container, '当前没有可选择的条目', true);
+        context.state.clearDeleteSelection();
+        return;
+    }
+
+    const currentSelectedRows = new Set(normalizeRowIndexes(context.state.selectedDeleteRowIndexes || []));
+    const allSelected = visibleRows.every((rowIndex) => currentSelectedRows.has(rowIndex));
+    context.state.setSelectedDeleteRowIndexes(allSelected ? [] : visibleRows);
+}
+
+function handleClearDeleteSelection(container) {
+    const context = getGenericListControllerContext(container);
+    if (!context?.state) return;
+    if (context.state.deletingSelection) return;
+    context.state.clearDeleteSelection();
+}
+
+async function executeDeleteSelectedRows(container, requestedRowIndexes) {
+    const context = getGenericListControllerContext(container);
+    if (!context?.state || typeof context.deleteRowsFromList !== 'function') return;
+    if (context.state.deletingSelection || context.state.deletingRowIndex >= 0) return;
+
+    const visibleRows = new Set(getVisibleDeleteRowIndexesFromContext(context));
+    const rowIndexes = normalizeRowIndexes(requestedRowIndexes).filter((rowIndex) => visibleRows.has(rowIndex));
+    if (rowIndexes.length === 0) {
+        context.state.clearDeleteSelection();
+        context.showInlineToast(container, '未选择可删除的条目', true);
+        return;
+    }
+
+    context.state.setDeletingSelection(true);
     if (typeof context.setSuppressExternalTableUpdate === 'function') {
         context.setSuppressExternalTableUpdate(true);
     }
@@ -242,19 +337,21 @@ async function handleDeleteRow(container, el) {
     let deleteOutcome = normalizeDeleteOutcome(false);
 
     try {
-        deleteOutcome = normalizeDeleteOutcome(await context.deleteRowFromList(idx));
+        deleteOutcome = normalizeDeleteOutcome(await context.deleteRowsFromList(rowIndexes));
         if (deleteOutcome.deleted && isGenericListContextActive(context)) {
-            const toastMessage = deleteOutcome.message || '删除成功';
-            const toastIsError = deleteOutcome.refreshed === false || deleteOutcome.viewSynced === false;
+            const toastMessage = deleteOutcome.message || `已删除 ${deleteOutcome.deletedCount || rowIndexes.length} 条记录`;
+            const toastIsError = deleteOutcome.refreshed === false || deleteOutcome.viewSynced === false || deleteOutcome.failedRowIndexes.length > 0;
             context.showInlineToast(container, toastMessage, toastIsError);
+        } else if (!deleteOutcome.deleted && isGenericListContextActive(context)) {
+            context.showInlineToast(container, deleteOutcome.message || '删除失败', true);
         }
     } catch (err) {
         logger.warn({
-            action: 'row.delete.exception',
-            message: '列表行删除异常',
+            action: 'row.delete-selected.exception',
+            message: '列表批量删除异常',
             context: {
                 sheetKey: String(context.sheetKey || ''),
-                rowIndex: idx,
+                rowIndexes,
                 active: isGenericListContextActive(context),
             },
             error: err,
@@ -272,13 +369,40 @@ async function handleDeleteRow(container, el) {
         if (!isGenericListContextActive(nextContext)) return;
 
         nextContext.state.batchUpdate({
-            deletingRowIndex: -1,
+            deletingSelection: false,
             lockState: nextContext.getTableLockState(nextContext.sheetKey),
         });
+        syncDeleteSelectionToVisibleRows(nextContext);
         if (deleteOutcome.deleted) {
             refreshListAfterDataMutation(container);
         }
     }
+}
+
+function confirmDeleteSelectedRows(container) {
+    const context = getGenericListControllerContext(container);
+    if (!context?.state?.deleteManageMode) return;
+    if (context.state.deletingSelection || context.state.deletingRowIndex >= 0) return;
+
+    syncDeleteSelectionToVisibleRows(context);
+    const selectedRows = getVisibleSelectedDeleteRowIndexes(context);
+    if (selectedRows.length === 0) {
+        context.showInlineToast(container, '未选择可删除的条目', true);
+        return;
+    }
+
+    showConfirmDialog(
+        container,
+        '批量删除条目',
+        `确认删除当前选中的 ${selectedRows.length} 条记录吗？此操作无法撤销。`,
+        () => {
+            executeDeleteSelectedRows(container, selectedRows);
+        },
+        '删除',
+        '取消',
+        context.runtime,
+        { overlayClassName: 'phone-generic-delete-confirm' },
+    );
 }
 
 async function handleActionClick(container, actionEl) {
@@ -314,8 +438,17 @@ async function handleActionClick(container, actionEl) {
         case 'toggle-row-lock':
             handleToggleRowLock(container, actionEl);
             return;
-        case 'delete-row':
-            await handleDeleteRow(container, actionEl);
+        case 'toggle-delete-selection':
+            handleToggleDeleteSelection(container, actionEl);
+            return;
+        case 'select-all-delete-rows':
+            handleSelectAllDeleteRows(container);
+            return;
+        case 'clear-delete-selection':
+            handleClearDeleteSelection(container);
+            return;
+        case 'delete-selected-rows':
+            confirmDeleteSelectedRows(container);
             return;
         case 'open-row':
             openRowDetail(container, Number(actionEl.dataset.rowIndex));
@@ -337,7 +470,8 @@ export function bindGenericListPageController(options = {}) {
         refreshListRegions,
         refreshListAfterDataMutation,
         showAddRowModal,
-        deleteRowFromList,
+        deleteRowsFromList,
+        getVisibleDeleteRowIndexes,
         toggleTableRowLock,
         getTableLockState,
         isTableRowLocked,
@@ -358,7 +492,8 @@ export function bindGenericListPageController(options = {}) {
         refreshListRegions,
         refreshListAfterDataMutation,
         showAddRowModal,
-        deleteRowFromList,
+        deleteRowsFromList,
+        getVisibleDeleteRowIndexes,
         toggleTableRowLock,
         getTableLockState,
         isTableRowLocked,
@@ -392,7 +527,7 @@ export function bindGenericListPageController(options = {}) {
         }
 
         const action = String(actionEl.dataset.action || '').trim();
-        if (action === 'toggle-row-lock' || action === 'delete-row') {
+        if (action === 'toggle-row-lock' || action === 'toggle-delete-selection') {
             event.preventDefault();
             event.stopPropagation();
         }
@@ -408,7 +543,7 @@ export function bindGenericListPageController(options = {}) {
         const target = event.target instanceof HTMLElement ? event.target : null;
         if (!target) return;
 
-        const actionEl = target.closest('[data-action="toggle-row-lock"], [data-action="delete-row"]');
+        const actionEl = target.closest('[data-action="toggle-row-lock"], [data-action="toggle-delete-selection"]');
         if (!(actionEl instanceof HTMLElement) || !container.contains(actionEl)) {
             return;
         }
