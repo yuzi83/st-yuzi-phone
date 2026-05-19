@@ -9,15 +9,41 @@
  *   2. 是否引入 XSS 风险（escape 路径不能放过 `<script>` 这种内容）
  */
 
+const HTML_ESCAPE_RE = /[&<>"']/g;
+const HTML_ESCAPE_MAP = Object.freeze({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+});
+
+function toSafeString(value) {
+    return String(value ?? '');
+}
+
+function canUseDomEscape() {
+    return typeof document !== 'undefined'
+        && document !== null
+        && typeof document.createElement === 'function';
+}
+
 /**
  * 转义 HTML 特殊字符
  * @param {string} str - 要转义的字符串
  * @returns {string} 转义后的字符串
  */
 export function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = String(str || '');
-    return div.innerHTML;
+    const text = toSafeString(str);
+    if (text === '') return '';
+
+    if (canUseDomEscape()) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    return text.replace(HTML_ESCAPE_RE, (char) => HTML_ESCAPE_MAP[char] || char);
 }
 
 /**
@@ -26,7 +52,7 @@ export function escapeHtml(str) {
  * @returns {string} 转义后的字符串
  */
 export function escapeHtmlAttr(value) {
-    return escapeHtml(String(value || ''));
+    return escapeHtml(toSafeString(value));
 }
 
 /**
@@ -35,7 +61,7 @@ export function escapeHtmlAttr(value) {
  * @returns {string} 字符串
  */
 export function safeText(value) {
-    return String(value ?? '');
+    return toSafeString(value);
 }
 
 /**

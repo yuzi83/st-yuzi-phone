@@ -11,7 +11,7 @@ import { buildEditCardHtml, buildAddVariableDialogHtml, buildConfirmDialogHtml }
 
 const logger = Logger.withScope ? Logger.withScope({ scope: 'variable-manager/interactions' }) : Logger;
 const LONG_PRESS_MS = 500;
-const SELECTABLE_DELETE_SELECTOR = '.vm-card, .vm-group-header, .vm-sub-group-title';
+const SELECTABLE_DELETE_SELECTOR = '.vm-card[data-delete-path], .vm-group-header[data-delete-path], .vm-object-title[data-delete-path]';
 
 function createRuntimeAdapter(runtime) {
     const cleanups = new Set();
@@ -225,9 +225,9 @@ function handlePageAction(action, actionEl, page, deps, runtime) {
             exitDeleteMode(page);
             return true;
         case 'confirm-delete': {
-            const paths = collectSelectedDeletePaths(page);
-            if (paths.length > 0) {
-                showDeleteConfirmDialog(page, paths, deps, runtime);
+            const targets = collectSelectedDeleteTargets(page);
+            if (targets.length > 0) {
+                showDeleteConfirmDialog(page, targets, deps, runtime);
             }
             return true;
         }
@@ -479,8 +479,8 @@ function decorateDeleteTargets(page) {
         ensureCheckbox(header, 'prepend');
     });
 
-    page.querySelectorAll('.vm-sub-group-title').forEach((title) => {
-        title.classList.add('vm-delete-selectable', 'vm-sub-title-delete-mode');
+    page.querySelectorAll('.vm-object-title').forEach((title) => {
+        title.classList.add('vm-delete-selectable', 'vm-object-title-delete-mode');
         ensureCheckbox(title, 'prepend');
     });
 }
@@ -503,7 +503,7 @@ function exitDeleteMode(page) {
     page.querySelector('.vm-footer')?.classList.remove('vm-footer-hidden');
 
     page.querySelectorAll('.vm-delete-selectable').forEach((el) => {
-        el.classList.remove('vm-delete-selectable', 'vm-delete-selected', 'vm-card-delete-mode', 'vm-card-selected', 'vm-group-header-delete-mode', 'vm-sub-title-delete-mode');
+        el.classList.remove('vm-delete-selectable', 'vm-delete-selected', 'vm-card-delete-mode', 'vm-card-selected', 'vm-group-header-delete-mode', 'vm-object-title-delete-mode');
         el.querySelector(':scope > .vm-card-checkbox')?.remove();
     });
 
@@ -528,47 +528,67 @@ function setDeleteSelected(element, selected) {
     checkbox?.classList.toggle('vm-checkbox-checked', selected);
 }
 
-function getDeletePath(element) {
-    if (!(element instanceof HTMLElement)) return '';
-    if (element.classList.contains('vm-card')) {
-        return String(element.dataset.varPath || '').trim();
-    }
-    if (element.classList.contains('vm-group-header')) {
-        return String(element.closest('.vm-group')?.dataset.groupPath || '').trim();
-    }
-    if (element.classList.contains('vm-sub-group-title')) {
-        return String(element.closest('.vm-sub-group')?.dataset.subPath || '').trim();
-    }
-    return '';
+function getDeleteTarget(element) {
+    if (!(element instanceof HTMLElement)) return null;
+
+    const path = String(element.dataset.deletePath || '').trim();
+    if (!path) return null;
+
+    const kind = String(element.dataset.deleteKind || '').trim()
+        || (element.classList.contains('vm-group-header') ? 'group' : element.classList.contains('vm-object-title') ? 'object' : 'leaf');
+    const label = String(element.dataset.deleteLabel || '').trim() || path;
+    const rawLeafCount = Number(element.dataset.deleteLeafCount);
+    const leafCount = Number.isFinite(rawLeafCount) ? rawLeafCount : 0;
+
+    return { path, kind, label, leafCount };
 }
 
-function collectSelectedDeletePaths(page) {
+function normalizeDeleteTarget(target) {
+    if (!target || typeof target !== 'object') return null;
+
+    const path = String(target.path || '').trim();
+    if (!path) return null;
+
+    const kind = String(target.kind || 'leaf').trim() || 'leaf';
+    const label = String(target.label || path).trim() || path;
+    const leafCount = Number.isFinite(Number(target.leafCount)) ? Number(target.leafCount) : 0;
+    return { path, kind, label, leafCount };
+}
+
+function collectSelectedDeleteTargets(page) {
     const selected = Array.from(page.querySelectorAll('.vm-delete-selected'));
-    return normalizeDeletePaths(selected.map((el) => getDeletePath(el)).filter(Boolean));
+    return normalizeDeleteTargets(selected.map((el) => getDeleteTarget(el)).filter(Boolean));
 }
 
-function normalizeDeletePaths(paths) {
-    const uniquePaths = Array.from(new Set(paths.map((item) => String(item || '').trim()).filter(Boolean)));
-    uniquePaths.sort((a, b) => a.split('.').length - b.split('.').length || a.length - b.length);
+function normalizeDeleteTargets(targets) {
+    const uniqueTargets = Array.from(new Map(
+        targets
+            .map((target) => normalizeDeleteTarget(target))
+            .filter(Boolean)
+            .map((target) => [target.path, target]),
+    ).values());
 
-    return uniquePaths.filter((path, index) => {
-        return !uniquePaths.slice(0, index).some((parent) => path === parent || path.startsWith(`${parent}.`));
+    uniqueTargets.sort((a, b) => a.path.split('.').length - b.path.split('.').length || a.path.length - b.path.length);
+
+    return uniqueTargets.filter((target, index) => {
+        return !uniqueTargets.slice(0, index).some((parent) => target.path === parent.path || target.path.startsWith(`${parent.path}.`));
     });
 }
 
 function updateDeleteCount(page) {
-    const paths = collectSelectedDeletePaths(page);
+    const targets = collectSelectedDeleteTargets(page);
     const countEl = page.querySelector('.vm-delete-count');
-    if (countEl) countEl.textContent = String(paths.length);
+    if (countEl) countEl.textContent = String(targets.length);
 
     const confirmBtn = page.querySelector('.vm-delete-confirm-btn');
     if (confirmBtn instanceof HTMLButtonElement) {
-        confirmBtn.disabled = paths.length === 0;
+        confirmBtn.disabled = targets.length === 0;
     }
 }
 
-function showDeleteConfirmDialog(page, paths, deps, runtime) {
-    const listHtml = paths.map((path) => `<div class="vm-confirm-delete-item">• ${escapeHtml(path)}</div>`).join('');
+function showDeleteConfirmDialog(page, targets, deps, runtime) {
+    const normalizedTargets = normalizeDeleteTargets(targets);
+    const listHtml = normalizedTargets.map((target) => renderDeleteTargetSummaryHtml(target)).join('');
     const bodyHtml = `
         <div class="vm-confirm-detail">
             <div class="vm-confirm-delete-list">${listHtml}</div>
@@ -576,12 +596,44 @@ function showDeleteConfirmDialog(page, paths, deps, runtime) {
         </div>
     `;
 
-    showDialog(page, `确认删除 ${paths.length} 项？`, bodyHtml, '删除', 'vm-dialog-confirm-danger', () => {
-        void doDeleteVariables(page, paths, deps, runtime);
+    showDialog(page, buildDeleteConfirmTitle(normalizedTargets), bodyHtml, '删除', 'vm-dialog-confirm-danger', () => {
+        void doDeleteVariables(page, normalizedTargets, deps, runtime);
     }, runtime);
 }
 
-async function doDeleteVariables(page, paths, deps, runtime) {
+function buildDeleteConfirmTitle(targets) {
+    const normalizedTargets = normalizeDeleteTargets(targets);
+    if (normalizedTargets.length === 1) {
+        const target = normalizedTargets[0];
+        return `确认删除${getDeleteTargetKindLabel(target.kind)}「${target.label}」？`;
+    }
+    return `确认删除以下 ${normalizedTargets.length} 个变量目标？`;
+}
+
+function renderDeleteTargetSummaryHtml(target) {
+    return `
+        <div class="vm-confirm-delete-item">
+            <span class="vm-confirm-delete-kind">${escapeHtml(getDeleteTargetKindLabel(target.kind))}</span>
+            <span class="vm-confirm-delete-value">${escapeHtml(target.label)}</span>
+            <span class="vm-confirm-delete-path">${escapeHtml(target.path)}</span>
+            <span class="vm-confirm-delete-meta">${escapeHtml(getDeleteTargetMetaText(target))}</span>
+        </div>
+    `;
+}
+
+function getDeleteTargetKindLabel(kind) {
+    if (kind === 'group') return '分组';
+    if (kind === 'object') return '对象';
+    return '字段';
+}
+
+function getDeleteTargetMetaText(target) {
+    if (target.kind === 'leaf') return '仅删除该字段';
+    if (target.leafCount > 0) return `将删除 ${target.leafCount} 个子字段`;
+    return '空对象';
+}
+
+async function doDeleteVariables(page, targets, deps, runtime) {
     const messageId = typeof deps.getMessageId === 'function' ? deps.getMessageId() : -1;
     if (messageId < 0) {
         showToastIfAlive(page, deps, null, '无法获取楼层号', true, runtime);
@@ -590,12 +642,12 @@ async function doDeleteVariables(page, paths, deps, runtime) {
     if (!isVariableManagerPageAlive(page, deps, messageId, runtime)) return;
 
     let successCount = 0;
-    for (const path of normalizeDeletePaths(paths)) {
+    for (const target of normalizeDeleteTargets(targets)) {
         try {
-            const ok = await deleteFloorVariable(messageId, path);
+            const ok = await deleteFloorVariable(messageId, target.path);
             if (ok) successCount++;
         } catch (error) {
-            logger.error?.({ action: 'doDeleteVariables', message: `删除变量失败: ${path}`, error });
+            logger.error?.({ action: 'doDeleteVariables', message: `删除变量失败: ${target.path}`, error });
         }
     }
 
