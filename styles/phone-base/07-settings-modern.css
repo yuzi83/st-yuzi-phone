@@ -415,10 +415,45 @@
     border-bottom: none;
 }
 
+.phone-icon-cleanup-panel {
+    border-top: 1px solid var(--yuzi-phone-border-soft, rgba(255, 255, 255, 0.06));
+    margin-top: 8px;
+    padding-top: 8px;
+}
+
 .phone-icon-name {
     flex: 1;
     font-size: 12px;
     color: var(--yuzi-phone-color-text-tertiary, rgba(255, 255, 255, 0.78));
+}
+
+.phone-icon-cleanup-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto;
+    font-size: 12px;
+    color: var(--yuzi-phone-color-text-tertiary, rgba(255, 255, 255, 0.78));
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--yuzi-phone-border-soft, rgba(255, 255, 255, 0.06));
+}
+
+.phone-icon-key,
+.phone-icon-status {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: var(--yuzi-phone-color-text-dim, rgba(255, 255, 255, 0.45));
+}
+
+.phone-icon-status-orphan {
+    color: var(--yuzi-phone-color-danger, #c45a5a);
+}
+
+.phone-icon-status-active {
+    color: var(--yuzi-phone-color-text-tertiary, rgba(255, 255, 255, 0.68));
 }
 
 .phone-icon-actions {

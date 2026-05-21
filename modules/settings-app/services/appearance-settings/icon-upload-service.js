@@ -71,10 +71,36 @@ export function createIconUploadService() {
             }
 
             const allItems = collectAppearanceIconSlots(rawData);
+            const slotMap = new Map(allItems.map(item => [item.key, item]));
 
             const summaryHtml = `
                 <div class="phone-settings-desc" style="margin-bottom:10px;">
                     自定义图标总占用：${escapeHtml(totalUsageText)} / ${escapeHtml(totalLimitText)}。如果超过上限，将无法继续上传新的自定义图标。
+                    下方“当前设置图标清理”会列出 appIcons 中的全部条目，包括隐藏旧图标。
+                </div>
+            `;
+            const allCurrentIconEntries = Object.entries(currentIcons);
+            const cleanupHtml = `
+                <div class="phone-icon-cleanup-panel">
+                    <div class="phone-settings-desc" style="margin:12px 0 8px;">
+                        当前设置图标清理：共 ${escapeHtml(String(allCurrentIconEntries.length))} 个自定义图标。删除这里只会移除 appIcons 中对应 key，不会影响表格数据或背景。
+                    </div>
+                    ${allCurrentIconEntries.length > 0 ? allCurrentIconEntries.map(([key, dataUrl]) => {
+                        const slot = slotMap.get(key);
+                        const label = slot ? slot.name : '隐藏旧图标 / 无当前图标位';
+                        const statusClass = slot ? 'phone-icon-status-active' : 'phone-icon-status-orphan';
+                        return `
+                            <div class="phone-icon-cleanup-row" data-icon-key="${escapeHtmlAttr(key)}">
+                                <span class="phone-icon-name">${escapeHtml(label)}</span>
+                                <span class="phone-icon-key">${escapeHtml(key)}</span>
+                                <span class="phone-icon-status ${statusClass}">${slot ? '当前图标位' : '隐藏旧图标'}</span>
+                                <div class="phone-icon-actions">
+                                    <img src="${escapeHtmlAttr(dataUrl)}" class="phone-icon-thumb">
+                                    <button type="button" class="phone-settings-btn phone-settings-btn-danger phone-icon-delete-current-btn">删除</button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('') : '<div class="phone-empty-msg">当前没有自定义图标</div>'}
                 </div>
             `;
 
@@ -90,7 +116,7 @@ export function createIconUploadService() {
                         </div>
                     </div>
                 `;
-            }).join('');
+            }).join('') + cleanupHtml;
 
             listEl.querySelectorAll('.phone-icon-upload-btn').forEach((btn) => {
                 addListener(btn, 'click', () => {
@@ -147,12 +173,27 @@ export function createIconUploadService() {
                     const row = btn.closest('.phone-icon-upload-row');
                     const key = row?.dataset?.iconKey;
                     if (!key) return;
-                    const icons = getPhoneSettings().appIcons || {};
+                    const icons = { ...(getPhoneSettings().appIcons || {}) };
                     delete icons[key];
                     savePhoneSetting('appIcons', icons);
                     cacheRemove(CACHE_STORES.images, `icon:${key}`).catch(() => {});
                     render();
                     showToast(listEl, '图标已清除');
+                });
+            });
+
+            listEl.querySelectorAll('.phone-icon-delete-current-btn').forEach((btn) => {
+                addListener(btn, 'click', () => {
+                    if (disposed) return;
+                    const row = btn.closest('.phone-icon-cleanup-row');
+                    const key = row?.dataset?.iconKey;
+                    if (!key) return;
+                    const icons = { ...(getPhoneSettings().appIcons || {}) };
+                    delete icons[key];
+                    savePhoneSetting('appIcons', icons);
+                    cacheRemove(CACHE_STORES.images, `icon:${key}`).catch(() => {});
+                    render();
+                    showToast(listEl, '当前设置图标已删除');
                 });
             });
         };

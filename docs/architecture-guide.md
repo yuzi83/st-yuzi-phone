@@ -509,15 +509,17 @@ AI 指令预设正文支持 `{{placeholderName}}` 形式的运行时占位符。
 
 Appearance 页面服务统一由 [`appearance-settings.js`](../modules/settings-app/services/appearance-settings.js:1) 聚合，不允许页面直接绕过 facade import 子服务。当前外观页新增两类持久设置：
 
-- [`appearanceResourcePool`](../modules/settings/schema.js:1)：保存未直接分配到当前图标位或背景位的外观图片资源池，结构为 `wallpapers` 与 `icons` 两组资源列表。
+- [`appearanceResourcePool`](../modules/settings/schema.js:1)：legacy compatibility 字段，仅用于旧设置归一化与旧数据清理；当前外观包导入导出业务不得再读取或写入资源池内容，导入成功后会清空为 `wallpapers: []` 与 `icons: []`。
 - [`appearanceFontLibrary`](../modules/settings/schema.js:1)：保存当前启用字体 id 和用户导入字体列表，内置字体 id 由 [`font-library-service.js`](../modules/settings-app/services/appearance-settings/font-library-service.js:1) 与 schema 白名单共同约束。
 
 资源包链路：
 
 1. UI 入口由 [`buildAppearancePageHtml()`](../modules/settings-app/layout/page-builders/appearance-builders.js:9) 输出，事件绑定在 [`bindAppearanceResourcePackActions()`](../modules/settings-app/pages/appearance.js:77)。
-2. 导入导出实现位于 [`resource-pack-service.js`](../modules/settings-app/services/appearance-settings/resource-pack-service.js:1)，格式常量为 `yuzi-phone-appearance-pack`。
+2. 导入导出实现位于 [`resource-pack-service.js`](../modules/settings-app/services/appearance-settings/resource-pack-service.js:1)，格式常量为 `yuzi-phone-appearance-pack`；导出只包含当前 [`backgroundImage`](../modules/settings/schema.js:1) 与当前 [`appIcons`](../modules/settings/schema.js:1)，`iconPool` 仅保留为空数组兼容旧格式。
 3. 图标位枚举必须复用 [`collectAppearanceIconSlots()`](../modules/settings-app/services/appearance-settings/icon-slots.js:1)，不要在资源包服务和图标上传 UI 中各写一套 key 枚举。
-4. 导入保存使用 [`savePhoneSettingsPatch()`](../modules/settings/persistence.js:161) 的布尔返回值判断是否成功；失败时必须回滚旧 [`backgroundImage`](../modules/settings/schema.js:1)、[`appIcons`](../modules/settings/schema.js:1) 与 [`appearanceResourcePool`](../modules/settings/schema.js:1)。
+4. 图标资源项可携带 `slotKey`，导入时优先按当前图标位精确匹配；旧包没有 `slotKey` 时按当前图标位顺序兼容分配。
+5. 导入使用替换语义写入 [`appIcons`](../modules/settings/schema.js:1)：包内多余图标直接丢弃，包内图标不足的位置不保留旧图标，首页自然回退默认文字图标。
+6. 导入保存使用 [`savePhoneSettingsPatch()`](../modules/settings/persistence.js:161) 的布尔返回值判断是否成功；失败时必须回滚旧 [`backgroundImage`](../modules/settings/schema.js:1)、[`appIcons`](../modules/settings/schema.js:1) 与 legacy [`appearanceResourcePool`](../modules/settings/schema.js:1)。
 
 字体库链路：
 

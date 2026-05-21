@@ -3,7 +3,6 @@ import {
     getPhoneSettings,
     savePhoneSettingsPatch,
     flushPhoneSettingsSave,
-    normalizeAppearanceResourcePoolSettings,
 } from '../../../settings.js';
 import { STORAGE_BUDGETS } from '../../constants.js';
 import {
@@ -59,6 +58,8 @@ function normalizeImageResource(raw, index = 0, kind = 'resource') {
     return {
         id,
         name: safeString(raw.name, 120) || id,
+        ...(safeString(raw.slotKey, 160)
+            ? { slotKey: safeString(raw.slotKey, 160) } : {}),
         mime,
         dataUrl,
         hash,
@@ -124,64 +125,77 @@ function validatePack(pack) {
     };
 }
 
-function mergeResourcePool(currentPool, incoming = {}) {
-    const normalizedCurrent = normalizeAppearanceResourcePoolSettings(currentPool);
-    const wallpapers = dedupeResources([
-        ...normalizedCurrent.wallpapers,
-        ...(Array.isArray(incoming.wallpapers) ? incoming.wallpapers : []),
-    ]);
-    const icons = dedupeResources([
-        ...normalizedCurrent.icons,
-        ...(Array.isArray(incoming.icons) ? incoming.icons : []),
-    ]);
-    return normalizeAppearanceResourcePoolSettings({ wallpapers, icons });
+function createEmptyAppearanceResourcePool() {
+    return {
+        wallpapers: [],
+        icons: [],
+    };
 }
 
-function shuffleStable(items, seedText = '') {
-    const copy = [...items];
-    let seed = 2166136261;
-    const text = String(seedText || 'yuzi-phone');
-    for (let i = 0; i < text.length; i += 1) {
-        seed ^= text.charCodeAt(i);
-        seed = Math.imul(seed, 16777619) >>> 0;
-    }
-    for (let i = copy.length - 1; i > 0; i -= 1) {
-        seed = Math.imul(seed ^ i, 1664525) + 1013904223;
-        seed >>>= 0;
-        const j = seed % (i + 1);
-        const tmp = copy[i];
-        copy[i] = copy[j];
-        copy[j] = tmp;
-    }
-    return copy;
-}
-
-function buildIconAssignment({ iconSlots, currentIcons, packIcons, overwriteExisting, seedText }) {
-    const nextIcons = { ...(currentIcons || {}) };
-    const assignableSlots = iconSlots.filter((slot) => overwriteExisting || !nextIcons[slot.key]);
-    const shuffledIcons = shuffleStable(packIcons, seedText);
+function buildReplacingIconAssignment({ iconSlots, packIcons }) {
+    const slots = Array.isArray(iconSlots) ? iconSlots.filter(slot => slot?.key) : [];
+    const slotMap = new Map(slots.map(slot => [slot.key, slot]));
+    const usedSlotKeys = new Set();
+    const nextIcons = {};
     const assigned = [];
-    const leftovers = [];
+    const sequentialCandidates = [];
+    const discarded = [];
+    const unmatchedSlotKeyIcons = [];
 
-    shuffledIcons.forEach((icon, index) => {
-        const slot = assignableSlots[index];
+    packIcons.forEach((icon) => {
+        const slotKey = safeString(icon?.slotKey, 160);
+        if (slotKey && slotMap.has(slotKey) && !usedSlotKeys.has(slotKey)) {
+            const slot = slotMap.get(slotKey);
+            nextIcons[slotKey] = icon.dataUrl;
+            usedSlotKeys.add(slotKey);
+            assigned.push({
+                slotKey,
+                slotName: slot.name,
+                resourceId: icon.id,
+            });
+            return;
+        }
+
+        if (slotKey && !slotMap.has(slotKey)) {
+            unmatchedSlotKeyIcons.push(icon);
+        }
+        sequentialCandidates.push(icon);
+    });
+
+    let slotIndex = 0;
+    sequentialCandidates.forEach((icon) => {
+        while (slotIndex < slots.length && usedSlotKeys.has(slots[slotIndex].key)) {
+            slotIndex += 1;
+        }
+        const slot = slots[slotIndex];
         if (!slot) {
-            leftovers.push(icon);
+            discarded.push(icon);
             return;
         }
         nextIcons[slot.key] = icon.dataUrl;
-        assigned.push({ slotKey: slot.key, slotName: slot.name, resourceId: icon.id });
+        usedSlotKeys.add(slot.key);
+        assigned.push({
+            slotKey: slot.key,
+            slotName: slot.name,
+            resourceId: icon.id,
+        });
+        slotIndex += 1;
     });
 
-    return { nextIcons, assigned, leftovers };
+    if (slots.length === 0 && sequentialCandidates.length === 0 && packIcons.length > 0) {
+        discarded.push(...packIcons);
+    }
+
+    return { nextIcons, assigned, discarded, unmatchedSlotKeyIcons };
 }
 
-function createExportResource({ id, name, dataUrl, source = 'settings' }) {
+function createExportResource({ id, name, dataUrl, source = 'settings', slotKey = '' }) {
     const normalized = normalizeImageResource({
         id,
         name,
         dataUrl,
         source,
+        slotKey,
     }, 0, 'export');
     return normalized;
 }
@@ -214,13 +228,12 @@ function splitAppIconsByActiveSlots(appIcons, activeKeys) {
 
 export function clearAppearanceResourcePoolIcons() {
     const settings = getPhoneSettings();
-    const pool = normalizeAppearanceResourcePoolSettings(settings.appearanceResourcePool);
     const activeKeyResult = collectActiveIconKeys();
     const currentAppIcons = settings.appIcons || {};
     const { activeIcons, orphanIcons } = activeKeyResult.available
         ? splitAppIconsByActiveSlots(currentAppIcons, activeKeyResult.keys)
         : { activeIcons: currentAppIcons, orphanIcons: {} };
-    const removedPoolIcons = Array.isArray(pool.icons) ? pool.icons.length : 0;
+    const removedPoolIcons = Array.isArray(settings.appearanceResourcePool?.icons) ? settings.appearanceResourcePool.icons.length : 0;
     const removedOrphanAppIcons = Object.keys(orphanIcons).length;
     const removedCount = removedPoolIcons + removedOrphanAppIcons;
 
@@ -231,15 +244,12 @@ export function clearAppearanceResourcePoolIcons() {
             removedPoolIcons: 0,
             removedOrphanAppIcons: 0,
             skippedOrphanCleanup: !activeKeyResult.available,
-            message: activeKeyResult.available ? '未发现可清理的未使用图标' : '未发现可清理的资源池图标，当前数据不可用，已跳过未使用图标扫描',
+            message: activeKeyResult.available ? '未发现可清理的未使用图标' : '当前数据不可用，已跳过隐藏旧图标扫描',
         };
     }
 
     const patch = {
-        appearanceResourcePool: {
-            wallpapers: pool.wallpapers,
-            icons: [],
-        },
+        appearanceResourcePool: createEmptyAppearanceResourcePool(),
     };
     if (removedOrphanAppIcons > 0) {
         patch.appIcons = activeIcons;
@@ -265,13 +275,13 @@ export function clearAppearanceResourcePoolIcons() {
         removedPoolIcons,
         removedOrphanAppIcons,
         skippedOrphanCleanup: !activeKeyResult.available,
-        message: `已清理未使用图标 ${removedCount} 个（资源池 ${removedPoolIcons} 个，隐藏旧图标 ${removedOrphanAppIcons} 个）`,
+        message: `已清理未使用图标 ${removedCount} 个（兼容旧资源 ${removedPoolIcons} 个，隐藏旧图标 ${removedOrphanAppIcons} 个）`,
     };
 }
 
 export function exportAppearanceResourcePack(options = {}) {
     const settings = getPhoneSettings();
-    const pool = normalizeAppearanceResourcePoolSettings(settings.appearanceResourcePool);
+    const slotNameMap = new Map(collectAppearanceIconSlots().map(slot => [slot.key, slot.name]));
     const wallpapers = [];
     const icons = [];
 
@@ -284,18 +294,17 @@ export function exportAppearanceResourcePack(options = {}) {
         });
         if (currentWallpaper) wallpapers.push(currentWallpaper);
     }
-    wallpapers.push(...pool.wallpapers);
 
     Object.entries(settings.appIcons || {}).forEach(([key, dataUrl]) => {
         const icon = createExportResource({
             id: `current-icon-${key}`,
-            name: `当前图标 ${key}`,
+            name: slotNameMap.get(key) || `当前图标 ${key}`,
             dataUrl,
             source: 'current',
+            slotKey: key,
         });
         if (icon) icons.push(icon);
     });
-    icons.push(...pool.icons);
 
     const packName = safeString(options.packName, 120) || '玉子手机外观资源包';
     return {
@@ -313,22 +322,21 @@ export function exportAppearanceResourcePack(options = {}) {
             icons: dedupeResources(icons),
             iconPool: [],
             preferences: {
-                wallpaperStrategy: 'first',
-                iconAssignStrategy: 'random-empty',
-                overwriteExistingIcons: false,
+                wallpaperStrategy: 'replace-current',
+                iconAssignStrategy: 'slot-key-overwrite',
+                overwriteExistingIcons: true,
+                discardExtraIcons: true,
+                clearMissingIconSlots: true,
             },
         },
     };
 }
 
-export function importAppearanceResourcePackFromData(input, options = {}) {
+export function importAppearanceResourcePackFromData(input) {
     const warnings = [];
     try {
         const pack = validatePack(parsePackInput(input));
         const currentSettings = getPhoneSettings();
-        const overwriteExisting = options.overwriteExistingIcons === true
-            || pack.preferences?.overwriteExistingIcons === true
-            || pack.preferences?.iconAssignStrategy === 'random-overwrite';
         const iconSlots = collectAppearanceIconSlots();
         const packIcons = dedupeResources([...pack.icons, ...pack.iconPool]);
         const wallpaper = pack.wallpapers[0] || null;
@@ -339,6 +347,8 @@ export function importAppearanceResourcePackFromData(input, options = {}) {
                 imported: 0,
                 assignedIcons: 0,
                 poolIcons: 0,
+                discardedIcons: 0,
+                unmatchedIcons: 0,
                 warnings,
                 errors: ['背景图超过当前背景容量上限，未导入'],
                 message: '导入失败：背景图过大',
@@ -352,24 +362,19 @@ export function importAppearanceResourcePackFromData(input, options = {}) {
                 imported: 0,
                 assignedIcons: 0,
                 poolIcons: 0,
+                discardedIcons: 0,
+                unmatchedIcons: 0,
                 warnings,
                 errors: [`图标“${oversizedIcon.name}”超过单图容量上限，未导入`],
                 message: '导入失败：图标过大',
             };
         }
 
-        const assignment = buildIconAssignment({
+        const assignment = buildReplacingIconAssignment({
             iconSlots,
-            currentIcons: currentSettings.appIcons || {},
             packIcons,
-            overwriteExisting,
-            seedText: `${pack.packMeta?.name || ''}:${pack.packMeta?.version || ''}:${packIcons.length}`,
         });
-        const nextPool = mergeResourcePool(currentSettings.appearanceResourcePool, {
-            wallpapers: wallpaper ? pack.wallpapers.slice(1) : pack.wallpapers,
-            icons: assignment.leftovers,
-        });
-        const nextTotalIconBytes = estimateIconsStorageBytes(assignment.nextIcons) + nextPool.icons.reduce((sum, icon) => sum + Number(icon.bytes || 0), 0);
+        const nextTotalIconBytes = estimateIconsStorageBytes(assignment.nextIcons);
 
         if (nextTotalIconBytes > STORAGE_BUDGETS.appIconsTotalBytes) {
             return {
@@ -377,6 +382,8 @@ export function importAppearanceResourcePackFromData(input, options = {}) {
                 imported: 0,
                 assignedIcons: 0,
                 poolIcons: 0,
+                discardedIcons: assignment.discarded.length,
+                unmatchedIcons: assignment.unmatchedSlotKeyIcons.length,
                 warnings,
                 errors: ['导入后图标总容量超过上限，未导入'],
                 message: '导入失败：图标总容量超限',
@@ -384,23 +391,23 @@ export function importAppearanceResourcePackFromData(input, options = {}) {
         }
 
         if (iconSlots.length === 0 && packIcons.length > 0) {
-            warnings.push('当前没有可分配图标位，图标已进入资源池');
+            warnings.push('当前没有可分配图标位，图标已丢弃');
+        } else if (assignment.discarded.length > 0) {
+            warnings.push(`有 ${assignment.discarded.length} 个图标超过当前图标位数量，已丢弃`);
+        }
+        if (assignment.unmatchedSlotKeyIcons.length > 0) {
+            warnings.push(`有 ${assignment.unmatchedSlotKeyIcons.length} 个图标的 slotKey 不存在，已按顺序分配或丢弃`);
         }
 
         const backup = {
             backgroundImage: currentSettings.backgroundImage || null,
             appIcons: { ...(currentSettings.appIcons || {}) },
-            appearanceResourcePool: normalizeAppearanceResourcePoolSettings(currentSettings.appearanceResourcePool),
+            appearanceResourcePool: currentSettings.appearanceResourcePool || createEmptyAppearanceResourcePool(),
         };
         const patch = {
             backgroundImage: wallpaper ? wallpaper.dataUrl : backup.backgroundImage,
             appIcons: assignment.nextIcons,
-            appearanceResourcePool: iconSlots.length === 0 && packIcons.length > 0
-                ? mergeResourcePool(currentSettings.appearanceResourcePool, {
-                    wallpapers: wallpaper ? pack.wallpapers.slice(1) : pack.wallpapers,
-                    icons: packIcons,
-                })
-                : nextPool,
+            appearanceResourcePool: createEmptyAppearanceResourcePool(),
         };
 
         const saved = savePhoneSettingsPatch(patch);
@@ -412,6 +419,8 @@ export function importAppearanceResourcePackFromData(input, options = {}) {
                 imported: 0,
                 assignedIcons: 0,
                 poolIcons: 0,
+                discardedIcons: assignment.discarded.length,
+                unmatchedIcons: assignment.unmatchedSlotKeyIcons.length,
                 warnings,
                 errors: ['设置保存失败，已回滚'],
                 message: '导入失败：设置保存失败',
@@ -421,12 +430,14 @@ export function importAppearanceResourcePackFromData(input, options = {}) {
 
         return {
             success: true,
-            imported: (wallpaper ? 1 : 0) + packIcons.length,
+            imported: (wallpaper ? 1 : 0) + assignment.assigned.length,
             assignedIcons: assignment.assigned.length,
-            poolIcons: (patch.appearanceResourcePool.icons || []).length,
+            poolIcons: 0,
+            discardedIcons: assignment.discarded.length,
+            unmatchedIcons: assignment.unmatchedSlotKeyIcons.length,
             warnings,
             errors: [],
-            message: `导入完成：背景 ${wallpaper ? 1 : 0}，分配图标 ${assignment.assigned.length}，资源池图标 ${patch.appearanceResourcePool.icons.length}`,
+            message: `导入完成：背景 ${wallpaper ? 1 : 0}，分配图标 ${assignment.assigned.length}，丢弃多余图标 ${assignment.discarded.length}`,
         };
     } catch (error) {
         return {
@@ -434,6 +445,8 @@ export function importAppearanceResourcePackFromData(input, options = {}) {
             imported: 0,
             assignedIcons: 0,
             poolIcons: 0,
+            discardedIcons: 0,
+            unmatchedIcons: 0,
             warnings,
             errors: [error?.message || '未知错误'],
             message: `导入失败：${error?.message || '未知错误'}`,

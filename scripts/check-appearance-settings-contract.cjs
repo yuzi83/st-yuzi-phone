@@ -48,7 +48,7 @@ function main() {
     check(results, 'facade', '继续暴露 getLayoutValue()', has(contents.facade, 'export function getLayoutValue('));
     check(results, 'facade', '暴露外观资源包导入服务', has(contents.facade, 'export function importAppearanceResourcePackFromData('));
     check(results, 'facade', '暴露外观资源包导出服务', has(contents.facade, 'export function exportAppearanceResourcePack('));
-    check(results, 'facade', '暴露资源池图标清理服务', has(contents.facade, 'export function clearAppearanceResourcePoolIcons('));
+    check(results, 'facade', '保留旧资源清理兼容 alias', has(contents.facade, 'export function clearAppearanceResourcePoolIcons('));
     check(results, 'facade', '暴露字体库视图和操作服务', has(contents.facade, 'export function getAppearanceFontLibraryViewModel(')
         && has(contents.facade, 'export function importAppearanceFontFile(')
         && has(contents.facade, 'export function selectAppearanceFont(')
@@ -61,14 +61,37 @@ function main() {
         && has(contents.iconUpload, 'const allItems = collectAppearanceIconSlots(rawData);'));
     check(results, 'iconUpload', '自定义图标总占用来自 appIcons 而不是资源池', has(contents.iconUpload, 'const currentIcons = phoneSettings.appIcons || {};')
         && has(contents.iconUpload, 'const currentIconsBytes = estimateIconsStorageBytes(currentIcons);'));
+    check(results, 'iconUpload', '自定义图标 UI 展示当前 appIcons 全量清理入口', has(contents.iconUpload, 'const allCurrentIconEntries = Object.entries(currentIcons);')
+        && has(contents.iconUpload, '当前设置图标清理')
+        && has(contents.iconUpload, 'phone-icon-cleanup-row')
+        && has(contents.iconUpload, 'phone-icon-delete-current-btn')
+        && has(contents.iconUpload, '隐藏旧图标 / 无当前图标位'));
+    check(results, 'iconUpload', '自定义图标删除使用复制对象避免直接突变设置引用', has(contents.iconUpload, 'const icons = { ...(getPhoneSettings().appIcons || {}) };')
+        && has(contents.iconUpload, 'delete icons[key];')
+        && !has(contents.iconUpload, 'const icons = getPhoneSettings().appIcons || {};\n                    delete icons[key];'));
     check(results, 'iconSlots', '存在共享图标位枚举函数', has(contents.iconSlots, 'export function collectAppearanceIconSlots('));
     check(results, 'resourcePack', '存在外观资源包格式常量', has(contents.resourcePack, "APPEARANCE_PACK_FORMAT = 'yuzi-phone-appearance-pack'"));
     check(results, 'resourcePack', '存在外观资源包导入导出函数', has(contents.resourcePack, 'export function importAppearanceResourcePackFromData(')
         && has(contents.resourcePack, 'export function exportAppearanceResourcePack('));
-    check(results, 'resourcePack', '存在资源池图标清理函数并保留壁纸资源', has(contents.resourcePack, 'export function clearAppearanceResourcePoolIcons()')
+    check(results, 'resourcePack', '旧资源清理兼容函数会清空 legacy appearanceResourcePool', has(contents.resourcePack, 'export function clearAppearanceResourcePoolIcons()')
         && has(contents.resourcePack, 'removedPoolIcons')
-        && has(contents.resourcePack, 'wallpapers: pool.wallpapers')
-        && has(contents.resourcePack, 'icons: []'));
+        && has(contents.resourcePack, 'createEmptyAppearanceResourcePool()'));
+    check(results, 'resourcePack', 'normalizeImageResource 保留 slotKey 以支持精确图标位导入', has(contents.resourcePack, 'slotKey: safeString(raw.slotKey, 160)'));
+    check(results, 'resourcePack', '导出只包含当前背景与当前 appIcons，不拼接 legacy 资源池', !has(contents.resourcePack, 'wallpapers.push(...pool.wallpapers)')
+        && !has(contents.resourcePack, 'icons.push(...pool.icons)')
+        && has(contents.resourcePack, 'slotKey: key')
+        && has(contents.resourcePack, 'iconPool: []')
+        && has(contents.resourcePack, "iconAssignStrategy: 'slot-key-overwrite'")
+        && has(contents.resourcePack, 'discardExtraIcons: true')
+        && has(contents.resourcePack, 'clearMissingIconSlots: true'));
+    check(results, 'resourcePack', '导入使用替换式 appIcons 并丢弃多余图标', has(contents.resourcePack, 'function buildReplacingIconAssignment(')
+        && has(contents.resourcePack, 'appIcons: assignment.nextIcons')
+        && has(contents.resourcePack, 'appearanceResourcePool: createEmptyAppearanceResourcePool()')
+        && has(contents.resourcePack, 'discardedIcons: assignment.discarded.length')
+        && has(contents.resourcePack, 'poolIcons: 0')
+        && !has(contents.resourcePack, 'shuffleStable')
+        && !has(contents.resourcePack, 'buildIconAssignment')
+        && !has(contents.resourcePack, 'mergeResourcePool'));
     check(results, 'resourcePack', '资源池图标清理会扫描并删除隐藏旧 appIcons', has(contents.resourcePack, "import { getTableData } from '../../../phone-core/data-api.js';")
         && has(contents.resourcePack, 'function collectActiveIconKeys()')
         && has(contents.resourcePack, 'collectAppearanceIconSlots(rawData)')
@@ -159,10 +182,13 @@ function main() {
     check(results, 'appearanceBuilder', '外观页 HTML 包含资源包导入导出入口', has(contents.appearanceBuilder, '外观资源包')
         && has(contents.appearanceBuilder, 'id="phone-import-appearance-pack"')
         && has(contents.appearanceBuilder, 'id="phone-export-appearance-pack"')
-        && has(contents.appearanceBuilder, 'id="phone-appearance-pack-file"'));
-    check(results, 'appearanceBuilder', '自定义图标区域包含资源池图标清理按钮', has(contents.appearanceBuilder, '自定义图标')
-        && has(contents.appearanceBuilder, 'id="phone-clear-icon-resource-pool"')
-        && has(contents.appearanceBuilder, '清空资源池图标'));
+        && has(contents.appearanceBuilder, 'id="phone-appearance-pack-file"')
+        && has(contents.appearanceBuilder, '多余图标直接丢弃'));
+    check(results, 'appearanceBuilder', '外观页不再暴露资源池图标清理按钮或旧资源池文案', has(contents.appearanceBuilder, '自定义图标')
+        && !has(contents.appearanceBuilder, 'id="phone-clear-icon-resource-pool"')
+        && !has(contents.appearanceBuilder, '清空资源池图标')
+        && !has(contents.appearanceBuilder, '多余图标进入资源池')
+        && !has(contents.appearanceBuilder, '备用资源池'));
     check(results, 'appearanceBuilder', '外观页 HTML 包含字体库入口', has(contents.appearanceBuilder, '字体库')
         && has(contents.appearanceBuilder, 'id="phone-font-select"')
         && has(contents.appearanceBuilder, 'id="phone-import-font-btn"')
@@ -185,10 +211,8 @@ function main() {
         && has(contents.appearancePage, 'appearancePageService.exportAppearanceResourcePack({')
         && has(contents.appearancePage, 'downloadTextFile(')
         && has(contents.appearancePage, 'runtime.registerCleanup(bindAppearanceResourcePackActions(ctx, runtime));'));
-    check(results, 'appearancePage', '外观页绑定资源池图标清理按钮并保留滚动位置', has(contents.appearancePage, "container.querySelector('#phone-clear-icon-resource-pool')")
-        && has(contents.appearancePage, 'appearancePageService.clearAppearanceResourcePoolIcons()')
-        && has(contents.appearancePage, '未使用图标已清理')
-        && has(contents.appearancePage, 'rerenderKeepScroll();'));
+    check(results, 'appearancePage', '外观页不再绑定资源池清理按钮', !has(contents.appearancePage, "container.querySelector('#phone-clear-icon-resource-pool')")
+        && !has(contents.appearancePage, 'appearancePageService.clearAppearanceResourcePoolIcons()'));
     check(results, 'appearancePage', '资源包导入重渲染保留外观页滚动位置并处理异步生命周期', has(contents.appearancePage, 'function bindAppearanceResourcePackActions(')
         && has(contents.appearancePage, 'ctx.rerenderAppearanceKeepScroll')
         && has(contents.appearancePage, 'rerenderKeepScroll();')
@@ -215,7 +239,10 @@ function main() {
         && has(contents.types, 'skippedOrphanCleanup?: boolean;')
         && has(contents.types, 'importAppearanceResourcePackFromData: (input: string | object')
         && has(contents.types, 'exportAppearanceResourcePack: (options?: Record<string, any>)')
-        && has(contents.types, 'clearAppearanceResourcePoolIcons: () => AppearanceResourcePoolOperationResult'));
+        && has(contents.types, 'clearAppearanceResourcePoolIcons: () => AppearanceResourcePoolOperationResult')
+        && has(contents.types, 'slotKey?: string;')
+        && has(contents.types, 'discardedIcons?: number;')
+        && has(contents.types, 'unmatchedIcons?: number;'));
     check(results, 'types', 'types.d.ts 声明字体库设置、视图模型与服务', has(contents.types, 'interface AppearanceFontLibrarySettings')
         && has(contents.types, 'appearanceFontLibrary: AppearanceFontLibrarySettings;')
         && has(contents.types, 'getAppearanceFontLibraryViewModel: () => AppearanceFontLibraryViewModel')

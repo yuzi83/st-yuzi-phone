@@ -67,7 +67,7 @@ export function buildAppearancePageHtml({ layoutValues, hideTableCountBadge, fon
 
         ${buildSettingsSectionHtml({
             title: '外观资源包',
-            desc: '导入官方美化包，或导出当前背景、图标与备用资源池。',
+            desc: '导入官方美化包，或导出当前背景与当前自定义图标。',
             actionsHtml: `
                 <div class="phone-settings-action phone-settings-action-wrap">
                     <button type="button" class="phone-settings-btn" id="phone-import-appearance-pack">
@@ -79,7 +79,7 @@ export function buildAppearancePageHtml({ layoutValues, hideTableCountBadge, fon
                 </div>
             `,
             bodyHtml: `
-                <div class="phone-settings-note">导入后会优先填充当前空图标位；多余图标进入资源池，不足部分保留原来的文字图标。</div>
+                <div class="phone-settings-note">导入会替换当前自定义图标：带 slotKey 的图标优先回到对应 App，旧包图标按当前顺序分配；多余图标直接丢弃，不足位置回退默认文字图标。</div>
             `,
         })}
 
@@ -178,12 +178,7 @@ export function buildAppearancePageHtml({ layoutValues, hideTableCountBadge, fon
 
         ${buildSettingsSectionHtml({
             title: '自定义图标',
-            desc: '为不同 App 上传更具识别度的图标资源，形成统一视觉记忆。',
-            actionsHtml: `
-                <div class="phone-settings-action">
-                    <button type="button" class="phone-settings-btn phone-settings-btn-danger" id="phone-clear-icon-resource-pool">清空资源池图标</button>
-                </div>
-            `,
+            desc: '为不同 App 上传更具识别度的图标资源；下方会列出当前设置内的全部图标，包含不再对应当前 App 位的隐藏旧图标。',
             bodyHtml: `<div id="phone-icon-upload-list" class="phone-icon-upload-list"></div>`,
         })}
     `;

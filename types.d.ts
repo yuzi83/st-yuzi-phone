@@ -329,6 +329,7 @@ export interface PhoneBeautifyTemplateMatchResult {
 export interface AppearanceResourceImageItem {
     id: string;
     name: string;
+    slotKey?: string;
     mime: string;
     dataUrl: string;
     hash: string;
@@ -400,6 +401,8 @@ export interface AppearanceResourcePackResult {
     imported?: number;
     assignedIcons?: number;
     poolIcons?: number;
+    discardedIcons?: number;
+    unmatchedIcons?: number;
     warnings?: string[];
     errors?: string[];
     message?: string;

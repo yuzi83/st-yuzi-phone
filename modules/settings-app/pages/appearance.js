@@ -78,7 +78,6 @@ function bindAppearanceResourcePackActions(ctx, runtime) {
     const { container, render, appearancePageService } = ctx;
     const importBtn = container.querySelector('#phone-import-appearance-pack');
     const exportBtn = container.querySelector('#phone-export-appearance-pack');
-    const clearIconPoolBtn = container.querySelector('#phone-clear-icon-resource-pool');
     const fileInput = container.querySelector('#phone-appearance-pack-file');
     const showToast = typeof ctx.showToast === 'function'
         ? ctx.showToast
@@ -134,16 +133,6 @@ function bindAppearanceResourcePackActions(ctx, runtime) {
             }
             downloadTextFile('玉子手机外观资源包.json', JSON.stringify(result.pack, null, 2), 'application/json');
             showToast(container, '已导出当前外观资源包');
-        }));
-    }
-
-    if (clearIconPoolBtn) {
-        cleanupFns.push(bindEvent(clearIconPoolBtn, 'click', () => {
-            const result = appearancePageService.clearAppearanceResourcePoolIcons();
-            showToast(container, result.message || (result.success ? '未使用图标已清理' : '未使用图标清理失败'), !result.success);
-            if (result.success) {
-                rerenderKeepScroll();
-            }
         }));
     }
 
