@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 收敛 P0/P1/P2 工程结构边界：运行模式、宿主 context、数据库 API、设置 schema、生命周期资源、存储事实源、文档边界与发布链路均进入可验证规则。
+- 重做外观字体库的四个内置字体入口，移除 `宋体阅读`、`手写便签` 等书面型/手写型旧选项，新增内置 `寒蝉圆体`；保存旧内置字体 ID 的用户设置会按 schema 归一化回退到 `系统清晰`。
 - 发布门禁补齐 `npm run check:ci`，当前普通 contract 检查与 CI contract 基线检查都要求全量通过，历史失败基线清零。
 - 文档入口和架构说明链接收敛到真实文件路径，稳定事实保留在 `docs/`，演进计划保留在 `plans/`。
 

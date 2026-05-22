@@ -14,7 +14,7 @@ function formatBytes(bytes) {
 }
 
 function buildFontLibraryOptionsHtml(fontLibrary) {
-    const activeFontId = String(fontLibrary?.activeFontId || 'builtin.system');
+    const activeFontId = String(fontLibrary?.activeFontId || 'builtin.system-ui');
     const options = Array.isArray(fontLibrary?.options) ? fontLibrary.options : [];
     return options.map((font) => {
         const id = String(font?.id || '').trim();

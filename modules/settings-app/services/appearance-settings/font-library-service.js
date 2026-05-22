@@ -15,28 +15,44 @@ const DEFAULT_FONT_ID = APPEARANCE_FONT_LIBRARY_DEFAULTS.activeFontId;
 
 const BUILTIN_FONTS = Object.freeze([
     Object.freeze({
-        id: 'builtin.system',
-        name: '系统默认',
-        family: '"Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Tahoma, Geneva, Verdana, sans-serif',
-        previewText: '玉子手机 · 清晰耐看的系统字体',
+        id: 'builtin.system-ui',
+        name: '系统清晰',
+        family: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", "HarmonyOS Sans", "Noto Sans CJK SC", sans-serif',
+        previewText: '玉子手机 · 清晰耐看的系统界面字体',
     }),
     Object.freeze({
-        id: 'builtin.rounded',
-        name: '圆润黑体',
-        family: '"PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
-        previewText: '玉子手机 · 更柔和的圆润观感',
+        id: 'builtin.modern-sans',
+        name: '现代黑体',
+        family: '"Helvetica Neue", "HarmonyOS Sans", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
+        previewText: '玉子手机 · 干净利落的现代黑体观感',
     }),
     Object.freeze({
-        id: 'builtin.serif',
-        name: '宋体阅读',
-        family: '"Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", SimSun, "STSong", Georgia, "Times New Roman", serif',
-        previewText: '玉子手机 · 宋体风格的故事阅读感',
+        id: 'builtin.chill-round',
+        name: '寒蝉圆体',
+        family: '"YuziPhoneChillRoundF", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
+        previewText: '玉子手机 · 柔和圆润的内置中文圆体',
+        fontFaces: Object.freeze([
+            Object.freeze({
+                family: 'YuziPhoneChillRoundF',
+                file: 'assets/fonts/chill-round-f/ChillRoundFRegular.otf',
+                format: 'opentype',
+                weight: '400',
+                style: 'normal',
+            }),
+            Object.freeze({
+                family: 'YuziPhoneChillRoundF',
+                file: 'assets/fonts/chill-round-f/ChillRoundFBold.otf',
+                format: 'opentype',
+                weight: '700',
+                style: 'normal',
+            }),
+        ]),
     }),
     Object.freeze({
-        id: 'builtin.handwriting',
-        name: '手写便签',
-        family: '"Comic Sans MS", "Segoe Print", "Kaiti SC", KaiTi, "STKaiti", "LXGW WenKai", "PingFang SC", "Microsoft YaHei", cursive, sans-serif',
-        previewText: '玉子手机 · 像便签一样轻松随性',
+        id: 'builtin.basic-sans',
+        name: '基础无衬线',
+        family: 'sans-serif',
+        previewText: '玉子手机 · 使用浏览器基础无衬线字体',
     }),
 ]);
 
@@ -141,10 +157,38 @@ function createResult(success, message, extra = {}) {
     };
 }
 
+function getExtensionRootUrl() {
+    const moduleUrl = String(import.meta.url || '');
+    return moduleUrl.includes('/dist/')
+        ? new URL('../', moduleUrl)
+        : new URL('../../../../', moduleUrl);
+}
+
+function resolveExtensionAssetUrl(assetPath) {
+    return new URL(assetPath, getExtensionRootUrl()).href;
+}
+
 function buildFontFaceCss(font) {
     const formatConfig = FONT_FORMATS[font.format];
     if (!formatConfig || !font.family || !font.dataUrl) return '';
     return `@font-face { font-family: "${cssString(font.family)}"; src: url("${cssUrl(font.dataUrl)}") format("${formatConfig.cssFormat}"); font-display: swap; }`;
+}
+
+function buildBuiltinFontFaceCss(font) {
+    if (!font || !Array.isArray(font.fontFaces)) return '';
+
+    return font.fontFaces.map((face) => {
+        const family = cssString(face?.family);
+        const file = normalizeString(face?.file);
+        if (!family || !file) return '';
+
+        const url = resolveExtensionAssetUrl(file);
+        const format = cssString(face?.format || 'opentype');
+        const weight = cssString(face?.weight || '400');
+        const style = cssString(face?.style || 'normal');
+
+        return `@font-face { font-family: "${family}"; src: url("${cssUrl(url)}") format("${format}"); font-weight: ${weight}; font-style: ${style}; font-display: swap; }`;
+    }).filter(Boolean).join('\n');
 }
 
 function buildScopedFontOverrideCss(activeFont) {
@@ -349,9 +393,10 @@ export function applyAppearanceFontLibrary(root = null) {
     const activeFont = resolveActiveFont(library);
     const style = getStyleElement();
     if (style) {
-        const fontFaces = library.userFonts.map(buildFontFaceCss).filter(Boolean);
+        const userFontFaces = library.userFonts.map(buildFontFaceCss).filter(Boolean);
         style.textContent = [
-            ...fontFaces,
+            buildBuiltinFontFaceCss(activeFont),
+            ...userFontFaces,
             buildScopedFontOverrideCss(activeFont),
         ].filter(Boolean).join('\n');
     }

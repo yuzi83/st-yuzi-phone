@@ -13,7 +13,7 @@
 }
 
 #yuzi-phone-standalone {
-    --yuzi-phone-font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Tahoma, Geneva, Verdana, sans-serif;
+    --yuzi-phone-font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", "HarmonyOS Sans", "Noto Sans CJK SC", sans-serif;
     font-family: var(--yuzi-phone-font-family);
 }
 

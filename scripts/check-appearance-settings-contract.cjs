@@ -31,6 +31,15 @@ function has(content, snippet) {
     return content.includes(snippet);
 }
 
+function exists(relativePath) {
+    try {
+        fs.accessSync(path.join(ROOT, relativePath));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 function check(results, fileKey, description, ok) {
     results.push({ file: FILES[fileKey], description, ok });
 }
@@ -136,20 +145,32 @@ function main() {
         && has(contents.fontLibrary, 'export function selectAppearanceFont(')
         && has(contents.fontLibrary, 'export function deleteAppearanceFont(')
         && has(contents.fontLibrary, 'export function applyAppearanceFontLibrary('));
-    check(results, 'fontLibrary', '字体库服务内置 4 种字体并包含宋体/手写风格，不再保留像素/等宽入口', has(contents.fontLibrary, "id: 'builtin.system'")
-        && has(contents.fontLibrary, "id: 'builtin.rounded'")
-        && has(contents.fontLibrary, "id: 'builtin.serif'")
-        && has(contents.fontLibrary, "id: 'builtin.handwriting'")
-        && has(contents.fontLibrary, "name: '宋体阅读'")
-        && has(contents.fontLibrary, "name: '手写便签'")
+    check(results, 'fontLibrary', '字体库服务内置 4 种 UI 字体并移除书面/手写旧入口', has(contents.fontLibrary, "id: 'builtin.system-ui'")
+        && has(contents.fontLibrary, "id: 'builtin.modern-sans'")
+        && has(contents.fontLibrary, "id: 'builtin.chill-round'")
+        && has(contents.fontLibrary, "id: 'builtin.basic-sans'")
+        && has(contents.fontLibrary, "name: '系统清晰'")
+        && has(contents.fontLibrary, "name: '现代黑体'")
+        && has(contents.fontLibrary, "name: '寒蝉圆体'")
+        && has(contents.fontLibrary, "name: '基础无衬线'")
+        && !has(contents.fontLibrary, "id: 'builtin.system'")
+        && !has(contents.fontLibrary, "id: 'builtin.rounded'")
+        && !has(contents.fontLibrary, "id: 'builtin.serif'")
+        && !has(contents.fontLibrary, "id: 'builtin.handwriting'")
+        && !has(contents.fontLibrary, "name: '宋体阅读'")
+        && !has(contents.fontLibrary, "name: '手写便签'")
         && !has(contents.fontLibrary, "id: 'builtin.pixel'")
         && !has(contents.fontLibrary, "id: 'builtin.mono'")
         && !has(contents.fontLibrary, "name: '像素复古'")
         && !has(contents.fontLibrary, "name: '等宽终端'"));
-    check(results, 'fontLibrary', 'settings schema 只接受 4 个内置字体 id', has(contents.schema, "'builtin.system'")
-        && has(contents.schema, "'builtin.rounded'")
-        && has(contents.schema, "'builtin.serif'")
-        && has(contents.schema, "'builtin.handwriting'")
+    check(results, 'fontLibrary', 'settings schema 只接受 4 个新内置字体 id', has(contents.schema, "'builtin.system-ui'")
+        && has(contents.schema, "'builtin.modern-sans'")
+        && has(contents.schema, "'builtin.chill-round'")
+        && has(contents.schema, "'builtin.basic-sans'")
+        && !has(contents.schema, "'builtin.system'")
+        && !has(contents.schema, "'builtin.rounded'")
+        && !has(contents.schema, "'builtin.serif'")
+        && !has(contents.schema, "'builtin.handwriting'")
         && !has(contents.schema, "'builtin.pixel'")
         && !has(contents.schema, "'builtin.mono'"));
     check(results, 'fontLibrary', '字体库服务包含动态 font-face 注入和容器变量应用', has(contents.fontLibrary, 'FONT_STYLE_ELEMENT_ID')
@@ -163,6 +184,13 @@ function main() {
         && has(contents.fontLibrary, ':not(.fa-brands)')
         && has(contents.fontLibrary, ':not(code)')
         && has(contents.fontLibrary, ':not(textarea)'));
+    check(results, 'fontLibrary', '内置寒蝉圆体引用正式字体资源并保留许可证文件', has(contents.fontLibrary, 'YuziPhoneChillRoundF')
+        && has(contents.fontLibrary, 'buildBuiltinFontFaceCss(activeFont)')
+        && has(contents.fontLibrary, 'assets/fonts/chill-round-f/ChillRoundFRegular.otf')
+        && has(contents.fontLibrary, 'assets/fonts/chill-round-f/ChillRoundFBold.otf')
+        && exists('assets/fonts/chill-round-f/ChillRoundFRegular.otf')
+        && exists('assets/fonts/chill-round-f/ChillRoundFBold.otf')
+        && exists('assets/fonts/chill-round-f/LICENSE.txt'));
     check(results, 'visibility', '存在 setupAppearanceToggles()', has(contents.visibility, 'export function setupAppearanceToggles('));
     check(results, 'visibility', '存在 renderHiddenTableAppsList()', has(contents.visibility, 'export function renderHiddenTableAppsList('));
     check(results, 'layout', '存在 setupIconLayoutSettings()', has(contents.layout, 'export function setupIconLayoutSettings('));

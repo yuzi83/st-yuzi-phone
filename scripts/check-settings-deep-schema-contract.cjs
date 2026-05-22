@@ -292,11 +292,11 @@ async function testAppearanceFontLibraryDeepNormalization() {
         activeFontId: 'missing-font',
         userFonts: [],
     });
-    assert.equal(fallback.value.activeFontId, 'builtin.system');
+    assert.equal(fallback.value.activeFontId, 'builtin.system-ui');
 
     const settings = validateSettings({ appearanceFontLibrary: [] });
     assert.deepEqual(settings.appearanceFontLibrary, {
-        activeFontId: 'builtin.system',
+        activeFontId: 'builtin.system-ui',
         userFonts: [],
     });
 }

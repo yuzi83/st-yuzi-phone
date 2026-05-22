@@ -36,7 +36,7 @@ export const APPEARANCE_RESOURCE_POOL_DEFAULTS = Object.freeze({
 });
 
 export const APPEARANCE_FONT_LIBRARY_DEFAULTS = Object.freeze({
-    activeFontId: 'builtin.system',
+    activeFontId: 'builtin.system-ui',
     userFonts: Object.freeze([]),
 });
 
@@ -67,10 +67,10 @@ const APPEARANCE_FONT_MIME_ALIASES = Object.freeze({
     'font/opentype': 'font/otf',
 });
 const APPEARANCE_FONT_BUILTIN_IDS = new Set([
-    'builtin.system',
-    'builtin.rounded',
-    'builtin.serif',
-    'builtin.handwriting',
+    'builtin.system-ui',
+    'builtin.modern-sans',
+    'builtin.chill-round',
+    'builtin.basic-sans',
 ]);
 const APPEARANCE_RESOURCE_POOL_LIMITS = Object.freeze({
     wallpapers: 48,
@@ -124,7 +124,7 @@ export const defaultSettings = {
         icons: [],
     },
     appearanceFontLibrary: {
-        activeFontId: 'builtin.system',
+        activeFontId: 'builtin.system-ui',
         userFonts: [],
     },
     phoneReadableTextScalePercent: 100,

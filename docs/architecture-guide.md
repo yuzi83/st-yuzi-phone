@@ -541,7 +541,10 @@ Appearance 页面服务统一由 [`appearance-settings.js`](../modules/settings-
 1. 字体视图模型、导入、选择、删除和运行时应用集中在 [`font-library-service.js`](../modules/settings-app/services/appearance-settings/font-library-service.js:1)。
 2. 用户字体通过 data URL 写入 [`appearanceFontLibrary`](../modules/settings/schema.js:1)，导入格式限制和容量限制在服务内校验；内置字体不写入用户字体列表。
 3. 运行时通过动态 `@font-face` 与 [`--yuzi-phone-font-family`](../styles/phone-base/01-shell-system.css:1) 注入字体，并用 `#yuzi-phone-standalone[data-yuzi-phone-font-id]` 作用域规则压过 SillyTavern 主题字体。
-4. 字体选择、字体导入、字体删除和资源包导入成功后的重渲染都应走 [`rerenderAppearanceKeepScroll`](../modules/settings-app/render.js:201)，异步 FileReader 回调必须先检查 [`pageRuntime.isDisposed()`](../modules/settings-app/page-runtime.js:118)。这里如果裸调用 `render()`，设置页回顶和销毁后 DOM 写入会一起回来，能跑但不能交付。
+4. 内置字体入口固定为 `builtin.system-ui`、`builtin.modern-sans`、`builtin.chill-round`、`builtin.basic-sans`；`builtin.chill-round` 的 ChillRoundF OTF 文件只从 [`assets/fonts/chill-round-f/`](../assets/fonts/chill-round-f/) 正式资源目录加载，不依赖临时解压目录。
+5. ChillRoundF 使用 SIL Open Font License 1.1，发布包必须保留 [`LICENSE.txt`](../assets/fonts/chill-round-f/LICENSE.txt)；不要把 `ChillRoundF_Update.pdf` 或 `.ttf` 文件放进运行资源，也不要擅自转换 `woff2` 制造派生字体风险。
+6. 旧内置 ID（`builtin.system`、`builtin.rounded`、`builtin.serif`、`builtin.handwriting`）不做迁移映射；旧设置或非法 `activeFontId` 由 `normalizeAppearanceFontLibrarySettings()` 回退到 `builtin.system-ui`。这不是兼容遗漏，而是避免书面型/手写型旧语义继续污染当前 UI 字体库。
+7. 字体选择、字体导入、字体删除和资源包导入成功后的重渲染都应走 [`rerenderAppearanceKeepScroll`](../modules/settings-app/render.js:201)，异步 FileReader 回调必须先检查 [`pageRuntime.isDisposed()`](../modules/settings-app/page-runtime.js:118)。这里如果裸调用 `render()`，设置页回顶和销毁后 DOM 写入会一起回来，能跑但不能交付。
 
 ### 6.4 Beautify 模板系统
 
