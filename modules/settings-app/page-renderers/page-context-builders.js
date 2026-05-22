@@ -97,6 +97,8 @@ function buildAppearancePageService(services) {
         getReadableTextScalePercentValue: services.appearance.getReadableTextScalePercentValue,
         applyReadableTextScale: services.appearance.applyReadableTextScale,
         setupReadableTextScaleSettings: services.appearance.setupReadableTextScaleSettings,
+        getHomeAppLabelColorModeValue: services.appearance.getHomeAppLabelColorModeValue,
+        setupHomeAppLabelColorSettings: services.appearance.setupHomeAppLabelColorSettings,
     };
 }
 

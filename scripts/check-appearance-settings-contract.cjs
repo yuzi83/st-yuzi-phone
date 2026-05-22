@@ -12,6 +12,7 @@ const FILES = {
     fontLibrary: 'modules/settings-app/services/appearance-settings/font-library-service.js',
     visibility: 'modules/settings-app/services/appearance-settings/visibility-settings.js',
     layout: 'modules/settings-app/services/appearance-settings/layout-settings.js',
+    homeLabelColor: 'modules/settings-app/services/appearance-settings/home-label-color-settings.js',
     settingsRender: 'modules/settings-app/render.js',
     pageRenderers: 'modules/settings-app/page-renderers.js',
     contextBuilders: 'modules/settings-app/page-renderers/page-context-builders.js',
@@ -19,6 +20,7 @@ const FILES = {
     appearancePage: 'modules/settings-app/pages/appearance.js',
     schema: 'modules/settings/schema.js',
     types: 'types.d.ts',
+    homeRender: 'modules/phone-home/render.js',
 };
 
 function read(relativePath) {
@@ -58,6 +60,8 @@ function main() {
         && has(contents.facade, 'export function selectAppearanceFont(')
         && has(contents.facade, 'export function deleteAppearanceFont(')
         && has(contents.facade, 'export function applyAppearanceFontLibrary('));
+    check(results, 'facade', '暴露首页 App 名称颜色服务', has(contents.facade, 'export function getHomeAppLabelColorModeValue(')
+        && has(contents.facade, 'export function setupHomeAppLabelColorSettings('));
 
     check(results, 'background', '存在 setupBgUpload()', has(contents.background, 'export function setupBgUpload('));
     check(results, 'iconUpload', '存在 createIconUploadService()', has(contents.iconUpload, 'export function createIconUploadService('));
@@ -163,6 +167,10 @@ function main() {
     check(results, 'visibility', '存在 renderHiddenTableAppsList()', has(contents.visibility, 'export function renderHiddenTableAppsList('));
     check(results, 'layout', '存在 setupIconLayoutSettings()', has(contents.layout, 'export function setupIconLayoutSettings('));
     check(results, 'layout', '存在 getLayoutValue()', has(contents.layout, 'export function getLayoutValue('));
+    check(results, 'homeLabelColor', '存在首页 App 名称颜色读取与绑定服务', has(contents.homeLabelColor, 'export function getHomeAppLabelColorModeValue()')
+        && has(contents.homeLabelColor, 'export function setupHomeAppLabelColorSettings(container)')
+        && has(contents.homeLabelColor, "const HOME_APP_LABEL_COLOR_SETTING_KEY = 'homeAppLabelColorMode';")
+        && has(contents.homeLabelColor, "new Set(['white', 'black'])"));
 
     check(results, 'settingsRender', 'settings render 从 appearance-settings façade 导入服务', has(contents.settingsRender, "from './services/appearance-settings.js';"));
     check(results, 'settingsRender', 'settings render 将 appearance 服务注入 grouped deps', has(contents.settingsRender, 'appearance: {')
@@ -178,7 +186,11 @@ function main() {
         && has(contents.settingsRender, 'importAppearanceFontFile,')
         && has(contents.settingsRender, 'selectAppearanceFont,')
         && has(contents.settingsRender, 'deleteAppearanceFont,')
-        && has(contents.settingsRender, 'applyAppearanceFontLibrary,'));
+        && has(contents.settingsRender, 'applyAppearanceFontLibrary,')
+        && has(contents.settingsRender, 'getReadableTextScalePercentValue,')
+        && has(contents.settingsRender, 'applyReadableTextScale,')
+        && has(contents.settingsRender, 'setupReadableTextScaleSettings,')
+        && has(contents.settingsRender, 'getHomeAppLabelColorModeValue,') && has(contents.settingsRender, 'setupHomeAppLabelColorSettings,'));
     check(results, 'settingsRender', 'settings render 创建并注入外观页滚动保留 rerender', has(contents.settingsRender, "createRerenderWithScroll('appearanceScrollTop', render)")
         && has(contents.settingsRender, 'rerenderAppearanceKeepScroll,'));
     check(results, 'pageRenderers', 'page renderer 校验 appearance 滚动保留依赖', has(contents.pageRenderers, "'rerenderAppearanceKeepScroll',"));
@@ -192,7 +204,11 @@ function main() {
         && has(contents.pageRenderers, "'importAppearanceFontFile',")
         && has(contents.pageRenderers, "'selectAppearanceFont',")
         && has(contents.pageRenderers, "'deleteAppearanceFont',")
-        && has(contents.pageRenderers, "'applyAppearanceFontLibrary',"));
+        && has(contents.pageRenderers, "'applyAppearanceFontLibrary',")
+        && has(contents.pageRenderers, "'getReadableTextScalePercentValue',")
+        && has(contents.pageRenderers, "'applyReadableTextScale',")
+        && has(contents.pageRenderers, "'setupReadableTextScaleSettings',")
+        && has(contents.pageRenderers, "'getHomeAppLabelColorModeValue',") && has(contents.pageRenderers, "'setupHomeAppLabelColorSettings',"));
     check(results, 'contextBuilders', 'appearance context 通过 appearancePageService 注入页面', has(contents.contextBuilders, 'function buildAppearancePageService(services)')
         && has(contents.contextBuilders, 'appearancePageService,')
         && has(contents.contextBuilders, 'setupBgUpload: services.appearance.setupBgUpload')
@@ -203,6 +219,11 @@ function main() {
         && has(contents.contextBuilders, 'importAppearanceFontFile: services.appearance.importAppearanceFontFile')
         && has(contents.contextBuilders, 'selectAppearanceFont: services.appearance.selectAppearanceFont')
         && has(contents.contextBuilders, 'deleteAppearanceFont: services.appearance.deleteAppearanceFont')
+        && has(contents.contextBuilders, 'getReadableTextScalePercentValue: services.appearance.getReadableTextScalePercentValue')
+        && has(contents.contextBuilders, 'applyReadableTextScale: services.appearance.applyReadableTextScale')
+        && has(contents.contextBuilders, 'setupReadableTextScaleSettings: services.appearance.setupReadableTextScaleSettings')
+        && has(contents.contextBuilders, 'getHomeAppLabelColorModeValue: services.appearance.getHomeAppLabelColorModeValue')
+        && has(contents.contextBuilders, 'setupHomeAppLabelColorSettings: services.appearance.setupHomeAppLabelColorSettings')
         && has(contents.contextBuilders, 'applyAppearanceFontLibrary: services.appearance.applyAppearanceFontLibrary')
         && has(contents.contextBuilders, 'rerenderAppearanceKeepScroll: services.scroll.rerenderAppearanceKeepScroll')
         && has(contents.contextBuilders, 'showToast: services.feedback.showToast'));
@@ -223,6 +244,10 @@ function main() {
         && has(contents.appearanceBuilder, 'id="phone-delete-font-btn"')
         && has(contents.appearanceBuilder, 'id="phone-font-file"')
         && has(contents.appearanceBuilder, 'id="phone-font-preview"'));
+    check(results, 'appearanceBuilder', '外观页 HTML 包含首页 App 名称颜色设置', has(contents.appearanceBuilder, '首页 App 名称颜色')
+        && has(contents.appearanceBuilder, 'id="phone-home-app-label-color-mode"')
+        && has(contents.appearanceBuilder, '白色文字（适合深色背景）')
+        && has(contents.appearanceBuilder, '黑色文字（适合浅色背景）'));
 
     check(results, 'appearancePage', '外观页从 appearancePageService 读取 setupBgUpload()', has(contents.appearancePage, 'const setupBgUpload = appearancePageService.setupBgUpload;'));
     check(results, 'appearancePage', '外观页从 appearancePageService 读取 renderIconUploadList()', has(contents.appearancePage, 'const renderIconUploadList = appearancePageService.renderIconUploadList;'));
@@ -259,6 +284,11 @@ function main() {
         && has(contents.appearancePage, 'rerenderKeepScroll();')
         && has(contents.appearancePage, 'runtime.isDisposed')
         && !has(contents.appearancePage, 'render();\n        }));\n    }\n\n    if (importBtn && fileInput)'));
+    check(results, 'appearancePage', '外观页读取并绑定首页 App 名称颜色设置', has(contents.appearancePage, 'const getHomeAppLabelColorModeValue = appearancePageService.getHomeAppLabelColorModeValue;')
+        && has(contents.appearancePage, 'const setupHomeAppLabelColorSettings = appearancePageService.setupHomeAppLabelColorSettings;')
+        && has(contents.appearancePage, 'homeAppLabelColorMode: getHomeAppLabelColorModeValue(),')
+        && has(contents.appearancePage, 'runtime.registerCleanup(setupHomeAppLabelColorSettings(container));')
+        && has(contents.appearancePage, 'registerCleanup(setupHomeAppLabelColorSettings(container));'));
     check(results, 'types', 'types.d.ts 声明外观资源池与资源包服务', has(contents.types, 'interface AppearanceResourcePoolSettings')
         && has(contents.types, 'appearanceResourcePool: AppearanceResourcePoolSettings;')
         && has(contents.types, 'interface AppearanceResourcePoolOperationResult')
@@ -280,7 +310,15 @@ function main() {
         && has(contents.types, 'applyAppearanceFontLibrary: (root?: Element | null) => boolean'));
     check(results, 'types', 'types.d.ts 声明外观页滚动保留 rerender 依赖', has(contents.types, 'rerenderAppearanceKeepScroll: () => void;')
         && has(contents.types, 'interface SettingsAppearancePageContext'));
+    check(results, 'types', 'types.d.ts 声明首页 App 名称颜色与外观页颜色服务', has(contents.types, "homeAppLabelColorMode: 'white' | 'black';")
+        && has(contents.types, "getHomeAppLabelColorModeValue: () => 'white' | 'black';")
+        && has(contents.types, 'setupHomeAppLabelColorSettings: (container: HTMLElement) => (() => void) | void;')
+        && has(contents.types, 'getReadableTextScalePercentValue: () => number;')
+        && has(contents.types, 'applyReadableTextScale: (root?: Element | null, percent?: number) => void;')
+        && has(contents.types, 'setupReadableTextScaleSettings: (container: HTMLElement) => (() => void) | void;'));
     check(results, 'types', 'types.d.ts 声明 savePhoneSettingsPatch() 返回保存结果布尔值', has(contents.types, 'savePhoneSettingsPatch(patch: Partial<PhoneSettings>): boolean;'));
+    check(results, 'schema', 'settings schema 声明首页 App 名称颜色默认值与枚举校验', has(contents.schema, "homeAppLabelColorMode: 'white'") && has(contents.schema, "homeAppLabelColorMode: { type: 'string', enum: ['white', 'black'] }"));
+    check(results, 'homeRender', 'Home 渲染通过受控枚举映射首页标签颜色', has(contents.homeRender, 'function resolveHomeAppLabelColorTokens(mode)') && has(contents.homeRender, 'phoneSettings.homeAppLabelColorMode'));
 
     const failed = results.filter(item => !item.ok);
     if (failed.length > 0) {

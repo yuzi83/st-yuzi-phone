@@ -71,6 +71,8 @@ function validateSettingsRendererDeps(deps = {}) {
         'getReadableTextScalePercentValue',
         'applyReadableTextScale',
         'setupReadableTextScaleSettings',
+        'getHomeAppLabelColorModeValue',
+        'setupHomeAppLabelColorSettings',
     ]);
     assertFunctionDeps('dataConfig', deps.dataConfig, [
         'getTableData',

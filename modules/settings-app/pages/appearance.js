@@ -176,6 +176,8 @@ export function renderAppearancePage(ctx) {
     const getReadableTextScalePercentValue = appearancePageService.getReadableTextScalePercentValue;
     const applyReadableTextScale = appearancePageService.applyReadableTextScale;
     const setupReadableTextScaleSettings = appearancePageService.setupReadableTextScaleSettings;
+    const getHomeAppLabelColorModeValue = appearancePageService.getHomeAppLabelColorModeValue;
+    const setupHomeAppLabelColorSettings = appearancePageService.setupHomeAppLabelColorSettings;
 
     const layoutValues = {
         appGridColumns: getLayoutValue('appGridColumns', 4),
@@ -188,6 +190,7 @@ export function renderAppearancePage(ctx) {
     container.innerHTML = buildAppearancePageHtml({
         layoutValues,
         hideTableCountBadge: !!getPhoneSettings().hideTableCountBadge,
+        homeAppLabelColorMode: getHomeAppLabelColorModeValue(),
         fontLibrary: getAppearanceFontLibraryViewModel(),
         readableTextScalePercent: getReadableTextScalePercentValue(),
     });
@@ -216,6 +219,7 @@ export function renderAppearancePage(ctx) {
         runtime.registerCleanup(bindAppearanceResourcePackActions(ctx, runtime));
         runtime.registerCleanup(bindAppearanceFontLibraryActions(ctx, runtime));
         runtime.registerCleanup(setupReadableTextScaleSettings(container));
+        runtime.registerCleanup(setupHomeAppLabelColorSettings(container));
     } else if (typeof registerCleanup === 'function') {
         registerCleanup(setupBgUpload(container));
         registerCleanup(setupIconLayoutSettings(container));
@@ -225,5 +229,6 @@ export function renderAppearancePage(ctx) {
         registerCleanup(bindAppearanceResourcePackActions(ctx, null));
         registerCleanup(bindAppearanceFontLibraryActions(ctx, null));
         registerCleanup(setupReadableTextScaleSettings(container));
+        registerCleanup(setupHomeAppLabelColorSettings(container));
     }
 }

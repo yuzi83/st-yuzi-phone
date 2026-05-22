@@ -25,6 +25,10 @@ import {
     getReadableTextScalePercentValue as getReadableTextScalePercentValueImpl,
     setupReadableTextScaleSettings as setupReadableTextScaleSettingsImpl,
 } from './appearance-settings/readable-text-scale-settings.js';
+import {
+    getHomeAppLabelColorModeValue as getHomeAppLabelColorModeValueImpl,
+    setupHomeAppLabelColorSettings as setupHomeAppLabelColorSettingsImpl,
+} from './appearance-settings/home-label-color-settings.js';
 
 const { renderIconUploadList: renderIconUploadListImpl } = createIconUploadService();
 
@@ -90,6 +94,14 @@ export function applyReadableTextScale(root = null, percent) {
 
 export function setupReadableTextScaleSettings(container) {
     return setupReadableTextScaleSettingsImpl(container);
+}
+
+export function getHomeAppLabelColorModeValue() {
+    return getHomeAppLabelColorModeValueImpl();
+}
+
+export function setupHomeAppLabelColorSettings(container) {
+    return setupHomeAppLabelColorSettingsImpl(container);
 }
 
 export function getLayoutValue(key, fallback) {

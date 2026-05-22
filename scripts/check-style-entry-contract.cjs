@@ -84,7 +84,9 @@ function main() {
     check(results, 'home', '主页不再保留整屏 overlay 规则', homeOverlayBlock.length === 0);
     check(results, 'home', '主页不再使用 15% 黑色遮罩压暗壁纸', !has(contents.home, 'background: rgba(0, 0, 0, 0.15);'));
     check(results, 'home', '主页无壁纸时由 .phone-home 提供浅暖玉默认背景', has(contents.home, 'linear-gradient(180deg, #f4efe6'));
-    check(results, 'home', '主页 App 名称使用局部文字阴影保障可读性', has(contents.home, '.phone-app-label') && has(contents.home, 'text-shadow: 0 1px 3px rgba(0, 0, 0, 0.32);'));
+    check(results, 'home', '主页 App 名称使用受控颜色变量与局部文字阴影保障可读性', has(contents.home, '.phone-app-label')
+        && has(contents.home, 'color: var(--phone-home-app-label-color, rgba(255, 255, 255, 0.96));')
+        && has(contents.home, 'text-shadow: var(--phone-home-app-label-shadow, 0 1px 3px rgba(0, 0, 0, 0.32));'));
     check(results, 'home', '主页 overlay 不得使用 backdrop-filter 模糊高清壁纸', !/backdrop-filter\s*:/i.test(homeOverlayBlock) && !/-webkit-backdrop-filter\s*:/i.test(homeOverlayBlock));
     check(results, 'shell', '手机容器声明字体库 CSS 变量入口', has(contents.shell, '#yuzi-phone-standalone')
         && has(contents.shell, '--yuzi-phone-font-family')

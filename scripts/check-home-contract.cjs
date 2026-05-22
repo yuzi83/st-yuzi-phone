@@ -59,6 +59,8 @@ function main() {
     check(results, 'render', 'render 直接组合 view-model 模块', has(contents.render, "from './view-model.js'"));
     check(results, 'render', 'render 直接组合交互绑定模块', has(contents.render, "from './interactions.js'"));
     check(results, 'render', 'render 直接组合 runtime 模块', has(contents.render, "from './runtime.js'"));
+    check(results, 'render', 'render 存在首页 App 名称颜色 token 映射函数', has(contents.render, 'function resolveHomeAppLabelColorTokens(mode)'));
+    check(results, 'render', 'render 读取 homeAppLabelColorMode 并映射首页标签颜色', has(contents.render, 'phoneSettings.homeAppLabelColorMode') && has(contents.render, 'resolveHomeAppLabelColorTokens('));
 
     // runtime.js 暴露主屏交互 runtime 工厂
     check(results, 'runtime', 'runtime 暴露 ensureHomeInteractionRuntime()', has(contents.runtime, 'export function ensureHomeInteractionRuntime(container)'));
@@ -74,6 +76,7 @@ function main() {
     check(results, 'templates', '存在 buildHomeShellHtml()', has(contents.templates, 'export function buildHomeShellHtml('));
     check(results, 'templates', '存在 buildHomeAppItemHtml()', has(contents.templates, 'export function buildHomeAppItemHtml('));
     check(results, 'templates', '存在 buildDockItemHtml()', has(contents.templates, 'export function buildDockItemHtml('));
+    check(results, 'templates', '主页模板注入首页标签颜色 CSS 变量', has(contents.templates, '--phone-home-app-label-color:') && has(contents.templates, '--phone-home-app-label-shadow:'));
     check(results, 'templates', '主页模板不再渲染黑色遮罩层', !has(contents.templates, 'phone-home-overlay'));
 
     check(results, 'actions', '存在 showHomeToast()', has(contents.actions, 'export function showHomeToast('));
@@ -88,7 +91,9 @@ function main() {
     check(results, 'homeCss', '主页 CSS 不再定义黑幕 overlay', !has(contents.homeCss, '.phone-home-overlay'));
     check(results, 'homeCss', '主页 CSS 不再硬编码 15% 黑色遮罩', !has(contents.homeCss, 'rgba(0, 0, 0, 0.15)'));
     check(results, 'homeCss', '主页无壁纸时存在浅暖玉默认背景', has(contents.homeCss, 'linear-gradient(180deg, #f4efe6'));
-    check(results, 'homeCss', '主页 App 名称通过文字阴影保障可读性', has(contents.homeCss, '.phone-app-label') && has(contents.homeCss, 'text-shadow: 0 1px 3px rgba(0, 0, 0, 0.32)'));
+    check(results, 'homeCss', '主页 App 名称通过受控 CSS 变量保障可读性', has(contents.homeCss, '.phone-app-label')
+        && has(contents.homeCss, 'color: var(--phone-home-app-label-color, rgba(255, 255, 255, 0.96));')
+        && has(contents.homeCss, 'text-shadow: var(--phone-home-app-label-shadow, 0 1px 3px rgba(0, 0, 0, 0.32));'));
 
     // route-renderer.js 直接动态 import 新路径
     check(results, 'routeRenderer', "route-renderer 'home' 路由动态 import phone-home/render.js", has(contents.routeRenderer, "await import('../phone-home/render.js')"));

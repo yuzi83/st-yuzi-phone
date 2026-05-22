@@ -31,6 +31,20 @@ import { bindHomeDockInteractions, bindHomeGridInteractions } from './interactio
 import { buildHomeShellStyleText, buildHomeShellHtml, buildHomeAppItemHtml, buildDockItemHtml } from './templates.js';
 import { ensureHomeInteractionRuntime } from './runtime.js';
 
+function resolveHomeAppLabelColorTokens(mode) {
+    if (mode === 'black') {
+        return {
+            color: 'rgba(20, 24, 28, 0.92)',
+            shadow: '0 1px 3px rgba(255, 255, 255, 0.45)',
+        };
+    }
+
+    return {
+        color: 'rgba(255, 255, 255, 0.96)',
+        shadow: '0 1px 3px rgba(0, 0, 0, 0.32)',
+    };
+}
+
 /**
  * 复用或重建主屏 shell DOM。
  * @param {HTMLElement} container
@@ -129,6 +143,7 @@ export function renderHomeScreen(container) {
     const appGridColumns = clampNumber(phoneSettings.appGridColumns, 3, 6, 4);
     const appGridGap = clampNumber(phoneSettings.appGridGap, 8, 24, 12);
     const dockIconSize = clampNumber(phoneSettings.dockIconSize, 32, 72, 48);
+    const { color: homeAppLabelColor, shadow: homeAppLabelShadow } = resolveHomeAppLabelColorTokens(phoneSettings.homeAppLabelColorMode);
 
     const bgStyle = phoneSettings.backgroundImage
         ? `background-image: url(${escapeHtmlAttr(phoneSettings.backgroundImage)}); background-size: cover; background-position: center;`
@@ -136,6 +151,8 @@ export function renderHomeScreen(container) {
 
     const homeShellStyle = buildHomeShellStyleText({
         bgStyle,
+        homeAppLabelColor,
+        homeAppLabelShadow,
         appIconSize,
         appIconRadius,
         appGridColumns,

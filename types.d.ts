@@ -429,6 +429,7 @@ export interface PhoneSettings {
     appIcons: Record<string, string>;
     appearanceResourcePool: AppearanceResourcePoolSettings;
     appearanceFontLibrary: AppearanceFontLibrarySettings;
+    homeAppLabelColorMode: 'white' | 'black';
     phoneReadableTextScalePercent: number;
     hideTableCountBadge: boolean;
     hiddenTableApps: Record<string, boolean>;
@@ -782,6 +783,11 @@ export interface SettingsAppearancePageService {
     selectAppearanceFont: (fontId: string) => AppearanceFontOperationResult;
     deleteAppearanceFont: (fontId: string) => AppearanceFontOperationResult;
     applyAppearanceFontLibrary: (root?: Element | null) => boolean;
+    getReadableTextScalePercentValue: () => number;
+    applyReadableTextScale: (root?: Element | null, percent?: number) => void;
+    setupReadableTextScaleSettings: (container: HTMLElement) => (() => void) | void;
+    getHomeAppLabelColorModeValue: () => 'white' | 'black';
+    setupHomeAppLabelColorSettings: (container: HTMLElement) => (() => void) | void;
 }
 
 export interface SettingsAppearancePageContext extends SettingsPageRendererCommonDeps {

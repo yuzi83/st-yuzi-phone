@@ -76,6 +76,8 @@ import {
     getReadableTextScalePercentValue,
     applyReadableTextScale,
     setupReadableTextScaleSettings,
+    getHomeAppLabelColorModeValue,
+    setupHomeAppLabelColorSettings,
     getLayoutValue,
 } from './services/appearance-settings.js';
 import { createSettingsPageRenderers } from './page-renderers.js';
@@ -254,6 +256,8 @@ export function renderSettings(container) {
             getReadableTextScalePercentValue,
             applyReadableTextScale,
             setupReadableTextScaleSettings,
+            getHomeAppLabelColorModeValue,
+            setupHomeAppLabelColorSettings,
         },
         dataConfig: {
             getTableData,

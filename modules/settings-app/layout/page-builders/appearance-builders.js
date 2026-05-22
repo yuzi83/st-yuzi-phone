@@ -24,7 +24,13 @@ function buildFontLibraryOptionsHtml(fontLibrary) {
     }).join('');
 }
 
-export function buildAppearancePageHtml({ layoutValues, hideTableCountBadge, fontLibrary = {}, readableTextScalePercent = 100 }) {
+export function buildAppearancePageHtml({
+    layoutValues,
+    hideTableCountBadge,
+    homeAppLabelColorMode = 'white',
+    fontLibrary = {},
+    readableTextScalePercent = 100,
+}) {
     const activeFont = fontLibrary?.activeFont || {};
     const userFontCount = Number(fontLibrary?.stats?.userFontCount) || 0;
     const maxFonts = Number(fontLibrary?.limits?.maxFonts) || 0;
@@ -159,12 +165,19 @@ export function buildAppearancePageHtml({ layoutValues, hideTableCountBadge, fon
 
         ${buildSettingsSectionHtml({
             title: '显示控制',
-            desc: '控制表格类 App 的数量徽标是否展示，减少视觉噪音。',
+            desc: '控制首页标签与表格类 App 的显示细节，减少视觉噪音。',
             bodyHtml: `
                 <div class="phone-appearance-switch-list">
                     <label class="phone-appearance-switch-item" for="phone-hide-table-count-badge">
                         <span class="phone-appearance-switch-main">隐藏数量徽标</span>
                         <input type="checkbox" id="phone-hide-table-count-badge" class="phone-settings-switch" ${hideTableCountBadge ? 'checked' : ''}>
+                    </label>
+                    <label class="phone-settings-field-inline phone-settings-field-full" for="phone-home-app-label-color-mode">
+                        <span>首页 App 名称颜色</span>
+                        <select id="phone-home-app-label-color-mode" class="phone-settings-select">
+                            <option value="white" ${homeAppLabelColorMode === 'white' ? 'selected' : ''}>白色文字（适合深色背景）</option>
+                            <option value="black" ${homeAppLabelColorMode === 'black' ? 'selected' : ''}>黑色文字（适合浅色背景）</option>
+                        </select>
                     </label>
                 </div>
             `,

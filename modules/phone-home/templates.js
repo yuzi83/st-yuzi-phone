@@ -1,7 +1,16 @@
 import { buildShellRegionHtml } from '../view-regions.js';
 import { escapeHtml, escapeHtmlAttr } from '../utils/dom-escape.js';
 
-export function buildHomeShellStyleText({ bgStyle, appIconSize, appIconRadius, appGridColumns, appGridGap, dockIconSize }) {
+export function buildHomeShellStyleText({
+    bgStyle,
+    homeAppLabelColor,
+    homeAppLabelShadow,
+    appIconSize,
+    appIconRadius,
+    appGridColumns,
+    appGridGap,
+    dockIconSize,
+}) {
     const styleChunks = [];
 
     if (bgStyle) {
@@ -13,6 +22,8 @@ export function buildHomeShellStyleText({ bgStyle, appIconSize, appIconRadius, a
     styleChunks.push(`--phone-app-grid-columns:${appGridColumns}`);
     styleChunks.push(`--phone-app-grid-gap:${appGridGap}px`);
     styleChunks.push(`--phone-dock-icon-size:${dockIconSize}px`);
+    styleChunks.push(`--phone-home-app-label-color:${String(homeAppLabelColor || 'rgba(255, 255, 255, 0.96)')}`);
+    styleChunks.push(`--phone-home-app-label-shadow:${String(homeAppLabelShadow || '0 1px 3px rgba(0, 0, 0, 0.32)')}`);
 
     return styleChunks.join('; ');
 }

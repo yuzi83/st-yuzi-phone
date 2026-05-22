@@ -138,13 +138,13 @@
 .phone-app-label {
     font-size: calc(11px * var(--yuzi-phone-readable-text-scale, 1));
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.96);
+    color: var(--phone-home-app-label-color, rgba(255, 255, 255, 0.96));
     text-align: center;
     max-width: 66px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.32);
+    text-shadow: var(--phone-home-app-label-shadow, 0 1px 3px rgba(0, 0, 0, 0.32));
 }
 
 /* --- Dock --- */
