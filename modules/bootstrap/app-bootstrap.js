@@ -94,22 +94,11 @@ export async function initializePhoneBootstrapUi(options = {}) {
         setPhoneEnabledWithUI,
         registerEventListeners,
         onToggle,
-        shouldAbort,
     } = options;
-
-    const assertNotAborted = () => {
-        if (typeof shouldAbort === 'function' && shouldAbort()) {
-            throw new Error('助手初始化已取消');
-        }
-    };
-
-    assertNotAborted();
 
     if (typeof migrateLegacyPhoneSettings === 'function') {
         migrateLegacyPhoneSettings();
     }
-
-    assertNotAborted();
 
     const settings = typeof getPhoneSettings === 'function'
         ? getPhoneSettings()
@@ -121,19 +110,13 @@ export async function initializePhoneBootstrapUi(options = {}) {
         })
         : false;
 
-    assertNotAborted();
-
     if (settings?.enabled !== false || !hasPanel) {
         mountPhoneBootstrapUi({ onToggle });
     }
 
-    assertNotAborted();
-
     if (typeof registerEventListeners === 'function') {
-        await registerEventListeners({ shouldAbort });
+        await registerEventListeners();
     }
-
-    assertNotAborted();
 
     logger.debug({
         action: 'initialize.ui',

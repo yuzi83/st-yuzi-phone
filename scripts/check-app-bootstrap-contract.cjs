@@ -33,7 +33,7 @@ function main() {
     check(results, 'appBootstrap', '继续暴露 togglePhoneBootstrapVisibility()', has(contents.appBootstrap, 'export function togglePhoneBootstrapVisibility('));
     check(results, 'appBootstrap', '继续暴露 setPhoneBootstrapEnabledState()', has(contents.appBootstrap, 'export function setPhoneBootstrapEnabledState('));
     check(results, 'appBootstrap', 'app-bootstrap 继续创建设置面板', has(contents.appBootstrap, 'createPhoneSettingsPanel'));
-    check(results, 'appBootstrap', 'app-bootstrap 继续注册事件监听', has(contents.appBootstrap, 'await registerEventListeners({ shouldAbort });'));
+    check(results, 'appBootstrap', 'app-bootstrap 继续注册事件监听', has(contents.appBootstrap, 'await registerEventListeners();'));
 
     check(results, 'index', 'index 导入 initializePhoneBootstrapUi()', has(contents.index, 'initializePhoneBootstrapUi'));
     check(results, 'index', 'index 导入 togglePhoneBootstrapVisibility()', has(contents.index, 'togglePhoneBootstrapVisibility'));

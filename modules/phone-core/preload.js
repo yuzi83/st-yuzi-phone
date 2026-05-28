@@ -41,7 +41,7 @@ let preloadScheduled = false;
 
 function isBundledRuntime() {
     const currentModuleUrl = String(import.meta.url || '').replace(/\\/g, '/');
-    return /\/dist\/(?:yuzi-phone\.bundle|assistant\/yuzi-phone\.assistant)\.js(?:[?#].*)?$/.test(currentModuleUrl);
+    return /\/dist\/yuzi-phone\.bundle\.js(?:[?#].*)?$/.test(currentModuleUrl);
 }
 
 /**
