@@ -13,10 +13,11 @@ const BARRAGE_KIND_LABELS = Object.freeze({
 const BARRAGE_HIDDEN_CLASS = 'is-barrage-hidden';
 const TEXT_HIDE_BARRAGE = '暂停弹幕';
 const TEXT_SHOW_BARRAGE = '显示弹幕';
+const DEFAULT_BARRAGE_BADGE = '观众';
+const BARRAGE_KIND_SEQUENCE = Object.freeze(['plot', 'stan', 'clash']);
 
 const LIVE_TABLES = Object.freeze({
-    rooms: '直播间主表',
-    barrageBands: '直播间弹幕分栏表',
+    rooms: '直播表',
 });
 
 function hashStringToIndex(text, modulo) {
@@ -42,10 +43,15 @@ function getStableIndent(seed, index) {
     return BARRAGE_INDENTS[(seedIndex + index) % BARRAGE_INDENTS.length] || 0;
 }
 
+function resolveBarrageKind(seed, index) {
+    const offset = hashStringToIndex(seed, BARRAGE_KIND_SEQUENCE.length);
+    return BARRAGE_KIND_SEQUENCE[(offset + index) % BARRAGE_KIND_SEQUENCE.length] || BARRAGE_KIND_SEQUENCE[0];
+}
+
 function buildBarrageItem({ text, kind, badge, favoredSide, funLevel, status, time, bandIndex, itemIndex }) {
     const safeText = normalizeText(text);
     if (!safeText) return null;
-    const safeBadge = normalizeText(badge) || '观众';
+    const safeBadge = normalizeText(badge) || DEFAULT_BARRAGE_BADGE;
     const safeFavoredSide = normalizeText(favoredSide);
     const safeKind = BARRAGE_KIND_LABELS[kind] ? kind : 'plot';
     const seed = `${safeBadge}|${safeFavoredSide}|${safeKind}|${safeText}|${bandIndex}|${itemIndex}`;
@@ -64,73 +70,62 @@ function buildBarrageItem({ text, kind, badge, favoredSide, funLevel, status, ti
     };
 }
 
-function pushBarrageItems(target, sourceTexts, options) {
-    sourceTexts.forEach((text, itemIndex) => {
-        const item = buildBarrageItem({ ...options, text, itemIndex });
-        if (item) target.push(item);
-    });
+function parseLiveBarrageSegment(segment) {
+    const raw = normalizeText(segment);
+    if (!raw) return null;
+
+    const separatorIndex = raw.search(/[:：]/);
+    if (separatorIndex < 0) {
+        return {
+            badge: DEFAULT_BARRAGE_BADGE,
+            text: raw,
+            raw,
+        };
+    }
+
+    const badge = normalizeText(raw.slice(0, separatorIndex)) || DEFAULT_BARRAGE_BADGE;
+    const text = normalizeText(raw.slice(separatorIndex + 1)) || '（空弹幕）';
+    return {
+        badge,
+        text,
+        raw,
+    };
+}
+
+function parseLiveBarrages(value, options = {}) {
+    const text = normalizeText(value);
+    if (!text || text.toLowerCase() === 'none') return [];
+
+    const favoredSide = normalizeText(options.favoredSide);
+    const funLevel = normalizeText(options.funLevel);
+    const status = normalizeText(options.status);
+    const time = normalizeText(options.time);
+    const bandIndex = Number.isInteger(options.bandIndex) ? options.bandIndex : 0;
+
+    return splitSemicolonText(text)
+        .map(parseLiveBarrageSegment)
+        .filter(Boolean)
+        .map((segment, itemIndex) => buildBarrageItem({
+            text: segment.text,
+            kind: resolveBarrageKind(`${segment.badge}|${segment.text}|${favoredSide}|${status}`, itemIndex),
+            badge: segment.badge,
+            favoredSide,
+            funLevel,
+            status,
+            time,
+            bandIndex,
+            itemIndex,
+        }))
+        .filter(Boolean);
 }
 
 function buildViewModel(resolved) {
     const roomsTable = resolved.tables.rooms;
-    const barrageTable = resolved.tables.barrageBands;
-
-    const barragesByRoom = new Map();
-    mapTheaterRows(barrageTable, (row, bandIndex) => {
-        const roomName = normalizeText(getCellByHeader(barrageTable, row, '所属直播间名'));
-        if (!roomName) return null;
-
-        const badge = normalizeText(getCellByHeader(barrageTable, row, '粉丝团挂牌')) || '观众';
-        const favoredSide = normalizeText(getCellByHeader(barrageTable, row, '主推角色/阵营'));
-        const funLevel = normalizeText(getCellByHeader(barrageTable, row, '乐子强度'));
-        const time = normalizeText(getCellByHeader(barrageTable, row, '时间文本'));
-        const status = normalizeText(getCellByHeader(barrageTable, row, '状态标签'));
-        const items = [];
-
-        pushBarrageItems(items, splitSemicolonText(getCellByHeader(barrageTable, row, '剧情弹幕串')), {
-            kind: 'plot',
-            badge,
-            favoredSide,
-            funLevel,
-            status,
-            time,
-            bandIndex,
-        });
-        pushBarrageItems(items, splitSemicolonText(getCellByHeader(barrageTable, row, '推角弹幕串')), {
-            kind: 'stan',
-            badge,
-            favoredSide,
-            funLevel,
-            status,
-            time,
-            bandIndex,
-        });
-        pushBarrageItems(items, splitSemicolonText(getCellByHeader(barrageTable, row, '对线弹幕串')), {
-            kind: 'clash',
-            badge,
-            favoredSide,
-            funLevel,
-            status,
-            time,
-            bandIndex,
-        });
-
-        const band = {
-            roomName,
-            badge,
-            favoredSide,
-            funLevel,
-            time,
-            status,
-            items,
-        };
-        if (!barragesByRoom.has(roomName)) barragesByRoom.set(roomName, []);
-        barragesByRoom.get(roomName).push(band);
-        return band;
-    });
 
     const rooms = mapTheaterRows(roomsTable, (row, rowIndex) => {
         const roomName = resolveRowIdentity(roomsTable, row, '直播间名', '直播间 ', rowIndex);
+        const time = normalizeText(getCellByHeader(roomsTable, row, '时间文本'));
+        const status = normalizeText(getCellByHeader(roomsTable, row, '状态标签'));
         return {
             roomName,
             deleteKey: buildTheaterDeleteKey('room', rowIndex, roomName),
@@ -142,9 +137,15 @@ function buildViewModel(resolved) {
             stageSummary: normalizeText(getCellByHeader(roomsTable, row, '剧情舞台概述')),
             chemistryFocus: normalizeText(getCellByHeader(roomsTable, row, '对手戏看点')),
             interaction: normalizeText(getCellByHeader(roomsTable, row, '观看/互动数据')),
-            time: normalizeText(getCellByHeader(roomsTable, row, '时间文本')),
-            status: normalizeText(getCellByHeader(roomsTable, row, '状态标签')),
-            barrageBands: barragesByRoom.get(roomName) || [],
+            time,
+            status,
+            barrageItems: parseLiveBarrages(getCellByHeader(roomsTable, row, '弹幕串'), {
+                favoredSide: normalizeText(getCellByHeader(roomsTable, row, '主推角色/阵营')),
+                funLevel: normalizeText(getCellByHeader(roomsTable, row, '乐子强度')),
+                status,
+                time,
+                bandIndex: rowIndex,
+            }),
         };
     });
 
@@ -155,18 +156,14 @@ function collectDeletableKeys(viewModel) {
     return (viewModel?.content?.rooms || []).map(room => room?.deleteKey).filter(Boolean);
 }
 
-function flattenRoomBarrages(barrageBands) {
-    return (Array.isArray(barrageBands) ? barrageBands : []).flatMap(band => (Array.isArray(band?.items) ? band.items : []));
-}
-
 function getBarrageWallStatus(room) {
-    const firstBand = Array.isArray(room.barrageBands) && room.barrageBands.length > 0 ? room.barrageBands[0] : null;
-    return normalizeText(firstBand?.status) || normalizeText(room.status) || '弹幕热议';
+    const firstItem = Array.isArray(room.barrageItems) && room.barrageItems.length > 0 ? room.barrageItems[0] : null;
+    return normalizeText(firstItem?.status) || normalizeText(room.status) || '弹幕热议';
 }
 
 function getBarrageWallFunLevel(room) {
-    const firstBand = Array.isArray(room.barrageBands) && room.barrageBands.length > 0 ? room.barrageBands[0] : null;
-    return normalizeText(firstBand?.funLevel) || '正常滚动';
+    const firstItem = Array.isArray(room.barrageItems) && room.barrageItems.length > 0 ? room.barrageItems[0] : null;
+    return normalizeText(firstItem?.funLevel) || '正常滚动';
 }
 
 function renderMetricPills(room) {
@@ -242,6 +239,7 @@ function renderBarrageItem(item) {
     return `
         <li class="phone-theater-live-barrage-item ${kindClass} ${toneClass}" data-indent="${indent}"${side}>
             <span class="phone-theater-live-barrage-badge">${escapeHtml(item.badge)}</span>
+            <span class="phone-theater-live-barrage-separator">：</span>
             <span class="phone-theater-live-barrage-text">${escapeHtml(item.text)}</span>
             <span class="phone-theater-live-barrage-mark" aria-hidden="true">${escapeHtml(item.mark)}</span>
         </li>
@@ -258,7 +256,7 @@ function renderLiveBarrageWall(room, items, renderKit) {
                     <span class="phone-theater-section-title">弹幕热议</span>
                     <span class="phone-theater-live-barrage-status">${escapeHtml(status)}</span>
                 </header>
-                ${renderKit.renderEmpty('暂无弹幕切片')}
+                ${renderKit.renderEmpty('暂无弹幕')}
             </section>
         `;
     }
@@ -291,7 +289,7 @@ function renderContent(viewModel, uiState = {}, renderKit) {
     return `
         <div class="phone-theater-live-page">
             ${rooms.map((room) => {
-        const items = flattenRoomBarrages(room.barrageBands || []);
+        const items = Array.isArray(room.barrageItems) ? room.barrageItems : [];
         const selected = uiState.deleteManageMode && uiState.selectedKeys?.has(room.deleteKey);
         return `
                     <article class="phone-theater-live-room ${selected ? 'is-delete-selected' : ''}" data-room-name="${escapeHtmlAttr(room.roomName)}" data-theater-delete-key="${escapeHtmlAttr(room.deleteKey)}">
@@ -310,26 +308,14 @@ function renderContent(viewModel, uiState = {}, renderKit) {
 function deleteEntities(context) {
     const { tables, selectedSet, filterTableRows, buildDeleteTargets, hasDeleteTarget } = context;
     const roomsTable = tables.rooms;
-    const barrageTable = tables.barrageBands;
     const roomTargets = buildDeleteTargets(selectedSet, 'room');
-    const roomNames = new Set();
 
     const roomDeletion = filterTableRows(roomsTable, (row, rowIndex) => {
         const roomName = resolveRowIdentity(roomsTable, row, '直播间名', '直播间 ', rowIndex);
-        const matched = hasDeleteTarget(roomTargets, rowIndex, roomName);
-        if (matched) roomNames.add(roomName);
-        return matched;
+        return hasDeleteTarget(roomTargets, rowIndex, roomName);
     });
 
-    let removed = roomDeletion.removed;
-    if (roomNames.size > 0) {
-        removed += filterTableRows(barrageTable, (row) => {
-            const roomName = normalizeText(getCellByHeader(barrageTable, row, '所属直播间名'));
-            return roomNames.has(roomName);
-        }).removed;
-    }
-
-    return { removed };
+    return { removed: roomDeletion.removed };
 }
 
 function findClosestRoom(element) {
@@ -393,9 +379,15 @@ export const liveScene = Object.freeze({
     styleScope: 'live',
     primaryTableRole: 'rooms',
     tables: LIVE_TABLES,
+    editableTables: Object.freeze([
+        Object.freeze({
+            role: 'rooms',
+            label: '编辑直播表',
+            description: '进入原始直播表格列表',
+        }),
+    ]),
     fieldSchema: Object.freeze({
         rooms: Object.freeze({ identity: '直播间名' }),
-        barrageBands: Object.freeze({ parentRef: '所属直播间名' }),
     }),
     contract: Object.freeze({
         styleFile: 'styles/phone-theater/live.css',

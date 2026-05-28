@@ -209,6 +209,9 @@ export function renderAppearancePage(ctx) {
     const setupReadableTextScaleSettings = appearancePageService.setupReadableTextScaleSettings;
     const getHomeAppLabelColorModeValue = appearancePageService.getHomeAppLabelColorModeValue;
     const setupHomeAppLabelColorSettings = appearancePageService.setupHomeAppLabelColorSettings;
+    const getPhoneThemeModeValue = appearancePageService.getPhoneThemeModeValue;
+    const applyPhoneThemeMode = appearancePageService.applyPhoneThemeMode;
+    const setupPhoneThemeModeSettings = appearancePageService.setupPhoneThemeModeSettings;
 
     const layoutValues = {
         appGridColumns: getLayoutValue('appGridColumns', 4),
@@ -222,10 +225,12 @@ export function renderAppearancePage(ctx) {
         layoutValues,
         hideTableCountBadge: !!getPhoneSettings().hideTableCountBadge,
         homeAppLabelColorMode: getHomeAppLabelColorModeValue(),
+        phoneThemeMode: getPhoneThemeModeValue(),
         fontLibrary: getAppearanceFontLibraryViewModel(),
         readableTextScalePercent: getReadableTextScalePercentValue(),
     });
     applyAppearanceFontLibrary();
+    applyPhoneThemeMode();
     applyReadableTextScale();
 
     const runtime = pageRuntime && typeof pageRuntime === 'object' ? pageRuntime : null;
@@ -251,6 +256,7 @@ export function renderAppearancePage(ctx) {
         runtime.registerCleanup(bindAppearanceFontLibraryActions(ctx, runtime));
         runtime.registerCleanup(setupReadableTextScaleSettings(container));
         runtime.registerCleanup(setupHomeAppLabelColorSettings(container));
+        runtime.registerCleanup(setupPhoneThemeModeSettings(container));
     } else if (typeof registerCleanup === 'function') {
         registerCleanup(setupBgUpload(container));
         registerCleanup(setupIconLayoutSettings(container));
@@ -261,5 +267,6 @@ export function renderAppearancePage(ctx) {
         registerCleanup(bindAppearanceFontLibraryActions(ctx, null));
         registerCleanup(setupReadableTextScaleSettings(container));
         registerCleanup(setupHomeAppLabelColorSettings(container));
+        registerCleanup(setupPhoneThemeModeSettings(container));
     }
 }

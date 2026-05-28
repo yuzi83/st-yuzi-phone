@@ -18,6 +18,7 @@ const FILES = {
     forumScene: 'modules/phone-theater/scenes/forum.js',
     liveScene: 'modules/phone-theater/scenes/live.js',
     calendarScene: 'modules/phone-theater/scenes/calendar.js',
+    diaryScene: 'modules/phone-theater/scenes/diary.js',
     homeViewModel: 'modules/phone-home/view-model.js',
     routeRenderer: 'modules/phone-core/route-renderer.js',
     notifications: 'modules/phone-core/notifications.js',
@@ -32,6 +33,7 @@ const FILES = {
     forumCss: 'styles/phone-theater/forum.css',
     liveCss: 'styles/phone-theater/live.css',
     calendarCss: 'styles/phone-theater/calendar.css',
+    diaryCss: 'styles/phone-theater/diary.css',
     homeCss: 'styles/phone-base/02-page-home.css',
     rootCss: 'style.css',
     specDoc: 'docs/reference/theater-scene-extension-spec.md',
@@ -53,20 +55,21 @@ const SCENES = [
         id: 'square',
         exportName: 'squareScene',
         appKey: '__theater_square',
-        tables: ['广场主贴表', '广场精选评论表', '广场普通评论分栏表'],
-        roles: ['posts', 'featuredComments', 'commentBands'],
+        tables: ['广场表'],
+        roles: ['posts'],
         deleteRoles: ['post'],
+        requiredFieldSnippets: ['图片描述', '视频描述', '评论串'],
+        forbiddenSnippets: ['广场主贴表', '广场精选评论表', '广场普通评论分栏表', 'featuredComments', 'commentBands'],
         requiredClasses: [
             'phone-theater-square-feed',
             'phone-theater-square-post',
             'phone-theater-square-card-head',
-            'phone-theater-square-featured',
             'phone-theater-square-comments',
-            'phone-theater-square-noise',
             'phone-theater-square-footer',
         ],
-        requiredDeletionFields: ['帖子ID', '帖子唯一标识', '关联帖子ID'],
+        requiredDeletionFields: ['帖子ID', '帖子唯一标识'],
         requiredIdentityAliases: ['帖子ID', '帖子唯一标识'],
+        requiredEditableRoles: ['posts'],
     },
     {
         key: 'forumScene',
@@ -74,18 +77,19 @@ const SCENES = [
         id: 'forum',
         exportName: 'forumScene',
         appKey: '__theater_forum',
-        tables: ['论坛主贴表', '论坛精选回应表'],
-        roles: ['threads', 'featuredReplies'],
+        tables: ['论坛表'],
+        roles: ['threads'],
         deleteRoles: ['thread'],
+        requiredFieldSnippets: ['评论串'],
+        forbiddenSnippets: ['论坛主贴表', '论坛精选回应表', 'featuredReplies', 'sidebar'],
         requiredClasses: [
             'phone-theater-forum-home',
-            'phone-theater-forum-channel-bar',
             'phone-theater-forum-note-card',
             'phone-theater-forum-cover',
             'phone-theater-forum-floor-reply',
-            'phone-theater-forum-floor-index',
         ],
-        requiredDeletionFields: ['帖子标题', '关联帖子标题'],
+        requiredDeletionFields: ['帖子标题'],
+        requiredEditableRoles: ['threads'],
     },
     {
         key: 'liveScene',
@@ -93,9 +97,11 @@ const SCENES = [
         id: 'live',
         exportName: 'liveScene',
         appKey: '__theater_live',
-        tables: ['直播间主表', '直播间弹幕分栏表'],
-        roles: ['rooms', 'barrageBands'],
+        tables: ['直播表'],
+        roles: ['rooms'],
         deleteRoles: ['room'],
+        requiredFieldSnippets: ['弹幕串'],
+        forbiddenSnippets: ['直播间主表', '直播间弹幕分栏表', '所属直播间名', 'barrageBands'],
         requiredClasses: [
             'phone-theater-live-page',
             'phone-theater-live-room',
@@ -106,7 +112,8 @@ const SCENES = [
             'phone-theater-barrage-toggle',
             'is-barrage-hidden',
         ],
-        requiredDeletionFields: ['直播间名', '所属直播间名'],
+        requiredDeletionFields: ['直播间名'],
+        requiredEditableRoles: ['rooms'],
     },
     {
         key: 'calendarScene',
@@ -126,6 +133,46 @@ const SCENES = [
         ],
         requiredDeletionFields: [],
         requiredEditableRoles: ['days'],
+    },
+    {
+        key: 'diaryScene',
+        cssKey: 'diaryCss',
+        id: 'diary',
+        exportName: 'diaryScene',
+        appKey: '__theater_diary',
+        tables: ['小日记表'],
+        roles: ['entries'],
+        deleteRoles: ['entry'],
+        requiredFieldSnippets: [
+            'row_id',
+            '日期',
+            '角色',
+            '内容',
+            'POSTSCRIPT_PATTERN',
+            'parseDiaryInlineTokens',
+            'DIARY_MAX_ENTRIES',
+        ],
+        requiredClasses: [
+            'phone-theater-diary-page',
+            'phone-theater-diary-stack',
+            'phone-theater-diary-card',
+            'phone-theater-diary-card-head',
+            'phone-theater-diary-date-chip',
+            'phone-theater-diary-private-mark',
+            'phone-theater-diary-author-row',
+            'phone-theater-diary-avatar',
+            'phone-theater-diary-author',
+            'phone-theater-diary-signature',
+            'phone-theater-diary-content',
+            'phone-theater-diary-line',
+            'phone-theater-diary-secret',
+            'phone-theater-diary-postscript',
+            'phone-theater-diary-postscript-line',
+            'phone-theater-diary-postscript-label',
+            'phone-theater-diary-empty-card',
+        ],
+        requiredDeletionFields: ['row_id'],
+        requiredEditableRoles: ['entries'],
     },
 ];
 
@@ -178,7 +225,20 @@ function checkSceneModule(results, contents, scene) {
     pushCheck(results, scene.key, `${scene.id} scene 实现 renderContent`, has(content, 'function renderContent(') && has(content, 'renderContent,'));
     pushCheck(results, scene.key, `${scene.id} scene 表名齐全`, scene.tables.every(tableName => has(content, tableName)));
     pushCheck(results, scene.key, `${scene.id} scene role 齐全`, scene.roles.every(role => has(content, `${role}:`)));
-    pushCheck(results, scene.key, `${scene.id} scene 使用 typed delete key`, scene.deleteRoles.length <= 0 || scene.deleteRoles.every(role => has(content, `buildTheaterDeleteKey('${role}'`)));
+    if (Array.isArray(scene.requiredFieldSnippets) && scene.requiredFieldSnippets.length > 0) {
+        pushCheck(results, scene.key, `${scene.id} scene 新字段齐全`, scene.requiredFieldSnippets.every(field => has(content, field)));
+    }
+    if (Array.isArray(scene.forbiddenSnippets) && scene.forbiddenSnippets.length > 0) {
+        pushCheck(results, scene.key, `${scene.id} scene 不残留旧多表片段`, scene.forbiddenSnippets.every(snippet => !has(content, snippet)));
+        pushCheck(results, scene.cssKey, `${scene.id} CSS 不残留旧多表片段`, scene.forbiddenSnippets.every(snippet => !has(cssContent, snippet)));
+    }
+    pushCheck(results, scene.key, `${scene.id} scene 使用 typed delete key`, scene.deleteRoles.length <= 0 || scene.deleteRoles.every((role) => {
+        if (has(content, `buildTheaterDeleteKey('${role}'`)) return true;
+        if (scene.id === 'diary') {
+            return has(content, `const DIARY_DELETE_ROLE = '${role}'`) && has(content, 'buildTheaterDeleteKey(DIARY_DELETE_ROLE');
+        }
+        return false;
+    }));
     pushCheck(results, scene.key, `${scene.id} scene 删除字段齐全`, scene.requiredDeletionFields.every(field => has(content, field)));
     if (Array.isArray(scene.requiredEditableRoles) && scene.requiredEditableRoles.length > 0) {
         pushCheck(results, scene.key, `${scene.id} scene 声明 editableTables`, has(content, 'editableTables: Object.freeze') && scene.requiredEditableRoles.every(role => has(content, `role: '${role}'`)));
@@ -210,6 +270,10 @@ function checkNoCoreSceneBranches(results, contents) {
         'renderSquareContent',
         'renderForumContent',
         'renderLiveContent',
+        "sceneId === 'diary'",
+        'buildDiaryViewModel',
+        'renderDiaryContent',
+        'collectDiaryDeletion',
     ];
 
     CORE_NO_SCENE_BRANCH_FILES.forEach((fileKey) => {
@@ -235,8 +299,8 @@ function main() {
 
     pushCheck(results, 'config', 'config 作为 registry facade 导出 scene API', has(contents.config, "from './scenes/index.js'") && has(contents.config, 'THEATER_SCENES as THEATER_SCENE_DEFINITIONS'));
 
-    pushCheck(results, 'scenesIndex', 'registry 导入三个内置 scene', SCENES.every(scene => has(contents.scenesIndex, `import { ${scene.exportName} }`)));
-    pushCheck(results, 'scenesIndex', 'registry 原始场景列表包含三个内置 scene', SCENES.every(scene => has(contents.scenesIndex, scene.exportName)));
+    pushCheck(results, 'scenesIndex', 'registry 导入内置 scene', SCENES.every(scene => has(contents.scenesIndex, `import { ${scene.exportName} }`)));
+    pushCheck(results, 'scenesIndex', 'registry 原始场景列表包含内置 scene', SCENES.every(scene => has(contents.scenesIndex, scene.exportName)));
     pushCheck(results, 'scenesIndex', 'registry 导出 route prefix 与 helper', has(contents.scenesIndex, 'export const THEATER_ROUTE_PREFIX') && has(contents.scenesIndex, 'export function buildTheaterRoute') && has(contents.scenesIndex, 'export function isTheaterRoute'));
     pushCheck(results, 'scenesIndex', 'registry 导出 THEATER_SCENES / THEATER_SCENE_IDS / THEATER_APP_KEYS', has(contents.scenesIndex, 'export const THEATER_SCENES') && has(contents.scenesIndex, 'export const THEATER_SCENE_IDS') && has(contents.scenesIndex, 'export const THEATER_APP_KEYS'));
     pushCheck(results, 'scenesIndex', 'registry 导出 scene 反查 helper', has(contents.scenesIndex, 'getTheaterSceneDefinitionByTableName') && has(contents.scenesIndex, 'getTheaterSceneDefinitionByAppKey') && has(contents.scenesIndex, 'getTheaterSceneDefinitionByRoute'));
@@ -250,6 +314,15 @@ function main() {
     pushCheck(results, 'scenesIndex', '契约配置中的内置 tableName 唯一', unique(sceneTableNames));
 
     SCENES.forEach(scene => checkSceneModule(results, contents, scene));
+
+    pushCheck(results, 'squareScene', 'square scene 评论解析同时支持半角与全角冒号', has(contents.squareScene, 'search(/[:：]/)'));
+    pushCheck(results, 'forumScene', 'forum scene 评论解析同时支持半角与全角冒号', has(contents.forumScene, 'search(/[:：]/)'));
+    pushCheck(results, 'liveScene', 'live scene 弹幕解析同时支持半角与全角冒号', has(contents.liveScene, 'search(/[:：]/)'));
+    pushCheck(results, 'squareScene', 'square scene 使用图标详情按钮而非旧文字按钮', has(contents.squareScene, 'renderSquareMediaDetailButton') && has(contents.squareScene, 'phone-theater-square-media-icon') && !has(contents.squareScene, '>图片描述</button>') && !has(contents.squareScene, '>视频描述</button>'));
+    pushCheck(results, 'forumScene', 'forum scene 不再渲染顶部频道条', !has(contents.forumScene, 'renderForumChannelBar(') && !has(contents.forumScene, 'phone-theater-forum-channel-bar'));
+    pushCheck(results, 'forumCss', 'forum CSS 不再保留顶部频道条样式', !has(contents.forumCss, '.phone-theater-forum-channel-bar') && !has(contents.forumCss, '.phone-theater-forum-channel-pill'));
+    pushCheck(results, 'liveScene', 'live scene 显式渲染弹幕分隔符节点', has(contents.liveScene, 'phone-theater-live-barrage-separator'));
+    pushCheck(results, 'liveCss', 'live CSS 为弹幕分隔符提供最小样式', has(contents.liveCss, '.phone-theater-live-barrage-separator') && has(contents.liveCss, 'flex: 0 0 auto'));
 
     pushCheck(results, 'data', '数据层导出 getAvailableTheaterScenes()', has(contents.data, 'export function getAvailableTheaterScenes(rawData)'));
     pushCheck(results, 'data', '数据层导出 getGroupedTheaterSheetKeys()', has(contents.data, 'export function getGroupedTheaterSheetKeys(rawData)'));
@@ -323,7 +396,7 @@ function main() {
 
     pushCheck(results, 'rootCss', '入口 CSS 引入 06-phone-theater.css', has(contents.rootCss, "@import url('./styles/06-phone-theater.css')"));
     pushCheck(results, 'theaterCss', '06-phone-theater.css 仅作为兼容入口 import style registry', has(contents.theaterCss, "@import url('./phone-theater/index.css')") && !has(contents.theaterCss, '[data-theater-scene="square"]'));
-    pushCheck(results, 'theaterCssIndex', 'style registry 按 core → square → forum → live → calendar 顺序 import', indexOfOrInfinity(contents.theaterCssIndex, "./00-core.css") < indexOfOrInfinity(contents.theaterCssIndex, "./square.css") && indexOfOrInfinity(contents.theaterCssIndex, "./square.css") < indexOfOrInfinity(contents.theaterCssIndex, "./forum.css") && indexOfOrInfinity(contents.theaterCssIndex, "./forum.css") < indexOfOrInfinity(contents.theaterCssIndex, "./live.css") && indexOfOrInfinity(contents.theaterCssIndex, "./live.css") < indexOfOrInfinity(contents.theaterCssIndex, "./calendar.css"));
+    pushCheck(results, 'theaterCssIndex', 'style registry 按 core → square → forum → live → calendar → diary 顺序 import', indexOfOrInfinity(contents.theaterCssIndex, "./00-core.css") < indexOfOrInfinity(contents.theaterCssIndex, "./square.css") && indexOfOrInfinity(contents.theaterCssIndex, "./square.css") < indexOfOrInfinity(contents.theaterCssIndex, "./forum.css") && indexOfOrInfinity(contents.theaterCssIndex, "./forum.css") < indexOfOrInfinity(contents.theaterCssIndex, "./live.css") && indexOfOrInfinity(contents.theaterCssIndex, "./live.css") < indexOfOrInfinity(contents.theaterCssIndex, "./calendar.css") && indexOfOrInfinity(contents.theaterCssIndex, "./calendar.css") < indexOfOrInfinity(contents.theaterCssIndex, "./diary.css"));
     pushCheck(results, 'theaterCoreCss', 'core CSS 包含 theater 删除按钮与管理条样式', has(contents.theaterCoreCss, '.phone-theater-delete-toggle') && has(contents.theaterCoreCss, '.phone-theater-manage-bar') && has(contents.theaterCoreCss, '.phone-theater-manage-btn'));
     pushCheck(results, 'theaterCoreCss', 'core CSS 包含 theater 编辑按钮与菜单样式', has(contents.theaterCoreCss, '.phone-theater-edit-toggle') && has(contents.theaterCoreCss, '.phone-theater-edit-menu') && has(contents.theaterCoreCss, '.phone-theater-nav-actions'));
     pushCheck(results, 'theaterCoreCss', 'core CSS 包含 theater 选择按钮与选中态样式', has(contents.theaterCoreCss, '.phone-theater-select-toggle') && has(contents.theaterCoreCss, '.is-delete-selected'));
@@ -347,6 +420,15 @@ function main() {
     pushCheck(results, 'calendarScene', 'calendar scene 自定义年份 picker 交互齐全', has(contents.calendarScene, 'toggle-year-picker') && has(contents.calendarScene, 'data-calendar-year') && has(contents.calendarScene, 'setYearPickerOpen(page, false)') && has(contents.calendarScene, 'renderYearOptions(container, year)'));
     pushCheck(results, 'calendarCss', 'calendar CSS 使用自定义年份 picker 并支持滚动', has(contents.calendarCss, '.phone-theater-calendar-year-picker') && has(contents.calendarCss, '.phone-theater-calendar-year-toggle') && has(contents.calendarCss, '.phone-theater-calendar-year-panel') && has(contents.calendarCss, 'overflow-y: auto') && has(contents.calendarCss, 'overscroll-behavior: contain') && has(contents.calendarCss, '.phone-theater-calendar-year-option.is-selected'));
     pushCheck(results, 'calendarCss', 'calendar CSS 不再依赖原生年份 select 样式', !has(contents.calendarCss, '.phone-theater-calendar-month-select select') && !has(contents.calendarCss, 'select option'));
+    pushCheck(results, 'diaryScene', 'diary scene 使用行首 PS/PPS 解析规则', has(contents.diaryScene, 'const POSTSCRIPT_PATTERN = /^\\s*(PS|PPS)\\s*[：:]/i;'));
+    pushCheck(results, 'diaryScene', 'diary scene 使用 token 化解析隐秘念头', has(contents.diaryScene, 'function parseDiaryInlineTokens') && has(contents.diaryScene, 'const closeIndex = text.indexOf(SECRET_MARKER') && has(contents.diaryScene, 'tokens.push({') && has(contents.diaryScene, "type: 'secret'") && has(contents.diaryScene, 'text.slice(openIndex + SECRET_MARKER.length, closeIndex)'));
+    pushCheck(results, 'diaryScene', 'diary scene 未闭合隐秘念头按普通文本处理', has(contents.diaryScene, 'if (closeIndex < 0)') && has(contents.diaryScene, "tokens.push({ type: 'text', text: text.slice(cursor) })"));
+    pushCheck(results, 'diaryScene', 'diary scene ViewModel 最多渲染 5 条有效日记', has(contents.diaryScene, '.slice(0, DIARY_MAX_ENTRIES)'));
+    pushCheck(results, 'diaryScene', 'diary scene 使用 delete-service 可复算的 entry identity', has(contents.diaryScene, "const DIARY_DELETE_ROLE = 'entry'") && has(contents.diaryScene, "resolveRowIdentity(entriesTable, row, DIARY_FIELD_NAMES.rowId, `${DIARY_DELETE_ROLE}_`, rowIndex)") && has(contents.diaryScene, "identity: 'row_id'"));
+    pushCheck(results, 'diaryScene', 'diary scene 用户文本使用 escapeHtml / escapeHtmlAttr 渲染', has(contents.diaryScene, 'escapeHtml(token?.text') && has(contents.diaryScene, 'escapeHtmlAttr(entry.identity)') && has(contents.diaryScene, 'escapeHtmlAttr(entry.deleteKey)'));
+    pushCheck(results, 'diaryScene', 'diary scene 不直接对原始内容做 HTML replace', !has(contents.diaryScene, 'innerHTML') && !has(contents.diaryScene, 'content.replace') && !has(contents.diaryScene, 'diary_content'));
+    pushCheck(results, 'diaryCss', 'diary CSS 包含 reduced-motion 降级', has(contents.diaryCss, 'prefers-reduced-motion: reduce') && has(contents.diaryCss, 'transition: none'));
+    pushCheck(results, 'diaryCss', 'diary CSS 删除选择按钮不被装饰遮挡', has(contents.diaryCss, '.phone-theater-select-toggle') && has(contents.diaryCss, 'z-index: 12') && has(contents.diaryCss, 'pointer-events: none'));
     pushCheck(results, 'homeCss', '桌面普通 App text icon 使用正方形尺寸', has(contents.homeCss, '.phone-app-icon-svg .phone-dock-text-icon') && has(contents.homeCss, 'width: 100%') && has(contents.homeCss, 'height: 100%'));
 
     pushCheck(results, 'homeViewModel', '首页 view-model 导入组合数据函数', has(contents.homeViewModel, "from '../phone-theater/data.js'"));

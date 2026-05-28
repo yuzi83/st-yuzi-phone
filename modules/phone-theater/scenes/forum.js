@@ -1,6 +1,6 @@
 import { escapeHtml, escapeHtmlAttr } from '../../utils/dom-escape.js';
 import { buildTheaterDeleteKey } from '../core/delete-key.js';
-import { getCellByHeader, mapTheaterRows, normalizeText, resolveRowIdentity } from '../core/table-index.js';
+import { getCellByHeader, mapTheaterRows, normalizeText, resolveRowIdentity, splitSemicolonText } from '../core/table-index.js';
 
 const FORUM_COVER_PALETTE = [
     'phone-theater-cover-mist',
@@ -10,29 +10,43 @@ const FORUM_COVER_PALETTE = [
 ];
 
 const FORUM_TABLES = Object.freeze({
-    threads: '论坛主贴表',
-    featuredReplies: '论坛精选回应表',
+    threads: '论坛表',
 });
+
+const DEFAULT_FORUM_REPLY_AUTHOR = '网友';
+
+function parseForumReplySegment(segment) {
+    const raw = normalizeText(segment);
+    if (!raw) return null;
+
+    const separatorIndex = raw.search(/[:：]/);
+    if (separatorIndex < 0) {
+        return {
+            author: DEFAULT_FORUM_REPLY_AUTHOR,
+            content: raw,
+            raw,
+        };
+    }
+
+    const author = normalizeText(raw.slice(0, separatorIndex)) || DEFAULT_FORUM_REPLY_AUTHOR;
+    const content = normalizeText(raw.slice(separatorIndex + 1)) || '（空回应）';
+    return {
+        author,
+        content,
+        raw,
+    };
+}
+
+function parseForumReplies(value) {
+    const text = normalizeText(value);
+    if (!text || text.toLowerCase() === 'none') return [];
+    return splitSemicolonText(text)
+        .map(parseForumReplySegment)
+        .filter(Boolean);
+}
 
 function buildViewModel(resolved) {
     const threadsTable = resolved.tables.threads;
-    const repliesTable = resolved.tables.featuredReplies;
-
-    const repliesByThread = new Map();
-    mapTheaterRows(repliesTable, (row) => {
-        const threadTitle = normalizeText(getCellByHeader(repliesTable, row, '关联帖子标题'));
-        if (!threadTitle) return null;
-        const item = {
-            author: normalizeText(getCellByHeader(repliesTable, row, '回应账号名', '匿名')) || '匿名',
-            tag: normalizeText(getCellByHeader(repliesTable, row, '账号标签')),
-            body: normalizeText(getCellByHeader(repliesTable, row, '回应正文')),
-            interaction: normalizeText(getCellByHeader(repliesTable, row, '有用/回应数据')),
-            time: normalizeText(getCellByHeader(repliesTable, row, '时间文本')),
-        };
-        if (!repliesByThread.has(threadTitle)) repliesByThread.set(threadTitle, []);
-        repliesByThread.get(threadTitle).push(item);
-        return item;
-    });
 
     const threads = mapTheaterRows(threadsTable, (row, rowIndex) => {
         const title = resolveRowIdentity(threadsTable, row, '帖子标题', '帖子 ', rowIndex);
@@ -47,7 +61,7 @@ function buildViewModel(resolved) {
             meta: normalizeText(getCellByHeader(threadsTable, row, '附加信息')),
             interaction: normalizeText(getCellByHeader(threadsTable, row, '热度/回应数据')),
             time: normalizeText(getCellByHeader(threadsTable, row, '时间文本')),
-            replies: repliesByThread.get(title) || [],
+            replies: parseForumReplies(getCellByHeader(threadsTable, row, '评论串')),
         };
     });
 
@@ -58,45 +72,22 @@ function collectDeletableKeys(viewModel) {
     return (viewModel?.content?.threads || []).map(thread => thread?.deleteKey).filter(Boolean);
 }
 
-function collectForumChannels(threads) {
-    const seen = new Set();
-    const result = [];
-    threads.forEach((thread) => {
-        const board = normalizeText(thread.board);
-        if (!board || seen.has(board)) return;
-        seen.add(board);
-        result.push(board);
-    });
-    return result;
-}
-
 function pickForumCoverClass(seed, renderKit) {
     const index = renderKit.hashStringToIndex(seed, FORUM_COVER_PALETTE.length);
     return FORUM_COVER_PALETTE[index];
 }
 
-function renderForumChannelBar(channels) {
-    if (channels.length <= 0) return '';
-    return `
-        <nav class="phone-theater-forum-channel-bar" aria-label="频道">
-            ${channels.map(channel => `<span class="phone-theater-forum-channel-pill">${escapeHtml(channel)}</span>`).join('')}
-        </nav>
-    `;
-}
-
 function renderForumFloors(replies, renderKit) {
-    if (replies.length <= 0) return '';
+    if (!Array.isArray(replies) || replies.length <= 0) return '';
     return `
-        <section class="phone-theater-forum-featured-floors" aria-label="精选楼层">
-            ${replies.map((reply, index) => `
+        <section class="phone-theater-forum-featured-floors" aria-label="评论区">
+            ${replies.map((reply) => `
                 <article class="phone-theater-forum-floor-reply">
                     <header class="phone-theater-forum-floor-head">
-                        <span class="phone-theater-forum-floor-index">${index + 1}L</span>
                         <span class="phone-theater-forum-floor-author">${escapeHtml(reply.author)}</span>
-                        ${reply.tag ? `<span class="phone-theater-forum-floor-tag">${escapeHtml(reply.tag)}</span>` : ''}
                     </header>
-                    <div class="phone-theater-forum-floor-body">${escapeHtml(reply.body || '（空回应）')}</div>
-                    ${renderKit.renderMetaLine([reply.interaction, reply.time])}
+                    <div class="phone-theater-forum-floor-body">${escapeHtml(reply.content || '（空回应）')}</div>
+                    ${renderKit.renderMetaLine([])}
                 </article>
             `).join('')}
         </section>
@@ -138,7 +129,6 @@ function renderForumNoteCard(thread, uiState = {}, renderKit) {
 function renderContent(viewModel, uiState = {}, renderKit) {
     const threads = viewModel?.content?.threads || [];
     if (threads.length <= 0) return renderKit.renderEmpty(viewModel.emptyText);
-    const channels = collectForumChannels(threads);
     const threadList = `
         <div class="phone-theater-forum-thread-list">
             ${threads.map(thread => renderForumNoteCard(thread, uiState, renderKit)).join('')}
@@ -146,7 +136,6 @@ function renderContent(viewModel, uiState = {}, renderKit) {
     `;
     return `
         <div class="phone-theater-forum-home">
-            ${renderForumChannelBar(channels)}
             ${threadList}
         </div>
     `;
@@ -155,26 +144,14 @@ function renderContent(viewModel, uiState = {}, renderKit) {
 function deleteEntities(context) {
     const { tables, selectedSet, filterTableRows, buildDeleteTargets, hasDeleteTarget } = context;
     const threadsTable = tables.threads;
-    const repliesTable = tables.featuredReplies;
     const threadTargets = buildDeleteTargets(selectedSet, 'thread');
-    const threadTitles = new Set();
 
     const threadDeletion = filterTableRows(threadsTable, (row, rowIndex) => {
         const title = resolveRowIdentity(threadsTable, row, '帖子标题', '帖子 ', rowIndex);
-        const matched = hasDeleteTarget(threadTargets, rowIndex, title);
-        if (matched) threadTitles.add(title);
-        return matched;
+        return hasDeleteTarget(threadTargets, rowIndex, title);
     });
 
-    let removed = threadDeletion.removed;
-    if (threadTitles.size > 0) {
-        removed += filterTableRows(repliesTable, (row) => {
-            const threadTitle = normalizeText(getCellByHeader(repliesTable, row, '关联帖子标题'));
-            return threadTitles.has(threadTitle);
-        }).removed;
-    }
-
-    return { removed };
+    return { removed: threadDeletion.removed };
 }
 
 export const forumScene = Object.freeze({
@@ -190,19 +167,23 @@ export const forumScene = Object.freeze({
     styleScope: 'forum',
     primaryTableRole: 'threads',
     tables: FORUM_TABLES,
+    editableTables: Object.freeze([
+        Object.freeze({
+            role: 'threads',
+            label: '编辑论坛表',
+            description: '进入原始论坛表格列表',
+        }),
+    ]),
     fieldSchema: Object.freeze({
         threads: Object.freeze({ identity: '帖子标题' }),
-        featuredReplies: Object.freeze({ parentRef: '关联帖子标题' }),
     }),
     contract: Object.freeze({
         styleFile: 'styles/phone-theater/forum.css',
         requiredClasses: [
             'phone-theater-forum-home',
-            'phone-theater-forum-channel-bar',
             'phone-theater-forum-note-card',
             'phone-theater-forum-cover',
             'phone-theater-forum-floor-reply',
-            'phone-theater-forum-floor-index',
         ],
     }),
     buildViewModel,

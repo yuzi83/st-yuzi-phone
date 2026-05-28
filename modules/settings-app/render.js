@@ -79,6 +79,9 @@ import {
     setupReadableTextScaleSettings,
     getHomeAppLabelColorModeValue,
     setupHomeAppLabelColorSettings,
+    getPhoneThemeModeValue,
+    applyPhoneThemeMode,
+    setupPhoneThemeModeSettings,
     getLayoutValue,
 } from './services/appearance-settings.js';
 import { createSettingsPageRenderers } from './page-renderers.js';
@@ -96,6 +99,7 @@ export function renderSettings(container) {
 
     const intent = consumePendingSettingsIntent();
     applyStatePatch(state, projectIntentToStatePatch(intent));
+    applyPhoneThemeMode();
 
     const {
         pageRuntime,
@@ -260,6 +264,9 @@ export function renderSettings(container) {
             setupReadableTextScaleSettings,
             getHomeAppLabelColorModeValue,
             setupHomeAppLabelColorSettings,
+            getPhoneThemeModeValue,
+            applyPhoneThemeMode,
+            setupPhoneThemeModeSettings,
         },
         dataConfig: {
             getTableData,

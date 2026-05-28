@@ -13,6 +13,7 @@
 
 /* foundation tokens / shell system */
 @import url('./phone-base/00-phone-tokens.css');
+@import url('./phone-base/00-theme-modes.css');
 @import url('./phone-base/01-shell-system.css');
 
 /* home shell / fusion feedback */

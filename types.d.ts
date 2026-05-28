@@ -789,6 +789,9 @@ export interface SettingsAppearancePageService {
     setupReadableTextScaleSettings: (container: HTMLElement) => (() => void) | void;
     getHomeAppLabelColorModeValue: () => 'white' | 'black';
     setupHomeAppLabelColorSettings: (container: HTMLElement) => (() => void) | void;
+    getPhoneThemeModeValue: () => 'light' | 'dark';
+    applyPhoneThemeMode: (mode?: string) => boolean;
+    setupPhoneThemeModeSettings: (container: HTMLElement) => (() => void) | void;
 }
 
 export interface SettingsAppearancePageContext extends SettingsPageRendererCommonDeps {

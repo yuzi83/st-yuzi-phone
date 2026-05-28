@@ -28,6 +28,7 @@ export function buildAppearancePageHtml({
     layoutValues,
     hideTableCountBadge,
     homeAppLabelColorMode = 'white',
+    phoneThemeMode = 'light',
     fontLibrary = {},
     readableTextScalePercent = 100,
 }) {
@@ -67,6 +68,13 @@ export function buildAppearancePageHtml({
             `,
             bodyHtml: `
                 <div class="phone-settings-note">建议选择浅色、低干扰背景，以保证图标与文字的可读性。</div>
+                <label class="phone-settings-field-inline phone-settings-field-full" for="phone-theme-mode-select">
+                    <span>主题模式</span>
+                    <select id="phone-theme-mode-select" class="phone-settings-select">
+                        <option value="light" ${phoneThemeMode === 'light' ? 'selected' : ''}>白天模式</option>
+                        <option value="dark" ${phoneThemeMode === 'dark' ? 'selected' : ''}>夜间模式</option>
+                    </select>
+                </label>
                 <div id="phone-bg-preview" class="phone-settings-preview"></div>
             `,
         })}
@@ -225,16 +233,17 @@ export function buildAppearancePageHtml({
     });
 }
 
-export function buildButtonStylePageHtml({ currentSize, currentShape, currentCover }) {
+export function buildButtonStylePageHtml({ currentSize, currentShape, currentCover, floatingToggleEnabled = true }) {
     const previewHtml = currentCover
         ? `<img src="${escapeHtmlAttr(currentCover)}" class="phone-bg-thumb" alt="按钮封面预览">`
         : '<div class="phone-empty-msg">未设置封面</div>';
 
     const heroHtml = buildSettingsHeroHtml({
         eyebrow: '控件与按钮',
-        title: '悬浮入口样式',
-        description: '调整入口尺寸、按钮形态与封面素材，让触达体验更轻盈。',
+        title: '悬浮入口控制',
+        description: '管理入口显示、默认位置、尺寸形态与封面素材，让触达体验更稳定。',
         chips: [
+            { text: floatingToggleEnabled ? '入口显示中' : '入口已隐藏', tone: floatingToggleEnabled ? 'info' : 'neutral' },
             { text: `尺寸 ${currentSize}px`, tone: 'info' },
             { text: currentShape === 'circle' ? '圆形模式' : '圆角模式', tone: 'soft' },
             { text: currentCover ? '封面已设置' : '未设置封面', tone: 'neutral' },
@@ -242,6 +251,13 @@ export function buildButtonStylePageHtml({ currentSize, currentShape, currentCov
     });
 
     const bodyHtml = `
+        ${buildSettingsSectionHtml({
+            title: '悬浮入口控制',
+            desc: '控制小手机悬浮入口是否显示，或将入口按钮恢复到默认位置。',
+            actionsHtml: `<div class="phone-settings-action phone-settings-action-wrap"><button type="button" class="phone-settings-btn" id="phone-toggle-position-reset-btn">重置悬浮按钮位置</button></div>`,
+            bodyHtml: `<label class="phone-toggle-shape-item" for="phone-floating-toggle-enabled"><span class="phone-toggle-shape-name">悬浮窗开关</span><input type="checkbox" id="phone-floating-toggle-enabled" ${floatingToggleEnabled ? 'checked' : ''}></label><p class="phone-settings-desc">关闭后会隐藏右侧悬浮入口，不影响已打开的小手机窗口。</p>`,
+        })}
+
         ${buildSettingsSectionHtml({
             title: '尺寸调节',
             desc: '滑动调整按钮尺寸，获得更合适的点击区域与视觉比例。',

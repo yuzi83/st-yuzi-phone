@@ -206,8 +206,7 @@
     margin-top: 12px;
 }
 
-.phone-theater-page[data-theater-scene="square"] .phone-theater-square-topic,
-.phone-theater-page[data-theater-scene="square"] .phone-theater-square-media {
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-topic {
     display: inline-flex;
     align-items: center;
     min-height: 24px;
@@ -216,18 +215,45 @@
     font-size: 12px;
     line-height: 1.4;
     border: 1px solid transparent;
-}
-
-.phone-theater-page[data-theater-scene="square"] .phone-theater-square-topic {
     color: var(--square-jade-deep);
     background: rgba(228, 238, 232, 0.92);
     border-color: rgba(111, 145, 135, 0.18);
 }
 
 .phone-theater-page[data-theater-scene="square"] .phone-theater-square-media {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid rgba(199, 162, 104, 0.24);
     color: var(--square-gold-deep);
     background: rgba(255, 248, 236, 0.9);
-    border-color: rgba(199, 162, 104, 0.24);
+    box-shadow: 0 5px 14px rgba(82, 73, 58, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+    line-height: 0;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-media:hover,
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-media:focus-visible {
+    border-color: rgba(169, 131, 77, 0.36);
+    background: rgba(255, 251, 242, 0.96);
+    transform: translateY(-1px);
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-media-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    pointer-events: none;
+}
+
+.phone-theater-page[data-theater-scene="square"] .phone-theater-square-media-icon svg {
+    width: 14px;
+    height: 14px;
 }
 
 .phone-theater-page[data-theater-scene="square"] .phone-theater-square-featured {

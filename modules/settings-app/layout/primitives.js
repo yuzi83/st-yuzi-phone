@@ -19,7 +19,7 @@ export const SETTINGS_ENTRY_META = {
     button_style: {
         glyph: '控',
         title: '控件与按钮',
-        description: '调整悬浮入口的尺寸、形态与封面',
+        description: '管理悬浮入口显示、位置、尺寸、形态与封面',
         tone: 'is-button',
         badge: '交互',
     },

@@ -538,6 +538,13 @@
     box-shadow: 0 5px 12px rgba(124, 88, 120, 0.16);
 }
 
+.phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-separator {
+    flex: 0 0 auto;
+    color: rgba(85, 68, 73, 0.62);
+    font-size: 12px;
+    font-weight: 600;
+}
+
 .phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-text {
     min-width: 0;
     color: rgba(45, 35, 38, 0.86);

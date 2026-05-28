@@ -66,12 +66,12 @@ export const newScene = Object.freeze({
 | `iconText` / `iconColors` / `orderNo` | 是 | 首页入口图标与排序。 |
 | `styleScope` | 是 | 页面根节点会输出 `data-theater-style-scope`，同时建议 CSS 使用 `data-theater-scene` 作用域。 |
 | `primaryTableRole` | 是 | 决定 scene 是否可用的主表 role。主表缺失时不会生成虚拟入口。 |
-| `tables` | 是 | role 到表名的映射。一个表名只能属于一个 scene。 |
+| `tables` | 是 | role 到表名的映射。一个表名只能属于一个 scene。scene 可以是单表，也可以按需要扩展为多表。 |
 | `fieldSchema` | 建议 | 描述身份字段、外键字段和业务字段，供文档与契约检查使用。 |
 | `contract` | 建议 | 描述样式文件和关键 class，供契约脚本检查。 |
 | `buildViewModel` | 是 | 从 resolved tables 构建渲染所需 content。 |
 | `collectDeletableKeys` | 是 | 返回当前页面所有可删除实体的 typed delete key。 |
-| `deleteEntities` | 是 | 执行主表删除与附表级联。 |
+| `deleteEntities` | 是 | 执行主表删除；如果 scene 确实有附表，再按明确外键做级联。 |
 | `renderContent` | 是 | 返回 scene 内容 HTML。 |
 | `bindInteractions` | 可选 | 场景专属交互，例如直播弹幕暂停。 |
 | `editableTables` | 可选 | 美化页可进入编辑的原始表列表。单表直接跳转，多表由 shell 弹出选择菜单。 |
@@ -130,8 +130,10 @@ editableTables: Object.freeze([
 1. 主表实体必须使用 typed delete key：`role:rowIndex:encodedIdentity`。
 2. 主表删除必须同时匹配 `role`、`rowIndex`、`identity`。
 3. 禁止使用裸自然键，例如只用 `帖子标题`、`直播间名` 或自造前缀字符串。
-4. 附表级联可以按数据模型已有外键字段删除，例如 `关联帖子ID`、`关联帖子标题`、`所属直播间名`。
+4. 如果 scene 存在附表，级联删除可以按数据模型已有外键字段执行，例如 `关联帖子ID`、`关联帖子标题` 等明确外键。
 5. 如果附表外键不是唯一字段，必须在 `fieldSchema` 或本文档中记录限制。
+
+当前内置 `square` / `forum` / `live` / `calendar` / `diary` 均为单表 scene：删除只作用各自主表，继续通过 typed delete key 精确匹配；`calendar` 不开放删除，`diary` 使用 `entry` delete role 删除 `小日记表` 中匹配日记行。
 
 示例：
 
@@ -157,10 +159,6 @@ function deleteEntities(context) {
     return { removed };
 }
 ```
-
-### 4.1 当前内置 scene 的特殊限制
-
-- [`modules/phone-theater/scenes/live.js`](../../modules/phone-theater/scenes/live.js) 的弹幕附表只有 `所属直播间名` 外键。主表删除仍按 typed delete key 精确匹配；附表级联只能按直播间名清理。这是当前表结构限制，不要把它误写成“全链路唯一”。
 
 ## 5. 渲染规则
 
@@ -203,6 +201,8 @@ styles/phone-theater/00-core.css         核心 shell 与通用控件
 styles/phone-theater/square.css          广场样式
 styles/phone-theater/forum.css           论坛样式
 styles/phone-theater/live.css            直播样式
+styles/phone-theater/calendar.css        日历样式
+styles/phone-theater/diary.css           小日记样式
 ```
 
 新增 scene 时：
@@ -227,8 +227,8 @@ npm run build --silent
 
 - scene module 文件存在。
 - registry 中 id / appKey / tableName 唯一。
-- 三个内置 scene 仍注册，新增 calendar scene 也必须注册。
-- 样式 index 按 core → square → forum → live → calendar 顺序引入。
+- 内置 scene 仍注册；新增 scene 必须加入 registry。
+- 样式 index 按 core → square → forum → live → calendar → diary 顺序引入。
 - `editableTables` role 必须属于 scene `tables`，且编辑入口统一走 `table-generic:<sheetKey>`。
 - 核心 data/templates/delete-service/render/interactions 不出现 `sceneId === 'square'` 这类分支。
 - typed delete key 没有回退。

@@ -54,7 +54,7 @@ tables/
     小剧场2.1/
       00-mate.md
       01-消息记录表.md
-      02-广场主贴表.md
+      02-广场表.md
       ...
   generated/
     小剧场2.1.json
@@ -93,11 +93,11 @@ type: mate
 ---
 type: sheet
 uid: sheet_square_posts
-name: 广场主贴表
+name: 广场表
 orderNo: 1
 ---
 
-# 广场主贴表
+# 广场表
 
 ## sourceData.note
 
@@ -194,7 +194,7 @@ JSON code block 虽然不如表格好看，但它能保证：
 错误示例：
 
 ```text
-03-广场主贴表.md
+03-广场表.md
 orderNo: 1
 ```
 

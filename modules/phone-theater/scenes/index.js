@@ -2,6 +2,7 @@ import { squareScene } from './square.js';
 import { forumScene } from './forum.js';
 import { liveScene } from './live.js';
 import { calendarScene } from './calendar.js';
+import { diaryScene } from './diary.js';
 
 export const THEATER_ROUTE_PREFIX = 'theater:';
 
@@ -10,6 +11,7 @@ const RAW_THEATER_SCENES = Object.freeze([
     forumScene,
     liveScene,
     calendarScene,
+    diaryScene,
 ]);
 
 function normalizeText(value) {

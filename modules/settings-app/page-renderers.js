@@ -74,6 +74,9 @@ function validateSettingsRendererDeps(deps = {}) {
         'setupReadableTextScaleSettings',
         'getHomeAppLabelColorModeValue',
         'setupHomeAppLabelColorSettings',
+        'getPhoneThemeModeValue',
+        'applyPhoneThemeMode',
+        'setupPhoneThemeModeSettings',
     ]);
     assertFunctionDeps('dataConfig', deps.dataConfig, [
         'getTableData',

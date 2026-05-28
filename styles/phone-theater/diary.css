@@ -1,0 +1,424 @@
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] {
+    --diary-paper: #fbf3df;
+    --diary-paper-deep: #f2dfb8;
+    --diary-ink: #5d412a;
+    --diary-muted: #9a7754;
+    --diary-accent: #b98042;
+    --diary-rose: #c87869;
+    --diary-shadow: rgba(96, 61, 32, 0.18);
+    color: var(--diary-ink);
+    background:
+        radial-gradient(circle at 18% 8%, rgba(255, 255, 255, 0.72), transparent 26%),
+        radial-gradient(circle at 82% 18%, rgba(222, 171, 103, 0.18), transparent 30%),
+        linear-gradient(180deg, #fff8e9 0%, #f3dfbd 100%);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-shell {
+    background:
+        linear-gradient(90deg, rgba(160, 113, 67, 0.07) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(160, 113, 67, 0.05) 1px, transparent 1px),
+        rgba(255, 250, 238, 0.72);
+    background-size: 22px 22px;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-nav {
+    color: var(--diary-ink);
+    background: linear-gradient(180deg, rgba(255, 250, 238, 0.96), rgba(248, 233, 204, 0.9));
+    border-bottom: 1px solid rgba(162, 109, 56, 0.14);
+    box-shadow: none;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-nav .phone-nav-title {
+    color: #624126;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-shadow: none;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-nav .phone-nav-back {
+    color: #624126;
+    text-shadow: none;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-nav .phone-theater-edit-toggle,
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-nav .phone-theater-delete-toggle {
+    border: 1px solid rgba(166, 108, 62, 0.18);
+    border-radius: 999px;
+    box-shadow: 0 4px 10px rgba(114, 75, 38, 0.06);
+    text-shadow: none;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-nav .phone-theater-edit-toggle {
+    color: #1c6d55;
+    background: rgba(230, 252, 243, 0.9);
+    border-color: rgba(45, 142, 108, 0.18);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-nav .phone-theater-delete-toggle {
+    color: #745238;
+    background: rgba(255, 253, 248, 0.86);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-nav .phone-theater-delete-toggle.is-active {
+    color: #a53d35;
+    background: rgba(255, 239, 235, 0.94);
+    border-color: rgba(190, 75, 63, 0.22);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-nav .phone-theater-edit-toggle:disabled,
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-nav .phone-theater-delete-toggle:disabled {
+    color: rgba(116, 82, 56, 0.46);
+    background: rgba(255, 250, 238, 0.58);
+    border-color: rgba(166, 108, 62, 0.1);
+    box-shadow: none;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-scene-nav {
+    border-color: rgba(159, 111, 61, 0.18);
+    background: rgba(255, 248, 232, 0.78);
+    box-shadow: 0 12px 24px rgba(111, 73, 36, 0.08);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-scene-tab.is-active {
+    color: #6e4626;
+    background: linear-gradient(135deg, rgba(255, 244, 215, 0.94), rgba(231, 193, 137, 0.62));
+    border-color: rgba(167, 111, 52, 0.28);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 4px 2px 18px;
+    isolation: isolate;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-page::before {
+    content: "";
+    position: absolute;
+    inset: 16px 10px auto auto;
+    z-index: -1;
+    width: 92px;
+    height: 92px;
+    border-radius: 999px;
+    background: rgba(196, 125, 85, 0.12);
+    filter: blur(1px);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card {
+    position: relative;
+    overflow: visible;
+    padding: 19px 17px 17px;
+    border: 1px solid rgba(151, 98, 48, 0.2);
+    border-radius: 24px;
+    background:
+        linear-gradient(90deg, rgba(164, 115, 69, 0.06) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(164, 115, 69, 0.05) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255, 253, 246, 0.98), rgba(248, 235, 207, 0.96));
+    background-size: 20px 20px, 20px 20px, auto;
+    box-shadow: 0 14px 28px var(--diary-shadow);
+    transform-origin: 50% 0;
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card:nth-child(2n) {
+    transform: rotate(0.45deg);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card:nth-child(2n + 1) {
+    transform: rotate(-0.35deg);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card:hover {
+    border-color: rgba(179, 121, 57, 0.32);
+    box-shadow: 0 18px 34px rgba(96, 61, 32, 0.22);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card::before,
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card::before {
+    top: -8px;
+    left: 50%;
+    width: 72px;
+    height: 18px;
+    border-radius: 4px;
+    background: rgba(226, 189, 132, 0.46);
+    box-shadow: inset 0 0 0 1px rgba(142, 91, 42, 0.08);
+    transform: translateX(-50%) rotate(-2deg);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card::after {
+    right: 0;
+    bottom: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 24px 0 24px 0;
+    background: linear-gradient(135deg, rgba(230, 205, 158, 0.08), rgba(154, 100, 50, 0.16));
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card.is-delete-selected {
+    border-color: rgba(201, 74, 63, 0.5);
+    background:
+        linear-gradient(90deg, rgba(201, 74, 63, 0.04) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(201, 74, 63, 0.035) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255, 250, 241, 0.98), rgba(248, 229, 203, 0.98));
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card .phone-theater-select-toggle {
+    z-index: 12;
+    border-color: rgba(126, 77, 35, 0.26);
+    color: transparent;
+    background: rgba(255, 255, 255, 0.96);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card .phone-theater-select-toggle.is-selected {
+    color: #ffffff;
+    background: linear-gradient(135deg, #cf6559, #a94336);
+    border-color: rgba(169, 67, 54, 0.8);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card-pin {
+    position: absolute;
+    top: 14px;
+    right: 48px;
+    z-index: 1;
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: radial-gradient(circle, #f4c97b 0 35%, #9e6536 38% 100%);
+    box-shadow: 0 2px 5px rgba(86, 50, 24, 0.2);
+    pointer-events: none;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card-head {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-date-chip,
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-private-mark {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-date-chip {
+    max-width: 66%;
+    padding: 6px 10px;
+    overflow: hidden;
+    color: #6e4828;
+    text-overflow: ellipsis;
+    background: rgba(255, 246, 220, 0.86);
+    border: 1px solid rgba(163, 105, 49, 0.18);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-private-mark {
+    padding: 5px 9px;
+    color: #9e5549;
+    background: rgba(201, 120, 105, 0.12);
+    border: 1px solid rgba(201, 120, 105, 0.18);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-author-row {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin-bottom: 13px;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-avatar {
+    display: inline-grid;
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border: 1px solid rgba(154, 101, 47, 0.2);
+    border-radius: 15px;
+    color: #6f4426;
+    background: linear-gradient(135deg, #f7d89e, #fff4d9);
+    font-size: 17px;
+    font-weight: 800;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68), 0 5px 12px rgba(111, 71, 35, 0.12);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-author-block {
+    min-width: 0;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-author {
+    margin: 0;
+    color: #54351f;
+    font-size: 16px;
+    line-height: 1.25;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-signature {
+    margin-top: 3px;
+    color: var(--diary-muted);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-content {
+    position: relative;
+    z-index: 2;
+    padding: 12px 12px 11px;
+    border: 1px solid rgba(145, 94, 45, 0.11);
+    border-radius: 18px;
+    background: rgba(255, 252, 243, 0.58);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-line {
+    margin: 0;
+    color: #5d4028;
+    font-size: 13px;
+    line-height: 1.85;
+    letter-spacing: 0.01em;
+    word-break: break-word;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-line + .phone-theater-diary-line {
+    margin-top: 8px;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-secret {
+    display: inline;
+    padding: 1px 5px 2px;
+    border-radius: 999px;
+    color: #7b443f;
+    background: linear-gradient(180deg, rgba(218, 150, 137, 0.16), rgba(218, 150, 137, 0.08));
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-postscript {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 13px;
+    padding: 11px 12px;
+    border: 1px dashed rgba(176, 113, 57, 0.28);
+    border-radius: 16px;
+    background: rgba(255, 241, 210, 0.62);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-postscript-line {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    align-items: start;
+    color: #6e4a2f;
+    font-size: 12px;
+    line-height: 1.65;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-postscript-label {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 999px;
+    color: #fff8ef;
+    background: #a66c3e;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-postscript-text {
+    min-width: 0;
+    word-break: break-word;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-empty-card {
+    position: relative;
+    overflow: hidden;
+    padding: 28px 20px;
+    border: 1px dashed rgba(158, 108, 58, 0.28);
+    border-radius: 24px;
+    text-align: center;
+    background: rgba(255, 250, 236, 0.78);
+    box-shadow: 0 14px 28px rgba(112, 76, 39, 0.1);
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-empty-card::before {
+    content: "";
+    position: absolute;
+    inset: 12px;
+    border: 1px solid rgba(169, 114, 56, 0.09);
+    border-radius: 18px;
+    pointer-events: none;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-empty-kicker {
+    color: var(--diary-accent);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-empty-title {
+    margin-top: 8px;
+    color: #5c3d25;
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-empty-text {
+    max-width: 240px;
+    margin: 8px auto 0;
+    color: var(--diary-muted);
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+@media (max-width: 380px) {
+    .phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card {
+        padding: 18px 14px 15px;
+    }
+
+    .phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-postscript-line {
+        grid-template-columns: 1fr;
+        gap: 5px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card,
+    .phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-select-toggle {
+        transition: none;
+    }
+
+    .phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card:nth-child(2n),
+    .phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-card:nth-child(2n + 1) {
+        transform: none;
+    }
+}

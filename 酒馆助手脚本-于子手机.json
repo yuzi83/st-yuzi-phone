@@ -1,0 +1,17 @@
+{
+  "type": "script",
+  "enabled": false,
+  "name": "玉子手机",
+  "id": "5a5a7b2e-3792-4e49-8bcb-7be06e5169ca",
+  "content": "",
+  "info": "",
+  "button": {
+    "enabled": true,
+    "buttons": []
+  },
+  "data": {},
+  "export_with": {
+    "data": true,
+    "button": true
+  }
+}

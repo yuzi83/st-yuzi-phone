@@ -30,6 +30,11 @@ import {
     getHomeAppLabelColorModeValue as getHomeAppLabelColorModeValueImpl,
     setupHomeAppLabelColorSettings as setupHomeAppLabelColorSettingsImpl,
 } from './appearance-settings/home-label-color-settings.js';
+import {
+    applyPhoneThemeMode as applyPhoneThemeModeImpl,
+    getPhoneThemeModeValue as getPhoneThemeModeValueImpl,
+    setupPhoneThemeModeSettings as setupPhoneThemeModeSettingsImpl,
+} from './appearance-settings/theme-settings.js';
 
 const { renderIconUploadList: renderIconUploadListImpl } = createIconUploadService();
 
@@ -111,4 +116,16 @@ export function setupHomeAppLabelColorSettings(container) {
 
 export function getLayoutValue(key, fallback) {
     return getLayoutValueImpl(key, fallback);
+}
+
+export function getPhoneThemeModeValue() {
+    return getPhoneThemeModeValueImpl();
+}
+
+export function applyPhoneThemeMode(mode) {
+    return applyPhoneThemeModeImpl(mode);
+}
+
+export function setupPhoneThemeModeSettings(container) {
+    return setupPhoneThemeModeSettingsImpl(container);
 }

@@ -100,6 +100,9 @@ function buildAppearancePageService(services) {
         setupReadableTextScaleSettings: services.appearance.setupReadableTextScaleSettings,
         getHomeAppLabelColorModeValue: services.appearance.getHomeAppLabelColorModeValue,
         setupHomeAppLabelColorSettings: services.appearance.setupHomeAppLabelColorSettings,
+        getPhoneThemeModeValue: services.appearance.getPhoneThemeModeValue,
+        applyPhoneThemeMode: services.appearance.applyPhoneThemeMode,
+        setupPhoneThemeModeSettings: services.appearance.setupPhoneThemeModeSettings,
     };
 }
 

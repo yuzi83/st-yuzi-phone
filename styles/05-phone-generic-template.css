@@ -6,32 +6,32 @@
 
 .phone-generic-root.phone-generic-template-scope {
     /* ===== 兼容桥接（旧 token -> 新 token） ===== */
-    --_gt-page-bg: var(--gtPageBg, transparent);
+    --_gt-page-bg: var(--gtPageBg, var(--yuzi-theme-page-bg, transparent));
     --_gt-body-bg: var(--gtBodyBg, var(--gtCompatTableBg, transparent));
 
-    --_gt-text: var(--gtText, var(--gtCompatText, rgba(255, 255, 255, 0.9)));
-    --_gt-muted-text: var(--gtMutedText, rgba(255, 255, 255, 0.62));
+    --_gt-text: var(--gtText, var(--gtCompatText, var(--yuzi-theme-text-primary, #3A3731)));
+    --_gt-muted-text: var(--gtMutedText, var(--yuzi-theme-text-secondary, #7A7772));
 
-    --_gt-nav-bg: var(--gtNavBg, var(--gtCompatNavBg, rgba(0, 0, 0, 0.4)));
-    --_gt-nav-border: var(--gtNavBorderColor, var(--gtCompatBorder, rgba(255, 255, 255, 0.08)));
+    --_gt-nav-bg: var(--gtNavBg, var(--gtCompatNavBg, var(--yuzi-theme-surface-soft, rgba(245, 243, 239, 0.6))));
+    --_gt-nav-border: var(--gtNavBorderColor, var(--gtCompatBorder, var(--yuzi-theme-border, rgba(58, 55, 49, 0.08))));
     --_gt-nav-text: var(--gtNavText, var(--_gt-text));
-    --_gt-nav-back-text: var(--gtNavBackText, rgba(100, 180, 255, 0.9));
+    --_gt-nav-back-text: var(--gtNavBackText, var(--yuzi-theme-accent, #5B7A6A));
 
-    --_gt-list-bg: var(--gtListBg, var(--gtCompatTableBg, rgba(255, 255, 255, 0.04)));
-    --_gt-list-border: var(--gtListBorder, var(--gtCompatBorder, rgba(255, 255, 255, 0.12)));
+    --_gt-list-bg: var(--gtListBg, var(--gtCompatTableBg, var(--yuzi-theme-surface, rgba(245, 243, 239, 0.96))));
+    --_gt-list-border: var(--gtListBorder, var(--gtCompatBorder, var(--yuzi-theme-border, rgba(58, 55, 49, 0.08))));
     --_gt-list-item-bg: var(--gtListItemBg, transparent);
-    --_gt-list-item-hover-bg: var(--gtListItemHoverBg, rgba(255, 255, 255, 0.08));
+    --_gt-list-item-hover-bg: var(--gtListItemHoverBg, var(--yuzi-theme-accent-soft, rgba(91, 122, 106, 0.1)));
     --_gt-list-item-text: var(--gtListItemText, var(--_gt-text));
 
-    --_gt-detail-bg: var(--gtDetailBg, var(--gtCompatTableBg, rgba(255, 255, 255, 0.03)));
-    --_gt-detail-border: var(--gtDetailBorder, var(--gtCompatBorder, rgba(255, 255, 255, 0.1)));
+    --_gt-detail-bg: var(--gtDetailBg, var(--gtCompatTableBg, var(--yuzi-theme-surface-soft, rgba(245, 243, 239, 0.6))));
+    --_gt-detail-border: var(--gtDetailBorder, var(--gtCompatBorder, var(--yuzi-theme-border, rgba(58, 55, 49, 0.08))));
     --_gt-detail-field-bg: var(--gtDetailFieldBg, transparent);
-    --_gt-detail-field-border: var(--gtDetailFieldBorder, rgba(255, 255, 255, 0.08));
-    --_gt-detail-key-text: var(--gtDetailKeyText, rgba(100, 180, 255, 0.78));
+    --_gt-detail-field-border: var(--gtDetailFieldBorder, var(--yuzi-theme-border, rgba(58, 55, 49, 0.08)));
+    --_gt-detail-key-text: var(--gtDetailKeyText, var(--yuzi-theme-accent, #5B7A6A));
     --_gt-detail-value-text: var(--gtDetailValueText, var(--_gt-text));
 
-    --_gt-action-btn-bg: var(--gtActionBtnBg, rgba(255, 255, 255, 0.08));
-    --_gt-action-btn-border: var(--gtActionBtnBorder, rgba(255, 255, 255, 0.2));
+    --_gt-action-btn-bg: var(--gtActionBtnBg, var(--yuzi-theme-surface-soft, rgba(245, 243, 239, 0.6)));
+    --_gt-action-btn-border: var(--gtActionBtnBorder, var(--yuzi-theme-border-strong, rgba(58, 55, 49, 0.12)));
     --_gt-action-btn-text: var(--gtActionBtnText, var(--_gt-text));
 
     --_gt-backdrop: var(--gtBackdropFilter, var(--gtCompatBackdrop, none));
@@ -64,17 +64,20 @@
     --_gt-shadow-md: var(--gtShadowMd, var(--_gt-shadow-preset-md));
     --_gt-shadow-lg: var(--gtShadowLg, var(--_gt-shadow-preset-lg));
 
-    --_gt-accent: var(--gtAccent, #2563eb);
+    --_gt-accent: var(--gtAccent, var(--yuzi-theme-accent, #5B7A6A));
     --_gt-accent-strong: var(--gtAccentStrong, var(--_gt-accent));
-    --_gt-accent-soft: var(--gtAccentSoft, rgba(37, 99, 235, 0.12));
-    --_gt-accent-border: var(--gtAccentBorder, rgba(37, 99, 235, 0.22));
-    --_gt-success: var(--gtSuccess, #16a34a);
-    --_gt-warning: var(--gtWarning, #d97706);
-    --_gt-danger: var(--gtDanger, #dc2626);
+    --_gt-accent-soft: var(--gtAccentSoft, var(--yuzi-theme-accent-soft, rgba(91, 122, 106, 0.1)));
+    --_gt-accent-contrast: var(--gtAccentContrast, var(--yuzi-theme-text-inverse, #FFFFFF));
+    --_gt-accent-border: var(--gtAccentBorder, color-mix(in srgb, var(--_gt-accent) 22%, transparent));
+    --_gt-accent-shadow: var(--gtAccentShadow, color-mix(in srgb, var(--_gt-accent) 20%, transparent));
+    --_gt-success: var(--gtSuccess, var(--yuzi-theme-success, #5B7A6A));
+    --_gt-warning: var(--gtWarning, var(--yuzi-theme-warning, #A68B5B));
+    --_gt-danger: var(--gtDanger, var(--yuzi-theme-danger, #8B5E5E));
     --_gt-info: var(--gtInfo, var(--_gt-accent));
-    --_gt-panel-bg: var(--gtPanelBg, rgba(255, 255, 255, 0.76));
-    --_gt-panel-muted-bg: var(--gtPanelMutedBg, rgba(248, 250, 252, 0.72));
-    --_gt-panel-border-strong: var(--gtPanelBorderStrong, rgba(148, 163, 184, 0.22));
+    --_gt-panel-bg: var(--gtPanelBg, var(--yuzi-theme-surface-strong, rgba(245, 243, 239, 0.99)));
+    --_gt-panel-muted-bg: var(--gtPanelMutedBg, var(--yuzi-theme-surface-soft, rgba(245, 243, 239, 0.6)));
+    --_gt-panel-border-strong: var(--gtPanelBorderStrong, var(--yuzi-theme-border-strong, rgba(58, 55, 49, 0.12)));
+    --_gt-panel-divider: var(--gtPanelDivider, color-mix(in srgb, var(--_gt-text) 14%, transparent));
 
     --_gt-action-btn-radius: var(--_gt-radius-sm);
     --_gt-action-btn-font-size: 12px;
@@ -525,7 +528,7 @@
     padding: 0 9px;
     border-radius: 999px;
     border: 1px solid var(--_gt-action-btn-border);
-    background: rgba(255, 255, 255, 0.74);
+    background: var(--_gt-action-btn-bg);
     color: var(--_gt-muted-text);
     font-size: 11px;
     font-weight: 700;
@@ -542,20 +545,20 @@
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn.is-danger {
-    border-color: rgba(220, 38, 38, 0.22);
-    background: rgba(220, 38, 38, 0.08);
+    border-color: color-mix(in srgb, var(--_gt-danger) 22%, transparent);
+    background: color-mix(in srgb, var(--_gt-danger) 8%, transparent);
     color: var(--_gt-danger);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn.is-danger:hover {
-    border-color: rgba(220, 38, 38, 0.36);
-    background: rgba(220, 38, 38, 0.14);
+    border-color: color-mix(in srgb, var(--_gt-danger) 36%, transparent);
+    background: color-mix(in srgb, var(--_gt-danger) 14%, transparent);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn:disabled,
 .phone-generic-root.phone-generic-template-scope .phone-generic-nav-delete-btn:disabled:hover {
     border-color: var(--_gt-action-btn-border);
-    background: rgba(255, 255, 255, 0.42);
+    background: var(--_gt-action-btn-bg);
     color: var(--_gt-muted-text);
     cursor: not-allowed;
     opacity: 0.48;
@@ -583,7 +586,7 @@
 .phone-generic-root.phone-generic-template-scope .phone-generic-detail-section {
     border: 1px solid var(--_gt-panel-border-strong);
     border-radius: var(--_gt-radius-lg);
-    background: rgba(255, 255, 255, 0.94);
+    background: var(--_gt-panel-bg);
     box-shadow: var(--_gt-shadow-sm);
 }
 
@@ -639,8 +642,8 @@
     box-sizing: border-box;
     border: 1px solid var(--_gt-detail-field-border) !important;
     border-radius: 12px;
-    background: #ffffff !important;
-    background-color: #ffffff !important;
+    background: var(--_gt-detail-bg) !important;
+    background-color: var(--_gt-detail-bg) !important;
     color: var(--_gt-text) !important;
     -webkit-text-fill-color: var(--_gt-text) !important;
     caret-color: var(--_gt-text);
@@ -656,8 +659,8 @@
     outline: none;
     border-color: var(--_gt-accent) !important;
     box-shadow: 0 0 0 3px var(--_gt-accent-soft);
-    background: #ffffff !important;
-    background-color: #ffffff !important;
+    background: var(--_gt-detail-bg) !important;
+    background-color: var(--_gt-detail-bg) !important;
     color: var(--_gt-text) !important;
     -webkit-text-fill-color: var(--_gt-text) !important;
 }
@@ -670,8 +673,8 @@
 .phone-generic-root.phone-generic-template-scope .phone-generic-search-input:disabled {
     cursor: not-allowed;
     opacity: 0.6;
-    background: #ffffff !important;
-    background-color: #ffffff !important;
+    background: var(--_gt-detail-bg) !important;
+    background-color: var(--_gt-detail-bg) !important;
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-toolbar-actions {
@@ -750,38 +753,38 @@
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-result-pill {
     border: 1px solid var(--_gt-detail-field-border);
-    background: rgba(248, 250, 252, 0.9);
+    background: color-mix(in srgb, var(--_gt-detail-bg) 90%, transparent);
     color: var(--_gt-muted-text);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-status-chip.is-neutral {
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    background: rgba(148, 163, 184, 0.12);
-    color: #475569;
+    border: 1px solid color-mix(in srgb, var(--_gt-muted-text) 20%, transparent);
+    background: color-mix(in srgb, var(--_gt-muted-text) 12%, transparent);
+    color: var(--_gt-muted-text);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-status-chip.is-success {
-    border: 1px solid rgba(22, 163, 74, 0.18);
-    background: rgba(22, 163, 74, 0.12);
+    border: 1px solid color-mix(in srgb, var(--_gt-success) 18%, transparent);
+    background: color-mix(in srgb, var(--_gt-success) 12%, transparent);
     color: var(--_gt-success);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-status-chip.is-warning,
 .phone-generic-root.phone-generic-template-scope .phone-generic-field-lock-state {
-    border: 1px solid rgba(217, 119, 6, 0.18);
-    background: rgba(217, 119, 6, 0.1);
+    border: 1px solid color-mix(in srgb, var(--_gt-warning) 18%, transparent);
+    background: color-mix(in srgb, var(--_gt-warning) 10%, transparent);
     color: var(--_gt-warning);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-status-chip.is-danger {
-    border: 1px solid rgba(220, 38, 38, 0.18);
-    background: rgba(220, 38, 38, 0.1);
+    border: 1px solid color-mix(in srgb, var(--_gt-danger) 18%, transparent);
+    background: color-mix(in srgb, var(--_gt-danger) 10%, transparent);
     color: var(--_gt-danger);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-status-chip.is-info {
-    border: 1px solid rgba(37, 99, 235, 0.18);
-    background: rgba(37, 99, 235, 0.1);
+    border: 1px solid color-mix(in srgb, var(--_gt-info) 18%, transparent);
+    background: color-mix(in srgb, var(--_gt-info) 10%, transparent);
     color: var(--_gt-info);
 }
 
@@ -809,7 +812,7 @@
     gap: 12px;
     padding: 14px 18px;
     border-bottom: 1px solid var(--_gt-list-border);
-    background: linear-gradient(180deg, rgba(248, 250, 252, 0.96) 0%, rgba(248, 250, 252, 0.82) 100%);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--_gt-panel-bg) 92%, transparent) 0%, color-mix(in srgb, var(--_gt-panel-muted-bg) 88%, transparent) 100%);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -852,8 +855,8 @@
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-item.is-delete-selected {
-    border-color: rgba(220, 38, 38, 0.24);
-    background: rgba(220, 38, 38, 0.06);
+    border-color: color-mix(in srgb, var(--_gt-danger) 24%, transparent);
+    background: color-mix(in srgb, var(--_gt-danger) 6%, transparent);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-item.is-delete-selected .phone-generic-slot-list-main {
@@ -924,25 +927,25 @@
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-row-select-circle {
-    border-color: rgba(220, 38, 38, 0.34);
-    background: rgba(255, 255, 255, 0.8);
+    border-color: color-mix(in srgb, var(--_gt-danger) 34%, transparent);
+    background: var(--_gt-action-btn-bg);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-row-select-circle:hover,
 .phone-generic-root.phone-generic-template-scope .phone-row-select-circle:focus-visible {
-    border-color: rgba(220, 38, 38, 0.58);
-    background: rgba(220, 38, 38, 0.08);
+    border-color: color-mix(in srgb, var(--_gt-danger) 58%, transparent);
+    background: color-mix(in srgb, var(--_gt-danger) 8%, transparent);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-row-select-circle.is-selected {
-    border-color: rgba(220, 38, 38, 0.72);
-    background: rgba(220, 38, 38, 0.16);
+    border-color: color-mix(in srgb, var(--_gt-danger) 72%, transparent);
+    background: color-mix(in srgb, var(--_gt-danger) 16%, transparent);
     color: var(--_gt-danger);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-row-select-circle.disabled {
-    border-color: rgba(148, 163, 184, 0.22);
-    background: rgba(248, 250, 252, 0.58);
+    border-color: color-mix(in srgb, var(--_gt-muted-text) 22%, transparent);
+    background: color-mix(in srgb, var(--_gt-action-btn-bg) 72%, transparent);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-arrow {
@@ -1023,8 +1026,8 @@
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-detail-flow-list .phone-generic-slot-detail-field.is-locked {
-    background: rgba(217, 119, 6, 0.04);
-    border-bottom-color: rgba(217, 119, 6, 0.18);
+    background: color-mix(in srgb, var(--_gt-warning) 4%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--_gt-warning) 18%, transparent);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-slot-detail-field {
@@ -1034,12 +1037,12 @@
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-slot-detail-field:hover {
     border-color: var(--_gt-accent-border);
-    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.06);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--_gt-accent) 6%, transparent);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-slot-detail-field.is-locked {
-    border-color: rgba(217, 119, 6, 0.18);
-    background: rgba(217, 119, 6, 0.06);
+    border-color: color-mix(in srgb, var(--_gt-warning) 18%, transparent);
+    background: color-mix(in srgb, var(--_gt-warning) 6%, transparent);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-generic-slot-detail-field.is-long-content {
@@ -1066,7 +1069,7 @@
     box-sizing: border-box;
     border: 1px solid var(--_gt-detail-field-border) !important;
     border-radius: 12px;
-    background: #ffffff !important;
+    background: var(--_gt-detail-bg) !important;
     color: var(--_gt-detail-value-text) !important;
     -webkit-text-fill-color: var(--_gt-detail-value-text) !important;
     caret-color: var(--_gt-detail-value-text);
@@ -1082,7 +1085,7 @@
     outline: none;
     border-color: var(--_gt-accent) !important;
     box-shadow: 0 0 0 3px var(--_gt-accent-soft);
-    background: #ffffff !important;
+    background: var(--_gt-detail-bg) !important;
     color: var(--_gt-detail-value-text) !important;
 }
 
@@ -1107,11 +1110,11 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
     padding: 12px 16px;
-    background: linear-gradient(180deg, rgba(248, 250, 252, 0.82) 0%, rgba(255, 255, 255, 0.96) 100%);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--_gt-panel-muted-bg) 88%, transparent) 0%, color-mix(in srgb, var(--_gt-panel-bg) 94%, transparent) 100%);
     border-top: 1px solid var(--_gt-panel-border-strong);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
-    box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.08);
+    box-shadow: 0 -10px 24px color-mix(in srgb, var(--_gt-text) 12%, transparent);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-list-bottom-btn,
@@ -1143,14 +1146,14 @@
 }
 
 .phone-generic-root.phone-generic-template-scope #phone-list-delete-btn.active {
-    border-color: rgba(220, 38, 38, 0.2);
-    background: rgba(220, 38, 38, 0.1);
+    border-color: color-mix(in srgb, var(--_gt-danger) 20%, transparent);
+    background: color-mix(in srgb, var(--_gt-danger) 10%, transparent);
     color: var(--_gt-danger);
 }
 
 .phone-generic-root.phone-generic-template-scope #phone-cell-lock-mode-btn.active {
-    border-color: rgba(217, 119, 6, 0.2);
-    background: rgba(217, 119, 6, 0.1);
+    border-color: color-mix(in srgb, var(--_gt-warning) 20%, transparent);
+    background: color-mix(in srgb, var(--_gt-warning) 10%, transparent);
     color: var(--_gt-warning);
 }
 
@@ -1235,7 +1238,7 @@
         border: 1px solid var(--_gt-panel-border-strong);
         border-bottom: 1px solid var(--_gt-panel-border-strong);
         border-radius: 16px;
-        background: rgba(255, 255, 255, 0.96);
+        background: var(--_gt-panel-bg);
         box-shadow: var(--_gt-shadow-sm);
     }
 
@@ -1267,7 +1270,7 @@
         min-width: 0;
         width: 100%;
         padding-top: 10px;
-        border-top: 1px dashed rgba(148, 163, 184, 0.22);
+        border-top: 1px dashed var(--_gt-panel-divider);
     }
 
     .phone-generic-root.phone-generic-template-scope .phone-generic-list-side-meta {
@@ -1308,8 +1311,8 @@
     .phone-generic-root.phone-generic-template-scope .phone-detail-bottom-bar #phone-save-row:not(:disabled) {
         border-color: var(--_gt-accent);
         background: var(--_gt-accent);
-        color: #ffffff;
-        box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
+        color: var(--_gt-accent-contrast);
+        box-shadow: 0 8px 18px var(--_gt-accent-shadow);
     }
 }
 
@@ -1398,7 +1401,7 @@
     border-color: var(--_gt-accent-border);
     background: var(--_gt-accent-soft);
     color: var(--_gt-accent-strong);
-    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.16);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--_gt-accent) 16%, transparent);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-detail-pager-btn:disabled {

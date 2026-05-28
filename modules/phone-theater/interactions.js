@@ -172,7 +172,7 @@ function confirmDelete(container, options) {
     showConfirmDialog(
         container,
         '确认删除',
-        `将删除已选 ${selectedCount} 项，并同步清理关联附表数据。此操作不可撤销。`,
+        `将删除已选 ${selectedCount} 项，并同步清理该场景关联数据。此操作不可撤销。`,
         () => executeConfirmedDelete(container, options),
         '删除',
         '取消'
@@ -224,6 +224,27 @@ function openEditableTable(actionNode, container, options) {
     navigateToEditableTable(entry);
 }
 
+function openDetailDialog(actionNode, container, options) {
+    if (!isTheaterInteractionActive(container, options)) return;
+
+    const title = normalizeText(actionNode?.dataset?.detailTitle) || '详情';
+    const content = normalizeText(actionNode?.dataset?.detailContent);
+    if (!content) {
+        showToastIfActive(container, options, '暂无可查看的详情', true);
+        return;
+    }
+
+    showConfirmDialog(
+        container,
+        title,
+        content,
+        () => {},
+        '知道了',
+        '关闭',
+        options?.lifecycle?.runtime || options?.lifecycle?.phoneRuntime || null
+    );
+}
+
 function isTheaterAction(action) {
     const normalizedAction = normalizeText(action);
     return normalizedAction === 'toggle-theater-edit-menu'
@@ -247,6 +268,10 @@ function handleDeleteAction(event, container, options) {
     }
     if (action === 'theater-open-edit-table') {
         openEditableTable(actionNode, container, options);
+        return true;
+    }
+    if (action === 'theater-open-detail') {
+        openDetailDialog(actionNode, container, options);
         return true;
     }
 

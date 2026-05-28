@@ -1,0 +1,119 @@
+/* ========================================
+   玉子的手机 — Theme Modes
+   作用：统一 light/dark 语义主题 token，并桥接到既有 --yuzi-settings-* 变量
+   作用域：html[data-yuzi-phone-theme] 与 #yuzi-phone-standalone[data-yuzi-phone-theme]
+   ======================================== */
+
+:root,
+html[data-yuzi-phone-theme='light'],
+#yuzi-phone-standalone[data-yuzi-phone-theme='light'] {
+    --yuzi-theme-page-bg: linear-gradient(180deg, #F5F3EF 0%, #EDEAE4 100%);
+    --yuzi-theme-surface: rgba(245, 243, 239, 0.96);
+    --yuzi-theme-surface-muted: rgba(240, 238, 233, 0.98);
+    --yuzi-theme-surface-soft: rgba(245, 243, 239, 0.6);
+    --yuzi-theme-surface-strong: rgba(245, 243, 239, 0.99);
+    --yuzi-theme-text-primary: #3A3731;
+    --yuzi-theme-text-secondary: #7A7772;
+    --yuzi-theme-text-tertiary: #7A7772;
+    --yuzi-theme-text-inverse: #FFFFFF;
+    --yuzi-theme-text-faint: #9A9790;
+    --yuzi-theme-border: rgba(58, 55, 49, 0.08);
+    --yuzi-theme-border-strong: rgba(58, 55, 49, 0.12);
+    --yuzi-theme-divider: rgba(58, 55, 49, 0.04);
+    --yuzi-theme-shadow-soft: 0 4px 12px rgba(58, 55, 49, 0.04);
+    --yuzi-theme-shadow-medium: 0 6px 18px rgba(58, 55, 49, 0.06);
+    --yuzi-theme-shadow-strong: 0 8px 24px rgba(58, 55, 49, 0.08);
+    --yuzi-theme-accent: #5B7A6A;
+    --yuzi-theme-accent-strong: #4B6648;
+    --yuzi-theme-accent-soft: rgba(91, 122, 106, 0.1);
+    --yuzi-theme-accent-soft-strong: rgba(91, 122, 106, 0.18);
+    --yuzi-theme-accent-ring: rgba(91, 122, 106, 0.18);
+    --yuzi-theme-success: #5B7A6A;
+    --yuzi-theme-success-soft: rgba(91, 122, 106, 0.1);
+    --yuzi-theme-warning: #A68B5B;
+    --yuzi-theme-warning-soft: rgba(166, 139, 91, 0.1);
+    --yuzi-theme-danger: #8B5E5E;
+    --yuzi-theme-danger-soft: rgba(139, 94, 94, 0.1);
+    --yuzi-theme-info: #7A7772;
+    --yuzi-theme-info-soft: rgba(122, 119, 114, 0.1);
+    --yuzi-theme-chip-bg: rgba(58, 55, 49, 0.04);
+    --yuzi-theme-chip-text: #7A7772;
+    --yuzi-theme-scrollbar-thumb: rgba(58, 55, 49, 0.12);
+    --yuzi-theme-scrollbar-thumb-hover: rgba(58, 55, 49, 0.2);
+}
+
+html[data-yuzi-phone-theme='dark'],
+#yuzi-phone-standalone[data-yuzi-phone-theme='dark'] {
+    --yuzi-theme-page-bg: linear-gradient(180deg, #1F211F 0%, #151715 100%);
+    --yuzi-theme-surface: rgba(28, 31, 29, 0.96);
+    --yuzi-theme-surface-muted: rgba(24, 27, 25, 0.98);
+    --yuzi-theme-surface-soft: rgba(36, 39, 37, 0.72);
+    --yuzi-theme-surface-strong: rgba(30, 33, 31, 0.99);
+    --yuzi-theme-text-primary: #E6E3DB;
+    --yuzi-theme-text-secondary: #B8B4AA;
+    --yuzi-theme-text-tertiary: #A8A398;
+    --yuzi-theme-text-inverse: #151715;
+    --yuzi-theme-text-faint: #8D897F;
+    --yuzi-theme-border: rgba(230, 227, 219, 0.08);
+    --yuzi-theme-border-strong: rgba(230, 227, 219, 0.14);
+    --yuzi-theme-divider: rgba(230, 227, 219, 0.06);
+    --yuzi-theme-shadow-soft: 0 6px 16px rgba(0, 0, 0, 0.3);
+    --yuzi-theme-shadow-medium: 0 10px 24px rgba(0, 0, 0, 0.34);
+    --yuzi-theme-shadow-strong: 0 14px 32px rgba(0, 0, 0, 0.4);
+    --yuzi-theme-accent: #8DAF9C;
+    --yuzi-theme-accent-strong: #A5C7B3;
+    --yuzi-theme-accent-soft: rgba(141, 175, 156, 0.2);
+    --yuzi-theme-accent-soft-strong: rgba(141, 175, 156, 0.28);
+    --yuzi-theme-accent-ring: rgba(141, 175, 156, 0.32);
+    --yuzi-theme-success: #8DB39F;
+    --yuzi-theme-success-soft: rgba(141, 179, 159, 0.2);
+    --yuzi-theme-warning: #C9B080;
+    --yuzi-theme-warning-soft: rgba(201, 176, 128, 0.2);
+    --yuzi-theme-danger: #C09090;
+    --yuzi-theme-danger-soft: rgba(192, 144, 144, 0.2);
+    --yuzi-theme-info: #B8B4AA;
+    --yuzi-theme-info-soft: rgba(184, 180, 170, 0.2);
+    --yuzi-theme-chip-bg: rgba(230, 227, 219, 0.08);
+    --yuzi-theme-chip-text: #C4BFB3;
+    --yuzi-theme-scrollbar-thumb: rgba(230, 227, 219, 0.24);
+    --yuzi-theme-scrollbar-thumb-hover: rgba(230, 227, 219, 0.36);
+}
+
+:root,
+html[data-yuzi-phone-theme],
+#yuzi-phone-standalone[data-yuzi-phone-theme] {
+    --yuzi-settings-page-bg: var(--yuzi-theme-page-bg);
+    --yuzi-settings-surface: var(--yuzi-theme-surface);
+    --yuzi-settings-surface-muted: var(--yuzi-theme-surface-muted);
+    --yuzi-settings-surface-soft: var(--yuzi-theme-surface-soft);
+    --yuzi-settings-surface-strong: var(--yuzi-theme-surface-strong);
+    --yuzi-settings-text-primary: var(--yuzi-theme-text-primary);
+    --yuzi-settings-text-secondary: var(--yuzi-theme-text-secondary);
+    --yuzi-settings-text-tertiary: var(--yuzi-theme-text-tertiary);
+    --yuzi-settings-text-inverse: var(--yuzi-theme-text-inverse);
+    --yuzi-settings-accent-contrast: var(--yuzi-theme-text-inverse);
+    --yuzi-settings-text-faint: var(--yuzi-theme-text-faint);
+    --yuzi-settings-border: var(--yuzi-theme-border);
+    --yuzi-settings-border-strong: var(--yuzi-theme-border-strong);
+    --yuzi-settings-divider: var(--yuzi-theme-divider);
+    --yuzi-settings-shadow-soft: var(--yuzi-theme-shadow-soft);
+    --yuzi-settings-shadow-medium: var(--yuzi-theme-shadow-medium);
+    --yuzi-settings-shadow-strong: var(--yuzi-theme-shadow-strong);
+    --yuzi-settings-accent: var(--yuzi-theme-accent);
+    --yuzi-settings-accent-strong: var(--yuzi-theme-accent-strong);
+    --yuzi-settings-accent-soft: var(--yuzi-theme-accent-soft);
+    --yuzi-settings-accent-soft-strong: var(--yuzi-theme-accent-soft-strong);
+    --yuzi-settings-accent-ring: var(--yuzi-theme-accent-ring);
+    --yuzi-settings-success: var(--yuzi-theme-success);
+    --yuzi-settings-success-soft: var(--yuzi-theme-success-soft);
+    --yuzi-settings-warning: var(--yuzi-theme-warning);
+    --yuzi-settings-warning-soft: var(--yuzi-theme-warning-soft);
+    --yuzi-settings-danger: var(--yuzi-theme-danger);
+    --yuzi-settings-danger-soft: var(--yuzi-theme-danger-soft);
+    --yuzi-settings-info: var(--yuzi-theme-info);
+    --yuzi-settings-info-soft: var(--yuzi-theme-info-soft);
+    --yuzi-settings-chip-bg: var(--yuzi-theme-chip-bg);
+    --yuzi-settings-chip-text: var(--yuzi-theme-chip-text);
+    --yuzi-settings-scrollbar-thumb: var(--yuzi-theme-scrollbar-thumb);
+    --yuzi-settings-scrollbar-thumb-hover: var(--yuzi-theme-scrollbar-thumb-hover);
+}

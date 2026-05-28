@@ -36,11 +36,13 @@ export function renderButtonStylePage(ctx) {
     const currentCover = typeof settings.phoneToggleCoverImage === 'string' && settings.phoneToggleCoverImage.trim()
         ? settings.phoneToggleCoverImage.trim()
         : '';
+    const floatingToggleEnabled = settings.floatingToggleEnabled !== false;
 
     container.innerHTML = buildButtonStylePageHtml({
         currentSize,
         currentShape,
         currentCover,
+        floatingToggleEnabled,
     });
 
     const runtime = pageRuntime && typeof pageRuntime === 'object' ? pageRuntime : null;
@@ -87,9 +89,14 @@ export function renderButtonStylePage(ctx) {
     const uploadBtn = container.querySelector('#phone-toggle-cover-upload-btn');
     const clearBtn = container.querySelector('#phone-toggle-cover-clear-btn');
     const preview = container.querySelector('#phone-toggle-cover-preview');
+    const floatingToggleCheckbox = container.querySelector('#phone-floating-toggle-enabled');
+    const resetPositionBtn = container.querySelector('#phone-toggle-position-reset-btn');
 
     const emitToggleStyleUpdated = () => {
         window.dispatchEvent(new CustomEvent('yuzi-phone-toggle-style-updated'));
+    };
+    const emitTogglePositionReset = () => {
+        window.dispatchEvent(new CustomEvent('yuzi-phone-toggle-position-reset'));
     };
 
     const saveToggleSizeDebounced = createDebouncedTask((next) => {
@@ -133,6 +140,18 @@ export function renderButtonStylePage(ctx) {
             emitToggleStyleUpdated();
             showToast(container, nextShape === 'circle' ? '按钮已切换为圆形（文字已隐藏）' : '按钮已切换为长方形');
         });
+    });
+
+    addListener(floatingToggleCheckbox, 'change', () => {
+        if (!(floatingToggleCheckbox instanceof HTMLInputElement)) return;
+        savePhoneSetting('floatingToggleEnabled', floatingToggleCheckbox.checked);
+        emitToggleStyleUpdated();
+        showToast(container, floatingToggleCheckbox.checked ? '悬浮入口已显示' : '悬浮入口已隐藏');
+    });
+
+    addListener(resetPositionBtn, 'click', () => {
+        emitTogglePositionReset();
+        showToast(container, '悬浮按钮位置已重置');
     });
 
     addListener(uploadBtn, 'click', () => {

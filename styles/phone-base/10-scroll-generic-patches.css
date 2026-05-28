@@ -56,17 +56,17 @@
 /* 通用表格模板作用域：基础变量桥接
    完整布局与结构开关在 styles/05-phone-generic-template.css */
 .phone-generic-root.phone-generic-template-scope {
-    --gtCompatTableBg: var(--tableBackgroundColor, rgba(25, 25, 30, 0.45));
-    --gtCompatNavBg: var(--headerBackgroundColor, rgba(0, 0, 0, 0.4));
-    --gtCompatText: var(--textColor, rgba(255, 255, 255, 0.9));
-    --gtCompatBorder: var(--borderColor, rgba(255, 255, 255, 0.15));
+    --gtCompatTableBg: var(--tableBackgroundColor, var(--yuzi-theme-surface, rgba(245, 243, 239, 0.96)));
+    --gtCompatNavBg: var(--headerBackgroundColor, var(--yuzi-theme-surface-soft, rgba(245, 243, 239, 0.6)));
+    --gtCompatText: var(--textColor, var(--yuzi-theme-text-primary, #3A3731));
+    --gtCompatBorder: var(--borderColor, var(--yuzi-theme-border, rgba(58, 55, 49, 0.08)));
     --gtCompatRadius: var(--borderRadius, 14px);
     --gtCompatShadow: var(--boxShadow, none);
     --gtCompatBackdrop: var(--backdropFilter, none);
 }
 
 .phone-generic-root.phone-generic-template-scope {
-    color: var(--gtText, var(--gtCompatText));
+    color: var(--gtText, var(--gtCompatText, var(--yuzi-theme-text-primary, #3A3731)));
     background: var(--gtPageBg, transparent);
 }
 
@@ -79,7 +79,7 @@
 
 .phone-generic-root.phone-generic-template-scope .phone-app-body.phone-table-body {
     background: var(--gtBodyBg, transparent);
-    color: var(--gtText, var(--gtCompatText));
+    color: var(--gtText, var(--gtCompatText, var(--yuzi-theme-text-primary, #3A3731)));
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
