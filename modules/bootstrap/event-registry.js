@@ -19,56 +19,84 @@ import {
 } from './toggle-button.js';
 
 export async function registerPhoneEventListeners(options = {}) {
-    const { onVisiblePhoneRefresh } = options;
+    const { onVisiblePhoneRefresh, shouldAbort } = options;
+    const unregisterCallbacks = [];
+
+    const cleanupRegisteredListeners = () => {
+        while (unregisterCallbacks.length > 0) {
+            const unsubscribe = unregisterCallbacks.pop();
+            try {
+                unsubscribe?.();
+            } catch (error) {
+                Logger.debug('清理事件监听器失败', error);
+            }
+        }
+    };
+
+    const assertNotAborted = () => {
+        if (typeof shouldAbort === 'function' && shouldAbort()) {
+            throw new Error('事件监听注册已取消');
+        }
+    };
+
+    const registerManagedListener = async (register) => {
+        assertNotAborted();
+        const unsubscribe = await register();
+        if (typeof unsubscribe === 'function') {
+            unregisterCallbacks.push(unsubscribe);
+        }
+        assertNotAborted();
+    };
 
     try {
-        await onChatChanged((chatId) => {
+        await registerManagedListener(() => onChatChanged((chatId) => {
             Logger.info('聊天切换:', chatId);
             const container = document.getElementById(DOM_IDS.container);
             if (container && container.classList.contains('visible')) {
                 onVisiblePhoneRefresh?.();
             }
-        });
+        }));
 
-        await onCharacterLoaded((characterId) => {
+        await registerManagedListener(() => onCharacterLoaded((characterId) => {
             Logger.info('角色加载:', characterId);
-        });
+        }));
 
-        await onAppReady(() => {
+        await registerManagedListener(() => onAppReady(() => {
             Logger.info('SillyTavern 应用就绪');
-        });
+        }));
 
-        await onUserMessageRendered((messageId) => {
+        await registerManagedListener(() => onUserMessageRendered((messageId) => {
             Logger.debug('用户消息渲染完成:', messageId);
-        });
+        }));
 
-        await onCharacterMessageRendered((messageId) => {
+        await registerManagedListener(() => onCharacterMessageRendered((messageId) => {
             Logger.debug('角色消息渲染完成:', messageId);
-        });
+        }));
 
-        await onMessageUpdated((messageId) => {
+        await registerManagedListener(() => onMessageUpdated((messageId) => {
             Logger.debug('消息更新:', messageId);
-        });
+        }));
 
-        await onMessageDeleted((messageId) => {
+        await registerManagedListener(() => onMessageDeleted((messageId) => {
             Logger.debug('消息删除:', messageId);
-        });
+        }));
 
-        await onGenerationStarted(() => {
+        await registerManagedListener(() => onGenerationStarted(() => {
             Logger.debug('AI 生成开始');
-        });
+        }));
 
-        await onGenerationEnded(() => {
+        await registerManagedListener(() => onGenerationEnded(() => {
             Logger.debug('AI 生成结束');
-        });
+        }));
 
-        await onGenerationAfterCommands((type, params, dryRun) => {
+        await registerManagedListener(() => onGenerationAfterCommands((type, params, dryRun) => {
             if (dryRun) return;
             Logger.debug('生成前命令处理:', { type, params });
-        });
+    }));
 
         Logger.debug('事件监听器已注册');
     } catch (error) {
+        cleanupRegisteredListeners();
         handleError(error, '注册事件监听器失败');
     }
 }

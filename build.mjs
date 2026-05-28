@@ -17,6 +17,9 @@ const isDev = process.argv.includes('--dev') || isWatch;
 
 const jsOutfile = resolve(DIST, 'yuzi-phone.bundle.js');
 const cssOutfile = resolve(DIST, 'yuzi-phone.bundle.css');
+const assistantJsOutfile = resolve(DIST, 'assistant/yuzi-phone.assistant.js');
+const assistantCssOutfile = resolve(DIST, 'assistant/yuzi-phone.assistant.css');
+
 
 function formatBytes(bytes) {
     if (!Number.isFinite(bytes) || bytes < 0) return '0 B';
@@ -86,13 +89,32 @@ const cssBuild = {
     outfile: cssOutfile,
 };
 
+const assistantJsBuild = {
+    ...sharedOptions,
+    entryPoints: [resolve(ROOT, 'modules/assistant/entry.js')],
+    outfile: assistantJsOutfile,
+    loader: {
+        '.css': 'css',
+    },
+};
+
+const assistantCssBuild = {
+    ...sharedOptions,
+    entryPoints: [resolve(ROOT, 'style.css')],
+    outfile: assistantCssOutfile,
+};
+
 if (isWatch) {
     cleanDist();
     const jsCtx = await esbuild.context(jsBuild);
     const cssCtx = await esbuild.context(cssBuild);
+    const assistantJsCtx = await esbuild.context(assistantJsBuild);
+    const assistantCssCtx = await esbuild.context(assistantCssBuild);
     await Promise.all([
         jsCtx.watch(),
         cssCtx.watch(),
+        assistantJsCtx.watch(),
+        assistantCssCtx.watch(),
     ]);
     console.log('[build] watching for changes...');
 } else {
@@ -101,13 +123,21 @@ if (isWatch) {
     await Promise.all([
         esbuild.build(jsBuild),
         esbuild.build(cssBuild),
+        esbuild.build(assistantJsBuild),
+        esbuild.build(assistantCssBuild),
     ]);
     normalizeSourceMapLineEndings(`${jsOutfile}.map`);
     normalizeSourceMapLineEndings(`${cssOutfile}.map`);
+    normalizeSourceMapLineEndings(`${assistantJsOutfile}.map`);
+    normalizeSourceMapLineEndings(`${assistantCssOutfile}.map`);
 
     const jsSize = assertBuildOutput(jsOutfile, 'JS');
     const cssSize = assertBuildOutput(cssOutfile, 'CSS');
+    const assistantJsSize = assertBuildOutput(assistantJsOutfile, 'Assistant JS');
+    const assistantCssSize = assertBuildOutput(assistantCssOutfile, 'Assistant CSS');
     console.log(`[build] done in ${Date.now() - t0}ms`);
     console.log(`        dist/yuzi-phone.bundle.js  ${formatBytes(jsSize)}`);
     console.log(`        dist/yuzi-phone.bundle.css ${formatBytes(cssSize)}`);
+    console.log(`        dist/assistant/yuzi-phone.assistant.js  ${formatBytes(assistantJsSize)}`);
+    console.log(`        dist/assistant/yuzi-phone.assistant.css ${formatBytes(assistantCssSize)}`);
 }
