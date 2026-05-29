@@ -9,6 +9,9 @@ const FILES = {
     settingsPanel: 'modules/settings-panel.js',
     eventRegistry: 'modules/bootstrap/event-registry.js',
     primitives: 'modules/settings-app/layout/primitives.js',
+    cropService: 'modules/settings-app/services/media-upload/crop.js',
+    toggleCss: 'styles/00-phone-shell.css',
+    toggleButton: 'modules/bootstrap/toggle-button.js',
 };
 
 function read(relativePath) {
@@ -74,6 +77,25 @@ function main() {
 
     pushCheck(results, 'primitives', 'settings 入口文案覆盖显示与位置职责',
         has(contents.primitives, "description: '管理悬浮入口显示、位置、尺寸、形态与封面'"));
+
+    pushCheck(results, 'buttonStylePage', '按钮封面上传禁用压缩',
+        has(contents.buttonStylePage, 'compress: false'));
+    pushCheck(results, 'buttonStylePage', '按钮封面上传按形态选择裁剪 preset',
+        has(contents.buttonStylePage, "cropPreset: getCurrentShape() === 'circle' ? 'toggle-cover-circle' : 'toggle-cover-rounded'"));
+    pushCheck(results, 'cropService', '裁剪服务定义圆形按钮 preset',
+        has(contents.cropService, "if (safePreset === 'toggle-cover-circle')"));
+    pushCheck(results, 'cropService', '裁剪服务定义长方形按钮 preset',
+        has(contents.cropService, "if (safePreset === 'toggle-cover-rounded')"));
+    pushCheck(results, 'toggleCss', '封面模式去白边',
+        has(contents.toggleCss, '.yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-has-cover {')
+        && has(contents.toggleCss, 'border: 0;'));
+    pushCheck(results, 'toggleCss', '长方形宽度按 2.6 比例变量计算',
+        has(contents.toggleCss, '--yuzi-phone-toggle-rounded-width: calc(var(--yuzi-phone-toggle-size) * 2.6);'));
+    pushCheck(results, 'toggleButton', 'toggle-button rounded metrics 与 CSS 比例一致',
+        has(contents.toggleButton, 'width: Math.round(size * 2.6),')
+        && has(contents.toggleButton, 'height: size,'));
+    pushCheck(results, 'appearanceBuilder', '按钮封面预览使用真实 toggle preview 结构',
+        has(contents.appearanceBuilder, 'phone-toggle-preview-button'));
 
     const failed = results.filter((item) => !item.ok);
 

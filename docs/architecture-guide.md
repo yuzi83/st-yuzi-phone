@@ -6,6 +6,12 @@
 
 Yuzi Phone 是 SillyTavern 第三方扩展，提供一个“小手机”样式的前端 UI。它不是独立后端，也不是数据源本身；它主要作为 SillyTavern 页面中的可视化前端壳层，依赖宿主和数据库插件暴露的 API。
 
+当前项目同时存在两种发布/加载形态：
+
+- **扩展版**：通过 SillyTavern 第三方扩展目录安装，由 [`manifest.json`](../manifest.json:6) 加载 `dist/yuzi-phone.bundle.js` 与 `dist/yuzi-phone.bundle.css`，更新依赖 SillyTavern 扩展 `auto_update` 机制。
+- **酒馆助手脚本版**：通过 JS-Slash-Runner/酒馆助手脚本注入远程 `dist/yuzi-phone.bundle.js` 与 `dist/yuzi-phone.bundle.css` 到父页面运行。它不是 SillyTavern 扩展管理器中的已安装扩展，但会执行同一套打包产物，因此会挂载同样的小手机 UI、设置面板与运行时逻辑。
+- 两种形态共享同一源码与同一 `dist` 产物；修改源码后必须重新构建并推送 `dist/`，脚本版用户刷新页面后才可能获得新版本。扩展版与脚本版不要同时启用，否则会重复初始化 UI、Slash 命令、设置面板和运行时状态。
+
 已确认入口：
 
 - 扩展 manifest 指向打包产物：[`manifest.json`](../manifest.json:6) 的 JS 是 [`dist/yuzi-phone.bundle.js`](../dist/yuzi-phone.bundle.js)，CSS 是 [`dist/yuzi-phone.bundle.css`](../dist/yuzi-phone.bundle.css)。

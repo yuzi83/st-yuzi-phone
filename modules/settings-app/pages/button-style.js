@@ -5,6 +5,24 @@ import { STORAGE_BUDGETS } from '../constants.js';
 import { buildButtonStylePageHtml } from '../layout/frame.js';
 import { pickImageFile, estimateBase64Bytes } from '../services/media-upload.js';
 
+function buildToggleCoverPreviewHtml(shape, coverDataUrl, sizePx = 44) {
+    const safeShape = String(shape || 'rounded') === 'circle' ? 'circle' : 'rounded';
+    const safeCover = String(coverDataUrl || '').trim();
+    const safeSize = clampNumber(sizePx, 32, 72, 44);
+    if (!safeCover) {
+        return '<div class="phone-empty-msg">未设置封面</div>';
+    }
+    return `
+        <div class="phone-toggle-preview-shell">
+            <div class="phone-toggle-preview-button ${safeShape === 'circle' ? 'is-circle' : 'is-rounded'}"
+                style="background-image:url('${escapeHtmlAttr(safeCover)}');--phone-toggle-preview-size:${escapeHtmlAttr(safeSize)}px;"
+                role="img"
+                aria-label="按钮封面预览">
+            </div>
+        </div>
+    `;
+}
+
 export function createButtonStylePage(ctx) {
     return {
         mount() {
@@ -77,6 +95,18 @@ export function renderButtonStylePage(ctx) {
     };
     const isPageActive = () => !isPageDisposed();
 
+    const getCurrentShape = () => {
+        const checked = shapeRadios.find((radio) => radio instanceof HTMLInputElement && radio.checked);
+        return checked?.value === 'circle' ? 'circle' : 'rounded';
+    };
+    const getCurrentSize = () => {
+        const raw = sizeInput instanceof HTMLInputElement ? Number(sizeInput.value) : Number(sizeRange?.value);
+        return clampNumber(raw, 32, 72, currentSize);
+    };
+    const renderCoverPreview = (shape, coverDataUrl, sizePx = getCurrentSize()) => {
+        if (preview) preview.innerHTML = buildToggleCoverPreviewHtml(shape, coverDataUrl, sizePx);
+    };
+
     const backBtn = container.querySelector('.phone-nav-back');
     addListener(backBtn, 'click', () => {
         state.mode = 'home';
@@ -119,6 +149,11 @@ export function renderButtonStylePage(ctx) {
         }
 
         if (withToast) showToast(container, `按钮大小已调整为 ${next}px`);
+
+        const latestCover = typeof getPhoneSettings().phoneToggleCoverImage === 'string'
+            ? getPhoneSettings().phoneToggleCoverImage.trim()
+            : '';
+        if (latestCover) renderCoverPreview(getCurrentShape(), latestCover, next);
     };
 
     addListener(sizeRange, 'input', () => {
@@ -136,6 +171,10 @@ export function renderButtonStylePage(ctx) {
     shapeRadios.forEach((radio) => {
         addListener(radio, 'change', () => {
             const nextShape = radio.checked && radio.value === 'circle' ? 'circle' : 'rounded';
+            const latestCover = typeof getPhoneSettings().phoneToggleCoverImage === 'string'
+                ? getPhoneSettings().phoneToggleCoverImage.trim()
+                : '';
+            if (latestCover) renderCoverPreview(nextShape, latestCover, getCurrentSize());
             savePhoneSetting('phoneToggleStyleShape', nextShape);
             emitToggleStyleUpdated();
             showToast(container, nextShape === 'circle' ? '按钮已切换为圆形（文字已隐藏）' : '按钮已切换为长方形');
@@ -171,19 +210,18 @@ export function renderButtonStylePage(ctx) {
 
             savePhoneSetting('phoneToggleCoverImage', safeDataUrl);
             emitToggleStyleUpdated();
-            if (preview) {
-                preview.innerHTML = `<img src="${escapeHtmlAttr(safeDataUrl)}" class="phone-bg-thumb" alt="按钮封面预览">`;
-            }
+            renderCoverPreview(getCurrentShape(), safeDataUrl, getCurrentSize());
             if (clearBtn instanceof HTMLButtonElement) {
                 clearBtn.disabled = false;
             }
             showToast(container, '按钮封面已更新');
         }, {
             runtime,
+            compress: false,
             maxSizeMB: 8,
             cropTitle: '裁剪悬浮按钮图片',
             cropDescription: '可自由调整按钮封面区域，建议保留主体在中心位置。',
-            cropPreset: 'button-cover',
+            cropPreset: getCurrentShape() === 'circle' ? 'toggle-cover-circle' : 'toggle-cover-rounded',
             onError: (msg) => {
                 if (!isPageActive()) return;
                 showToast(container, msg || '按钮封面上传失败', true);
@@ -194,9 +232,7 @@ export function renderButtonStylePage(ctx) {
     addListener(clearBtn, 'click', () => {
         savePhoneSetting('phoneToggleCoverImage', null);
         emitToggleStyleUpdated();
-        if (preview) {
-            preview.innerHTML = '<div class="phone-empty-msg">未设置封面</div>';
-        }
+        renderCoverPreview(getCurrentShape(), null);
         if (clearBtn instanceof HTMLButtonElement) {
             clearBtn.disabled = true;
         }

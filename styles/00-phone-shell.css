@@ -76,12 +76,15 @@
 .yuzi-phone-root .yuzi-phone-toggle {
     --yuzi-phone-toggle-size: 44px;
     --yuzi-phone-toggle-cover-image: none;
+    --yuzi-phone-toggle-rounded-width: calc(var(--yuzi-phone-toggle-size) * 2.6);
 
     position: fixed;
     z-index: 10000;
+    width: var(--yuzi-phone-toggle-rounded-width);
+    min-width: var(--yuzi-phone-toggle-rounded-width);
+    height: var(--yuzi-phone-toggle-size);
     min-height: var(--yuzi-phone-toggle-size);
-    min-width: max(var(--yuzi-phone-toggle-size), 110px);
-    padding: 8px 14px;
+    padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -90,7 +93,7 @@
     cursor: pointer;
     user-select: none;
     border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 12px;
+    border-radius: 999px;
     background-image: var(--yuzi-phone-toggle-cover-image), linear-gradient(135deg, #5AC8FA 0%, #007AFF 100%);
     background-size: cover, auto;
     background-position: center, center;
@@ -111,11 +114,16 @@
 }
 
 .yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-has-cover::before {
-    opacity: 1;
+    opacity: 0;
 }
 
 .yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-shape-rounded {
-    border-radius: 12px;
+    width: var(--yuzi-phone-toggle-rounded-width);
+    min-width: var(--yuzi-phone-toggle-rounded-width);
+    height: var(--yuzi-phone-toggle-size);
+    min-height: var(--yuzi-phone-toggle-size);
+    padding: 0;
+    border-radius: 999px;
 }
 
 .yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-shape-circle {
@@ -125,6 +133,14 @@
     min-height: var(--yuzi-phone-toggle-size);
     padding: 0;
     border-radius: 999px;
+}
+
+.yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-has-cover {
+    border: 0;
+    background-image: var(--yuzi-phone-toggle-cover-image);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 
 .yuzi-phone-root .yuzi-phone-toggle.dragging {

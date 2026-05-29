@@ -233,10 +233,25 @@ export function buildAppearancePageHtml({
     });
 }
 
+function buildToggleCoverPreviewHtml(shape, coverDataUrl, sizePx = 44) {
+    const safeShape = String(shape || 'rounded') === 'circle' ? 'circle' : 'rounded';
+    const safeCover = String(coverDataUrl || '').trim();
+    if (!safeCover) {
+        return '<div class="phone-empty-msg">未设置封面</div>';
+    }
+    return `
+        <div class="phone-toggle-preview-shell">
+            <div class="phone-toggle-preview-button ${safeShape === 'circle' ? 'is-circle' : 'is-rounded'}"
+                style="background-image:url('${escapeHtmlAttr(safeCover)}');--phone-toggle-preview-size:${escapeHtmlAttr(sizePx)}px;"
+                role="img"
+                aria-label="按钮封面预览">
+            </div>
+        </div>
+    `;
+}
+
 export function buildButtonStylePageHtml({ currentSize, currentShape, currentCover, floatingToggleEnabled = true }) {
-    const previewHtml = currentCover
-        ? `<img src="${escapeHtmlAttr(currentCover)}" class="phone-bg-thumb" alt="按钮封面预览">`
-        : '<div class="phone-empty-msg">未设置封面</div>';
+    const previewHtml = buildToggleCoverPreviewHtml(currentShape, currentCover, currentSize);
 
     const heroHtml = buildSettingsHeroHtml({
         eyebrow: '控件与按钮',
@@ -289,7 +304,7 @@ export function buildButtonStylePageHtml({ currentSize, currentShape, currentCov
 
         ${buildSettingsSectionHtml({
             title: '封面管理',
-            desc: '上传封面后会使用 cover 裁剪，建议主体位于中心区域。',
+            desc: '上传封面会按当前形态应用初始裁剪（圆形=方图，长方形=横图），建议主体位于中心区域。',
             actionsHtml: `
                 <div class="phone-settings-action">
                     <button type="button" class="phone-settings-btn" id="phone-toggle-cover-upload-btn">

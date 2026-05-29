@@ -9,6 +9,33 @@ function buildInitialCropRect(preset, naturalWidth, naturalHeight, coverage = 0.
     const safePreset = String(preset || '').trim();
     const safeCoverage = normalizeCoverage(coverage);
 
+    const buildCenteredAspectRect = (aspectRatio, frameCoverage = safeCoverage) => {
+        const ratio = Number(aspectRatio);
+        if (!Number.isFinite(ratio) || ratio <= 0 || naturalWidth <= 0 || naturalHeight <= 0) {
+            const fallbackSize = clampNumber(frameCoverage, 0.5, 0.92, 0.72);
+            return normalizeCropRect({
+                x: (1 - fallbackSize) / 2,
+                y: (1 - fallbackSize) / 2,
+                w: fallbackSize,
+                h: fallbackSize,
+            });
+        }
+
+        const targetCoverage = clampNumber(frameCoverage, 0.52, 0.94, 0.78);
+        const maxWByCoverage = targetCoverage;
+        const maxHByCoverage = targetCoverage;
+        const imageRatio = naturalWidth / naturalHeight;
+
+        let w = maxWByCoverage;
+        let h = (w * imageRatio) / ratio;
+        if (h > maxHByCoverage) {
+            h = maxHByCoverage;
+            w = (h * ratio) / imageRatio;
+        }
+
+        return normalizeCropRect({ x: (1 - w) / 2, y: (1 - h) / 2, w, h });
+    };
+
     if (safePreset === 'icon' || safePreset === 'button-cover' || safePreset === 'toggle-cover') {
         const size = clampNumber(safeCoverage, 0.5, 0.92, 0.72);
         return normalizeCropRect({
@@ -17,6 +44,14 @@ function buildInitialCropRect(preset, naturalWidth, naturalHeight, coverage = 0.
             w: size,
             h: size,
         });
+    }
+
+    if (safePreset === 'toggle-cover-circle') {
+        return buildCenteredAspectRect(1, 0.8);
+    }
+
+    if (safePreset === 'toggle-cover-rounded') {
+        return buildCenteredAspectRect(2.6, 0.88);
     }
 
     if (safePreset === 'background') {

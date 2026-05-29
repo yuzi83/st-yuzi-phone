@@ -68,8 +68,8 @@ function getPhoneToggleMetrics(btn, settings = getPhoneSettings()) {
     }
 
     return {
-        width: Math.max(size, 110) + 28,
-        height: size + 16,
+        width: Math.round(size * 2.6),
+        height: size,
     };
 }
 

@@ -1629,7 +1629,49 @@
 
 .phone-settings-page .phone-empty-msg {
     padding: 20px 14px;
+    text-align: center;
     color: var(--yuzi-settings-text-secondary, #7A7772);
+}
+
+.phone-toggle-preview-shell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 140px;
+    padding: 10px;
+}
+
+.phone-toggle-preview-button {
+    --phone-toggle-preview-size: 44px;
+    width: calc(var(--phone-toggle-preview-size) * 2.6);
+    min-width: calc(var(--phone-toggle-preview-size) * 2.6);
+    height: var(--phone-toggle-preview-size);
+    min-height: var(--phone-toggle-preview-size);
+    border-radius: 999px;
+    border: 0;
+    background-color: rgba(58, 55, 49, 0.08);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    box-shadow: inset 0 0 0 1px rgba(58, 55, 49, 0.08);
+}
+
+.phone-toggle-preview-button.is-circle {
+    width: var(--phone-toggle-preview-size);
+    min-width: var(--phone-toggle-preview-size);
+    border-radius: 999px;
+}
+
+.phone-toggle-preview-button.is-rounded {
+    width: calc(var(--phone-toggle-preview-size) * 2.6);
+    min-width: calc(var(--phone-toggle-preview-size) * 2.6);
+}
+
+.phone-settings-page #phone-toggle-cover-preview.phone-settings-preview {
+    margin-top: 2px;
+    border-radius: 8px;
+    border: 1px solid rgba(58, 55, 49, 0.06);
+    background: rgba(255, 255, 255, 0.45);
 }
 
 .phone-settings-page .phone-appearance-switch-list,

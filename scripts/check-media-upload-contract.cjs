@@ -88,8 +88,9 @@ function main() {
     check(results, 'iconUploadService', 'icon-upload-service 接收上传 runtime options', has(contents.iconUploadService, 'const renderIconUploadList = (listEl, options = {}) =>'));
     check(results, 'iconUploadService', 'icon-upload-service 将 runtime 传给 pickImageFile()', has(contents.iconUploadService, 'runtime,\n                        maxSizeMB: 6'));
     check(results, 'buttonStyle', '继续从 media-upload façade 导入按钮封面上传能力', has(contents.buttonStyle, "from '../services/media-upload.js';"));
-    check(results, 'buttonStyle', 'button-style 将 page runtime 传给 pickImageFile()', has(contents.buttonStyle, 'runtime,\n            maxSizeMB: 8'));
+    check(results, 'buttonStyle', 'button-style 将 page runtime 传给 pickImageFile()', has(contents.buttonStyle, 'runtime,\n            compress: false,\n            maxSizeMB: 8'));
     check(results, 'buttonStyle', 'button-style 声明页面 disposed helper', has(contents.buttonStyle, 'const isPageDisposed = () => {'));
+    check(results, 'buttonStyle', 'button-style 按钮封面上传显式关闭二次压缩', has(contents.buttonStyle, 'compress: false,'));
     check(results, 'buttonStyle', 'button-style 上传成功回调先检查页面生命周期', has(contents.buttonStyle, 'pickImageFile((dataUrl) => {\n            if (!isPageActive()) return;'));
     check(results, 'buttonStyle', 'button-style 上传错误回调先检查页面生命周期', has(contents.buttonStyle, "onError: (msg) => {\n                if (!isPageActive()) return;\n                showToast(container, msg || '按钮封面上传失败', true);\n            },"));
     check(results, 'appearancePage', 'appearance 页面向背景上传服务传入 runtime', has(contents.appearancePage, 'setupBgUpload(container, { runtime })'));

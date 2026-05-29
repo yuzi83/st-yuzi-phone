@@ -97,7 +97,7 @@
       "deleteNode": "主贴达到 5 条后新增时，优先从最老主贴开始删。",
       "updateNode": "一般情况下，不更新发过的帖子，等待攒满五条主贴就从最老的删除。",
       "insertNode": "当主角周围 NPC 出现新的公开生活片段、个人表达、照片感内容、视频感内容、世界侧影或轻社交互动时新增。每轮通常新增 1-2 条。优先补足“重要NPC 各自生活”的动态；只有发帖 NPC 合理知道且适合公开。\n\n若新增前已有 5 条主贴，先按时间从最老主贴开始删除旧帖；新增后仍保持 3-5 条，不要让旧动态长期占满广场。",
-      "ddl": "CREATE TABLE square_posts ( -- 广场表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  post_id TEXT NOT NULL UNIQUE, -- 帖子唯一标识\n  author_name TEXT NOT NULL, -- 发帖账号名\n  author_tag TEXT NOT NULL, -- 账号标签\n  post_title TEXT, -- 帖子标题\n  post_body TEXT NOT NULL, -- 帖子正文\n  topic_meta TEXT, -- 话题/附加信息\n  image_desc TEXT NOT NULL CHECK(TRIM(image_desc) <> ''), -- 图片描述\n  video_desc TEXT NOT NULL CHECK(TRIM(video_desc) <> ''), -- 视频描述\n  comment_thread TEXT, -- 评论串\n  interaction_text TEXT NOT NULL CHECK(TRIM(interaction_text) <> ''), -- 互动数据\n  time_text TEXT NOT NULL -- 时间文本\n);"
+      "ddl": "CREATE TABLE square_posts ( -- 广场表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  post_id TEXT NOT NULL UNIQUE, -- 帖子ID\n  author_name TEXT NOT NULL, -- 发帖账号名\n  author_tag TEXT NOT NULL, -- 账号标签\n  post_title TEXT, -- 帖子标题\n  post_body TEXT NOT NULL, -- 帖子正文\n  topic_meta TEXT, -- 话题/附加信息\n  image_desc TEXT NOT NULL CHECK(TRIM(image_desc) <> ''), -- 图片描述\n  video_desc TEXT NOT NULL CHECK(TRIM(video_desc) <> ''), -- 视频描述\n  comment_thread TEXT, -- 评论串\n  interaction_text TEXT NOT NULL CHECK(TRIM(interaction_text) <> ''), -- 互动数据\n  time_text TEXT NOT NULL -- 时间文本\n);"
     },
     "content": [
       [
