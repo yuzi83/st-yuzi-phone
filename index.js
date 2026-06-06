@@ -17,7 +17,7 @@ import {
     flushPhoneSettingsSave,
     savePhoneSettingsPatch,
 } from './modules/settings.js';
-import { createPhoneSettingsPanel } from './modules/settings-panel.js';
+import { createPhoneSettingsPanel, destroyPhoneSettingsPanel } from './modules/settings-panel.js';
 import { EventManager } from './modules/utils/event-manager.js';
 import { cleanupIntegration } from './modules/integration/cleanup.js';
 import { showNotification } from './modules/integration/toast-bridge.js';
@@ -57,8 +57,94 @@ import { repairActiveBeautifyTemplateSettings } from './modules/phone-beautify-t
 const EXTENSION_VERSION = '1.4.2';
 const globalEventManager = new EventManager();
 const logger = Logger.withScope({ scope: 'index' });
+const INSTANCE_KEY = '__YUZI_PHONE_INSTANCE__';
+const INSTANCE_SOURCE = 'extension';
+const INSTANCE_OWNER_TOKEN = `yuzi-phone-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const LEGACY_INSTANCE_TRACE_IDS = Object.freeze([
+    'yuzi-phone-root',
+    'yuzi-phone-standalone',
+    'yuzi-phone-toggle',
+    'yuzi-phone-settings',
+]);
 let initRetryTimeoutId = null;
 let isDestroying = false;
+let singletonBlocked = false;
+let singletonBlockReason = '';
+
+function getInstanceHost() {
+    return typeof window !== 'undefined' ? window : globalThis;
+}
+
+function findLegacyInstanceTraces() {
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return [];
+    return LEGACY_INSTANCE_TRACE_IDS.filter(id => !!document.getElementById(id));
+}
+
+function getOwnedInstanceRecord() {
+    const host = getInstanceHost();
+    const record = host?.[INSTANCE_KEY];
+    return record && record.ownerToken === INSTANCE_OWNER_TOKEN ? record : null;
+}
+
+function setOwnedInstanceStatus(status, extra = {}) {
+    const record = getOwnedInstanceRecord();
+    if (!record) return;
+    record.status = status;
+    record.updatedAt = new Date().toISOString();
+    Object.assign(record, extra);
+}
+
+function releaseSingletonGuard() {
+    const host = getInstanceHost();
+    if (host?.[INSTANCE_KEY]?.ownerToken === INSTANCE_OWNER_TOKEN) {
+        delete host[INSTANCE_KEY];
+    }
+}
+
+function blockSingletonInitialization(reason, context = {}) {
+    singletonBlocked = true;
+    singletonBlockReason = reason;
+    logger.warn({
+        feature: 'lifecycle',
+        action: 'singleton.block',
+        message: '检测到玉子手机已加载或存在旧实例痕迹，已阻止重复初始化',
+        context: { reason, ...context },
+    });
+    showNotification('检测到玉子手机已加载，请勿同时启用扩展版和脚本版。', 'warning');
+    return false;
+}
+
+function acquireSingletonGuard() {
+    const host = getInstanceHost();
+    const existing = host?.[INSTANCE_KEY];
+    if (existing && existing.ownerToken !== INSTANCE_OWNER_TOKEN && existing.status !== 'destroyed') {
+        return blockSingletonInitialization('active-instance', {
+            existingVersion: existing.version,
+            existingSource: existing.source,
+            existingStatus: existing.status,
+        });
+    }
+
+    const legacyTraces = findLegacyInstanceTraces();
+    if (legacyTraces.length > 0) {
+        return blockSingletonInitialization('legacy-traces', { legacyTraces });
+    }
+
+    host[INSTANCE_KEY] = {
+        version: EXTENSION_VERSION,
+        source: INSTANCE_SOURCE,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        status: 'initializing',
+        ownerToken: INSTANCE_OWNER_TOKEN,
+        instanceId: INSTANCE_OWNER_TOKEN,
+        destroy,
+        getInitStatus,
+    };
+    singletonBlocked = false;
+    singletonBlockReason = '';
+    return true;
+}
 
 function clearInitRetryTimeout() {
     if (initRetryTimeoutId === null) return;
@@ -159,6 +245,7 @@ async function ensureInitialized() {
     try {
         await initPromise;
         isInitialized = true;
+        setOwnedInstanceStatus('initialized');
     } finally {
         isInitializing = false;
     }
@@ -171,6 +258,8 @@ async function ensureInitialized() {
  * @returns {Promise<void>}
  */
 async function doInitialize() {
+    setOwnedInstanceStatus('initializing');
+
     if (isDestroying) {
         logger.warn({
             feature: 'lifecycle',
@@ -220,6 +309,8 @@ async function doInitialize() {
  * 初始化函数
  */
 (function init() {
+    if (!acquireSingletonGuard()) return;
+
     // 配置错误处理器
     configureErrorHandler({
         enableLogging: true,
@@ -241,6 +332,8 @@ async function doInitialize() {
             });
             await ensureInitialized();
         } catch (error) {
+            setOwnedInstanceStatus('failed', { lastError: error?.message || String(error) });
+            releaseSingletonGuard();
             handleError(error, '玉子手机初始化失败');
             // 重置初始化状态，允许重试
             resetInitializationState();
@@ -266,6 +359,10 @@ export function getInitStatus() {
     return {
         isInitialized,
         isInitializing,
+        isDestroying,
+        singletonBlocked,
+        singletonBlockReason,
+        instanceId: INSTANCE_OWNER_TOKEN,
     };
 }
 
@@ -273,6 +370,8 @@ export function getInitStatus() {
  * 销毁函数 - 清理所有资源
  */
 export function destroy() {
+    if (singletonBlocked) return;
+
     if (isDestroying) {
         logger.warn({
             feature: 'lifecycle',
@@ -303,6 +402,7 @@ export function destroy() {
 
         // P0-002 修复: 清理全局事件管理器中的所有事件监听器
         globalEventManager.dispose();
+        destroyPhoneSettingsPanel();
         unmountPhoneBootstrapUi();
 
         // 4. 保存设置
@@ -317,8 +417,10 @@ export function destroy() {
     } catch (error) {
         handleError(error, '卸载错误');
     } finally {
+        setOwnedInstanceStatus('destroyed');
         clearInitRetryTimeout();
         resetInitializationState();
+        releaseSingletonGuard();
     }
 }
 

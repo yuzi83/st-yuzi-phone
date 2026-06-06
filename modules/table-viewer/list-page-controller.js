@@ -201,6 +201,19 @@ function normalizeRowIndexes(rowIndexes = []) {
 
 function normalizeDeleteOutcome(result) {
     if (result && typeof result === 'object') {
+        const requestedRowIndexes = normalizeRowIndexes(result.requestedRowIndexes || []);
+        const deletedRowIndexes = normalizeRowIndexes(result.deletedRowIndexes || []);
+        const failedRowIndexes = normalizeRowIndexes(result.failedRowIndexes || []);
+        const unattemptedRowIndexes = normalizeRowIndexes(result.unattemptedRowIndexes || []);
+        const notDeletedRowIndexes = normalizeRowIndexes(
+            result.notDeletedRowIndexes || (failedRowIndexes.length > 0
+                ? failedRowIndexes
+                : requestedRowIndexes.filter(rowIndex => !deletedRowIndexes.includes(rowIndex)))
+        );
+        const failedViewRowIndexes = normalizeRowIndexes(result.failedViewRowIndexes || failedRowIndexes);
+        const unattemptedViewRowIndexes = normalizeRowIndexes(result.unattemptedViewRowIndexes || unattemptedRowIndexes);
+        const notDeletedViewRowIndexes = normalizeRowIndexes(result.notDeletedViewRowIndexes || notDeletedRowIndexes);
+
         return {
             ok: !!result.ok,
             deleted: !!result.deleted,
@@ -208,9 +221,15 @@ function normalizeDeleteOutcome(result) {
             refreshed: result.refreshed ?? null,
             viewSynced: result.viewSynced ?? null,
             deletedCount: Number(result.deletedCount || 0),
-            requestedRowIndexes: normalizeRowIndexes(result.requestedRowIndexes || []),
-            deletedRowIndexes: normalizeRowIndexes(result.deletedRowIndexes || []),
-            failedRowIndexes: normalizeRowIndexes(result.failedRowIndexes || []),
+            requestedRowIndexes,
+            deletedRowIndexes,
+            failedRowIndexes,
+            attemptedRowIndexes: normalizeRowIndexes(result.attemptedRowIndexes || []),
+            unattemptedRowIndexes,
+            notDeletedRowIndexes,
+            failedViewRowIndexes,
+            unattemptedViewRowIndexes,
+            notDeletedViewRowIndexes,
         };
     }
 
@@ -224,6 +243,12 @@ function normalizeDeleteOutcome(result) {
         requestedRowIndexes: [],
         deletedRowIndexes: [],
         failedRowIndexes: [],
+        attemptedRowIndexes: [],
+        unattemptedRowIndexes: [],
+        notDeletedRowIndexes: [],
+        failedViewRowIndexes: [],
+        unattemptedViewRowIndexes: [],
+        notDeletedViewRowIndexes: [],
     };
 }
 
@@ -340,7 +365,9 @@ async function executeDeleteSelectedRows(container, requestedRowIndexes) {
         deleteOutcome = normalizeDeleteOutcome(await context.deleteRowsFromList(rowIndexes));
         if (deleteOutcome.deleted && isGenericListContextActive(context)) {
             const toastMessage = deleteOutcome.message || `已删除 ${deleteOutcome.deletedCount || rowIndexes.length} 条记录`;
-            const toastIsError = deleteOutcome.refreshed === false || deleteOutcome.viewSynced === false || deleteOutcome.failedRowIndexes.length > 0;
+            const toastIsError = deleteOutcome.refreshed === false
+                || deleteOutcome.viewSynced === false
+                || deleteOutcome.notDeletedViewRowIndexes.length > 0;
             context.showInlineToast(container, toastMessage, toastIsError);
         } else if (!deleteOutcome.deleted && isGenericListContextActive(context)) {
             context.showInlineToast(container, deleteOutcome.message || '删除失败', true);

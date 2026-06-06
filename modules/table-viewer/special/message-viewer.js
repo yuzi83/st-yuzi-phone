@@ -18,6 +18,22 @@ import {
     normalizeMediaDesc,
 } from './view-utils.js';
 
+function normalizeMessageRowIndexes(rowIndexes = []) {
+    return Array.from(new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
+        .map((value) => Number(value))
+        .filter(Number.isInteger)
+        .filter((value) => value >= 0)))
+        .sort((a, b) => b - a);
+}
+
+function remapRemainingMessageRowIndexes(rowIndexes = [], deletedRowIndexes = []) {
+    const deletedSorted = normalizeMessageRowIndexes(deletedRowIndexes).sort((a, b) => a - b);
+    return normalizeMessageRowIndexes(rowIndexes)
+        .map((rowIndex) => rowIndex - deletedSorted.filter((deletedIndex) => deletedIndex < rowIndex).length)
+        .filter((rowIndex) => rowIndex >= 0)
+        .sort((a, b) => a - b);
+}
+
 /**
  * @typedef {Object} MessageStyleOptions
  * @property {boolean} [showAvatar]
@@ -457,8 +473,14 @@ export function renderMessageTable(container, context, deps = {}) {
             const result = await deletePhoneSheetRows(sheetKey, selectedRows, {
                 tableName: liveTableName,
             });
-            const deletedRowIndexes = Array.isArray(result.deletedRowIndexes) ? result.deletedRowIndexes : [];
-            const failedRowIndexes = Array.isArray(result.failedRowIndexes) ? result.failedRowIndexes : [];
+            const deletedRowIndexes = normalizeMessageRowIndexes(result.deletedRowIndexes || []);
+            const failedRowIndexes = normalizeMessageRowIndexes(result.failedRowIndexes || []);
+            const notDeletedRawRowIndexes = Array.isArray(result.notDeletedRowIndexes)
+                ? normalizeMessageRowIndexes(result.notDeletedRowIndexes)
+                : failedRowIndexes;
+            const notDeletedViewRowIndexes = Array.isArray(result.notDeletedViewRowIndexes)
+                ? normalizeMessageRowIndexes(result.notDeletedViewRowIndexes)
+                : remapRemainingMessageRowIndexes(notDeletedRawRowIndexes, deletedRowIndexes);
             const hasPartialDeletion = deletedRowIndexes.length > 0 && !result.ok;
             if (!result.ok && !hasPartialDeletion) {
                 syncRowsFromSheet();
@@ -469,7 +491,7 @@ export function renderMessageTable(container, context, deps = {}) {
 
             const synced = syncRowsFromSheet();
             if (hasPartialDeletion) {
-                setSelectedMessageRowIndexes(failedRowIndexes);
+                setSelectedMessageRowIndexes(notDeletedViewRowIndexes);
             } else {
                 clearDeleteManageState();
             }

@@ -238,12 +238,72 @@ function sortDeletionPlans(scene, plans = []) {
     });
 }
 
+function normalizeTheaterRowIndexes(rowIndexes = []) {
+    return Array.from(new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
+        .map(value => Number(value))
+        .filter(Number.isInteger)
+        .filter(value => value >= 0)))
+        .sort((a, b) => a - b);
+}
+
+function collectTheaterNotDeletedPlans(results = []) {
+    return (Array.isArray(results) ? results : [])
+        .map((result) => {
+            const notDeletedRowIndexes = normalizeTheaterRowIndexes(
+                result?.notDeletedRowIndexes || result?.failedRowIndexes || []
+            );
+            if (notDeletedRowIndexes.length <= 0) return null;
+            return {
+                sheetKey: normalizeText(result?.sheetKey),
+                tableName: normalizeText(result?.tableName),
+                role: normalizeText(result?.role),
+                attempted: true,
+                reason: String(result?.code || 'delete_failed').trim() || 'delete_failed',
+                notDeletedRowIndexes,
+            };
+        })
+        .filter(Boolean);
+}
+
+function collectUnattemptedTheaterNotDeletedPlans(plans = []) {
+    return (Array.isArray(plans) ? plans : [])
+        .map((plan) => {
+            const notDeletedRowIndexes = normalizeTheaterRowIndexes(plan?.rowIndexes || []);
+            if (notDeletedRowIndexes.length <= 0) return null;
+            return {
+                sheetKey: normalizeText(plan?.sheetKey),
+                tableName: normalizeText(plan?.tableName),
+                role: normalizeText(plan?.role),
+                attempted: false,
+                reason: 'unattempted_after_previous_failure',
+                notDeletedRowIndexes,
+            };
+        })
+        .filter(Boolean);
+}
+
+function buildTheaterNotDeletedRowsBySheetKey(notDeletedPlans = []) {
+    return Object.fromEntries((Array.isArray(notDeletedPlans) ? notDeletedPlans : [])
+        .map((plan) => [
+            plan.sheetKey,
+            {
+                tableName: plan.tableName,
+                role: plan.role,
+                attempted: plan.attempted !== false,
+                reason: String(plan.reason || '').trim(),
+                notDeletedRowIndexes: normalizeTheaterRowIndexes(plan.notDeletedRowIndexes),
+            },
+        ])
+        .filter(([sheetKey, detail]) => sheetKey && detail.notDeletedRowIndexes.length > 0));
+}
+
 async function executeTheaterDeletionPlans(scene, plans = []) {
     const orderedPlans = sortDeletionPlans(scene, plans);
     const results = [];
     let deletedCount = 0;
 
-    for (const plan of orderedPlans) {
+    for (let planIndex = 0; planIndex < orderedPlans.length; planIndex += 1) {
+        const plan = orderedPlans[planIndex];
         const result = await deleteTableRowsBatch(plan.tableName, plan.rowIndexes, {
             refreshProjection: false,
         });
@@ -255,12 +315,18 @@ async function executeTheaterDeletionPlans(scene, plans = []) {
         });
         deletedCount += Number(result.deletedCount || 0);
         if (!result.ok) {
+            const notDeletedPlans = [
+                ...collectTheaterNotDeletedPlans(results),
+                ...collectUnattemptedTheaterNotDeletedPlans(orderedPlans.slice(planIndex + 1)),
+            ];
             return {
                 ok: false,
                 code: result.code || 'partial_failed',
                 message: result.message || '小剧场删除失败：数据库未确认删除目标行',
                 deletedCount,
                 results,
+                notDeletedPlans,
+                notDeletedRowsBySheetKey: buildTheaterNotDeletedRowsBySheetKey(notDeletedPlans),
             };
         }
     }
@@ -336,6 +402,8 @@ export async function deleteTheaterEntities(rawData, sceneId, selectedKeys = [])
             refreshed,
             affectedSheetKeys: notifiedSheetKeys,
             results: execution.results,
+            notDeletedPlans: execution.notDeletedPlans || [],
+            notDeletedRowsBySheetKey: execution.notDeletedRowsBySheetKey || {},
         };
     }
 

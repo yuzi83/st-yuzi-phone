@@ -4,17 +4,21 @@
 
 ## 1. 事实源与生成物
 
-当前小剧场表格的维护链路是：
+当前参与 CI freshness 的正式事实源是：
 
 ```text
 docs/reference/小剧场2.1.json  --首次拆分-->  tables/sources/小剧场2.1/*.md
-tables/sources/小剧场2.1/*.md  --校验/合成-->  tables/generated/小剧场2.1.json
+tables/sources/小剧场2.1/*.md  --校验/合成/深比较-->  tables/generated/小剧场2.1.json
+tables/sources/纪要/*.md       --校验/合成/深比较-->  tables/generated/纪要.json
 ```
+
+当前参考事实源是 `tables/sources/恋爱特化参考/*.md`。它用于格式参考和后续扩展，不参与 generated freshness，也不应提交同名 `tables/generated/恋爱特化参考.json`；若要发布它，必须先加入 `scripts/check-table-sources-contract.cjs` 的 `FORMAL_TABLE_SOURCES`。
 
 维护规则：
 
-- `tables/sources/小剧场2.1/*.md` 是后续人工编辑的事实源。
-- `tables/generated/小剧场2.1.json` 是合成产物。
+- `tables/sources/小剧场2.1/*.md` 与 `tables/sources/纪要/*.md` 是当前正式人工编辑事实源。
+- `tables/generated/小剧场2.1.json` 与 `tables/generated/纪要.json` 是正式合成产物，contract 会临时 build 后与 committed JSON 深比较。
+- `tables/sources/恋爱特化参考/*.md` 是参考事实源，不参与 generated/CI freshness。
 - 第一阶段不自动覆盖 `docs/reference/小剧场2.1.json`。
 - 不要手工编辑 generated JSON 后再期待变更保留；下一次 `tables:build` 会重新生成它。
 
@@ -38,6 +42,8 @@ npm run tables:check
 npm run tables:build
 ```
 
+该命令会重建当前正式事实源对应的 `tables/generated/*.json`。
+
 无损往返验证：
 
 ```bash
@@ -56,8 +62,13 @@ tables/
       01-消息记录表.md
       02-广场表.md
       ...
+    纪要/
+      00-mate.md
+      01-纪要表.md
+    恋爱特化参考/
   generated/
     小剧场2.1.json
+    纪要.json
 ```
 
 编号规则：

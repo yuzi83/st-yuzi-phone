@@ -171,15 +171,23 @@ assertIncludes(api, 'resolveWaitGlobalInitialized()', 'variable-api 必须尝试
 assertIncludes(api, 'readMvuDataWithRetry(messageId, options = {})', 'variable-api 必须提供 bounded retry 读取');
 const getFloorVariablesAsyncBody = extractFunctionBody(api, 'getFloorVariablesAsync');
 assertOrdered(getFloorVariablesAsyncBody, [
-    'if (isMvuAvailable()) {',
-    'const result = await readMvuDataWithRetry(resolvedId, options);',
+    'const mvuInitiallyAvailable = isMvuAvailable();',
+    'let waitedMvu = false;',
+    'let mvuAvailableAfterWait = mvuInitiallyAvailable;',
+    'if (!mvuInitiallyAvailable && opts.waitMvu !== false) {',
+    'waitedMvu = await waitForMvuInitialized(opts.timeoutMs);',
+    'mvuAvailableAfterWait = isMvuAvailable();',
+    'const availabilityMeta = {',
+    'if (mvuInitiallyAvailable || mvuAvailableAfterWait) {',
+    'const result = await readMvuDataWithRetry(resolvedId, {',
+    'waitMvu: mvuInitiallyAvailable && opts.waitMvu === true,',
     'const data = normalizePlainObject(result.mvuData.stat_data);',
     'if (Object.keys(data).length > 0) {',
     "return buildReadResult('ready', data, true, result.mvuData, resolvedId, {",
-    'const fallback = readTavernHelperVariables(resolvedId, result.error);',
+    'const fallback = readTavernHelperVariables(resolvedId, result.error, availabilityMeta);',
     "return buildReadResult('empty', data, true, result.mvuData, resolvedId, {",
-    'return readTavernHelperVariables(resolvedId);',
-], 'getFloorVariablesAsync 必须优先读取 MVU stat_data，空数据再降级 TavernHelper');
+    'return readTavernHelperVariables(resolvedId, null, availabilityMeta);',
+], 'getFloorVariablesAsync 必须等待初始不可用的 MVU，优先读取 stat_data，空数据再降级 TavernHelper');
 assertNotIncludes(getFloorVariablesAsyncBody, 'display_data', 'getFloorVariablesAsync 不能把 display_data 当成可编辑变量树返回');
 
 const setFloorVariableBody = extractFunctionBody(api, 'setFloorVariable');

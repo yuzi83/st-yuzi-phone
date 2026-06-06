@@ -38,6 +38,12 @@ function createDeleteOutcome({
     requestedRowIndexes = [],
     deletedRowIndexes = [],
     failedRowIndexes = [],
+    attemptedRowIndexes = [],
+    unattemptedRowIndexes = [],
+    notDeletedRowIndexes = [],
+    failedViewRowIndexes = [],
+    unattemptedViewRowIndexes = [],
+    notDeletedViewRowIndexes = [],
 } = {}) {
     return {
         ok,
@@ -49,7 +55,26 @@ function createDeleteOutcome({
         requestedRowIndexes,
         deletedRowIndexes,
         failedRowIndexes,
+        attemptedRowIndexes,
+        unattemptedRowIndexes,
+        notDeletedRowIndexes,
+        failedViewRowIndexes,
+        unattemptedViewRowIndexes,
+        notDeletedViewRowIndexes,
     };
+}
+
+function createDeletePreflightFailureOutcome(message, requestedRowIndexes = []) {
+    return createDeleteOutcome({
+        message,
+        requestedRowIndexes,
+        failedRowIndexes: [],
+        unattemptedRowIndexes: requestedRowIndexes,
+        notDeletedRowIndexes: requestedRowIndexes,
+        failedViewRowIndexes: [],
+        unattemptedViewRowIndexes: requestedRowIndexes,
+        notDeletedViewRowIndexes: requestedRowIndexes,
+    });
 }
 
 export function createRowDeleteController(options) {
@@ -81,37 +106,43 @@ export function createRowDeleteController(options) {
         if (!latestSheet?.rows || !Array.isArray(latestSheet.rows)) {
             const message = '删除失败：表格不存在';
             showInlineToast(container, message, true);
-            return createDeleteOutcome({ message, requestedRowIndexes, failedRowIndexes: requestedRowIndexes });
+            return createDeletePreflightFailureOutcome(message, requestedRowIndexes);
         }
 
         const invalidRowIndexes = requestedRowIndexes.filter((rowIndex) => !Array.isArray(latestSheet.rows[rowIndex]));
         if (invalidRowIndexes.length > 0) {
             const message = '删除失败：行不存在';
             showInlineToast(container, message, true);
-            return createDeleteOutcome({ message, requestedRowIndexes, failedRowIndexes: requestedRowIndexes });
+            return createDeletePreflightFailureOutcome(message, requestedRowIndexes);
         }
 
         const lockedRowIndexes = requestedRowIndexes.filter((rowIndex) => isTableRowLocked(sheetKey, rowIndex));
         if (lockedRowIndexes.length > 0) {
             const message = lockedRowIndexes.length === 1 ? '删除失败：条目已锁定' : `删除失败：${lockedRowIndexes.length} 条已锁定`;
             showInlineToast(container, message, true);
-            return createDeleteOutcome({ message, requestedRowIndexes, failedRowIndexes: requestedRowIndexes });
+            return createDeletePreflightFailureOutcome(message, requestedRowIndexes);
         }
 
         const liveTableName = getLiveTableName();
         if (!liveTableName) {
             const message = '删除失败：缺少表格名称';
             showInlineToast(container, message, true);
-            return createDeleteOutcome({ message, requestedRowIndexes, failedRowIndexes: requestedRowIndexes });
+            return createDeletePreflightFailureOutcome(message, requestedRowIndexes);
         }
 
         const result = await deletePhoneSheetRows(sheetKey, requestedRowIndexes, {
             tableName: liveTableName,
         });
         const deletedRowIndexes = normalizeRowIndexes(result.deletedRowIndexes || []);
-        const failedRowIndexes = normalizeRowIndexes(result.failedRowIndexes || requestedRowIndexes.filter((rowIndex) => !deletedRowIndexes.includes(rowIndex)));
+        const failedRowIndexes = normalizeRowIndexes(result.failedRowIndexes || []);
+        const fallbackNotDeletedRowIndexes = requestedRowIndexes.filter((rowIndex) => !deletedRowIndexes.includes(rowIndex));
+        const notDeletedRowIndexes = normalizeRowIndexes(result.notDeletedRowIndexes || fallbackNotDeletedRowIndexes);
+        const attemptedRowIndexes = normalizeRowIndexes(result.attemptedRowIndexes || [...deletedRowIndexes, ...failedRowIndexes]);
+        const unattemptedRowIndexes = normalizeRowIndexes(result.unattemptedRowIndexes || notDeletedRowIndexes.filter((rowIndex) => !failedRowIndexes.includes(rowIndex)));
         const hasDeletion = deletedRowIndexes.length > 0;
-        const failedRowIndexesAfterDelete = remapRemainingRowIndexes(failedRowIndexes, deletedRowIndexes);
+        const failedViewRowIndexes = remapRemainingRowIndexes(failedRowIndexes, deletedRowIndexes);
+        const unattemptedViewRowIndexes = remapRemainingRowIndexes(unattemptedRowIndexes, deletedRowIndexes);
+        const notDeletedViewRowIndexes = remapRemainingRowIndexes(notDeletedRowIndexes, deletedRowIndexes);
 
         if (!result.ok && !hasDeletion) {
             const message = result.message || '删除失败';
@@ -126,6 +157,12 @@ export function createRowDeleteController(options) {
                 requestedRowIndexes,
                 deletedRowIndexes,
                 failedRowIndexes,
+                attemptedRowIndexes,
+                unattemptedRowIndexes,
+                notDeletedRowIndexes,
+                failedViewRowIndexes: failedRowIndexes,
+                unattemptedViewRowIndexes: unattemptedRowIndexes,
+                notDeletedViewRowIndexes: notDeletedRowIndexes,
             });
         }
 
@@ -142,7 +179,13 @@ export function createRowDeleteController(options) {
                 deletedCount: result.deletedCount || deletedRowIndexes.length,
                 requestedRowIndexes,
                 deletedRowIndexes,
-                failedRowIndexes: failedRowIndexesAfterDelete,
+                failedRowIndexes,
+                attemptedRowIndexes,
+                unattemptedRowIndexes,
+                notDeletedRowIndexes,
+                failedViewRowIndexes,
+                unattemptedViewRowIndexes,
+                notDeletedViewRowIndexes,
             });
         }
 
@@ -159,7 +202,13 @@ export function createRowDeleteController(options) {
                 deletedCount: result.deletedCount || deletedRowIndexes.length,
                 requestedRowIndexes,
                 deletedRowIndexes,
-                failedRowIndexes: failedRowIndexesAfterDelete,
+                failedRowIndexes,
+                attemptedRowIndexes,
+                unattemptedRowIndexes,
+                notDeletedRowIndexes,
+                failedViewRowIndexes,
+                unattemptedViewRowIndexes,
+                notDeletedViewRowIndexes,
             });
         }
 
@@ -168,8 +217,8 @@ export function createRowDeleteController(options) {
                 rowIndex: -1,
                 selectedDeleteRowIndexes: [],
             });
-        } else if (failedRowIndexesAfterDelete.length > 0) {
-            state.setSelectedDeleteRowIndexes(failedRowIndexesAfterDelete);
+        } else if (notDeletedViewRowIndexes.length > 0) {
+            state.setSelectedDeleteRowIndexes(notDeletedViewRowIndexes);
         } else {
             state.clearDeleteSelection();
         }
@@ -183,7 +232,13 @@ export function createRowDeleteController(options) {
             deletedCount: result.deletedCount || deletedRowIndexes.length,
             requestedRowIndexes,
             deletedRowIndexes,
-            failedRowIndexes: failedRowIndexesAfterDelete,
+            failedRowIndexes,
+            attemptedRowIndexes,
+            unattemptedRowIndexes,
+            notDeletedRowIndexes,
+            failedViewRowIndexes,
+            unattemptedViewRowIndexes,
+            notDeletedViewRowIndexes,
         });
     };
 

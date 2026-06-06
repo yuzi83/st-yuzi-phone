@@ -21,6 +21,8 @@ npm install
 | `npm run lint` | 静态代码检查（ESLint） |
 | `npm run check` | 运行全部 contract checks，任何失败都会让命令失败 |
 | `npm run check:ci` | 运行全部 contract checks，并额外校验历史失败基线是否仍匹配；当前基线应为 0 |
+| `npm run tables:check` | 校验 `tables/sources/` 与 `tables/generated/` 的表源契约和新鲜度 |
+| `npm run tables:build` | 从 `tables/sources/` 重新生成 `tables/generated/` 表格模板产物 |
 
 生产构建输出：
 
@@ -31,7 +33,9 @@ npm install
 
 开发构建与监听模式也输出到同一组 `dist/` 文件。发版前必须重新执行 `npm run build`，不要把开发构建产物提交到 main。
 
-发布前的最低自动化门禁是：`npm run lint`、`npm run check`、`npm run check:ci`、`npm run build` 全部通过。`check` 证明合同脚本真实全绿；`check:ci` 额外证明历史失败基线没有过期或重新堆积。当前项目不允许保留历史失败基线，否则发布链路就是假绿。
+发布前的最低自动化门禁是：`npm run lint`、`npm run check`、`npm run check:ci`、`npm run tables:check`、`npm run tables:build`、`npm run build` 全部通过。`check` 证明合同脚本真实全绿；`check:ci` 额外证明历史失败基线没有过期或重新堆积；`tables:check` / `tables:build` 证明表源 Markdown 与 generated JSON 未漂移。当前项目不允许保留历史失败基线，否则发布链路就是假绿。
+
+当前发布链路还显式检查脚本版 loader 互斥、`window.__YUZI_PHONE_INSTANCE__` singleton guard、版本字段、release/dist 交付与 table source 边界；对应 contract 入口分别是 `scripts/check-script-loader-contract.cjs`、`scripts/check-extension-version-contract.cjs`、`scripts/check-release-chain-contract.cjs` 与 `scripts/check-table-sources-contract.cjs`。
 
 ## 文件结构
 
@@ -65,18 +69,21 @@ npm run build
 npm run lint
 npm run check
 npm run check:ci
+npm run tables:check
+npm run tables:build
 npm run build
 ```
 
-5. 确认 `manifest.json` 的 `js` / `css` 仍指向 `dist/yuzi-phone.bundle.js` 与 `dist/yuzi-phone.bundle.css`，并确认这两个文件由上一步构建生成且非空。
-6. 确认浏览器回归通过。
-7. 提交以下关键文件：
+5. 如果修改了表格模板，确认事实源来自 `tables/sources/` 下 Markdown；正式表源是 `小剧场2.1` 与 `纪要`，`恋爱特化参考` 是参考源，不要手工修改 `tables/generated/` 伪装成事实源。
+6. 确认 `manifest.json` 的 `js` / `css` 仍指向 `dist/yuzi-phone.bundle.js` 与 `dist/yuzi-phone.bundle.css`，并确认这两个文件由上一步构建生成且非空。
+7. 确认浏览器回归通过。
+8. 提交以下关键文件：
 
 ```cmd
-git add manifest.json index.js package.json package-lock.json build.mjs BUILD.md .gitignore .gitattributes .eslintrc.json CHANGELOG.md .github/ scripts/ dist/
+git add manifest.json index.js package.json package-lock.json build.mjs BUILD.md .gitignore .gitattributes .eslintrc.json CHANGELOG.md .github/ scripts/ tables/sources/ tables/generated/ dist/
 ```
 
-8. 打 git tag 并推送：
+9. 打 git tag 并推送：
 
 ```cmd
 git tag v1.4.0

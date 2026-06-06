@@ -13,6 +13,7 @@ const DIAGNOSTIC_STATE_KEYS = new Set([
     'deletingRowIndex',
     'selectedDeleteRowIndexes',
     'deletingSelection',
+    'pendingExternalTableUpdate',
 ]);
 
 function normalizeRowIndexList(rowIndexes = []) {
@@ -295,6 +296,7 @@ export class TableViewerState {
             selectedDeleteRowIndexes: getClearedRowIndexList(this._state.selectedDeleteRowIndexes),
             deletingSelection: false,
             cellLockManageMode: false,
+            pendingExternalTableUpdate: null,
             saving: false,
         });
     }
@@ -315,6 +317,7 @@ export class TableViewerState {
             deletingSelection: false,
             cellLockManageMode: false,
             saving: false,
+            pendingExternalTableUpdate: null,
         });
     }
 
@@ -329,6 +332,7 @@ export class TableViewerState {
             editMode: nextEnabled,
             draftValues: nextEnabled ? this._state.draftValues : getClearedDraftValues(this._state.draftValues),
             cellLockManageMode: nextEnabled ? false : this._state.cellLockManageMode,
+            pendingExternalTableUpdate: nextEnabled ? this._state.pendingExternalTableUpdate : null,
         });
     }
 
@@ -343,6 +347,7 @@ export class TableViewerState {
             cellLockManageMode: nextEnabled,
             editMode: nextEnabled ? false : this._state.editMode,
             draftValues: nextEnabled ? getClearedDraftValues(this._state.draftValues) : this._state.draftValues,
+            pendingExternalTableUpdate: nextEnabled ? null : this._state.pendingExternalTableUpdate,
         });
     }
 
@@ -353,6 +358,30 @@ export class TableViewerState {
      */
     setSaving(enabled) {
         return this.set('saving', !!enabled);
+    }
+
+    /**
+     * 记录详情编辑态期间收到但暂不消费的外部表更新
+     * @param {Object} update - 外部更新摘要
+     * @returns {Object}
+     */
+    setPendingExternalTableUpdate(update = {}) {
+        if (!isRecordObject(update)) {
+            Logger.warn('[TableViewerState] setPendingExternalTableUpdate: 无效的外部更新摘要');
+            return this._state;
+        }
+        return this.set('pendingExternalTableUpdate', { ...update });
+    }
+
+    /**
+     * 清理详情编辑态挂起的外部表更新
+     * @returns {Object}
+     */
+    clearPendingExternalTableUpdate() {
+        if (this._state.pendingExternalTableUpdate === null) {
+            return this._state;
+        }
+        return this.set('pendingExternalTableUpdate', null);
     }
 
     /**
@@ -532,6 +561,7 @@ export function createTableViewerState(sheetKey) {
         listScrollTop: 0,
         listSearchQuery: '',
         listSortDescending: false,
+        pendingExternalTableUpdate: null,
     });
 
     return new Proxy(stateManager, {

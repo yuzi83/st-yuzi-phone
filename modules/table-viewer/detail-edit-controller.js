@@ -66,6 +66,7 @@ export function bindGenericDetailEditController(options = {}) {
         getLiveTableName,
         updateTableRow,
         buildMutationDiagnostics,
+        syncRowsFromSheet,
         showInlineToast,
         runtime,
     } = options;
@@ -112,18 +113,12 @@ export function bindGenericDetailEditController(options = {}) {
         }
 
         if (target.closest('#phone-toggle-edit-mode')) {
-            if (rowLocked && !state.editMode) {
-                showInlineToast(container, '当前条目已锁定，无法编辑');
-                return;
-            }
-            state.setEditMode(!state.editMode);
-            renderKeepScroll();
+            handleToggleEditMode();
             return;
         }
 
         if (target.closest('#phone-cell-lock-mode-btn')) {
-            state.setCellLockManageMode(!state.cellLockManageMode);
-            renderKeepScroll();
+            handleToggleCellLockManageMode();
             return;
         }
 
@@ -173,6 +168,60 @@ export function bindGenericDetailEditController(options = {}) {
         controllerRuntime.disposeFallback?.();
     });
 
+    function hasPendingExternalTableUpdate() {
+        const pendingUpdate = state.pendingExternalTableUpdate;
+        return !!pendingUpdate && typeof pendingUpdate === 'object' && !Array.isArray(pendingUpdate);
+    }
+
+    function consumePendingExternalTableUpdateAfterLeavingEdit() {
+        const synced = typeof syncRowsFromSheet === 'function' && syncRowsFromSheet();
+        if (!synced) {
+            state.returnToListMode();
+            renderKeepScroll();
+            showInlineToast(container, '外部表更新同步失败，已返回列表', true);
+            return;
+        }
+
+        state.syncLockState(getTableLockState(sheetKey));
+        state.clearPendingExternalTableUpdate?.();
+
+        const currentRowIndex = Number(state.rowIndex);
+        if (!Number.isInteger(currentRowIndex) || currentRowIndex < 0 || !Array.isArray(rows[currentRowIndex])) {
+            state.returnToListMode();
+            renderKeepScroll();
+            showInlineToast(container, '外部表更新后当前行已不存在，已返回列表', true);
+            return;
+        }
+
+        renderKeepScroll();
+        showInlineToast(container, '已同步外部表更新');
+    }
+
+    function handleToggleEditMode() {
+        if (rowLocked && !state.editMode) {
+            showInlineToast(container, '当前条目已锁定，无法编辑');
+            return;
+        }
+
+        const shouldConsumePendingExternalUpdate = state.editMode && hasPendingExternalTableUpdate();
+        state.setEditMode(!state.editMode);
+        if (shouldConsumePendingExternalUpdate) {
+            consumePendingExternalTableUpdateAfterLeavingEdit();
+            return;
+        }
+        renderKeepScroll();
+    }
+
+    function handleToggleCellLockManageMode() {
+        const shouldConsumePendingExternalUpdate = !state.cellLockManageMode && state.editMode && hasPendingExternalTableUpdate();
+        state.setCellLockManageMode(!state.cellLockManageMode);
+        if (shouldConsumePendingExternalUpdate) {
+            consumePendingExternalTableUpdateAfterLeavingEdit();
+            return;
+        }
+        renderKeepScroll();
+    }
+
     function handleToggleCellLock(el) {
         const lockColIndex = Number(el.getAttribute('data-cell-lock'));
         const rawColIndex = Number(el.getAttribute('data-cell-raw'));
@@ -220,6 +269,8 @@ export function bindGenericDetailEditController(options = {}) {
         const saveRowIndex = Number(state.rowIndex);
         state.setSaving(true);
         renderKeepScroll();
+        let suppressExternalTableUpdate = false;
+        let deferredToast = null;
 
         try {
             if (!Number.isInteger(saveRowIndex) || saveRowIndex < 0) {
@@ -322,17 +373,32 @@ export function bindGenericDetailEditController(options = {}) {
                     payloadKeys: Object.keys(updateData),
                 });
 
+            if (typeof runtime?.setSuppressExternalTableUpdate === 'function') {
+                runtime.setSuppressExternalTableUpdate(true);
+                suppressExternalTableUpdate = true;
+            }
+
             const result = await updateTableRow(liveTableName, dataRowIndex, updateData);
             if (!isViewerActive()) return;
 
             if (result?.ok) {
-                changedDraftEntries.forEach(([rawColIndex, draft]) => {
-                    if (rows[saveRowIndex]) {
-                        rows[saveRowIndex][rawColIndex] = draft;
-                    }
-                });
+                const refreshedFromSheet = typeof syncRowsFromSheet === 'function' && syncRowsFromSheet();
+                state.clearPendingExternalTableUpdate?.();
+
+                if (!refreshedFromSheet || !Array.isArray(rows[saveRowIndex])) {
+                    state.returnToListMode();
+                    deferredToast = {
+                        message: refreshedFromSheet ? '保存成功，但当前行已不存在，已返回列表' : '保存成功，但刷新数据失败，已返回列表',
+                        warning: true,
+                    };
+                    return;
+                }
+
                 state.setEditMode(false);
-                showInlineToast(container, result.refreshed === false ? '保存成功，但刷新投影失败' : '保存成功', result.refreshed === false);
+                deferredToast = {
+                    message: result.refreshed === false ? '保存成功，但刷新投影失败' : '保存成功',
+                    warning: result.refreshed === false,
+                };
             } else {
                 logger.warn({
                     action: 'row.save.failed',
@@ -359,9 +425,15 @@ export function bindGenericDetailEditController(options = {}) {
                 showInlineToast(container, `保存异常: ${err?.message || '未知错误'}`);
             }
         } finally {
+            if (suppressExternalTableUpdate && typeof runtime?.setSuppressExternalTableUpdate === 'function') {
+                runtime.setSuppressExternalTableUpdate(false);
+            }
             if (isViewerActive()) {
                 state.setSaving(false);
                 renderKeepScroll();
+                if (deferredToast) {
+                    showInlineToast(container, deferredToast.message, deferredToast.warning);
+                }
             }
         }
     }

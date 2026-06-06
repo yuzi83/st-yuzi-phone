@@ -19,9 +19,9 @@ const DEFAULT_MVU_READ_OPTIONS = Object.freeze({
  */
 export function isMvuAvailable() {
     try {
-        return typeof window !== 'undefined'
+        return !!(typeof window !== 'undefined'
             && window.Mvu
-            && typeof window.Mvu.getMvuData === 'function';
+            && typeof window.Mvu.getMvuData === 'function');
     } catch {
         return false;
     }
@@ -152,7 +152,7 @@ function buildReadResult(status, data, isMvu, raw, messageId, meta = {}, error =
     };
 }
 
-function readTavernHelperVariables(messageId, fallbackError = null) {
+function readTavernHelperVariables(messageId, fallbackError = null, meta = {}) {
     const helper = getTavernHelper();
     if (!helper || typeof helper.getVariables !== 'function') {
         return buildReadResult(
@@ -161,7 +161,7 @@ function readTavernHelperVariables(messageId, fallbackError = null) {
             false,
             {},
             messageId,
-            { source: 'none' },
+            { source: 'none', ...meta },
             fallbackError || undefined,
         );
     }
@@ -175,11 +175,11 @@ function readTavernHelperVariables(messageId, fallbackError = null) {
             false,
             vars || {},
             messageId,
-            { source: 'tavern-helper' },
+            { source: 'tavern-helper', ...meta },
         );
     } catch (error) {
         logger.error?.({ action: 'readTavernHelperVariables', message: '获取楼层变量失败', error });
-        return buildReadResult('error', {}, false, {}, messageId, { source: 'tavern-helper' }, error);
+        return buildReadResult('error', {}, false, {}, messageId, { source: 'tavern-helper', ...meta }, error);
     }
 }
 
@@ -227,40 +227,68 @@ export async function getFloorVariablesAsync(messageId = 'latest', options = {})
         return buildReadResult('unavailable', {}, false, {}, resolvedId, { source: 'none' });
     }
 
-    if (isMvuAvailable()) {
-        const result = await readMvuDataWithRetry(resolvedId, options);
+    const opts = {
+        ...DEFAULT_MVU_READ_OPTIONS,
+        ...(options && typeof options === 'object' ? options : {}),
+    };
+    const mvuInitiallyAvailable = isMvuAvailable();
+    let waitedMvu = false;
+    let mvuAvailableAfterWait = mvuInitiallyAvailable;
+
+    if (!mvuInitiallyAvailable && opts.waitMvu !== false) {
+        waitedMvu = await waitForMvuInitialized(opts.timeoutMs);
+        mvuAvailableAfterWait = isMvuAvailable();
+    }
+
+    const availabilityMeta = {
+        waitedMvu,
+        mvuInitiallyAvailable,
+        mvuAvailableAfterWait,
+    };
+
+    if (mvuInitiallyAvailable || mvuAvailableAfterWait) {
+        const result = await readMvuDataWithRetry(resolvedId, {
+            ...options,
+            waitMvu: mvuInitiallyAvailable && opts.waitMvu === true,
+        });
         if (result.mvuData) {
             const data = normalizePlainObject(result.mvuData.stat_data);
             if (Object.keys(data).length > 0) {
                 return buildReadResult('ready', data, true, result.mvuData, resolvedId, {
                     source: 'mvu',
-                    waitedMvu: result.waitedMvu,
+                    waitedMvu: waitedMvu || result.waitedMvu,
                     attempts: result.attempts,
+                    mvuInitiallyAvailable,
+                    mvuAvailableAfterWait,
                 });
             }
 
-            const fallback = readTavernHelperVariables(resolvedId, result.error);
+            const fallback = readTavernHelperVariables(resolvedId, result.error, availabilityMeta);
             if (fallback.status === 'ready') return fallback;
 
             return buildReadResult('empty', data, true, result.mvuData, resolvedId, {
                 source: 'mvu',
-                waitedMvu: result.waitedMvu,
+                waitedMvu: waitedMvu || result.waitedMvu,
                 attempts: result.attempts,
+                mvuInitiallyAvailable,
+                mvuAvailableAfterWait,
             }, result.error || undefined);
         }
 
         if (result.error) {
-            const fallback = readTavernHelperVariables(resolvedId, result.error);
+            const fallback = readTavernHelperVariables(resolvedId, result.error, availabilityMeta);
             if (fallback.status !== 'unavailable') return fallback;
             return buildReadResult('error', {}, true, {}, resolvedId, {
                 source: 'mvu',
-                waitedMvu: result.waitedMvu,
+                waitedMvu: waitedMvu || result.waitedMvu,
                 attempts: result.attempts,
+                mvuInitiallyAvailable,
+                mvuAvailableAfterWait,
             }, result.error);
         }
     }
 
-    return readTavernHelperVariables(resolvedId);
+    return readTavernHelperVariables(resolvedId, null, availabilityMeta);
 }
 
 /**

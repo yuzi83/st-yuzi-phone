@@ -71,6 +71,7 @@ export function renderGenericDetailPage(options = {}) {
         updateTableRow,
         buildMutationDiagnostics,
         viewerRuntime,
+        syncRowsFromSheet,
     } = options;
 
     if (!(container instanceof HTMLElement) || !state) return;
@@ -81,6 +82,7 @@ export function renderGenericDetailPage(options = {}) {
         if (typeof render === 'function') {
             render();
         }
+        showInlineToast(container, '当前详情行已不存在，已返回列表', true);
         return;
     }
 
@@ -149,6 +151,7 @@ export function renderGenericDetailPage(options = {}) {
         getLiveTableName,
         updateTableRow,
         buildMutationDiagnostics,
+        syncRowsFromSheet,
         showInlineToast,
         runtime: viewerRuntime,
     });

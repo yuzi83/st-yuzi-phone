@@ -10,8 +10,41 @@ const CHECKBOX_ID = 'yuzi-phone-enabled';
 const FLOATING_TOGGLE_CHECKBOX_ID = 'yuzi-phone-floating-toggle-enabled';
 const RESET_POSITION_BTN_ID = 'yuzi-phone-reset-position';
 
+let panelCleanupFns = [];
+
+function registerPanelCleanup(cleanup) {
+    if (typeof cleanup === 'function') {
+        panelCleanupFns.push(cleanup);
+    }
+}
+
+function cleanupPhoneSettingsPanelListeners() {
+    const cleanups = panelCleanupFns;
+    panelCleanupFns = [];
+    cleanups.forEach((cleanup) => {
+        try {
+            cleanup();
+        } catch {}
+    });
+}
+
+export function destroyPhoneSettingsPanel() {
+    cleanupPhoneSettingsPanelListeners();
+    const panel = document.getElementById(PANEL_ID);
+    panel?.remove();
+}
+
 export function createPhoneSettingsPanel(onToggleEnabled) {
-    if (document.getElementById(PANEL_ID)) return true;
+    cleanupPhoneSettingsPanelListeners();
+
+    const existingPanel = document.getElementById(PANEL_ID);
+    if (existingPanel) {
+        bindDrawerEvents();
+        bindEnabledToggle(onToggleEnabled);
+        bindFloatingToggle();
+        bindResetPositionButton();
+        return true;
+    }
 
     const container = document.getElementById('extensions_settings');
     if (!container) return false;
@@ -61,7 +94,7 @@ function bindDrawerEvents() {
     const $content = $drawer.find('.inline-drawer-content');
     const $icon = $drawer.find('.inline-drawer-icon');
 
-    $header.off('click').on('click', function (e) {
+    $header.off('click.yuziPhoneSettings').on('click.yuziPhoneSettings', function (e) {
         e.preventDefault();
         e.stopPropagation();
         const isOpen = $content.is(':visible');
@@ -74,37 +107,48 @@ function bindDrawerEvents() {
             $icon.removeClass('fa-circle-chevron-down').addClass('fa-circle-chevron-up');
         }
     });
+
+    registerPanelCleanup(() => $header.off('click.yuziPhoneSettings'));
 }
 
 function bindEnabledToggle(onToggleEnabled) {
     const checkbox = document.getElementById(CHECKBOX_ID);
     if (!checkbox) return;
 
-    checkbox.addEventListener('change', () => {
+    const handleChange = () => {
         const enabled = checkbox.checked;
         savePhoneSetting('enabled', enabled);
 
         if (typeof onToggleEnabled === 'function') {
             onToggleEnabled(enabled);
         }
-    });
+    };
+
+    checkbox.addEventListener('change', handleChange);
+    registerPanelCleanup(() => checkbox.removeEventListener('change', handleChange));
 }
 
 function bindFloatingToggle() {
     const checkbox = document.getElementById(FLOATING_TOGGLE_CHECKBOX_ID);
     if (!checkbox) return;
 
-    checkbox.addEventListener('change', () => {
+    const handleChange = () => {
         savePhoneSetting('floatingToggleEnabled', checkbox.checked);
         window.dispatchEvent(new CustomEvent('yuzi-phone-toggle-style-updated'));
-    });
+    };
+
+    checkbox.addEventListener('change', handleChange);
+    registerPanelCleanup(() => checkbox.removeEventListener('change', handleChange));
 }
 
 function bindResetPositionButton() {
     const button = document.getElementById(RESET_POSITION_BTN_ID);
     if (!button) return;
 
-    button.addEventListener('click', () => {
+    const handleClick = () => {
         window.dispatchEvent(new CustomEvent('yuzi-phone-toggle-position-reset'));
-    });
+    };
+
+    button.addEventListener('click', handleClick);
+    registerPanelCleanup(() => button.removeEventListener('click', handleClick));
 }

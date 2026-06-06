@@ -68,7 +68,22 @@ const outcomeBody = extractFunctionBody(
     /function\s+createDeleteOutcome\s*\([^)]*\)\s*{/
 );
 assert(outcomeBody.includes('ok,') && outcomeBody.includes('deleted,') && outcomeBody.includes('message,') && outcomeBody.includes('refreshed,') && outcomeBody.includes('viewSynced,'), '删除结果 helper 必须保留 ok/deleted/message/refreshed/viewSynced 字段');
-assert(outcomeBody.includes('deletedCount,') && outcomeBody.includes('requestedRowIndexes,') && outcomeBody.includes('deletedRowIndexes,') && outcomeBody.includes('failedRowIndexes,'), '删除结果 helper 必须透传批量行级删除的部分失败字段');
+assert(outcomeBody.includes('deletedCount,') && outcomeBody.includes('requestedRowIndexes,') && outcomeBody.includes('deletedRowIndexes,') && outcomeBody.includes('failedRowIndexes,') && outcomeBody.includes('attemptedRowIndexes,') && outcomeBody.includes('unattemptedRowIndexes,') && outcomeBody.includes('notDeletedRowIndexes,') && outcomeBody.includes('failedViewRowIndexes,') && outcomeBody.includes('unattemptedViewRowIndexes,') && outcomeBody.includes('notDeletedViewRowIndexes,'), '删除结果 helper 必须透传批量行级删除的部分失败字段和 UI view 字段');
+
+const preflightBody = extractFunctionBody(
+    rowDelete,
+    'createDeletePreflightFailureOutcome',
+    /function\s+createDeletePreflightFailureOutcome\s*\([^)]*\)\s*{/
+);
+assertOrdered(preflightBody, [
+    'requestedRowIndexes,',
+    'failedRowIndexes: [],',
+    'unattemptedRowIndexes: requestedRowIndexes,',
+    'notDeletedRowIndexes: requestedRowIndexes,',
+    'failedViewRowIndexes: [],',
+    'unattemptedViewRowIndexes: requestedRowIndexes,',
+    'notDeletedViewRowIndexes: requestedRowIndexes,',
+], '前置校验失败必须同形返回未尝试和未删除行，且不得污染 failedRowIndexes');
 
 const deleteBody = extractFunctionBody(
     rowDelete,
@@ -77,14 +92,20 @@ const deleteBody = extractFunctionBody(
 );
 assert(deleteBody.includes('return createDeleteOutcome({ message });'), '未选择条目时必须返回结构化失败结果');
 assert(deleteBody.includes('showInlineToast(container, message, true);'), '前置校验失败必须使用错误样式');
-assert(deleteBody.includes('requestedRowIndexes, failedRowIndexes: requestedRowIndexes'), '前置校验失败必须透传请求行与失败行');
+assert(deleteBody.includes('return createDeletePreflightFailureOutcome(message, requestedRowIndexes);'), '前置校验失败必须透传请求行、未尝试行与未删除行');
 assertOrdered(deleteBody, [
     'const result = await deletePhoneSheetRows(sheetKey, requestedRowIndexes, {',
     'const deletedRowIndexes = normalizeRowIndexes(result.deletedRowIndexes || []);',
-    'const failedRowIndexes = normalizeRowIndexes(result.failedRowIndexes || requestedRowIndexes.filter((rowIndex) => !deletedRowIndexes.includes(rowIndex)));',
+    'const failedRowIndexes = normalizeRowIndexes(result.failedRowIndexes || []);',
+    'const fallbackNotDeletedRowIndexes = requestedRowIndexes.filter((rowIndex) => !deletedRowIndexes.includes(rowIndex));',
+    'const notDeletedRowIndexes = normalizeRowIndexes(result.notDeletedRowIndexes || fallbackNotDeletedRowIndexes);',
+    'const attemptedRowIndexes = normalizeRowIndexes(result.attemptedRowIndexes || [...deletedRowIndexes, ...failedRowIndexes]);',
+    'const unattemptedRowIndexes = normalizeRowIndexes(result.unattemptedRowIndexes || notDeletedRowIndexes.filter((rowIndex) => !failedRowIndexes.includes(rowIndex)));',
     'const hasDeletion = deletedRowIndexes.length > 0;',
-    'const failedRowIndexesAfterDelete = remapRemainingRowIndexes(failedRowIndexes, deletedRowIndexes);',
-], 'deleteRowsFromList 必须使用批量行级删除结果并重映射失败行');
+    'const failedViewRowIndexes = remapRemainingRowIndexes(failedRowIndexes, deletedRowIndexes);',
+    'const unattemptedViewRowIndexes = remapRemainingRowIndexes(unattemptedRowIndexes, deletedRowIndexes);',
+    'const notDeletedViewRowIndexes = remapRemainingRowIndexes(notDeletedRowIndexes, deletedRowIndexes);',
+], 'deleteRowsFromList 必须使用批量行级删除结果并重映射失败、未尝试和未删除 view 行');
 assertOrdered(deleteBody, [
     'if (!result.ok && !hasDeletion) {',
     'if (isViewerActive()) {',
@@ -92,6 +113,12 @@ assertOrdered(deleteBody, [
     'showInlineToast(container, message, true);',
     'return createDeleteOutcome({',
     'failedRowIndexes,',
+    'attemptedRowIndexes,',
+    'unattemptedRowIndexes,',
+    'notDeletedRowIndexes,',
+    'failedViewRowIndexes: failedRowIndexes,',
+    'unattemptedViewRowIndexes: unattemptedRowIndexes,',
+    'notDeletedViewRowIndexes: notDeletedRowIndexes,',
 ], 'deleteRowsFromList 删除失败结构化返回并只在 active 时同步旧 UI');
 assertOrdered(deleteBody, [
     'if (hasDeletion) {',
@@ -110,11 +137,11 @@ assertOrdered(deleteBody, [
 assertOrdered(deleteBody, [
     'if (rows.length === 0) {',
     'selectedDeleteRowIndexes: [],',
-    '} else if (failedRowIndexesAfterDelete.length > 0) {',
-    'state.setSelectedDeleteRowIndexes(failedRowIndexesAfterDelete);',
+    '} else if (notDeletedViewRowIndexes.length > 0) {',
+    'state.setSelectedDeleteRowIndexes(notDeletedViewRowIndexes);',
     '} else {',
     'state.clearDeleteSelection();',
-], 'deleteRowsFromList 成功后必须按空表、部分失败、全成功维护删除选择状态');
+], 'deleteRowsFromList 成功后必须按空表、未删除 view 集合、全成功维护删除选择状态');
 assert(deleteBody.includes('refreshed: result.refreshed ?? null,'), 'deleteRowsFromList 成功路径必须透传 refreshed');
 assert(!/return\s+true\s*;/.test(deleteBody), 'deleteRowsFromList 不能把成功压缩为裸 true');
 assert(!/return\s+false\s*;/.test(deleteBody), 'deleteRowsFromList 不能把失败压缩为裸 false');
@@ -127,7 +154,14 @@ const normalizeBody = extractFunctionBody(
 assert(normalizeBody.includes('refreshed: result.refreshed ?? null,'), 'list controller 必须保留 refreshed 字段');
 assert(normalizeBody.includes('viewSynced: result.viewSynced ?? null,'), 'list controller 必须保留 viewSynced 字段');
 assert(normalizeBody.includes('deletedCount: Number(result.deletedCount || 0),'), 'list controller 必须保留批量删除数量字段');
-assert(normalizeBody.includes('failedRowIndexes: normalizeRowIndexes(result.failedRowIndexes || []),'), 'list controller 必须保留批量删除失败行字段');
+assert(normalizeBody.includes('const failedRowIndexes = normalizeRowIndexes(result.failedRowIndexes || []);'), 'list controller 必须保留已尝试失败行字段');
+assert(normalizeBody.includes('const unattemptedRowIndexes = normalizeRowIndexes(result.unattemptedRowIndexes || []);'), 'list controller 必须归一化未尝试行字段');
+assert(normalizeBody.includes('const notDeletedRowIndexes = normalizeRowIndexes('), 'list controller 必须归一化未删除行字段');
+assert(normalizeBody.includes('const notDeletedViewRowIndexes = normalizeRowIndexes(result.notDeletedViewRowIndexes || notDeletedRowIndexes);'), 'list controller 必须归一化未删除 view 行字段');
+assert(normalizeBody.includes('attemptedRowIndexes: normalizeRowIndexes(result.attemptedRowIndexes || []),'), 'list controller 必须保留已尝试行字段');
+assert(normalizeBody.includes('unattemptedRowIndexes,'), 'list controller 必须保留未尝试行字段');
+assert(normalizeBody.includes('notDeletedRowIndexes,'), 'list controller 必须优先透传未删除行字段');
+assert(normalizeBody.includes('notDeletedViewRowIndexes,'), 'list controller 必须透传未删除 view 行字段');
 
 const handleBody = extractFunctionBody(
     listController,
@@ -140,9 +174,11 @@ assert(!handleBody.includes("context.showInlineToast(container, '删除成功');
 assertOrdered(handleBody, [
     'deleteOutcome = normalizeDeleteOutcome(await context.deleteRowsFromList(rowIndexes));',
     'if (deleteOutcome.deleted && isGenericListContextActive(context)) {',
-    'const toastIsError = deleteOutcome.refreshed === false || deleteOutcome.viewSynced === false || deleteOutcome.failedRowIndexes.length > 0;',
+    'const toastIsError = deleteOutcome.refreshed === false',
+    '|| deleteOutcome.viewSynced === false',
+    '|| deleteOutcome.notDeletedViewRowIndexes.length > 0;',
     'context.showInlineToast(container, toastMessage, toastIsError);',
-], 'executeDeleteSelectedRows 必须根据 refreshed/viewSynced/failedRowIndexes 选择 toast 样式');
+], 'executeDeleteSelectedRows 必须根据 refreshed/viewSynced/notDeletedViewRowIndexes 选择 toast 样式');
 assertOrdered(handleBody, [
     'if (deleteOutcome.deleted) {',
     'refreshListAfterDataMutation(container);',

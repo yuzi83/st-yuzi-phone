@@ -63,6 +63,28 @@ assertOrdered(deleteBody, [
     'refreshed,',
 ], 'deleteTheaterEntities 必须返回投影刷新状态和失败文案');
 assert(deleteBody.includes('expectedDeletedCount: removedCount'), 'deleteTheaterEntities 必须返回预期删除数量用于部分失败反馈');
+assert(deleteBody.includes('notDeletedPlans: execution.notDeletedPlans || [],'), 'deleteTheaterEntities 失败时必须返回按计划归集的未删除行');
+assert(deleteBody.includes('notDeletedRowsBySheetKey: execution.notDeletedRowsBySheetKey || {},'), 'deleteTheaterEntities 失败时必须返回按 sheetKey 索引的未删除行');
+
+const executionPlansBody = extractFunctionBody(
+    deleteService,
+    'executeTheaterDeletionPlans',
+    /async\s+function\s+executeTheaterDeletionPlans\s*\([^)]*\)\s*{/
+);
+assertOrdered(executionPlansBody, [
+    'for (let planIndex = 0; planIndex < orderedPlans.length; planIndex += 1) {',
+    'const plan = orderedPlans[planIndex];',
+    'const result = await deleteTableRowsBatch(plan.tableName, plan.rowIndexes, {',
+    'results.push({',
+    '...result,',
+    'if (!result.ok) {',
+    'const notDeletedPlans = [',
+    '...collectTheaterNotDeletedPlans(results),',
+    '...collectUnattemptedTheaterNotDeletedPlans(orderedPlans.slice(planIndex + 1)),',
+    'notDeletedPlans,',
+    'notDeletedRowsBySheetKey: buildTheaterNotDeletedRowsBySheetKey(notDeletedPlans),',
+], 'executeTheaterDeletionPlans 必须透传并归集每个删除计划和后续未执行计划的未删除行');
+assert(deleteService.includes('attempted: false,') && deleteService.includes("reason: 'unattempted_after_previous_failure'"), 'delete-service 必须标记后续未执行计划');
 
 assert(
     interactions.includes('function showToastIfActive(container, options, message, isError = false)'),

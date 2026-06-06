@@ -50,12 +50,24 @@ const saveBody = extractFunctionBody(
 assertOrdered(saveBody, [
     'const saveRowIndex = Number(state.rowIndex);',
     'state.setSaving(true);',
+    'let suppressExternalTableUpdate = false;',
+    'let deferredToast = null;',
     'const dataRowIndex = saveRowIndex + 1;',
     'const updateData = {};',
     'const liveTableName = typeof getLiveTableName === \'function\' ? String(getLiveTableName() || \'\').trim() : \'\';',
+    'runtime.setSuppressExternalTableUpdate(true);',
     'const result = await updateTableRow(liveTableName, dataRowIndex, updateData);',
-    'rows[saveRowIndex][rawColIndex] = draft;',
+    'const refreshedFromSheet = typeof syncRowsFromSheet === \'function\' && syncRowsFromSheet();',
+    'state.clearPendingExternalTableUpdate?.();',
+    'state.setEditMode(false);',
 ], 'handleSaveRow');
+
+assertOrdered(saveBody, [
+    'runtime.setSuppressExternalTableUpdate(true);',
+    'const result = await updateTableRow(liveTableName, dataRowIndex, updateData);',
+    '} finally {',
+    'runtime.setSuppressExternalTableUpdate(false);',
+], 'handleSaveRow suppress lifecycle');
 
 assert(saveBody.includes('保存失败：行索引无效'), '保存开始时必须校验捕获行号');
 assert(saveBody.includes('保存失败：缺少表格名称'), '行级保存缺少表名时必须给用户明确反馈');
@@ -63,6 +75,10 @@ assert(saveBody.includes('保存失败：数据库行级更新接口不可用'),
 assert(saveBody.includes('context: { sheetKey, rowIndex: saveRowIndex }'), '异常日志必须使用保存开始时捕获的行号');
 assert(!saveBody.includes('rows[state.rowIndex]'), '保存成功后不能使用可变 state.rowIndex 回写本地 rows');
 assert(!/updateTableRow\([^,]+,\s*state\.rowIndex/.test(saveBody), '保存时不能用可变 state.rowIndex 定位数据库行');
+assert(!saveBody.includes('rows[saveRowIndex][rawColIndex] = draft;'), '保存成功后不能直接 patch 本地 rows，必须从 sheet 对账');
+assert(saveBody.includes('state.returnToListMode();'), '保存后对账发现当前行缺失时必须返回列表');
+assert(saveBody.includes('保存成功，但当前行已不存在，已返回列表'), '保存后当前行缺失时必须提示用户');
+assert(saveBody.includes('保存成功，但刷新数据失败，已返回列表'), '保存后同步 sheet 失败时必须提示用户');
 assert(!saveBody.includes('const success = await'), '行级保存必须检查结构化 result.ok，而不是压缩成布尔 success');
 
 console.log('check-generic-detail-save-row: ok');

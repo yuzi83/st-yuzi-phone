@@ -16,6 +16,7 @@
 
 ### modern active
 - `00-phone-tokens.css`
+- `00-theme-modes.css`
 - `01-shell-system.css`
 - `02-page-home.css`
 - `05-update-fusion-feedback.css`
@@ -31,4 +32,5 @@
 ## 当前收口原则
 1. 入口和层级语义保持稳定，不直接大范围改视觉规则。
 2. 如需新增样式层级，统一从 `style.css` 与 `styles/01-phone-base.css` 两层入口扩展。
-3. 历史回滚需求请通过版本控制取回旧文件，不再在仓库内常驻 legacy 副本。
+3. `styles/01-phone-base.css` 当前显式聚合 `styles/phone-base/00-theme-modes.css`，主题模式变量层必须在本索引和 `styles/phone-base/README.md` 同步登记。
+4. 历史回滚需求请通过版本控制取回旧文件，不再在仓库内常驻 legacy 副本。

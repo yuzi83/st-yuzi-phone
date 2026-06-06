@@ -1,11 +1,29 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { writeTemplateFromSource } = require('./table-source.cjs');
 
 const ROOT = process.cwd();
 const TABLE_SOURCE_SCRIPT = path.join(ROOT, 'scripts', 'table-source.cjs');
-const SOURCE_DIR = path.join(ROOT, 'tables', 'sources', '小剧场2.1');
-const GENERATED_JSON = path.join(ROOT, 'tables', 'generated', '小剧场2.1.json');
+const PACKAGE_JSON = path.join(ROOT, 'package.json');
+const FORMAL_TABLE_SOURCES = [
+    {
+        label: '小剧场2.1',
+        sourceDir: path.join(ROOT, 'tables', 'sources', '小剧场2.1'),
+        generatedJson: path.join(ROOT, 'tables', 'generated', '小剧场2.1.json'),
+        validateSceneContract: true,
+    },
+    {
+        label: '纪要',
+        sourceDir: path.join(ROOT, 'tables', 'sources', '纪要'),
+        generatedJson: path.join(ROOT, 'tables', 'generated', '纪要.json'),
+        validateSceneContract: false,
+    },
+];
+const REFERENCE_TABLE_SOURCES = [
+    { label: '恋爱特化参考', sourceDir: path.join(ROOT, 'tables', 'sources', '恋爱特化参考') },
+];
 
 const REQUIRED_SCENE_SHEETS = [
     {
@@ -54,8 +72,8 @@ function toRelative(filePath) {
     return path.relative(ROOT, filePath).replace(/\\/g, '/');
 }
 
-function runTableSourceCheck() {
-    return spawnSync(process.execPath, [TABLE_SOURCE_SCRIPT, 'check', SOURCE_DIR], {
+function runTableSourceCheck(sourceDir) {
+    return spawnSync(process.execPath, [TABLE_SOURCE_SCRIPT, 'check', sourceDir], {
         cwd: ROOT,
         encoding: 'utf8',
         stdio: 'pipe',
@@ -68,6 +86,48 @@ function fail(message, details = '') {
         console.error(details.trim());
     }
     process.exitCode = 1;
+}
+
+function assertSourceDefinitions() {
+    FORMAL_TABLE_SOURCES.forEach((definition) => {
+        assert(fs.existsSync(definition.sourceDir) && fs.statSync(definition.sourceDir).isDirectory(), `正式事实源目录不存在：${toRelative(definition.sourceDir)}`);
+        assert(fs.existsSync(definition.generatedJson), `正式事实源缺少 committed generated：${toRelative(definition.generatedJson)}`);
+    });
+
+    REFERENCE_TABLE_SOURCES.forEach((definition) => {
+        const generatedJson = path.join(ROOT, 'tables', 'generated', `${definition.label}.json`);
+        assert(fs.existsSync(definition.sourceDir) && fs.statSync(definition.sourceDir).isDirectory(), `参考事实源目录不存在：${toRelative(definition.sourceDir)}`);
+        assert(!fs.existsSync(generatedJson), `参考事实源不应提交 generated：${toRelative(generatedJson)}。若要发布它，请加入 FORMAL_TABLE_SOURCES`);
+    });
+}
+
+function assertPackageScriptsCoverFormalSources() {
+    const packageJson = readJson(PACKAGE_JSON);
+    const scripts = packageJson.scripts || {};
+    const tablesCheck = String(scripts['tables:check'] || '');
+    const tablesBuild = String(scripts['tables:build'] || '');
+    FORMAL_TABLE_SOURCES.forEach((definition) => {
+        const sourcePath = toRelative(definition.sourceDir);
+        const generatedPath = toRelative(definition.generatedJson);
+        assert(tablesCheck.includes(sourcePath), `package.json tables:check 未覆盖 ${sourcePath}`);
+        assert(tablesBuild.includes(sourcePath) && tablesBuild.includes(generatedPath), `package.json tables:build 未覆盖 ${sourcePath} -> ${generatedPath}`);
+    });
+}
+
+function assertGeneratedFreshness(definition, committedGenerated) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yuzi-phone-table-sources-'));
+    try {
+        const tempJson = path.join(tempDir, `${definition.label}.json`);
+        const rebuilt = writeTemplateFromSource(definition.sourceDir, tempJson);
+        const committedString = JSON.stringify(committedGenerated);
+        const rebuiltString = JSON.stringify(rebuilt);
+        assert(
+            committedString === rebuiltString,
+            `${definition.label} 的 generated 与 source build 输出不一致，请运行 node scripts/table-source.cjs build ${toRelative(definition.sourceDir)} ${toRelative(definition.generatedJson)}`
+        );
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
 }
 
 function validateGeneratedSceneSheets(generated) {
@@ -85,15 +145,15 @@ function validateGeneratedSceneSheets(generated) {
     });
 }
 
-function validateSourceMarkdownFiles() {
-    const markdownFiles = fs.readdirSync(SOURCE_DIR, { withFileTypes: true })
+function validateSourceMarkdownFiles(sourceDir) {
+    const markdownFiles = fs.readdirSync(sourceDir, { withFileTypes: true })
         .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.md'))
         .map(entry => entry.name);
 
     REQUIRED_SCENE_SHEETS.forEach((definition) => {
         const fileName = markdownFiles.find(name => name.endsWith(`${definition.name}.md`));
         assert(fileName, `事实源目录缺少 ${definition.name}.md`);
-        const content = fs.readFileSync(path.join(SOURCE_DIR, fileName), 'utf8');
+        const content = fs.readFileSync(path.join(sourceDir, fileName), 'utf8');
         assert(content.includes(`uid: ${definition.uid}`), `${fileName} 缺少 uid: ${definition.uid}`);
         assert(content.includes(`name: ${definition.name}`), `${fileName} 缺少 name: ${definition.name}`);
         definition.requiredHeaders.forEach((header) => {
@@ -108,42 +168,54 @@ function main() {
         fail(`缺少表格事实源工具：${toRelative(TABLE_SOURCE_SCRIPT)}`);
         return;
     }
-    if (!fs.existsSync(SOURCE_DIR) || !fs.statSync(SOURCE_DIR).isDirectory()) {
-        fail(`缺少表格 Markdown 事实源目录：${toRelative(SOURCE_DIR)}`);
-        return;
-    }
-
-    const result = runTableSourceCheck();
-    if (result.status !== 0) {
-        fail('表格 Markdown 事实源校验失败', `${result.stdout || ''}\n${result.stderr || ''}`);
-        return;
-    }
-
-    if (!fs.existsSync(GENERATED_JSON)) {
-        fail(`缺少合成产物：${toRelative(GENERATED_JSON)}，请运行 npm run tables:build`);
-        return;
-    }
-
-    let generated;
-    try {
-        generated = readJson(GENERATED_JSON);
-    } catch (error) {
-        fail(`合成产物不是合法 JSON：${toRelative(GENERATED_JSON)}`, error.message);
-        return;
-    }
 
     try {
-        validateSourceMarkdownFiles();
-        validateGeneratedSceneSheets(generated);
+        assertSourceDefinitions();
+        assertPackageScriptsCoverFormalSources();
     } catch (error) {
-        fail('表源契约检查失败', error.message);
+        fail('表源清单边界检查失败', error.message);
         return;
+    }
+
+    const checked = [];
+    for (const definition of FORMAL_TABLE_SOURCES) {
+        const result = runTableSourceCheck(definition.sourceDir);
+        if (result.status !== 0) {
+            fail(`${definition.label} Markdown 事实源校验失败`, `${result.stdout || ''}\n${result.stderr || ''}`);
+            return;
+        }
+
+        let generated;
+        try {
+            generated = readJson(definition.generatedJson);
+        } catch (error) {
+            fail(`${definition.label} 合成产物不是合法 JSON：${toRelative(definition.generatedJson)}`, error.message);
+            return;
+        }
+
+        try {
+            assertGeneratedFreshness(definition, generated);
+            if (definition.validateSceneContract) {
+                validateSourceMarkdownFiles(definition.sourceDir);
+                validateGeneratedSceneSheets(generated);
+            }
+        } catch (error) {
+            fail(`${definition.label} 表源契约检查失败`, error.message);
+            return;
+        }
+
+        checked.push({ definition, stdout: String(result.stdout || '').trim() });
     }
 
     console.log('[table-sources-contract] 检查通过');
-    console.log(result.stdout.trim());
-    console.log(`- OK | ${toRelative(SOURCE_DIR)} | Markdown 事实源可解析且结构有效`);
-    console.log(`- OK | ${toRelative(GENERATED_JSON)} | 合成 JSON 可解析`);
+    checked.forEach(({ definition, stdout }) => {
+        if (stdout) console.log(stdout);
+        console.log(`- OK | ${toRelative(definition.sourceDir)} | Markdown 事实源可解析且结构有效`);
+        console.log(`- OK | ${toRelative(definition.generatedJson)} | committed generated 可解析且与临时 build 深比较一致`);
+    });
+    REFERENCE_TABLE_SOURCES.forEach((definition) => {
+        console.log(`- OK | ${toRelative(definition.sourceDir)} | 参考事实源明确不参与 generated/CI freshness`);
+    });
     console.log('- OK | 内置 square/forum/live 表源保持单表 uid / 表名 / 字段契约，且无旧副表残留');
 }
 

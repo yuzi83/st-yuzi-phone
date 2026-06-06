@@ -161,6 +161,29 @@ function normalizeDbDeleteRowIndexes(rowIndexes = []) {
     return normalizeDeleteRowIndexes(rowIndexes).map((rowIndex) => rowIndex + 1);
 }
 
+function buildBatchDeleteRowIndexResult({
+    requestedRowIndexes = [],
+    attemptedRowIndexes = [],
+    deletedRowIndexes = [],
+    failedRowIndexes = [],
+} = {}) {
+    const requested = normalizeDeleteRowIndexes(requestedRowIndexes);
+    const attempted = normalizeDeleteRowIndexes(attemptedRowIndexes);
+    const deleted = normalizeDeleteRowIndexes(deletedRowIndexes);
+    const failed = normalizeDeleteRowIndexes(failedRowIndexes);
+    const attemptedSet = new Set(attempted);
+    const deletedSet = new Set(deleted);
+
+    return {
+        requestedRowIndexes: requested,
+        attemptedRowIndexes: attempted,
+        deletedRowIndexes: deleted,
+        failedRowIndexes: failed,
+        unattemptedRowIndexes: requested.filter((rowIndex) => !attemptedSet.has(rowIndex)),
+        notDeletedRowIndexes: requested.filter((rowIndex) => !deletedSet.has(rowIndex)),
+    };
+}
+
 async function callDeleteRowApi(api, tableName, dbRowIndex) {
     const result = await callApiWithTimeout(
         () => api.deleteRow(tableName, dbRowIndex),
@@ -596,8 +619,7 @@ export async function deleteTableRowsBatch(tableName, rowIndexes = [], options =
             return {
                 ...buildTableNameMissingResult('批量删除行'),
                 deletedCount: 0,
-                requestedRowIndexes: normalizedRowIndexes,
-                failedRowIndexes: normalizedRowIndexes,
+                ...buildBatchDeleteRowIndexResult({ requestedRowIndexes: normalizedRowIndexes }),
             };
         }
         if (normalizedRowIndexes.length === 0) {
@@ -606,8 +628,7 @@ export async function deleteTableRowsBatch(tableName, rowIndexes = [], options =
                 code: 'empty_selection',
                 message: '未选择可删除的条目',
                 deletedCount: 0,
-                requestedRowIndexes: [],
-                failedRowIndexes: [],
+                ...buildBatchDeleteRowIndexResult(),
                 refreshed: false,
             };
         }
@@ -615,11 +636,11 @@ export async function deleteTableRowsBatch(tableName, rowIndexes = [], options =
             return {
                 ...buildApiUnavailableResult(),
                 deletedCount: 0,
-                requestedRowIndexes: normalizedRowIndexes,
-                failedRowIndexes: normalizedRowIndexes,
+                ...buildBatchDeleteRowIndexResult({ requestedRowIndexes: normalizedRowIndexes }),
             };
         }
 
+        const attemptedRowIndexes = [];
         const deletedRowIndexes = [];
         const failedRowIndexes = [];
 
@@ -627,6 +648,7 @@ export async function deleteTableRowsBatch(tableName, rowIndexes = [], options =
             const dbRowIndex = dbRowIndexes[index];
             const uiRowIndex = normalizedRowIndexes[index];
             try {
+                attemptedRowIndexes.push(uiRowIndex);
                 const ok = await callDeleteRowApi(api, safeTableName, dbRowIndex);
                 if (ok) {
                     deletedRowIndexes.push(uiRowIndex);
@@ -646,7 +668,13 @@ export async function deleteTableRowsBatch(tableName, rowIndexes = [], options =
             }
         }
 
-        const allDeleted = deletedRowIndexes.length === normalizedRowIndexes.length && failedRowIndexes.length === 0;
+        const batchRowIndexes = buildBatchDeleteRowIndexResult({
+            requestedRowIndexes: normalizedRowIndexes,
+            attemptedRowIndexes,
+            deletedRowIndexes,
+            failedRowIndexes,
+        });
+        const allDeleted = batchRowIndexes.notDeletedRowIndexes.length === 0 && failedRowIndexes.length === 0;
         const refreshed = deletedRowIndexes.length > 0
             ? await refreshTableProjection(api, 'deleteTableRowsBatch.refreshProjection', options)
             : false;
@@ -659,12 +687,10 @@ export async function deleteTableRowsBatch(tableName, rowIndexes = [], options =
             message: allDeleted
                 ? (refreshed ? '删除成功' : '删除成功，但刷新投影失败')
                 : (deletedRowIndexes.length > 0
-                    ? `部分删除失败：已删除 ${deletedRowIndexes.length} 行，仍有 ${normalizedRowIndexes.length - deletedRowIndexes.length} 行未删除`
+                    ? `部分删除失败：已删除 ${deletedRowIndexes.length} 行，仍有 ${batchRowIndexes.notDeletedRowIndexes.length} 行未删除`
                     : '删除失败：数据库未确认删除目标行'),
             tableName: safeTableName,
-            requestedRowIndexes: normalizedRowIndexes,
-            deletedRowIndexes,
-            failedRowIndexes,
+            ...batchRowIndexes,
             deletedCount: deletedRowIndexes.length,
             refreshed,
         };

@@ -105,7 +105,7 @@ export function createViewerRuntime(options = {}) {
     };
     let cleanupObserver = null;
     let viewerDisposed = false;
-    let suppressExternalTableUpdate = false;
+    let suppressExternalTableUpdateDepth = 0;
     let runtimeApi = null;
 
     const dispose = () => {
@@ -185,7 +185,7 @@ export function createViewerRuntime(options = {}) {
 
         viewerRuntimeScope.addEventListener(window, 'yuzi-phone-table-updated', (event) => {
             if (event?.detail?.sheetKey !== sheetKey) return;
-            if (suppressExternalTableUpdate) return;
+            if (suppressExternalTableUpdateDepth > 0) return;
             handler(event);
         });
     };
@@ -257,10 +257,14 @@ export function createViewerRuntime(options = {}) {
             viewerRuntimeScope.clearTimeout(timeoutId);
         },
         setSuppressExternalTableUpdate(next) {
-            suppressExternalTableUpdate = !!next;
+            if (next) {
+                suppressExternalTableUpdateDepth += 1;
+                return;
+            }
+            suppressExternalTableUpdateDepth = Math.max(0, suppressExternalTableUpdateDepth - 1);
         },
         isSuppressingExternalTableUpdate() {
-            return suppressExternalTableUpdate;
+            return suppressExternalTableUpdateDepth > 0;
         },
         isDisposed() {
             return viewerDisposed || viewerRuntimeScope.isDisposed();

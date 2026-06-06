@@ -24,7 +24,7 @@ export function createSettingsPersistenceTools(options = {}) {
     let saveSettingsMaxWaitTimer = null;
     let saveSettingsPendingCtx = null;
 
-    function executeSaveSettings(ctx) {
+    function clearScheduledSettingsSaveTimers() {
         if (saveSettingsDebounceTimer !== null) {
             window.clearTimeout(saveSettingsDebounceTimer);
             saveSettingsDebounceTimer = null;
@@ -33,6 +33,11 @@ export function createSettingsPersistenceTools(options = {}) {
             window.clearTimeout(saveSettingsMaxWaitTimer);
             saveSettingsMaxWaitTimer = null;
         }
+    }
+
+    function executeSaveSettings(ctx) {
+        clearScheduledSettingsSaveTimers();
+        saveSettingsPendingCtx = null;
 
         if (!ctx || typeof ctx.saveSettingsDebounced !== 'function') {
             logger.warn({
@@ -46,7 +51,7 @@ export function createSettingsPersistenceTools(options = {}) {
             ctx.saveSettingsDebounced();
             logger.debug({
                 action: 'persist.execute',
-                message: '设置已保存',
+                message: '已触发宿主设置保存请求',
             });
         } catch (error) {
             logger.error({
@@ -90,29 +95,27 @@ export function createSettingsPersistenceTools(options = {}) {
 
     function flushPhoneSettingsSave() {
         const ctx = typeof getContext === 'function' ? getContext() : null;
+        clearScheduledSettingsSaveTimers();
+        saveSettingsPendingCtx = null;
+
         if (!ctx || typeof ctx.saveSettingsDebounced !== 'function') {
             logger.warn({
                 action: 'persist.flush',
-                message: '无法立即保存设置：上下文不可用',
+                message: '无法触发宿主设置保存请求：上下文不可用',
             });
             return;
-        }
-
-        if (saveSettingsDebounceTimer !== null) {
-            window.clearTimeout(saveSettingsDebounceTimer);
-            saveSettingsDebounceTimer = null;
         }
 
         try {
             ctx.saveSettingsDebounced();
             logger.info({
                 action: 'persist.flush',
-                message: '设置已立即保存',
+                message: '已清理本扩展待保存任务并触发宿主设置保存请求',
             });
         } catch (error) {
             logger.error({
                 action: 'persist.flush',
-                message: '立即保存设置失败',
+                message: '触发宿主设置保存请求失败',
                 error,
             });
             showNotification?.('保存设置失败', 'error');

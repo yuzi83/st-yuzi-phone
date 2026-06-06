@@ -17,6 +17,10 @@ export function revokeFusionDownloadUrl() {
 }
 
 export function setFusionDownloadUrl(nextUrl) {
+    if (activeDownloadUrl && activeDownloadUrl !== nextUrl) {
+        revokeFusionDownloadUrl();
+    }
+
     activeDownloadUrl = nextUrl || null;
 }
 

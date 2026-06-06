@@ -139,6 +139,27 @@ async function testViewerRuntimeStartSession(runtimeModule) {
     assert.ok(order.includes('sheet:null'));
 }
 
+async function testViewerRuntimeSuppressDepth(runtimeModule) {
+    installDomGlobals();
+    const runtime = runtimeModule.createViewerRuntime({
+        container: new FakeHTMLElement('viewer-container'),
+        sheetKey: 'sheet_runtime',
+        rerenderViewer: () => {},
+    });
+
+    assert.equal(runtime.isSuppressingExternalTableUpdate(), false);
+    runtime.setSuppressExternalTableUpdate(true);
+    assert.equal(runtime.isSuppressingExternalTableUpdate(), true);
+    runtime.setSuppressExternalTableUpdate(true);
+    assert.equal(runtime.isSuppressingExternalTableUpdate(), true);
+    runtime.setSuppressExternalTableUpdate(false);
+    assert.equal(runtime.isSuppressingExternalTableUpdate(), true);
+    runtime.setSuppressExternalTableUpdate(false);
+    assert.equal(runtime.isSuppressingExternalTableUpdate(), false);
+    runtime.setSuppressExternalTableUpdate(false);
+    assert.equal(runtime.isSuppressingExternalTableUpdate(), false);
+}
+
 async function testGenericRuntimeStartOrder(genericRuntimeModule) {
     const order = [];
     const container = new FakeHTMLElement('generic-container');
@@ -209,11 +230,13 @@ async function main() {
     const { runtimeModule, genericRuntimeModule, specialRuntimeModule } = await importViewerModules();
 
     await testViewerRuntimeStartSession(runtimeModule);
+    await testViewerRuntimeSuppressDepth(runtimeModule);
     await testGenericRuntimeStartOrder(genericRuntimeModule);
     await testSpecialRuntimeStartPath(specialRuntimeModule);
 
     console.log('[viewer-runtime-behavior-check] 检查通过');
     console.log('- OK | startViewerSession() 保持 viewing sheet / reset / draft / observer 启动顺序');
+    console.log('- OK | setSuppressExternalTableUpdate() 使用计数语义并防止多余 false 下溢');
     console.log('- OK | generic-runtime.start() 保持 bind -> render 顺序');
     console.log('- OK | special-runtime 保持 create -> start 路径与 viewerEventManager owner 传递');
 }

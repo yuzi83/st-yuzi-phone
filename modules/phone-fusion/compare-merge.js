@@ -70,6 +70,7 @@ export function performFusionMerge(container, templateA, templateB) {
 
     const sheetCount = Object.keys(merged).filter(k => k.startsWith('sheet_')).length;
     if (sheetCount === 0) {
+        clearFusionResult(container);
         resultEl.innerHTML = buildFusionEmptyResultHtml();
         return;
     }

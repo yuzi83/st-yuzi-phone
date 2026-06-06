@@ -12,6 +12,7 @@ const FILES = {
     runtimeManager: 'modules/runtime-manager.js',
     eventManager: 'modules/utils/event-manager.js',
     fusionRuntime: 'modules/phone-fusion/runtime.js',
+    settingsPanel: 'modules/settings-panel.js',
 };
 
 function read(relativePath) {
@@ -41,6 +42,10 @@ function main() {
     check(results, 'index', 'destroy() 继续调用 destroyPhoneRuntime()', has(contents.index, 'destroyPhoneRuntime();'));
     check(results, 'index', 'destroy() 继续调用 cleanupIntegration()', has(contents.index, 'cleanupIntegration();'));
     check(results, 'index', 'destroy() 在 finally 中重置初始化状态', has(contents.index, 'resetInitializationState();'));
+    check(results, 'index', 'index 导入 destroyPhoneSettingsPanel()', has(contents.index, 'destroyPhoneSettingsPanel'));
+    check(results, 'index', 'destroy() 清理 settings panel', has(contents.index, 'destroyPhoneSettingsPanel();'));
+    check(results, 'index', 'releaseSingletonGuard() 使用 ownerToken 防误删', has(contents.index, 'host?.[INSTANCE_KEY]?.ownerToken === INSTANCE_OWNER_TOKEN'));
+    check(results, 'settingsPanel', 'settings-panel 暴露 destroyPhoneSettingsPanel()', has(contents.settingsPanel, 'export function destroyPhoneSettingsPanel()'));
 
     check(results, 'state', 'phone-core state 新增 isPhoneActive', has(contents.state, 'isPhoneActive: false,'));
     check(results, 'state', 'phone-core state 新增 isDestroying', has(contents.state, 'isDestroying: false,'));

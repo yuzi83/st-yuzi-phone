@@ -10,6 +10,8 @@ const FILES = {
     gitignore: '.gitignore',
     changelog: 'CHANGELOG.md',
     readme: 'README.md',
+    scriptLoader: '酒馆助手脚本-玉子手机.json',
+    scriptLoaderContract: 'scripts/check-script-loader-contract.cjs',
 };
 
 function read(relativePath) {
@@ -73,6 +75,8 @@ function main() {
 
     assertPackageScripts(results, packageJson);
     assertManifestDist(results, manifest);
+    check(results, FILES.scriptLoader, '脚本版 loader JSON 存在且非空', fileExistsAndNonEmpty(FILES.scriptLoader));
+    check(results, FILES.scriptLoaderContract, '脚本版 loader contract 存在且非空', fileExistsAndNonEmpty(FILES.scriptLoaderContract));
 
     check(results, FILES.buildDoc, 'BUILD 命令表包含 check:ci', has(buildDoc, '| `npm run check:ci` |'));
     check(results, FILES.buildDoc, 'BUILD 发布命令包含 lint/check/check:ci/build', /npm run lint[\s\S]*npm run check[\s\S]*npm run check:ci[\s\S]*npm run build/.test(buildDoc));

@@ -62,7 +62,7 @@ function main() {
 
     check(results, 'detailController', '详情编辑继续使用显式状态动作 API', has(contents.detailController, 'state.setEditMode(!state.editMode);'));
     check(results, 'rowDeleteController', '删除控制器通过批量锁状态重排修正锁索引', has(contents.rowDeleteController, 'remapTableLockStateAfterRowsDelete(sheetKey, deletedRowIndexes);'));
-    check(results, 'rowDeleteController', '删除控制器成功后维护批量删除选择状态', has(contents.rowDeleteController, 'state.setSelectedDeleteRowIndexes(failedRowIndexesAfterDelete);') && has(contents.rowDeleteController, 'state.clearDeleteSelection();'));
+    check(results, 'rowDeleteController', '删除控制器成功后维护批量删除选择状态', has(contents.rowDeleteController, 'state.setSelectedDeleteRowIndexes(notDeletedViewRowIndexes);') && has(contents.rowDeleteController, 'state.clearDeleteSelection();'));
 
     check(results, 'specialRuntime', 'special runtime 未引入 createTableViewerState() 依赖', !has(contents.specialRuntime, 'createTableViewerState('));
     check(results, 'specialMessageViewer', 'message special viewer 仍使用独立 plain object 状态', has(contents.specialMessageViewer, 'const state = {'));

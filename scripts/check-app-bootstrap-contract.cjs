@@ -26,6 +26,9 @@ function main() {
     );
 
     const results = [];
+    const unmountStart = contents.appBootstrap.indexOf('export function unmountPhoneBootstrapUi()');
+    const unmountEnd = contents.appBootstrap.indexOf('export function getMountedPhoneBootstrapUi()');
+    const unmountBody = unmountStart >= 0 && unmountEnd > unmountStart ? contents.appBootstrap.slice(unmountStart, unmountEnd) : '';
 
     check(results, 'appBootstrap', '继续暴露 mountPhoneBootstrapUi()', has(contents.appBootstrap, 'export function mountPhoneBootstrapUi('));
     check(results, 'appBootstrap', '继续暴露 unmountPhoneBootstrapUi()', has(contents.appBootstrap, 'export function unmountPhoneBootstrapUi('));
@@ -34,6 +37,7 @@ function main() {
     check(results, 'appBootstrap', '继续暴露 setPhoneBootstrapEnabledState()', has(contents.appBootstrap, 'export function setPhoneBootstrapEnabledState('));
     check(results, 'appBootstrap', 'app-bootstrap 继续创建设置面板', has(contents.appBootstrap, 'createPhoneSettingsPanel'));
     check(results, 'appBootstrap', 'app-bootstrap 继续注册事件监听', has(contents.appBootstrap, 'await registerEventListeners();'));
+    check(results, 'appBootstrap', '普通 unmountPhoneBootstrapUi() 不删除 settings panel', !has(unmountBody, 'yuzi-phone-settings') && !has(unmountBody, 'destroyPhoneSettingsPanel'));
 
     check(results, 'index', 'index 导入 initializePhoneBootstrapUi()', has(contents.index, 'initializePhoneBootstrapUi'));
     check(results, 'index', 'index 导入 togglePhoneBootstrapVisibility()', has(contents.index, 'togglePhoneBootstrapVisibility'));

@@ -277,8 +277,48 @@ export function dispatchPhoneTableUpdated(sheetKey) {
     return true;
 }
 
+function normalizePhoneDeleteRowIndexes(rowIndexes = [], maxRowCount = Infinity) {
+    const maxRows = Number(maxRowCount);
+    return Array.from(new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
+        .map((value) => Number(value))
+        .filter(Number.isInteger)
+        .filter((value) => value >= 0)
+        .filter((value) => !Number.isFinite(maxRows) || value < maxRows)))
+        .sort((a, b) => b - a);
+}
+
+function buildPhoneDeleteRowIndexResult({
+    requestedRowIndexes = [],
+    attemptedRowIndexes = [],
+    deletedRowIndexes = [],
+    failedRowIndexes = [],
+    unattemptedRowIndexes,
+    notDeletedRowIndexes,
+} = {}) {
+    const requested = normalizePhoneDeleteRowIndexes(requestedRowIndexes);
+    const attempted = normalizePhoneDeleteRowIndexes(attemptedRowIndexes);
+    const deleted = normalizePhoneDeleteRowIndexes(deletedRowIndexes);
+    const failed = normalizePhoneDeleteRowIndexes(failedRowIndexes);
+    const attemptedSet = new Set(attempted);
+    const deletedSet = new Set(deleted);
+
+    return {
+        requestedRowIndexes: requested,
+        attemptedRowIndexes: attempted,
+        deletedRowIndexes: deleted,
+        failedRowIndexes: failed,
+        unattemptedRowIndexes: Array.isArray(unattemptedRowIndexes)
+            ? normalizePhoneDeleteRowIndexes(unattemptedRowIndexes)
+            : requested.filter((rowIndex) => !attemptedSet.has(rowIndex)),
+        notDeletedRowIndexes: Array.isArray(notDeletedRowIndexes)
+            ? normalizePhoneDeleteRowIndexes(notDeletedRowIndexes)
+            : requested.filter((rowIndex) => !deletedSet.has(rowIndex)),
+    };
+}
+
 export async function deletePhoneSheetRows(sheetKey, rowIndexes = [], options = {}) {
     const safeSheetKey = String(sheetKey || '').trim();
+    const requestedFallbackRowIndexes = normalizePhoneDeleteRowIndexes(rowIndexes);
     const snapshot = getSheetDataByKey(safeSheetKey);
     if (!snapshot) {
         return {
@@ -287,9 +327,11 @@ export async function deletePhoneSheetRows(sheetKey, rowIndexes = [], options = 
             message: '未找到对应表格',
             deletedCount: 0,
             refreshed: false,
+            ...buildPhoneDeleteRowIndexResult({ requestedRowIndexes: requestedFallbackRowIndexes }),
         };
     }
 
+    const normalizedRowIndexes = normalizePhoneDeleteRowIndexes(rowIndexes, snapshot.rows.length);
     const tableName = String(options.tableName || snapshot.tableName || '').trim();
     if (!tableName) {
         return {
@@ -298,14 +340,9 @@ export async function deletePhoneSheetRows(sheetKey, rowIndexes = [], options = 
             message: '删除失败：缺少表格名称',
             deletedCount: 0,
             refreshed: false,
+            ...buildPhoneDeleteRowIndexResult({ requestedRowIndexes: normalizedRowIndexes }),
         };
     }
-
-    const normalizedRowIndexes = Array.from(new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
-        .map((value) => Number(value))
-        .filter(Number.isInteger)
-        .filter((value) => value >= 0 && value < snapshot.rows.length)))
-        .sort((a, b) => b - a);
 
     if (normalizedRowIndexes.length === 0) {
         return {
@@ -314,12 +351,18 @@ export async function deletePhoneSheetRows(sheetKey, rowIndexes = [], options = 
             message: '未选择可删除的条目',
             deletedCount: 0,
             refreshed: false,
+            ...buildPhoneDeleteRowIndexResult(),
         };
     }
 
     const result = await deleteTableRowsBatch(tableName, normalizedRowIndexes, {
         refreshProjection: options.refreshProjection,
     });
+    const resultDeletedRowIndexes = Array.isArray(result.deletedRowIndexes) ? result.deletedRowIndexes : [];
+    const resultFailedRowIndexes = Array.isArray(result.failedRowIndexes) ? result.failedRowIndexes : [];
+    const resultAttemptedRowIndexes = Array.isArray(result.attemptedRowIndexes)
+        ? result.attemptedRowIndexes
+        : [...resultDeletedRowIndexes, ...resultFailedRowIndexes];
 
     if (!result.ok) {
         if (result.deletedCount > 0) {
@@ -331,9 +374,14 @@ export async function deletePhoneSheetRows(sheetKey, rowIndexes = [], options = 
             message: result.message || '删除失败：数据库未确认删除目标行',
             deletedCount: result.deletedCount || 0,
             refreshed: result.refreshed ?? false,
-            requestedRowIndexes: normalizedRowIndexes,
-            deletedRowIndexes: result.deletedRowIndexes || [],
-            failedRowIndexes: result.failedRowIndexes || [],
+            ...buildPhoneDeleteRowIndexResult({
+                requestedRowIndexes: normalizedRowIndexes,
+                attemptedRowIndexes: resultAttemptedRowIndexes,
+                deletedRowIndexes: resultDeletedRowIndexes,
+                failedRowIndexes: resultFailedRowIndexes,
+                unattemptedRowIndexes: result.unattemptedRowIndexes,
+                notDeletedRowIndexes: result.notDeletedRowIndexes,
+            }),
         };
     }
 
@@ -345,8 +393,13 @@ export async function deletePhoneSheetRows(sheetKey, rowIndexes = [], options = 
         message: result.message || (result.refreshed === false ? '删除成功，但刷新投影失败' : '删除成功'),
         deletedCount: result.deletedCount || normalizedRowIndexes.length,
         refreshed: result.refreshed ?? true,
-        requestedRowIndexes: normalizedRowIndexes,
-        deletedRowIndexes: result.deletedRowIndexes || normalizedRowIndexes,
-        failedRowIndexes: [],
+        ...buildPhoneDeleteRowIndexResult({
+            requestedRowIndexes: normalizedRowIndexes,
+            attemptedRowIndexes: resultAttemptedRowIndexes.length > 0 ? resultAttemptedRowIndexes : normalizedRowIndexes,
+            deletedRowIndexes: resultDeletedRowIndexes.length > 0 ? resultDeletedRowIndexes : normalizedRowIndexes,
+            failedRowIndexes: resultFailedRowIndexes,
+            unattemptedRowIndexes: result.unattemptedRowIndexes || [],
+            notDeletedRowIndexes: result.notDeletedRowIndexes || [],
+        }),
     };
 }

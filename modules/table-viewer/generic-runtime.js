@@ -172,6 +172,18 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
         return true;
     };
 
+    const hasDirtyDetailDraft = () => {
+        const draftValues = state?.draftValues;
+        return state?.mode === 'detail'
+            && state?.editMode === true
+            && draftValues
+            && typeof draftValues === 'object'
+            && !Array.isArray(draftValues)
+            && Object.keys(draftValues).length > 0;
+    };
+
+    const getDraftKeys = () => Object.keys(state?.draftValues && typeof state.draftValues === 'object' ? state.draftValues : {});
+
     const getLiveTableName = () => {
         const latestSheet = getSheetDataByKey(sheetKey);
         return String(latestSheet?.tableName || tableName || sheetKey || '').trim();
@@ -232,6 +244,7 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
                 updateTableRow,
                 buildMutationDiagnostics,
                 viewerRuntime,
+                syncRowsFromSheet,
             });
             return;
         }
@@ -277,12 +290,27 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
         renderKeepScroll();
     };
 
-    const handleTableUpdate = () => {
+    const handleTableUpdate = (event) => {
+        if (hasDirtyDetailDraft()) {
+            state.setPendingExternalTableUpdate({
+                reason: 'dirty_detail_draft',
+                sheetKey: String(sheetKey || ''),
+                tableName: String(getLiveTableName() || ''),
+                rowIndex: Number(state.rowIndex),
+                draftKeys: getDraftKeys(),
+                eventType: String(event?.type || 'yuzi-phone-table-updated'),
+                receivedAt: Date.now(),
+            });
+            showInlineToast(container, '表格已有外部更新，当前草稿保存或退出编辑后再刷新', true);
+            return;
+        }
+
         if (!syncRowsFromSheet()) return;
         state.batchUpdate({
             lockState: getTableLockState(sheetKey),
             selectedDeleteRowIndexes: [],
             deletingSelection: false,
+            pendingExternalTableUpdate: null,
         });
         refreshListAfterDataMutation();
     };
