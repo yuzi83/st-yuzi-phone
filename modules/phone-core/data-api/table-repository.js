@@ -9,6 +9,7 @@ import {
 import { enqueueTableMutation } from './mutation-queue.js';
 
 const logger = Logger.withScope({ scope: 'phone-core/data-api/table-repository', feature: 'db-api' });
+const SQL_DELETE_MAX_BOUND_PARAMS = 900;
 
 function summarizeTablePayload(data = {}) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
@@ -131,6 +132,15 @@ async function refreshTableProjection(api, actionName, options = {}) {
     return !!result;
 }
 
+function buildDeleteBatchDiagnostics({ tableName = '', deleteStrategy = 'none', fallbackReason = '', requestedRowIndexes = [] } = {}) {
+    return {
+        tableName,
+        deleteStrategy,
+        fallbackReason,
+        requestedRowIndexes: normalizeDeleteRowIndexes(requestedRowIndexes),
+    };
+}
+
 function buildApiUnavailableResult(message = '数据库API不可用') {
     return {
         ok: false,
@@ -191,6 +201,342 @@ async function callDeleteRowApi(api, tableName, dbRowIndex) {
         'deleteTableRows.deleteRow',
     );
     return isDbBooleanSuccess(result);
+}
+
+function isSafeSqlIdentifier(value) {
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(value || '').trim());
+}
+
+function findSheetEntryByTableName(rawData, tableName) {
+    const safeTableName = normalizeTableName(tableName);
+    if (!safeTableName || !rawData || typeof rawData !== 'object') {
+        return null;
+    }
+
+    const entry = Object.entries(rawData)
+        .find(([, sheet]) => String(sheet?.name || '').trim() === safeTableName);
+    return entry ? { sheetKey: entry[0], sheet: entry[1] } : null;
+}
+
+function resolvePhysicalTableNameFromSheet(sheet, fallbackTableName = '') {
+    const ddl = String(sheet?.sourceData?.ddl || sheet?.ddl || '').trim();
+    const ddlMatch = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["'`\[]?([A-Za-z_][A-Za-z0-9_]*)["'`\]]?/i.exec(ddl);
+    if (ddlMatch && isSafeSqlIdentifier(ddlMatch[1])) {
+        return ddlMatch[1];
+    }
+
+    const directName = String(sheet?.sourceData?.tableName || sheet?.sourceData?.physicalTableName || '').trim();
+    if (isSafeSqlIdentifier(directName)) {
+        return directName;
+    }
+
+    const fallbackName = normalizeTableName(fallbackTableName);
+    return isSafeSqlIdentifier(fallbackName) ? fallbackName : '';
+}
+
+function normalizeRowId(value) {
+    const rowId = Number(value);
+    return Number.isInteger(rowId) && rowId > 0 ? rowId : null;
+}
+
+function resolveDeleteRowIdMappingsFromSnapshot(rawData, tableName, rowIndexes = []) {
+    const sheetEntry = findSheetEntryByTableName(rawData, tableName);
+    if (!sheetEntry) {
+        return { ok: false, code: 'sheet_missing', reason: '未找到表格快照' };
+    }
+
+    const { sheet } = sheetEntry;
+    const content = Array.isArray(sheet?.content) ? sheet.content : [];
+    const headers = Array.isArray(content[0]) ? content[0].map((header) => String(header || '').trim()) : [];
+    const rowIdColumnIndex = headers.indexOf('row_id');
+    if (rowIdColumnIndex < 0) {
+        return { ok: false, code: 'row_id_missing', reason: '表格快照缺少 row_id 列' };
+    }
+
+    const mappings = [];
+    for (const rowIndex of rowIndexes) {
+        const row = content[rowIndex + 1];
+        const rowId = Array.isArray(row) ? normalizeRowId(row[rowIdColumnIndex]) : null;
+        if (!rowId) {
+            return { ok: false, code: 'row_id_unresolved', reason: `第 ${rowIndex} 行无法映射 row_id` };
+        }
+        mappings.push({ rowIndex, rowId });
+    }
+
+    const physicalTableName = resolvePhysicalTableNameFromSheet(sheet, tableName);
+    if (!physicalTableName) {
+        return { ok: false, code: 'physical_table_missing', reason: '无法解析安全物理表名' };
+    }
+
+    return { ok: true, sheetKey: sheetEntry.sheetKey, physicalTableName, mappings };
+}
+
+function buildDeleteRowsSql(physicalTableName, rowCount) {
+    const placeholders = Array(rowCount).fill('?').join(', ');
+    return `DELETE FROM ${physicalTableName} WHERE row_id IN (${placeholders})`;
+}
+
+function buildSelectExistingRowIdsSql(physicalTableName, rowCount) {
+    const placeholders = Array(rowCount).fill('?').join(', ');
+    return `SELECT row_id FROM ${physicalTableName} WHERE row_id IN (${placeholders})`;
+}
+
+function normalizeSqlDeleteMutationResult(result) {
+    if (result === null) {
+        return { ok: false, code: 'sqlite_unavailable', message: 'SQLite SQL 写入不可用或数据库 API 返回 null', changes: null };
+    }
+    if (result === undefined) {
+        return { ok: false, code: 'mutation_failed', message: 'SQL 写入返回 undefined', changes: null };
+    }
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+        return { ok: false, code: 'mutation_failed', message: 'SQL 写入返回值不是对象', changes: null, rawResult: result };
+    }
+
+    const errors = Array.isArray(result.errors) ? result.errors : [];
+    if (errors.length > 0) {
+        return { ok: false, code: 'mutation_failed', message: 'SQL 写入返回错误', changes: null, result, errors };
+    }
+    if (result.saved === false) {
+        return { ok: false, code: 'save_failed', message: 'SQL 写入未确认保存成功', changes: null, result };
+    }
+    if ('ok' in result && result.ok === false) {
+        return { ok: false, code: result.code || 'mutation_failed', message: result.message || 'SQL 写入未确认成功', changes: null, result };
+    }
+    if ('success' in result && result.success === false) {
+        return { ok: false, code: 'mutation_failed', message: 'SQL 写入未确认成功', changes: null, result };
+    }
+
+    return {
+        ok: true,
+        code: 'ok',
+        message: 'SQL 写入成功',
+        changes: Number.isFinite(Number(result.changes)) ? Number(result.changes) : null,
+        result,
+    };
+}
+
+function normalizeExistingRowIdQueryResult(result) {
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+        return { ok: false, rowIds: [] };
+    }
+    const errors = Array.isArray(result.errors) ? result.errors : [];
+    if (errors.length > 0 || result.saved === false || result.ok === false || result.success === false) {
+        return { ok: false, rowIds: [] };
+    }
+
+    const rows = Array.isArray(result.rows) ? result.rows : [];
+    const values = Array.isArray(result.values) ? result.values : [];
+    const rowIds = rows.length > 0
+        ? rows.map((row) => normalizeRowId(row?.row_id ?? row?.ROW_ID ?? row?.[0])).filter(Boolean)
+        : values.map((row) => normalizeRowId(Array.isArray(row) ? row[0] : row)).filter(Boolean);
+    return { ok: true, rowIds: Array.from(new Set(rowIds)) };
+}
+
+async function queryExistingRowIdsAfterSqlDelete(api, physicalTableName, rowIds) {
+    const methodName = typeof api.querySql === 'function'
+        ? 'querySql'
+        : (typeof api.executeSqlQuery === 'function' ? 'executeSqlQuery' : '');
+    if (!methodName) {
+        return { ok: false, rowIds: [] };
+    }
+
+    const sql = buildSelectExistingRowIdsSql(physicalTableName, rowIds.length);
+    const result = await callApiWithTimeout(
+        () => api[methodName](sql, rowIds),
+        DEFAULT_API_TIMEOUT,
+        `deleteTableRowsBatch.${methodName}`,
+    );
+    return normalizeExistingRowIdQueryResult(result);
+}
+
+async function tryDeleteRowsViaSqlMutation(api, safeTableName, normalizedRowIndexes, options = {}) {
+    if (!api || typeof api.executeSqlMutation !== 'function') {
+        return { shouldFallback: true, fallbackReason: 'executeSqlMutation_missing' };
+    }
+    if (!api || typeof api.exportTableAsJson !== 'function') {
+        return { shouldFallback: true, fallbackReason: 'snapshot_api_missing' };
+    }
+
+    let rawData = null;
+    try {
+        rawData = api.exportTableAsJson();
+    } catch (error) {
+        logger.warn({
+            action: 'delete-rows-batch.sql.snapshot-error',
+            message: 'SQL 批量删除读取表格快照失败，回退 deleteRow 循环',
+            context: { tableName: safeTableName },
+            error,
+        });
+        return { shouldFallback: true, fallbackReason: 'snapshot_read_failed' };
+    }
+
+    const mappingResult = resolveDeleteRowIdMappingsFromSnapshot(rawData, safeTableName, normalizedRowIndexes);
+    if (!mappingResult.ok) {
+        return { shouldFallback: true, fallbackReason: mappingResult.code || 'row_id_mapping_failed' };
+    }
+
+    const rowIds = mappingResult.mappings.map((mapping) => mapping.rowId);
+    if (rowIds.length > SQL_DELETE_MAX_BOUND_PARAMS) {
+        return { shouldFallback: true, fallbackReason: 'sql_param_limit_exceeded' };
+    }
+    const sql = buildDeleteRowsSql(mappingResult.physicalTableName, rowIds.length);
+    let mutationResult = null;
+    try {
+        const rawResult = await callApiWithTimeout(
+            () => api.executeSqlMutation(sql, rowIds),
+            DEFAULT_API_TIMEOUT,
+            'deleteTableRowsBatch.executeSqlMutation',
+        );
+        mutationResult = normalizeSqlDeleteMutationResult(rawResult);
+    } catch (error) {
+        logger.warn({
+            action: 'delete-rows-batch.sql-error',
+            message: 'SQL 批量删除调用异常，已可能写入，不执行 deleteRow 回退',
+            context: { tableName: safeTableName, physicalTableName: mappingResult.physicalTableName, rowIds },
+            error,
+        });
+        mutationResult = { ok: false, code: 'mutation_failed', message: error?.message || 'SQL 批量删除调用异常', changes: null, errors: [error] };
+    }
+
+    const attemptedRowIndexes = normalizedRowIndexes;
+    let deletedRowIndexes = [];
+    let failedRowIndexes = [];
+    let queryResult = null;
+    const changesMatchesRequest = mutationResult.ok && mutationResult.changes === rowIds.length;
+
+    if (changesMatchesRequest) {
+        deletedRowIndexes = normalizedRowIndexes;
+    } else if (mutationResult.ok || mutationResult.changes !== null) {
+        try {
+            queryResult = await queryExistingRowIdsAfterSqlDelete(api, mappingResult.physicalTableName, rowIds);
+            if (queryResult.ok) {
+                const existingRowIds = new Set(queryResult.rowIds);
+                deletedRowIndexes = mappingResult.mappings
+                    .filter((mapping) => !existingRowIds.has(mapping.rowId))
+                    .map((mapping) => mapping.rowIndex);
+                failedRowIndexes = mappingResult.mappings
+                    .filter((mapping) => existingRowIds.has(mapping.rowId))
+                    .map((mapping) => mapping.rowIndex);
+            }
+        } catch (error) {
+            logger.warn({
+                action: 'delete-rows-batch.sql-reconcile-error',
+                message: 'SQL 批量删除对账查询失败，不执行 deleteRow 回退',
+                context: { tableName: safeTableName, physicalTableName: mappingResult.physicalTableName, rowIds },
+                error,
+            });
+            queryResult = { ok: false, rowIds: [] };
+        }
+    }
+
+    const batchRowIndexes = buildBatchDeleteRowIndexResult({
+        requestedRowIndexes: normalizedRowIndexes,
+        attemptedRowIndexes,
+        deletedRowIndexes,
+        failedRowIndexes,
+    });
+    const allDeleted = batchRowIndexes.notDeletedRowIndexes.length === 0 && failedRowIndexes.length === 0;
+    const partialUnknown = !allDeleted && (!queryResult || queryResult.ok !== true) && !changesMatchesRequest;
+    const refreshed = deletedRowIndexes.length > 0
+        ? await refreshTableProjection(api, 'deleteTableRowsBatch.refreshProjection', options)
+        : false;
+
+    return {
+        shouldFallback: false,
+        ok: allDeleted,
+        code: allDeleted
+            ? (refreshed ? 'ok' : 'ok_refresh_failed')
+            : (partialUnknown ? 'partial_unknown' : (deletedRowIndexes.length > 0 ? 'partial_failed' : 'failed')),
+        message: allDeleted
+            ? (refreshed ? '删除成功' : '删除成功，但刷新投影失败')
+            : (partialUnknown
+                ? 'SQL 批量删除结果无法完整确认，已可能写入，不执行逐行回退'
+                : (deletedRowIndexes.length > 0
+                    ? `部分删除失败：已删除 ${deletedRowIndexes.length} 行，仍有 ${batchRowIndexes.notDeletedRowIndexes.length} 行未删除`
+                    : '删除失败：数据库未确认删除目标行')),
+        tableName: safeTableName,
+        ...batchRowIndexes,
+        deletedCount: deletedRowIndexes.length,
+        refreshed,
+        deleteStrategy: 'sql_executeSqlMutation',
+        fallbackReason: '',
+        diagnostics: {
+            deleteStrategy: 'sql_executeSqlMutation',
+            physicalTableName: mappingResult.physicalTableName,
+            sheetKey: mappingResult.sheetKey,
+            rowIds,
+            sqlChanges: mutationResult.changes,
+            mutationCode: mutationResult.code,
+            queryChecked: !!queryResult,
+            queryConfirmed: queryResult?.ok === true,
+        },
+    };
+}
+
+async function deleteRowsViaLegacyDeleteRowLoop(api, safeTableName, normalizedRowIndexes, options = {}) {
+    const dbRowIndexes = normalizeDbDeleteRowIndexes(normalizedRowIndexes);
+    const attemptedRowIndexes = [];
+    const deletedRowIndexes = [];
+    const failedRowIndexes = [];
+
+    for (let index = 0; index < dbRowIndexes.length; index++) {
+        const dbRowIndex = dbRowIndexes[index];
+        const uiRowIndex = normalizedRowIndexes[index];
+        try {
+            attemptedRowIndexes.push(uiRowIndex);
+            const ok = await callDeleteRowApi(api, safeTableName, dbRowIndex);
+            if (ok) {
+                deletedRowIndexes.push(uiRowIndex);
+            } else {
+                failedRowIndexes.push(uiRowIndex);
+                break;
+            }
+        } catch (error) {
+            failedRowIndexes.push(uiRowIndex);
+            logger.warn({
+                action: 'delete-rows-batch.error',
+                message: '批量 deleteRow 调用异常',
+                context: { tableName: safeTableName, rowIndex: dbRowIndex, uiRowIndex },
+                error,
+            });
+            break;
+        }
+    }
+
+    const batchRowIndexes = buildBatchDeleteRowIndexResult({
+        requestedRowIndexes: normalizedRowIndexes,
+        attemptedRowIndexes,
+        deletedRowIndexes,
+        failedRowIndexes,
+    });
+    const allDeleted = batchRowIndexes.notDeletedRowIndexes.length === 0 && failedRowIndexes.length === 0;
+    const refreshed = deletedRowIndexes.length > 0
+        ? await refreshTableProjection(api, 'deleteTableRowsBatch.refreshProjection', options)
+        : false;
+
+    return {
+        ok: allDeleted,
+        code: allDeleted
+            ? (refreshed ? 'ok' : 'ok_refresh_failed')
+            : (deletedRowIndexes.length > 0 ? 'partial_failed' : 'failed'),
+        message: allDeleted
+            ? (refreshed ? '删除成功' : '删除成功，但刷新投影失败')
+            : (deletedRowIndexes.length > 0
+                ? `部分删除失败：已删除 ${deletedRowIndexes.length} 行，仍有 ${batchRowIndexes.notDeletedRowIndexes.length} 行未删除`
+                : '删除失败：数据库未确认删除目标行'),
+        tableName: safeTableName,
+        ...batchRowIndexes,
+        deletedCount: deletedRowIndexes.length,
+        refreshed,
+        deleteStrategy: 'legacy_deleteRow_loop',
+        fallbackReason: options.fallbackReason || '',
+        diagnostics: {
+            deleteStrategy: 'legacy_deleteRow_loop',
+            fallbackReason: options.fallbackReason || '',
+            attemptedDbRowIndexes: dbRowIndexes.slice(0, attemptedRowIndexes.length),
+            requestedRowIndexes: normalizedRowIndexes,
+        },
+    };
 }
 
 export function getTableData() {
@@ -613,86 +959,68 @@ export async function deleteTableRowsBatch(tableName, rowIndexes = [], options =
         const api = getDB();
         const safeTableName = normalizeTableName(tableName);
         const normalizedRowIndexes = normalizeDeleteRowIndexes(rowIndexes);
-        const dbRowIndexes = normalizeDbDeleteRowIndexes(normalizedRowIndexes);
 
         if (!safeTableName) {
+            const fallbackReason = 'table_name_missing';
             return {
                 ...buildTableNameMissingResult('批量删除行'),
+                tableName: safeTableName,
                 deletedCount: 0,
                 ...buildBatchDeleteRowIndexResult({ requestedRowIndexes: normalizedRowIndexes }),
+                deleteStrategy: 'none',
+                fallbackReason,
+                diagnostics: buildDeleteBatchDiagnostics({ tableName: safeTableName, deleteStrategy: 'none', fallbackReason, requestedRowIndexes: normalizedRowIndexes }),
             };
         }
         if (normalizedRowIndexes.length === 0) {
+            const fallbackReason = 'empty_selection';
             return {
                 ok: false,
                 code: 'empty_selection',
                 message: '未选择可删除的条目',
+                tableName: safeTableName,
                 deletedCount: 0,
                 ...buildBatchDeleteRowIndexResult(),
                 refreshed: false,
+                deleteStrategy: 'none',
+                fallbackReason,
+                diagnostics: buildDeleteBatchDiagnostics({ tableName: safeTableName, deleteStrategy: 'none', fallbackReason, requestedRowIndexes: normalizedRowIndexes }),
             };
         }
-        if (!api || typeof api.deleteRow !== 'function') {
+        if (!api) {
+            const fallbackReason = 'api_unavailable';
             return {
                 ...buildApiUnavailableResult(),
+                tableName: safeTableName,
                 deletedCount: 0,
                 ...buildBatchDeleteRowIndexResult({ requestedRowIndexes: normalizedRowIndexes }),
+                deleteStrategy: 'none',
+                fallbackReason,
+                diagnostics: buildDeleteBatchDiagnostics({ tableName: safeTableName, deleteStrategy: 'none', fallbackReason, requestedRowIndexes: normalizedRowIndexes }),
             };
         }
 
-        const attemptedRowIndexes = [];
-        const deletedRowIndexes = [];
-        const failedRowIndexes = [];
-
-        for (let index = 0; index < dbRowIndexes.length; index++) {
-            const dbRowIndex = dbRowIndexes[index];
-            const uiRowIndex = normalizedRowIndexes[index];
-            try {
-                attemptedRowIndexes.push(uiRowIndex);
-                const ok = await callDeleteRowApi(api, safeTableName, dbRowIndex);
-                if (ok) {
-                    deletedRowIndexes.push(uiRowIndex);
-                } else {
-                    failedRowIndexes.push(uiRowIndex);
-                    break;
-                }
-            } catch (error) {
-                failedRowIndexes.push(uiRowIndex);
-                logger.warn({
-                    action: 'delete-rows-batch.error',
-                    message: '批量 deleteRow 调用异常',
-                    context: { tableName: safeTableName, rowIndex: dbRowIndex, uiRowIndex },
-                    error,
-                });
-                break;
-            }
+        const sqlResult = await tryDeleteRowsViaSqlMutation(api, safeTableName, normalizedRowIndexes, options);
+        if (!sqlResult.shouldFallback) {
+            return sqlResult;
         }
 
-        const batchRowIndexes = buildBatchDeleteRowIndexResult({
-            requestedRowIndexes: normalizedRowIndexes,
-            attemptedRowIndexes,
-            deletedRowIndexes,
-            failedRowIndexes,
-        });
-        const allDeleted = batchRowIndexes.notDeletedRowIndexes.length === 0 && failedRowIndexes.length === 0;
-        const refreshed = deletedRowIndexes.length > 0
-            ? await refreshTableProjection(api, 'deleteTableRowsBatch.refreshProjection', options)
-            : false;
+        if (typeof api.deleteRow !== 'function') {
+            const fallbackReason = sqlResult.fallbackReason || 'deleteRow_missing';
+            return {
+                ...buildApiUnavailableResult('数据库API不可用：缺少 executeSqlMutation 快路径且缺少 deleteRow 回退'),
+                tableName: safeTableName,
+                deletedCount: 0,
+                ...buildBatchDeleteRowIndexResult({ requestedRowIndexes: normalizedRowIndexes }),
+                deleteStrategy: 'none',
+                fallbackReason,
+                diagnostics: buildDeleteBatchDiagnostics({ tableName: safeTableName, deleteStrategy: 'none', fallbackReason, requestedRowIndexes: normalizedRowIndexes }),
+            };
+        }
 
-        return {
-            ok: allDeleted,
-            code: allDeleted
-                ? (refreshed ? 'ok' : 'ok_refresh_failed')
-                : (deletedRowIndexes.length > 0 ? 'partial_failed' : 'failed'),
-            message: allDeleted
-                ? (refreshed ? '删除成功' : '删除成功，但刷新投影失败')
-                : (deletedRowIndexes.length > 0
-                    ? `部分删除失败：已删除 ${deletedRowIndexes.length} 行，仍有 ${batchRowIndexes.notDeletedRowIndexes.length} 行未删除`
-                    : '删除失败：数据库未确认删除目标行'),
-            tableName: safeTableName,
-            ...batchRowIndexes,
-            deletedCount: deletedRowIndexes.length,
-            refreshed,
-        };
+        return deleteRowsViaLegacyDeleteRowLoop(api, safeTableName, normalizedRowIndexes, {
+            ...options,
+            fallbackReason: sqlResult.fallbackReason || 'sql_fast_path_unavailable',
+        });
     });
 }

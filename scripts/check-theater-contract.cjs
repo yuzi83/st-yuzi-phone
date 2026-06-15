@@ -100,7 +100,7 @@ const SCENES = [
         tables: ['直播表'],
         roles: ['rooms'],
         deleteRoles: ['room'],
-        requiredFieldSnippets: ['弹幕串'],
+        requiredFieldSnippets: ['剧情弹幕串', '推角弹幕串', '对线弹幕串'],
         forbiddenSnippets: ['直播间主表', '直播间弹幕分栏表', '所属直播间名', 'barrageBands'],
         requiredClasses: [
             'phone-theater-live-page',

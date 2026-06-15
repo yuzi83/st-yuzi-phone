@@ -133,7 +133,7 @@ async function main() {
 
     assertHeaderIncludes(cloned, 'sheet_square_posts', ['图片描述', '视频描述', '评论串']);
     assertHeaderIncludes(cloned, 'sheet_forum_threads', ['评论串']);
-    assertHeaderIncludes(cloned, 'sheet_livestream_rooms', ['弹幕串']);
+    assertHeaderIncludes(cloned, 'sheet_livestream_rooms', ['剧情弹幕串', '推角弹幕串', '对线弹幕串']);
     assertHeaderIncludes(cloned, 'sheet_summary', ['编码索引', '时间跨度', '概览', '纪要']);
 
     console.log('[fusion-builtin-theater-template-freshness-check] 检查通过');

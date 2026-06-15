@@ -217,6 +217,9 @@ sequenceDiagram
 - 成功判定必须严格遵守外部 API 契约：布尔接口只接受 `true`，插入接口只接受有效行号。
 - 批量删除的 partial failure 结果必须同时表达 `attemptedRowIndexes`、`failedRowIndexes`、`unattemptedRowIndexes` 与 `notDeletedRowIndexes`；`failedRowIndexes` 只表示已尝试但失败，UI 保留选择和反馈应优先消费 `notDeletedRowIndexes` 或映射后的 view 坐标，不要把“未尝试”伪装成“删除失败”。
 - UI 层不要直接调用 [`AutoCardUpdaterAPI`](../modules/phone-core/db-bridge.js:8)，应经 [`data-api.js`](../modules/phone-core/data-api.js:1) 或更具体 repository。
+- Raw SQL 派生字段如果需要读取某张表作为业务锚点，必须使用代码内集中维护的英文物理表名白名单；例如 [`chronicle-today-relation-sql.js`](../modules/phone-core/derived-fields/chronicle-today-relation-sql.js:1) 的 `CHRONICLE_TODAY_RELATION_ANCHOR_TABLES` 当前只允许 `global_state` 与 `current_status`，并要求候选表同时具备 `row_id` 与 `cur_time`。
+- Raw SQL 路径承认 SQLite 只能识别真实物理表名：不要走 `NameMapper` 自动反查中文显示名，不要扫描所有包含 `cur_time` 的表猜测锚点，也不要把 UI 表头别名（例如“行号”）当成 SQL 字段。未来新增模板的同类 today anchor，只能在集中白名单里追加明确的英文物理表名，并同步合同数据。
+
 
 ### 5.2 消息记录实时回复数据流
 
@@ -833,6 +836,8 @@ sequenceDiagram
 ```
 
 [`deleteTheaterEntities()`](../modules/phone-theater/delete-service.js:72) 会读取当前 rawData，构建 table index，并把 `filterTableRows`、`buildDeleteTargets`、`hasDeleteTarget` 等 helper 注入 scene 的 [`deleteEntities`](../modules/phone-theater/scenes/square.js:159)。scene 只负责根据业务关系标记哪些主表行和附表行需要删除；[`createDeletionPlanTracker()`](../modules/phone-theater/delete-service.js:24) 汇总每张表的 UI rowIndex 删除计划，保存执行由 delete service 统一转换为 [`deleteTableRowsBatch()`](../modules/phone-core/data-api/table-repository.js:529) 行级删除。这里禁止回退到整表快照保存，运行时全量覆盖会绕过 mutation queue 并污染其他表的并发写入状态。
+
+小剧场 scene 只收集删除计划，不拼 SQL。delete service 仍按表调用 `deleteTableRowsBatch()`；仓库层可以在单表多行删除时使用 SQLite `executeSqlMutation` 快路径。当前不做跨表单条 SQL，不承诺跨表事务原子性。未来如需跨表事务删除，必须另开设计，不能把跨表事务语义偷塞进 scene 或 delete service。
 
 内置 scene 删除关系：
 

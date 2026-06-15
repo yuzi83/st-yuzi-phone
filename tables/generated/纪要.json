@@ -20,12 +20,12 @@
     "uid": "sheet_summary",
     "name": "纪要表",
     "sourceData": {
-      "note": "轮次日志。每轮交互结束后立刻插入一条新记录。\n\n【列定义】\n- 列1: 编码索引 code_index（AM0001起递增，全表唯一）\n- 列2: 时间跨度 time_span\n- 列3：与今天的关系 today_relation（前端派生字段，AI 不填写）\n- 列4: 概览 summary（≤30字）\n- 列5: 纪要 chronicle_text（400-600字）\n- 列6: 重要对话 key_dialogue（可NULL）\n\n【强制约束】\n1.编码索引格式 AMXXXX，从0001开始递增。\n2.时间跨度格式为 \"YYYY-MM-DD HH:MM ~ YYYY-MM-DD HH:MM\"，覆盖本轮事件的实际时间范围。\n3.概览一句话概括本轮纪要内容，≤30字。\n\n4.纪要规范：\n- 以第三方视角中立客观记录正文发生的一切，移除所有修辞与对话。不加评论，不抒情，不升华。\n- 用词直白生活化，避免正式措辞（如“达成协议”“确立计划”）。\n- 结尾必须开放，在事件自然流动中结束，不得归纳状态或做出封闭式收束。\n违例：故事仍在继续 / 新的篇章开启 / 二人关系迈入新阶段 / 未来等待着他们。\n- 多轮交互整合为一条记录。\n- 禁止内容：极端情绪、夸张、比喻、升华、情绪总结、支配欲、掌控欲、总结性收尾。\n\n5.重要对话仅摘录直接推动剧情转折、揭示关键信息、改变人物关系/决策或构成承诺/誓约/约定的原文台词，标明说话人。排除寒暄、重复、情绪感叹。通常3句，最多5句，总token不超过150。",
+      "note": "轮次日志。每轮交互结束后立刻插入一条新记录。\n\n【列定义】\n- 列1: 编码索引 code_index（AM0001起递增，全表唯一）\n- 列2: 时间跨度 time_span\n- 列3：与今天的关系 today_relation（前端派生字段，AI 不填写）\n- 列4: 概览 summary（≤50字）\n- 列5: 纪要 chronicle_text（300-500字）\n- 列6: 重要对话 key_dialogue（可NULL）\n\n【强制约束】\n1.编码索引格式 AMXXXX，从0001开始递增，不跳号。\n2.时间跨度格式为 \"YYYY-MM-DD HH:MM ~ YYYY-MM-DD HH:MM\"，覆盖本轮事件的实际时间范围。\n3.概览作用是概括本轮纪要内容，简单交代起因经过结果，≤50字。\n\n4.纪要规范：\n- 以第三方视角中立客观记录正文发生的一切，移除所有修辞。不滥用环境描写、不加评论、不抒情、不升华。\n- 用词直白生活化，避免正式措辞。\n- 结尾必须开放，在事件自然流动中结束，不得归纳状态或做封闭式收束。\n- 多轮交互整合为一条记录。\n- 字数不少于300字。\n\n5.重要对话仅摘录直接推动剧情转折、揭示关键信息、改变人物关系/决策或构成承诺/誓言/约定的原文台词，标明说话人。通常3句，最多5句。",
       "initNode": "故事初始化时，插入一条新记录用于记录剧情。",
       "deleteNode": "禁止。",
       "updateNode": "禁止。",
-      "insertNode": "每轮交互结束后插入一条新记录。\n\n【强制约束】\n“与今天的关系”由前端派生注入，AI 插入时不得填写 today_relation。\ncode_index、time_span、summary、chronicle_text 均 NOT NULL，不可写 NULL 或空串。\n\nSQL示例：INSERT INTO chronicle (row_id, code_index, time_span, summary, chronicle_text, key_dialogue) VALUES ((SELECT COALESCE(MAX(row_id), 0) + 1 FROM chronicle), 'AM0036', '2026-02-04 08:00 ~ 2026-02-04 08:30', '一句话概括', '本轮纪要内容...', NULL);",
-      "ddl": "CREATE TABLE chronicle ( -- 纪要表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  code_index TEXT UNIQUE, -- 编码索引\n  time_span TEXT, -- 时间跨度\n  today_relation TEXT, -- 与今天的关系\n  summary TEXT CHECK(LENGTH(summary) <= 80), -- 概览\n  chronicle_text TEXT CHECK(LENGTH(chronicle_text) <= 750), -- 纪要\n  key_dialogue TEXT -- 重要对话\n);\n"
+      "insertNode": "每轮交互结束后插入一条新记录。\n\n【强制约束】\n“与今天的关系”由前端派生注入，AI 插入时不得填写 today_relation。\ncode_index、time_span、summary、chronicle_text 均 NOT NULL，不可写 NULL 或空串。\ncode_index 从已存在的最大 AM 码递增（AM0001 → AM0002 → ...），不可跳号。\ntime_span 格式：本轮起始时间 ~ 本轮结束时间。\n\nSQL示例：INSERT INTO chronicle (row_id, code_index, time_span, summary, chronicle_text, key_dialogue) VALUES ((SELECT COALESCE(MAX(row_id), 0) + 1 FROM chronicle), 'AM0036', '2026-02-04 08:00 ~ 2026-02-04 08:30', '一句话概括', '本轮纪要内容...', NULL);",
+      "ddl": "CREATE TABLE chronicle ( -- 纪要表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  code_index TEXT UNIQUE, -- 编码索引\n  time_span TEXT, -- 时间跨度\n  today_relation TEXT, -- 与今天的关系\n  summary TEXT, -- 概览\n  chronicle_text TEXT NOT NULL CHECK(length(chronicle_text) >= 200 AND length(chronicle_text) <= 520), -- 纪要\n  key_dialogue TEXT -- 重要对话\n);\n"
     },
     "content": [
       [
@@ -40,11 +40,11 @@
     ],
     "updateConfig": {
       "uiSentinel": -1,
-      "contextDepth": 1,
-      "updateFrequency": 1,
-      "batchSize": 1,
+      "contextDepth": -1,
+      "updateFrequency": -1,
+      "batchSize": -1,
       "skipFloors": -1,
-      "groupId": 2
+      "groupId": -1
     },
     "exportConfig": {
       "enabled": true,
@@ -58,10 +58,12 @@
       "extraIndexEntryName": "纪要索引",
       "extraIndexColumns": [
         "编码索引",
+        "与今天的关系",
         "概览"
       ],
       "extraIndexColumnModes": {
         "编码索引": "both",
+        "与今天的关系": "both",
         "概览": "index_only"
       },
       "extraIndexInjectionTemplate": "<已发生的事件概览>\n$1\n</已发生的事件概览>",

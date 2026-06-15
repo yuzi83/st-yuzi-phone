@@ -14,6 +14,10 @@ import {
     startChronicleTodayRelationInjection,
     stopChronicleTodayRelationInjection,
 } from './derived-fields/chronicle-today-relation.js';
+import {
+    startSmallCalendarDerivedFieldsInjection,
+    stopSmallCalendarDerivedFieldsInjection,
+} from './derived-fields/small-calendar-derived-fields.js';
 import { getPhoneCoreState, phoneRuntime, resetPhoneCoreState, resetPhoneRuntimeScope } from './state.js';
 import { startDataWatcherForNotifications, stopDataWatcherForNotifications } from './notifications.js';
 import {
@@ -163,6 +167,7 @@ function initializePhoneRuntimeBindings(state = getPhoneCoreState()) {
     scheduleIdleApiDebugTask(state);
     initSmartRefreshListener();
     startChronicleTodayRelationInjection();
+    startSmallCalendarDerivedFieldsInjection();
     scheduleShellWindowInteractions(state);
     ensureVisibilityLifecycle(state);
 
@@ -217,6 +222,7 @@ function cleanupPhoneRuntimeBindings(state = getPhoneCoreState()) {
     clearIdleApiDebugTask(state);
     clearVisibilityLifecycle(state);
     clearRouteRenderSubscription(state);
+    stopSmallCalendarDerivedFieldsInjection();
     stopChronicleTodayRelationInjection();
     unregisterTableUpdateListener();
     unregisterTableFillStartListener();

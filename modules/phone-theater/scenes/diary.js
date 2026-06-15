@@ -9,6 +9,7 @@ const DIARY_TABLES = Object.freeze({
 const DIARY_DELETE_ROLE = 'entry';
 const DIARY_MAX_ENTRIES = 5;
 const POSTSCRIPT_PATTERN = /^\s*(PS|PPS)\s*[：:]/i;
+const INLINE_POSTSCRIPT_PATTERN = /(^|\s)(PS|PPS)\s*[：:]/ig;
 const SECRET_MARKER = '~~';
 const DEFAULT_DISPLAY_DATE = '昨日私语';
 const DIARY_FIELD_NAMES = Object.freeze({
@@ -54,6 +55,72 @@ function parseDiaryInlineTokens(line) {
     return tokens.filter(token => token.text !== '');
 }
 
+function pushDiaryMainLine(mainLines, text) {
+    const normalizedText = normalizeText(text);
+    if (!normalizedText) return;
+    mainLines.push({
+        tokens: parseDiaryInlineTokens(normalizedText),
+    });
+}
+
+function pushDiaryPostscriptLine(postscriptLines, kind, text) {
+    const normalizedText = normalizeText(text);
+    if (!normalizedText) return;
+    postscriptLines.push({
+        kind: normalizeText(kind).toUpperCase(),
+        tokens: parseDiaryInlineTokens(normalizedText),
+    });
+}
+
+function findInlinePostscriptMarkers(line) {
+    const markers = [];
+    INLINE_POSTSCRIPT_PATTERN.lastIndex = 0;
+
+    let match = INLINE_POSTSCRIPT_PATTERN.exec(line);
+    while (match) {
+        const prefix = match[1] || '';
+        const markerStart = match.index + prefix.length;
+        markers.push({
+            kind: match[2].toUpperCase(),
+            start: markerStart,
+            bodyStart: INLINE_POSTSCRIPT_PATTERN.lastIndex,
+        });
+        match = INLINE_POSTSCRIPT_PATTERN.exec(line);
+    }
+
+    return markers;
+}
+
+function parseDiaryPostscriptBody(postscriptLines, initialKind, body) {
+    const markers = findInlinePostscriptMarkers(body);
+    if (markers.length <= 0) {
+        pushDiaryPostscriptLine(postscriptLines, initialKind, body);
+        return;
+    }
+
+    pushDiaryPostscriptLine(postscriptLines, initialKind, body.slice(0, markers[0].start));
+    markers.forEach((marker, index) => {
+        const nextMarker = markers[index + 1];
+        const bodyEnd = nextMarker ? nextMarker.start : body.length;
+        pushDiaryPostscriptLine(postscriptLines, marker.kind, body.slice(marker.bodyStart, bodyEnd));
+    });
+}
+
+function splitDiaryLineByPostscripts(line, mainLines, postscriptLines) {
+    const markers = findInlinePostscriptMarkers(line);
+    if (markers.length <= 0) {
+        pushDiaryMainLine(mainLines, line);
+        return;
+    }
+
+    pushDiaryMainLine(mainLines, line.slice(0, markers[0].start));
+    markers.forEach((marker, index) => {
+        const nextMarker = markers[index + 1];
+        const bodyEnd = nextMarker ? nextMarker.start : line.length;
+        pushDiaryPostscriptLine(postscriptLines, marker.kind, line.slice(marker.bodyStart, bodyEnd));
+    });
+}
+
 function parseDiaryContent(content) {
     const text = normalizeDiaryText(content);
     if (!text) {
@@ -72,17 +139,12 @@ function parseDiaryContent(content) {
         const postscriptMatch = POSTSCRIPT_PATTERN.exec(normalizedLine);
         if (postscriptMatch) {
             const kind = postscriptMatch[1].toUpperCase();
-            const body = normalizedLine.slice(postscriptMatch[0].length).trim();
-            postscriptLines.push({
-                kind,
-                tokens: parseDiaryInlineTokens(body),
-            });
+            const body = normalizedLine.slice(postscriptMatch[0].length);
+            parseDiaryPostscriptBody(postscriptLines, kind, body);
             return;
         }
 
-        mainLines.push({
-            tokens: parseDiaryInlineTokens(normalizedLine),
-        });
+        splitDiaryLineByPostscripts(normalizedLine, mainLines, postscriptLines);
     });
 
     return { mainLines, postscriptLines };

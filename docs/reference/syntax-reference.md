@@ -166,6 +166,87 @@ if (rowIdx !== -1) {
 }
 ```
 
+#### 1.5 SQLite 模式：直接 SQL 查询（推荐做复杂读取）
+
+如果当前是 **SQLite 模式**，前端可以直接通过 `AutoCardUpdaterAPI` 查询运行时数据库，不必再 `exportTableAsJson()` 后全量遍历。
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `querySql` | `(sqlOrOptions, params?, options?) => SqlQueryResult \| null` | 执行只读 SQL，别名见 `executeSqlQuery` |
+| `executeSqlQuery` | `(sqlOrOptions, params?, options?) => SqlQueryResult \| null` | 同 `querySql`，只允许 `SELECT / PRAGMA / EXPLAIN / WITH` |
+| `queryTableRows` | `(options) => SqlQueryResult \| null` | 声明式单表查询，自动拼 `SELECT` |
+
+返回结构：
+
+```js
+{
+  columns: ['row_id', 'name', 'quantity'], // 列名数组
+  values: [[1, '铁剑', 3]],                // 二维数组
+  rows: [{ row_id: 1, name: '铁剑', quantity: 3 }], // 对象数组，更适合前端用
+  rowCount: 1,
+  sql: '实际执行的 SQL',
+  limit: 100,
+  offset: 0,
+}
+```
+
+**参数化 SQL 查询**：
+
+```js
+const API = window.AutoCardUpdaterAPI;
+
+const result = API.querySql(
+  'SELECT row_id, name, quantity FROM inventory WHERE name = ?',
+  ['铁剑'],
+  { limit: 20, offset: 0 },
+);
+
+console.log(result?.rows[0]?.quantity);
+```
+
+也支持对象参数写法：
+
+```js
+const result = API.executeSqlQuery({
+  sql: 'SELECT row_id, name, quantity FROM inventory WHERE quantity > ?',
+  params: [0],
+  limit: 50,
+  offset: 0,
+});
+```
+
+**多表 JOIN 查询**：
+
+```js
+const result = API.querySql(`
+  SELECT i.name, i.quantity, c.location
+  FROM inventory i
+  LEFT JOIN characters c ON c.owner_item = i.name
+  WHERE i.quantity > ?
+`, [0]);
+
+console.table(result?.rows || []);
+```
+
+**声明式单表查询**（不想自己拼 SQL 时用）：
+
+```js
+const result = API.queryTableRows({
+  tableName: '背包物品表',     // 也可传英文物理表名，或 sheetKey
+  columns: ['row_id', '物品名称', '数量'],
+  where: { 类型: '武器' },    // 等值匹配；数组值会转成 IN (...)
+  orderBy: { column: '数量', direction: 'DESC' },
+  limit: 20,
+  offset: 0,
+});
+
+console.table(result?.rows || []);
+```
+
+> ⚠️ SQL 查询接口是**只读**的：拒绝多语句，也拒绝 `INSERT / UPDATE / DELETE / CREATE / DROP / ALTER / VACUUM / ATTACH` 等写入类关键词。`WITH` 也会检查里面是否混入写操作。
+>
+> ⚠️ 这些 SQL 查询只在 SQLite 模式可用；原生模式没有运行时 SQL 引擎，调用会返回 `null` 并在日志里记录错误。
+
 ### 二、写入表格数据（四个核心方法）
 
 这四个方法**由 `AutoCardUpdaterAPI` 直接暴露**，不用自己封装：
@@ -208,6 +289,121 @@ await API.updateRow('背包物品表', rowIdx, { quantity: cur - 1, 描述: '已
 ```
 
 > 💡 这四个方法**同时兼容原生 / SQLite 两种存储模式**——内部会自动判断并走对应路径（原生模式改 JSON 数组，SQLite 模式拼 `UPDATE/INSERT/DELETE` SQL 并执行）。你不需要关心当前是哪种模式。
+>
+> ✅ 这四个方法都会进入 `runTableWriteTransaction_ACU`，会拿表写锁并参与 V2 并发冲突检测。对象参数写法只是入参解析不同，最终走同一条事务路径：
+>
+> | 方法 | 锁粒度 / `writeSet` |
+> |------|---------------------|
+> | `updateCell` | 单元格级：`cell(sheetKey,rowId,columnKey)` |
+> | `updateRow` | 表级：`sheet(sheetKey)` |
+> | `insertRow` | 表级：`sheet(sheetKey)` |
+> | `deleteRow` | 通常行级：`row(sheetKey,rowId)`；如果拿不到 `row_id` 才降级表级 |
+>
+> SQLite 模式下，CRUD 会先在事务私有 `workingData` 快照上执行参数化 SQL，保存时携带同一个 `transactionContext`；保存成功后只对运行时 SQLite 做增量同步，只有同步失败才兜底重建运行时 DB。
+
+#### 2.1 对象参数写法和静默选项
+
+四个 CRUD 方法也支持对象参数，适合前端组件统一传参：
+
+```js
+await API.updateCell({
+  tableName: '背包物品表',
+  rowIndex: 1,
+  column: '数量',
+  value: 2,
+  silent: true,       // 或 skipNotify / isSilent / suppressNotify
+});
+
+await API.updateRow({
+  table: 'inventory',
+  row: 1,
+  data: { quantity: 2, description: '已使用' },
+});
+
+await API.insertRow({
+  tableName: '背包物品表',
+  data: { 物品名称: '治疗药水', 数量: 1 },
+  skipChatSave: false, // 或 skipSave / isImportMode
+});
+
+await API.deleteRow({ tableName: '背包物品表', rowIndex: 1 });
+```
+
+常用选项：
+
+| 选项 | 作用 |
+|------|------|
+| `skipChatSave` / `skipSave` / `isImportMode` | 只改运行时/内存视图，不写回聊天记录；谨慎使用 |
+| `skipNotify` / `silent` / `isSilent` / `suppressNotify` | 写完后不通知 UI 刷新 |
+
+#### 2.2 SQLite 模式：raw SQL 写入
+
+如果你确实需要直接写 SQL，可以使用 raw SQL 写入接口。它们**只适合 SQLite 模式**，并且会进入表写事务/V2 并发控制。
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `executeSqlMutation` | `(sqlOrOptions, params?, options?) => Promise<SqlMutationResult>` | 执行单条参数化写 SQL |
+| `executeSqlBatch` | `(sqlOrOptions, options?) => Promise<SqlBatchResult>` | 执行多条 SQL；不支持 `params` |
+| `executeSql` | `(sqlOrOptions, params?, options?) => Promise<{type,result} \| null>` | 自动判断读/写；读返回 `type: 'query'`，写返回 `type: 'mutation'` |
+
+**单条参数化写入**：
+
+```js
+const result = await API.executeSqlMutation(
+  'UPDATE inventory SET quantity = ? WHERE name = ?',
+  [2, '铁剑'],
+  {
+    // 可选；不传时系统会从 SQL 表名推断保存范围
+    targetSheetKeys: ['sheet_0'],
+    silent: false,
+  },
+);
+
+if (result.errors.length) {
+  console.error(result.errors);
+} else {
+  console.log('影响行数:', result.changes, '已保存:', result.saved);
+}
+```
+
+**批量 SQL**：
+
+```js
+const result = await API.executeSqlBatch({
+  sql: `
+    UPDATE inventory SET quantity = quantity - 1 WHERE name = '铁剑';
+    INSERT INTO inventory (name, quantity, type) VALUES ('治疗药水', 1, '消耗品');
+  `,
+  targetSheetKeys: ['sheet_0'], // 可选；写多表时建议显式传，锁和保存范围更准确
+});
+
+console.log(result.success, result.modifiedKeys, result.appliedEdits);
+```
+
+**自动读写分流**：
+
+```js
+const r1 = await API.executeSql('SELECT * FROM inventory WHERE quantity > ?', [0]);
+if (r1?.type === 'query') console.table(r1.result.rows);
+
+const r2 = await API.executeSql('UPDATE inventory SET quantity = ? WHERE name = ?', [5, '铁剑']);
+if (r2?.type === 'mutation') console.log(r2.result.saved);
+```
+
+raw SQL 写入选项：
+
+| 选项 | 说明 |
+|------|------|
+| `params` | 仅 `executeSqlMutation` / `executeSql` 单语句支持；会做参数绑定，避免 SQL 注入 |
+| `targetSheetKeys` / `sheetKeys` / `targetSheets` | 指定写入涉及的 sheet，用于锁粒度和保存范围；不传会尝试从 SQL 表名推断 |
+| `updateGroupKeys` / `groupKeys` | 手动指定本次保存的 update group；一般前端业务不要传 |
+| `trackingSheetKeys` / `trackingKeys` | 手动指定 AI 填表追踪表；**普通前端写入不要传** |
+| `skipChatSave` / `skipSave` / `isImportMode` | 不写回聊天记录；通常不要开 |
+| `skipNotify` / `silent` / `isSilent` / `suppressNotify` | 不触发 UI 通知 |
+
+> ⚠️ raw SQL 写入默认**不会**把表标记为“本楼 AI 已填表”。`targetSheetKeys` 只代表锁和保存范围，不等于 AI 填表进度。
+>
+> ⚠️ 推荐优先用 `updateCell/updateRow/insertRow/deleteRow`。raw SQL 写入适合批量修复、多表联动、复杂条件更新等高级场景；表名/列名要使用 SQLite 物理名（通常来自 DDL），不要直接拿中文显示名裸写 SQL。
 
 ### 三、监听表格变化（回调）
 
@@ -247,10 +443,17 @@ await window.AutoCardUpdaterAPI.refreshDataAndWorldbook();
 - `triggerUpdate()` — 外部触发增量填表
 
 #### 表格 CRUD（table-crud，**最常用**）
-- `updateCell(tableName, rowIndex, colIdentifier, value)`
-- `updateRow(tableName, rowIndex, data)`
-- `insertRow(tableName, data)` → 返回新 rowIndex
-- `deleteRow(tableName, rowIndex)`
+- `updateCell(tableName, rowIndex, colIdentifier, value)` / `updateCell(options)`
+- `updateRow(tableName, rowIndex, data)` / `updateRow(options)`
+- `insertRow(tableName, data)` / `insertRow(options)` → 返回新 rowIndex
+- `deleteRow(tableName, rowIndex)` / `deleteRow(options)`
+
+#### SQL 读写（sql-api，SQLite 模式）
+- `querySql(sqlOrOptions, params?, options?)` / `executeSqlQuery(sqlOrOptions, params?, options?)` — 只读 SQL 查询
+- `queryTableRows(options)` — 声明式单表查询
+- `executeSqlMutation(sqlOrOptions, params?, options?)` — 单条参数化 SQL 写入
+- `executeSqlBatch(sqlOrOptions, options?)` — 多语句 SQL 批量写入
+- `executeSql(sqlOrOptions, params?, options?)` — 自动判断读/写
 
 #### 表格锁（table-lock）
 - `getTableLockState(sheetKey)` / `setTableLockState(sheetKey, lockState, {merge})`
@@ -334,12 +537,14 @@ await API.insertRow('背包物品表', { 名称: '新手剑', 数量: 1, 类型:
 
 ### 七、你可能会问的陷阱
 
-1. **"我怎么直接跑 SQL 查询？"** — `AutoCardUpdaterAPI` **没有**暴露 `query(sql)` 这样的方法。想做条件查询，要么：(a) 自己用上面的 `findRowByColumn` 遍历；(b) 在 AI 提示词里用 `{[sql "SELECT..."]}`（见下一节"使用场景 B"）。
-2. **"rowIndex 从 0 还是 1 开始？"** — 0 是表头，数据从 1 开始。`updateRow/deleteRow` 的入参也必须 ≥ 1。
-3. **"写完没刷新 UI？"** — 四个 CRUD 方法内部已经调了 `_notifyTableUpdate` 和 `refreshMergedDataAndNotifyWithUI_ACU`，正常会刷新。如果你自己直接 `exportTableAsJson` 拿到对象后本地改它的 `content` 数组，插件**察觉不到**，必须走 `updateCell/updateRow`。
-4. **"数据隔离标签切换后，我之前的 rowIndex 还能用吗？"** — 不能。隔离切换后表格内容可能整体换了，rowIndex 不稳定。最佳做法是：**每次操作前先用 `findRowByColumn` 根据业务字段（如名称）重新定位**。
-5. **"我传英文表名/列名为什么有时候不认？"** — 只有一种场景：**纯原生模式 + 从未进入过 SQLite 模式**。这种情况下 `NameMapper` 从未构建，所有英文名都没被注册。解决办法：(a) 给表配上 DDL（带中文注释），在 SQLite 模式下加载过一次，mapper 就建好了；(b) 或者就用中文名——原生模式下中文永远可用。
-6. **"列名既有英文又可能被大小写混淆吗？"** — `NameMapper` 在 `translateSql` 里做**长名称优先的字符串替换**，列名大小写敏感（因为 DDL 里的英文名就是小写）。传入的英文列名必须和 DDL 里一字不差（比如 DDL 写 `quantity` 就要传 `quantity`，传 `Quantity` 会当成未知列原样保留，然后在 SQL 执行时报错）。
+1. **"我怎么直接跑 SQL 查询？"** — SQLite 模式下直接用 `querySql()` / `executeSqlQuery()`；单表查询推荐 `queryTableRows()`。原生模式没有 SQL 引擎，只能用 `exportTableAsJson()` 后遍历。
+2. **"SQL 查询能不能写数据？"** — `querySql()` / `executeSqlQuery()` 只读，拒绝多语句和写入关键词。写数据要用 `executeSqlMutation()`、`executeSqlBatch()` 或 `executeSql()`。
+3. **"前端 raw SQL 写入会不会被记录成 AI 已填表？"** — 默认不会。`targetSheetKeys` 只用于锁和保存范围；只有你显式传 `trackingSheetKeys` 才会影响 AI 填表追踪。
+4. **"rowIndex 从 0 还是 1 开始？"** — 0 是表头，数据从 1 开始。`updateRow/deleteRow` 的入参也必须 ≥ 1。
+5. **"写完没刷新 UI？"** — 四个 CRUD 方法和 SQL 写入默认都会刷新。若传了 `silent/skipNotify`，则不会主动通知 UI。如果你自己直接 `exportTableAsJson` 拿到对象后本地改它的 `content` 数组，插件**察觉不到**，必须走写入 API。
+6. **"数据隔离标签切换后，我之前的 rowIndex 还能用吗？"** — 不能。隔离切换后表格内容可能整体换了，rowIndex 不稳定。最佳做法是：**每次操作前先按业务字段重新定位**；SQLite 模式可用 `querySql()` / `queryTableRows()`，原生模式用 `findRowByColumn()`。
+7. **"我传英文表名/列名为什么有时候不认？"** — 只有一种场景：**纯原生模式 + 从未进入过 SQLite 模式**。这种情况下 `NameMapper` 从未构建，所有英文名都没被注册。解决办法：(a) 给表配上 DDL（带中文注释），在 SQLite 模式下加载过一次，mapper 就建好了；(b) 或者就用中文名——原生模式下中文永远可用。
+8. **"列名既有英文又可能被大小写混淆吗？"** — `NameMapper` 在 `translateSql` 里做**长名称优先的字符串替换**，列名大小写敏感（因为 DDL 里的英文名就是小写）。传入的英文列名必须和 DDL 里一字不差（比如 DDL 写 `quantity` 就要传 `quantity`，传 `Quantity` 会当成未知列原样保留，然后在 SQL 执行时报错）。
 
 ---
 

@@ -41,7 +41,7 @@ const REQUIRED_SCENE_SHEETS = [
     {
         uid: 'sheet_livestream_rooms',
         name: '直播表',
-        requiredHeaders: ['弹幕串'],
+        requiredHeaders: ['剧情弹幕串', '推角弹幕串', '对线弹幕串'],
         forbiddenSnippets: ['直播间主表', '直播间弹幕分栏表'],
     },
 ];

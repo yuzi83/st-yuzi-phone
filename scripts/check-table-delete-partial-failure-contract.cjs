@@ -85,7 +85,12 @@ const repositoryBody = extractFunctionBody(
 assert(sources.repository.includes('function buildBatchDeleteRowIndexResult({'), 'table-repository 必须集中构建批量删除行索引结果');
 assert(sources.repository.includes('unattemptedRowIndexes: requested.filter((rowIndex) => !attemptedSet.has(rowIndex)),'), 'table-repository 必用 requested-attempted 计算未尝试行');
 assert(sources.repository.includes('notDeletedRowIndexes: requested.filter((rowIndex) => !deletedSet.has(rowIndex)),'), 'table-repository 必须用 requested-deleted 计算未删除行');
-assertOrdered(repositoryBody, [
+const legacyDeleteLoopBody = extractFunctionBody(
+    sources.repository,
+    'deleteRowsViaLegacyDeleteRowLoop',
+    /async\s+function\s+deleteRowsViaLegacyDeleteRowLoop\s*\([^)]*\)\s*{/
+);
+assertOrdered(legacyDeleteLoopBody, [
     'const attemptedRowIndexes = [];',
     'attemptedRowIndexes.push(uiRowIndex);',
     'failedRowIndexes.push(uiRowIndex);',
@@ -95,7 +100,7 @@ assertOrdered(repositoryBody, [
     'deletedRowIndexes,',
     'failedRowIndexes,',
     'const allDeleted = batchRowIndexes.notDeletedRowIndexes.length === 0 && failedRowIndexes.length === 0;',
-], 'deleteTableRowsBatch 必须区分已尝试失败、未尝试和未删除行');
+], 'deleteRowsViaLegacyDeleteRowLoop 必须区分已尝试失败、未尝试和未删除行');
 assert(!repositoryBody.includes('failedRowIndexes: normalizedRowIndexes'), 'deleteTableRowsBatch 前置失败不得把 requested 写入 failedRowIndexes');
 
 const { buildBatchDeleteRowIndexResult } = evaluateNamedFunctions(

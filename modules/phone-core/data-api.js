@@ -12,6 +12,11 @@ export {
 } from './data-api/table-repository.js';
 
 export {
+    querySqlViaApi,
+    executeSqlMutationViaApi,
+} from './data-api/sql-repository.js';
+
+export {
     getTableLockState,
     remapTableLockStateAfterRowDelete,
     remapTableLockStateAfterRowsDelete,

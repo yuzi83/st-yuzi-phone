@@ -107,7 +107,7 @@ export function buildConversations(rows, readSpecialField, styleOptions = {}) {
         sorted.reverse();
     }
 
-    return sorted.map(({ sortKey, ...conversation }) => conversation);
+    return sorted.map(({ sortKey: _sortKey, ...conversation }) => conversation);
 }
 
 export function resolveConversationDisplayName(conversation, titleMode = 'auto') {

@@ -126,7 +126,7 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding: 10px 10px 14px;
+    padding: 8px 4px 12px;
 }
 
 .phone-theater-page[data-theater-scene="live"] .phone-theater-live-room {
@@ -135,8 +135,8 @@
     flex-direction: column;
     gap: 10px;
     overflow: hidden;
-    padding: 10px;
-    border-radius: 28px;
+    padding: 7px;
+    border-radius: 24px;
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 247, 250, 0.72) 100%);
     border: 1px solid rgba(255, 255, 255, 0.78);
@@ -475,7 +475,7 @@
 .phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-list {
     list-style: none;
     margin: 0;
-    padding: 0 4px 0;
+    padding: 0 1px 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -495,13 +495,13 @@
 }
 
 .phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item {
-    --indent-step: 12px;
+    --indent-step: 6px;
     align-self: flex-start;
     display: inline-flex;
     align-items: center;
     gap: 8px;
     width: fit-content;
-    max-width: calc(100% - 10px - var(--indent-step) * var(--live-indent, 0));
+    max-width: calc(100% - 4px - var(--indent-step) * var(--live-indent, 0));
     margin-left: calc(var(--indent-step) * var(--live-indent, 0));
     padding: 7px 10px;
     border-radius: 999px;
