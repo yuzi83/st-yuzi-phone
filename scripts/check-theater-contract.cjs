@@ -317,6 +317,8 @@ function main() {
 
     pushCheck(results, 'squareScene', 'square scene 评论解析同时支持半角与全角冒号', has(contents.squareScene, 'search(/[:：]/)'));
     pushCheck(results, 'forumScene', 'forum scene 评论解析同时支持半角与全角冒号', has(contents.forumScene, 'search(/[:：]/)'));
+    pushCheck(results, 'squareScene', 'square scene 美化展示使用反序视图且保留 post 删除键协议', has(contents.squareScene, 'posts.reverse();') && has(contents.squareScene, "buildTheaterDeleteKey('post', rowIndex, postId)") && has(contents.squareScene, 'rowIndex,'));
+    pushCheck(results, 'forumScene', 'forum scene 美化展示使用反序视图且保留 thread 删除键协议', has(contents.forumScene, 'threads.reverse();') && has(contents.forumScene, "buildTheaterDeleteKey('thread', rowIndex, title)") && has(contents.forumScene, 'rowIndex,'));
     pushCheck(results, 'liveScene', 'live scene 弹幕解析同时支持半角与全角冒号', has(contents.liveScene, 'search(/[:：]/)'));
     pushCheck(results, 'squareScene', 'square scene 使用图标详情按钮而非旧文字按钮', has(contents.squareScene, 'renderSquareMediaDetailButton') && has(contents.squareScene, 'phone-theater-square-media-icon') && !has(contents.squareScene, '>图片描述</button>') && !has(contents.squareScene, '>视频描述</button>'));
     pushCheck(results, 'forumScene', 'forum scene 不再渲染顶部频道条', !has(contents.forumScene, 'renderForumChannelBar(') && !has(contents.forumScene, 'phone-theater-forum-channel-bar'));

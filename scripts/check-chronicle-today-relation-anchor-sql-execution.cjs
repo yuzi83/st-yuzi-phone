@@ -30,9 +30,72 @@ function findPython() {
     return null;
 }
 
-async function main() {
+function loadNodeSqlite() {
+    const originalEmitWarning = process.emitWarning;
+    process.emitWarning = function emitWarningFiltered(warning, ...args) {
+        const message = typeof warning === 'string' ? warning : warning?.message;
+        const type = typeof args[0] === 'string' ? args[0] : warning?.name;
+        if (type === 'ExperimentalWarning' && String(message || '').includes('SQLite')) {
+            return undefined;
+        }
+        return originalEmitWarning.call(this, warning, ...args);
+    };
+
+    try {
+        return require('node:sqlite');
+    } catch (_) {
+        return null;
+    } finally {
+        process.emitWarning = originalEmitWarning;
+    }
+}
+
+function findSqliteEngine() {
     const python = findPython();
-    assert.ok(python, '执行级 SQL 合同需要 Python sqlite3；当前环境缺少可用 python/python3/py -3，不能伪装通过');
+    if (python) {
+        return { type: 'python', python };
+    }
+
+    const nodeSqlite = loadNodeSqlite();
+    if (nodeSqlite?.DatabaseSync) {
+        return { type: 'node', nodeSqlite };
+    }
+
+    return null;
+}
+
+function runNodeSqlite(nodeSqlite, sql, scenarios) {
+    const { DatabaseSync } = nodeSqlite;
+    const versionDb = new DatabaseSync(':memory:');
+    let sqliteVersion = '';
+    try {
+        sqliteVersion = String(versionDb.prepare('SELECT sqlite_version() AS version').get().version || '');
+    } finally {
+        versionDb.close();
+    }
+
+    const results = scenarios.map((scenario) => {
+        const connection = new DatabaseSync(':memory:');
+        try {
+            scenario.setup.forEach((statement) => {
+                connection.exec(statement);
+            });
+            const rows = connection.prepare(sql).all();
+            return { name: scenario.name, rows };
+        } catch (error) {
+            return { name: scenario.name, error: String(error?.message || error) };
+        } finally {
+            connection.close();
+        }
+    });
+
+    return { sqliteVersion, results };
+}
+
+async function main() {
+    const sqliteEngine = findSqliteEngine();
+    const python = sqliteEngine?.python || null;
+    assert.ok(sqliteEngine, '执行级 SQL 合同需要 Python sqlite3 或 Node node:sqlite；当前环境缺少可用 python/python3/py -3/node:sqlite，不能伪装通过');
 
     const mod = await import(pathToFileURL(SOURCE_PATH).href);
     assert.strictEqual(typeof mod.ANCHOR_TABLE_SQL, 'string', '派生器必须导出 ANCHOR_TABLE_SQL 供执行级合同复用');
@@ -123,17 +186,20 @@ for scenario in payload['scenarios']:
 print(json.dumps({'sqliteVersion': sqlite3.sqlite_version, 'results': results}, ensure_ascii=False))
 `;
 
-    const result = runPython(python, pythonCode, JSON.stringify({ sql: mod.ANCHOR_TABLE_SQL, scenarios }));
-    assert.strictEqual(result.status, 0, `Python sqlite3 执行 ANCHOR_TABLE_SQL 失败：${result.stderr || result.stdout}`);
-
-    const report = JSON.parse(result.stdout);
+    const report = sqliteEngine.type === 'python'
+        ? (() => {
+            const result = runPython(python, pythonCode, JSON.stringify({ sql: mod.ANCHOR_TABLE_SQL, scenarios }));
+            assert.strictEqual(result.status, 0, `Python sqlite3 执行 ANCHOR_TABLE_SQL 失败：${result.stderr || result.stdout}`);
+            return JSON.parse(result.stdout);
+        })()
+        : runNodeSqlite(sqliteEngine.nodeSqlite, mod.ANCHOR_TABLE_SQL, scenarios);
     report.results.forEach((item, index) => {
         assert.ok(!item.error, `${item.name} 不应执行失败：${item.error}`);
         const actual = item.rows?.[0]?.anchor_table || '';
         assert.strictEqual(actual, scenarios[index].expected, `${item.name} 应返回 ${scenarios[index].expected || '空结果'}`);
     });
 
-    console.log(`[通过] 纪要 today_relation anchor SQL 执行合同：SQLite ${report.sqliteVersion} 真实执行 schema 锚点选择通过`);
+    console.log(`[通过] 纪要 today_relation anchor SQL 执行合同：SQLite ${report.sqliteVersion} 真实执行 schema 锚点选择通过 (${sqliteEngine.type})`);
 }
 
 main().catch((error) => {

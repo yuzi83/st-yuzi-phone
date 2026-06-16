@@ -12,10 +12,21 @@ function setMessageDetailControllerContext(container, options = {}) {
     const currentContext = getMessageDetailControllerContext(container) || {
         delegatedBound: false,
         stableTapGuards: Object.create(null),
+        overlayFreshTapGuards: Object.create(null),
     };
     Object.assign(currentContext, options);
-    currentContext.stableTapGuards = currentContext.stableTapGuards && typeof currentContext.stableTapGuards === 'object'
-        ? currentContext.stableTapGuards
+    const stateStableTapGuards = currentContext.state?.stableTapGuards && typeof currentContext.state.stableTapGuards === 'object'
+        ? currentContext.state.stableTapGuards
+        : null;
+    currentContext.stableTapGuards = stateStableTapGuards
+        || (currentContext.stableTapGuards && typeof currentContext.stableTapGuards === 'object'
+            ? currentContext.stableTapGuards
+            : Object.create(null));
+    if (currentContext.state && typeof currentContext.state === 'object') {
+        currentContext.state.stableTapGuards = currentContext.stableTapGuards;
+    }
+    currentContext.overlayFreshTapGuards = currentContext.overlayFreshTapGuards && typeof currentContext.overlayFreshTapGuards === 'object'
+        ? currentContext.overlayFreshTapGuards
         : Object.create(null);
     container[MESSAGE_DETAIL_CONTROLLER_KEY] = currentContext;
     return currentContext;
@@ -46,21 +57,66 @@ const POINTER_CLICK_SUPPRESS_MS = {
     unknown: 80,
 };
 
+function normalizePointerType(value) {
+    const pointerType = String(value || 'unknown').trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(POINTER_CLICK_SUPPRESS_MS, pointerType) ? pointerType : 'unknown';
+}
+
+function getPointerClickSuppressWindow(pointerType) {
+    return POINTER_CLICK_SUPPRESS_MS[normalizePointerType(pointerType)] ?? POINTER_CLICK_SUPPRESS_MS.unknown;
+}
+
 function getEventTime(event) {
     return Number.isFinite(event?.timeStamp) ? Number(event.timeStamp) : Date.now();
 }
 
 function shouldSuppressSyntheticClick(context, action, event) {
     const guard = getStableTapGuard(context, action);
-    const suppressWindow = POINTER_CLICK_SUPPRESS_MS[guard.lastPointerType] ?? POINTER_CLICK_SUPPRESS_MS.unknown;
+    const suppressWindow = getPointerClickSuppressWindow(guard.lastPointerType);
     const elapsed = getEventTime(event) - guard.lastPointerHandledAt;
     return elapsed >= 0 && elapsed <= suppressWindow;
 }
 
 function markPointerHandled(context, action, event) {
     const guard = getStableTapGuard(context, action);
-    guard.lastPointerType = String(event?.pointerType || 'unknown').trim().toLowerCase() || 'unknown';
+    guard.lastPointerType = normalizePointerType(event?.pointerType);
     guard.lastPointerHandledAt = getEventTime(event);
+}
+
+function getOverlayFreshTapGuard(context, kind) {
+    const guardKey = String(kind || '').trim() || '__default__';
+    const guards = context?.overlayFreshTapGuards && typeof context.overlayFreshTapGuards === 'object'
+        ? context.overlayFreshTapGuards
+        : (context.overlayFreshTapGuards = Object.create(null));
+    const existingGuard = guards[guardKey];
+    if (existingGuard && typeof existingGuard === 'object') {
+        return existingGuard;
+    }
+
+    const guard = {
+        openedAt: -Infinity,
+        pointerType: 'unknown',
+    };
+    guards[guardKey] = guard;
+    return guard;
+}
+
+function markOverlayOpened(context, kind, event) {
+    if (event?.type !== 'pointerup') return;
+    const guard = getOverlayFreshTapGuard(context, kind);
+    guard.openedAt = getEventTime(event);
+    guard.pointerType = normalizePointerType(event?.pointerType);
+}
+
+function shouldIgnoreFreshOverlayMaskClick(context, kind, event) {
+    const guard = getOverlayFreshTapGuard(context, kind);
+    const elapsed = getEventTime(event) - guard.openedAt;
+    const suppressWindow = getPointerClickSuppressWindow(guard.pointerType);
+    const shouldIgnore = elapsed >= 0 && elapsed <= suppressWindow;
+    if (shouldIgnore) {
+        guard.openedAt = -Infinity;
+    }
+    return shouldIgnore;
 }
 
 function consumeEvent(event) {
@@ -229,7 +285,7 @@ function handleToggleRowSelection(context, actionEl) {
     patchManageUi(context);
 }
 
-function handleOpenMediaPreview(context, actionEl) {
+function handleOpenMediaPreview(context, actionEl, event = null) {
     const desc = normalizeMedia(context, actionEl.dataset.description);
     if (!desc) return;
     const title = String(actionEl.dataset.mediaLabel || '媒体内容').trim() || '媒体内容';
@@ -237,6 +293,7 @@ function handleOpenMediaPreview(context, actionEl) {
         title,
         content: desc,
     };
+    markOverlayOpened(context, 'mediaPreview', event);
     context.renderKeepScroll?.();
 }
 
@@ -265,7 +322,7 @@ function handleRetryArchive(context) {
     });
 }
 
-function handleOpenAttachmentDialog(context, actionEl) {
+function handleOpenAttachmentDialog(context, actionEl, event = null) {
     if (context.state.sending) return;
     const conversationId = String(actionEl?.dataset?.conversationId || '').trim();
     const currentConversationId = getContextConversationId(context);
@@ -287,6 +344,7 @@ function handleOpenAttachmentDialog(context, actionEl) {
         kind,
         draftValue: normalizeMedia(context, media[mediaKey]),
     };
+    markOverlayOpened(context, 'attachmentDialog', event);
     context.renderKeepScroll?.();
 }
 
@@ -352,7 +410,7 @@ function handleClearComposeMedia(context, actionEl) {
     context.renderKeepScroll?.();
 }
 
-function dispatchDetailAction(container, context, actionEl) {
+function dispatchDetailAction(container, context, actionEl, event = null) {
     const action = String(actionEl?.dataset?.action || '').trim();
     if (!action) return false;
 
@@ -376,7 +434,7 @@ function dispatchDetailAction(container, context, actionEl) {
             handleToggleRowSelection(context, actionEl);
             return true;
         case 'open-media-preview':
-            handleOpenMediaPreview(context, actionEl);
+            handleOpenMediaPreview(context, actionEl, event);
             return true;
         case 'close-media-preview':
             handleCloseMediaPreview(context);
@@ -392,7 +450,7 @@ function dispatchDetailAction(container, context, actionEl) {
             handleRetryArchive(context);
             return true;
         case 'open-attachment-dialog':
-            handleOpenAttachmentDialog(context, actionEl);
+            handleOpenAttachmentDialog(context, actionEl, event);
             return true;
         case 'close-attachment-dialog':
             handleCloseAttachmentDialog(context, actionEl);
@@ -428,7 +486,7 @@ function bindMessageDetailDelegates(container, context) {
         if (!action) return;
         markPointerHandled(currentContext, action, event);
         consumeEvent(event);
-        dispatchDetailAction(container, currentContext, actionEl);
+        dispatchDetailAction(container, currentContext, actionEl, event);
     });
 
     addListener(container, 'click', (event) => {
@@ -439,6 +497,7 @@ function bindMessageDetailDelegates(container, context) {
         const previewMask = target.closest('.phone-special-media-preview-mask');
         if (previewMask instanceof HTMLElement && previewMask === target && container.contains(previewMask)) {
             consumeEvent(event);
+            if (shouldIgnoreFreshOverlayMaskClick(currentContext, 'mediaPreview', event)) return;
             currentContext.closeMediaPreview?.();
             return;
         }
@@ -446,6 +505,7 @@ function bindMessageDetailDelegates(container, context) {
         const attachmentMask = target.closest('.phone-special-attachment-dialog-mask');
         if (attachmentMask instanceof HTMLElement && attachmentMask === target && container.contains(attachmentMask)) {
             consumeEvent(event);
+            if (shouldIgnoreFreshOverlayMaskClick(currentContext, 'attachmentDialog', event)) return;
             handleCloseAttachmentDialog(currentContext, attachmentMask);
             return;
         }
@@ -460,7 +520,7 @@ function bindMessageDetailDelegates(container, context) {
             return;
         }
         consumeEvent(event);
-        dispatchDetailAction(container, currentContext, actionEl);
+        dispatchDetailAction(container, currentContext, actionEl, event);
     });
 
     addListener(container, 'input', (event) => {

@@ -64,6 +64,7 @@ function buildViewModel(resolved) {
             replies: parseForumReplies(getCellByHeader(threadsTable, row, '评论串')),
         };
     });
+    threads.reverse();
 
     return { threads };
 }

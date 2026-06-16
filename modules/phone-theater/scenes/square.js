@@ -115,6 +115,7 @@ function buildViewModel(resolved, helpers) {
             comments: parseSquareComments(getCellByHeader(postsTable, row, '评论串')),
         };
     });
+    posts.reverse();
 
     void helpers;
     return { posts };

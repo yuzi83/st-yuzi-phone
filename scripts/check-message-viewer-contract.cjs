@@ -7,6 +7,7 @@ const FILES = {
     viewer: 'modules/table-viewer/special/message-viewer.js',
     helpers: 'modules/table-viewer/special/message-viewer-helpers.js',
     actions: 'modules/table-viewer/special/message-viewer-actions.js',
+    conversationView: 'modules/table-viewer/special/message-viewer/conversation-view.js',
     detailView: 'modules/table-viewer/special/message-viewer/detail-view.js',
     detailController: 'modules/table-viewer/special/message-viewer/detail-controller.js',
 };
@@ -55,6 +56,12 @@ function main() {
     check(results, 'viewer', 'message-viewer 继续通过 renderMessageConversationView() 装配会话页', has(contents.viewer, 'renderMessageConversationView({'));
     check(results, 'viewer', 'message-viewer 使用 sendPhase 区分 AI 等待与归档阶段', has(contents.viewer, "sendPhase: 'idle'") && has(contents.viewer, "phase === 'ai'") && has(contents.viewer, "phase === 'archive'"));
     check(results, 'viewer', 'message-viewer 输入框 resize 使用 RAF 调度', has(contents.viewer, 'function scheduleComposeInputResize') || has(contents.viewer, 'const scheduleComposeInputResize = (inputEl) => {'));
+    check(results, 'conversationView', 'conversation-view 通过 viewer runtime 注册单一 pointerup 委托', has(contents.conversationView, "addListener(container, 'pointerup', (event) => {"));
+    check(results, 'conversationView', 'conversation-view 通过 viewer runtime 注册单一 click 委托', has(contents.conversationView, "addListener(container, 'click', (event) => {"));
+    check(results, 'conversationView', 'conversation-view 复用 state.stableTapGuards 保存触摸保护', has(contents.conversationView, 'state.stableTapGuards') && has(contents.conversationView, 'function getStableTapGuard('));
+    check(results, 'conversationView', 'conversation-view 标记 pointerup 并抑制合成 click', has(contents.conversationView, 'function markPointerHandled(') && has(contents.conversationView, 'function shouldSuppressSyntheticClick(') && has(contents.conversationView, 'markPointerHandled(currentContext, action, event)') && has(contents.conversationView, 'shouldSuppressSyntheticClick(currentContext, action, event)'));
+    check(results, 'conversationView', 'conversation-view 使用统一分发处理返回/进会话/联系人选择', has(contents.conversationView, 'function dispatchConversationAction(') && has(contents.conversationView, "case 'nav-back':") && has(contents.conversationView, "case 'open-conversation':") && has(contents.conversationView, "case 'open-contact-picker':"));
+    check(results, 'conversationView', 'conversation-view 不拦截 prompt preset select 的 change 行为', has(contents.conversationView, "if (!['nav-back', 'open-conversation', 'open-contact-picker'].includes(action)) return;") && has(contents.conversationView, "target.dataset.action !== 'select-prompt-preset'"));
     check(results, 'detailView', 'detail-view 为返回按钮提供稳定 data-action', has(contents.detailView, 'data-action="nav-back"'));
     check(results, 'detailView', 'detail-view 为删除模式切换按钮提供稳定 data-action', has(contents.detailView, 'data-action="toggle-delete-mode"'));
     check(results, 'detailView', 'detail-view 为管理条按钮提供稳定 data-action', has(contents.detailView, 'data-action="select-all"'));
@@ -77,6 +84,8 @@ function main() {
     check(results, 'helpers', 'helpers 为媒体按钮提供稳定 data-action', has(contents.helpers, 'data-action="open-media-preview"'));
 
     check(results, 'detailController', 'detail-controller 使用容器私有 context 保存最新详情页状态', has(contents.detailController, 'const MESSAGE_DETAIL_CONTROLLER_KEY') && has(contents.detailController, 'function setMessageDetailControllerContext('));
+    check(results, 'detailController', 'detail-controller 复用 state.stableTapGuards 供列表页吃掉返回残余 click', has(contents.detailController, 'const stateStableTapGuards') && has(contents.detailController, 'currentContext.state.stableTapGuards = currentContext.stableTapGuards'));
+    check(results, 'detailController', 'detail-controller 记录刚打开 overlay 的遮罩保护窗', has(contents.detailController, 'overlayFreshTapGuards') && has(contents.detailController, 'function markOverlayOpened(') && has(contents.detailController, 'function shouldIgnoreFreshOverlayMaskClick('));
     check(results, 'detailController', 'detail-controller 使用 delegatedBound 防止重复委托绑定', has(contents.detailController, 'delegatedBound: false') && has(contents.detailController, 'if (!(container instanceof HTMLElement) || !context || context.delegatedBound) return;'));
     check(results, 'detailController', 'detail-controller 通过 viewer runtime 注册单一 pointerup 委托', has(contents.detailController, "addListener(container, 'pointerup', (event) => {"));
     check(results, 'detailController', 'detail-controller 通过 viewer runtime 注册单一 click 委托', has(contents.detailController, "addListener(container, 'click', (event) => {"));
@@ -91,6 +100,7 @@ function main() {
     check(results, 'detailController', 'detail-controller close 附件弹窗校验 conversationId', has(contents.detailController, 'function handleCloseAttachmentDialog(context, actionEl = null)') && has(contents.detailController, 'actionConversationId !== getContextConversationId(context)'));
     check(results, 'detailController', 'detail-controller 委托层跳过 disabled action', has(contents.detailController, 'function isDisabledActionElement(actionEl)') && has(contents.detailController, 'if (isDisabledActionElement(actionEl)) return;'));
     check(results, 'detailController', 'detail-controller 附件 mask 仅点击遮罩本体关闭', has(contents.detailController, "attachmentMask === target") && has(contents.detailController, 'handleCloseAttachmentDialog(currentContext, attachmentMask);'));
+    check(results, 'detailController', 'detail-controller 媒体/附件 mask 刚打开保护命中时不关闭', has(contents.detailController, "shouldIgnoreFreshOverlayMaskClick(currentContext, 'mediaPreview', event)") && has(contents.detailController, "shouldIgnoreFreshOverlayMaskClick(currentContext, 'attachmentDialog', event)"));
     check(results, 'detailController', 'detail-controller 保留 stable tap 防合成 click 语义但不再逐节点绑定', has(contents.detailController, 'function shouldSuppressSyntheticClick(') && !has(contents.detailController, 'function bindStableTapAction('));
     check(results, 'detailController', 'detail-controller 已移除消息选择批量绑定旧写法', !has(contents.detailController, "container.querySelectorAll('.phone-special-message-select-toggle').forEach((btn) => {"));
     check(results, 'detailController', 'detail-controller 已移除媒体按钮批量绑定旧写法', !has(contents.detailController, "container.querySelectorAll('.phone-special-media-item').forEach((mediaEl) => {"));

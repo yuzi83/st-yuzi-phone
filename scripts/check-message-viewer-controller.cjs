@@ -125,6 +125,7 @@ function createHarness(bindMessageDetailController) {
     const state = {
         mode: 'detail',
         conversationId: 'conv_a',
+        mediaPreview: null,
         draftByConversation: { conv_a: '原草稿' },
         composeMediaByConversation: {
             conv_a: { imageDesc: '旧图片', videoDesc: '旧视频' },
@@ -144,6 +145,10 @@ function createHarness(bindMessageDetailController) {
         renderKeepScroll: () => { calls.renderKeepScroll += 1; },
         normalizeMediaDesc: (value) => String(value || '').trim(),
         handleSendMessage: () => { calls.send += 1; },
+        closeMediaPreview: () => {
+            state.mediaPreview = null;
+            calls.renderKeepScroll += 1;
+        },
     });
     return { container, calls, state };
 }
@@ -153,6 +158,8 @@ function actionElement(action, options = {}) {
     el.dataset.action = action;
     if (options.conversationId) el.dataset.conversationId = options.conversationId;
     if (options.mediaKind) el.dataset.mediaKind = options.mediaKind;
+    if (options.description) el.dataset.description = options.description;
+    if (options.mediaLabel) el.dataset.mediaLabel = options.mediaLabel;
     if (options.disabled) el.disabled = true;
     if (options.ariaDisabled) el.setAttribute('aria-disabled', 'true');
     return el;
@@ -278,6 +285,46 @@ function testMaskClickOnlyClosesOnMaskItself(bindMessageDetailController) {
     assert.equal(harness.state.attachmentDialog.visible, false, '点击遮罩本体应关闭');
 }
 
+function testFreshAttachmentMaskClickDoesNotClose(bindMessageDetailController) {
+    const harness = createHarness(bindMessageDetailController);
+    const openImage = actionElement('open-attachment-dialog', { conversationId: 'conv_a', mediaKind: 'image' });
+    harness.container.appendChild(openImage);
+
+    dispatch(harness.container, 'pointerup', openImage, { timeStamp: 11000, pointerType: 'touch' });
+    assert.equal(harness.state.attachmentDialog.visible, true, 'pointerup 应打开附件弹窗');
+
+    const mask = new FakeElement('phone-special-attachment-dialog-mask');
+    mask.dataset.conversationId = 'conv_a';
+    harness.container.appendChild(mask);
+
+    dispatch(harness.container, 'click', mask, { timeStamp: 11100 });
+    assert.equal(harness.state.attachmentDialog.visible, true, '刚打开后的合成 click 不应立即关闭附件弹窗');
+
+    dispatch(harness.container, 'click', mask, { timeStamp: 11600 });
+    assert.equal(harness.state.attachmentDialog.visible, false, '保护窗后点击遮罩应关闭附件弹窗');
+}
+
+function testFreshMediaPreviewMaskClickDoesNotClose(bindMessageDetailController) {
+    const harness = createHarness(bindMessageDetailController);
+    const openMedia = actionElement('open-media-preview', {
+        description: '一张图片',
+        mediaLabel: '图片内容',
+    });
+    harness.container.appendChild(openMedia);
+
+    dispatch(harness.container, 'pointerup', openMedia, { timeStamp: 12000, pointerType: 'touch' });
+    assert.deepEqual(harness.state.mediaPreview, { title: '图片内容', content: '一张图片' }, 'pointerup 应打开媒体预览');
+
+    const mask = new FakeElement('phone-special-media-preview-mask');
+    harness.container.appendChild(mask);
+
+    dispatch(harness.container, 'click', mask, { timeStamp: 12100 });
+    assert.deepEqual(harness.state.mediaPreview, { title: '图片内容', content: '一张图片' }, '刚打开后的合成 click 不应立即关闭媒体预览');
+
+    dispatch(harness.container, 'click', mask, { timeStamp: 12600 });
+    assert.equal(harness.state.mediaPreview, null, '保护窗后点击遮罩应关闭媒体预览');
+}
+
 async function main() {
     installDomGlobals();
     const { bindMessageDetailController } = await import(toModuleUrl('modules/table-viewer/special/message-viewer/detail-controller.js'));
@@ -287,6 +334,8 @@ async function main() {
     testComposeInputStillUpdatesDraftAndSends(bindMessageDetailController);
     testOpenSaveClearAndCloseAttachmentDialog(bindMessageDetailController);
     testMaskClickOnlyClosesOnMaskItself(bindMessageDetailController);
+    testFreshAttachmentMaskClickDoesNotClose(bindMessageDetailController);
+    testFreshMediaPreviewMaskClickDoesNotClose(bindMessageDetailController);
 
     console.log('[message-viewer-controller-check] 检查通过');
     console.log('- OK | disabled 与 aria-disabled action 被委托层拦截');
@@ -294,6 +343,8 @@ async function main() {
     console.log('- OK | compose textarea 仍更新草稿且 Enter 发送');
     console.log('- OK | 附件 open/save/clear/close 校验 conversationId 与 media kind');
     console.log('- OK | 附件弹窗仅遮罩本体点击关闭');
+    console.log('- OK | 附件弹窗刚打开后的合成遮罩 click 被保护');
+    console.log('- OK | 媒体预览刚打开后的合成遮罩 click 被保护');
 }
 
 main().catch((error) => {
