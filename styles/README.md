@@ -24,6 +24,7 @@
 - `07-settings-modern.css`
 - `08-image-crop.css`
 - `09-table-manage-detail.css`
+- `12-table-update-review.css`
 - `10-scroll-generic-patches.css`
 - `11-api-dialog-worldbook.css`
 

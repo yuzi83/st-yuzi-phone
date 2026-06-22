@@ -17,6 +17,7 @@ import {
     normalizeCellDisplayValue,
     buildGenericRowViewModel,
 } from './row-view-model.js';
+import { getUpdatedRowsForSheet } from '../table-update-review/store.js';
 
 const logger = Logger.withScope({ scope: 'table-viewer/list-page-renderer', feature: 'table-viewer' });
 
@@ -27,6 +28,23 @@ const GENERIC_TOOLBAR_ACTIONS_REGION_SELECTOR = '[data-generic-toolbar-region="a
 const GENERIC_TOOLBAR_INFO_REGION_SELECTOR = '[data-generic-toolbar-region="info"]';
 const GENERIC_CONTENT_REGION_SELECTOR = '[data-generic-list-region="content"]';
 const GENERIC_BOTTOM_BAR_REGION_SELECTOR = '[data-generic-list-region="bottom-bar"]';
+const REVIEW_ROW_ID_HEADERS = new Set(['row_id', 'ROW_ID', '行号']);
+
+function resolveReviewRowId(row = [], headers = [], rawHeaders = []) {
+    if (!Array.isArray(row)) return '';
+
+    for (let index = 0; index < row.length; index++) {
+        const candidates = [rawHeaders[index], headers[index]];
+        const hasRowIdHeader = candidates.some((candidate) => {
+            const text = String(candidate || '').trim();
+            return REVIEW_ROW_ID_HEADERS.has(text) || text.toLowerCase() === 'row_id';
+        });
+        if (!hasRowIdHeader) continue;
+        return normalizeCellDisplayValue(row[index]);
+    }
+
+    return '';
+}
 
 function normalizeSelectedDeleteRowIndexes(rowIndexes = []) {
     return Array.from(new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
@@ -43,6 +61,7 @@ function buildGenericListPageViewModel(options = {}) {
         headers = [],
         rawHeaders = [],
         genericMatch,
+        sheetKey = '',
         searchQueryOverride,
     } = options;
 
@@ -70,8 +89,17 @@ function buildGenericListPageViewModel(options = {}) {
     const showAddAction = bottomBarOptions.showAdd !== false;
     const showLockAction = bottomBarOptions.showLock !== false;
     const showDeleteAction = bottomBarOptions.showDelete !== false;
+    const onlyShowReviewUpdates = !!state.onlyShowReviewUpdates;
+    const reviewRows = getUpdatedRowsForSheet(sheetKey);
+    const reviewRowIndexes = reviewRows.rowIndexes instanceof Set ? reviewRows.rowIndexes : new Set();
+    const reviewRowIds = reviewRows.rowIds instanceof Set ? reviewRows.rowIds : new Set();
 
     const rowViewModels = rows.map((row, rowIndex) => {
+        const reviewRowId = resolveReviewRowId(row, headers, rawHeaders);
+        const normalizedReviewRowId = String(reviewRowId || '').trim();
+        const reviewUpdated = normalizedReviewRowId
+            ? reviewRowIds.has(normalizedReviewRowId)
+            : reviewRowIndexes.has(Number(rowIndex));
         const rowViewModel = buildGenericRowViewModel(
             row,
             rowIndex,
@@ -86,6 +114,8 @@ function buildGenericListPageViewModel(options = {}) {
         const deleteSelected = selectedDeleteRows.has(rowIndex);
         return {
             ...rowViewModel,
+            reviewRowId,
+            reviewUpdated,
             deleteSelected,
             rowKey: `row:${rowIndex}`,
             rowVersion: [
@@ -93,6 +123,8 @@ function buildGenericListPageViewModel(options = {}) {
                 rowDataSignature,
                 rowViewModel.title,
                 rowViewModel.nonEmptyCount,
+                reviewRowId,
+                reviewUpdated ? 'review-updated' : 'review-unmodified',
                 rowViewModel.rowLocked ? 'locked' : 'unlocked',
                 deleteSelected ? 'delete-selected' : 'delete-unselected',
                 rowViewModel.statusText,
@@ -102,14 +134,18 @@ function buildGenericListPageViewModel(options = {}) {
             ].join('\u001e'),
         };
     });
-    const filteredRows = searchQueryLower
-        ? rowViewModels.filter((viewModel) => viewModel.searchText.includes(searchQueryLower))
+    const reviewFilteredRows = onlyShowReviewUpdates
+        ? rowViewModels.filter((viewModel) => viewModel.reviewUpdated)
         : rowViewModels;
+    const filteredRows = searchQueryLower
+        ? reviewFilteredRows.filter((viewModel) => viewModel.searchText.includes(searchQueryLower))
+        : reviewFilteredRows;
     const orderedFilteredRows = state.listSortDescending
         ? [...filteredRows].reverse()
         : filteredRows;
 
     const visibleCount = filteredRows.length;
+    const reviewUpdatedRowCount = rowViewModels.filter((viewModel) => viewModel.reviewUpdated).length;
     const selectableDeleteRowIndexes = orderedFilteredRows
         .filter((viewModel) => !viewModel.rowLocked)
         .map((viewModel) => viewModel.rowIndex);
@@ -119,17 +155,25 @@ function buildGenericListPageViewModel(options = {}) {
     const selectableDeleteCount = selectableDeleteRowIndexes.length;
     const allVisibleDeleteRowsSelected = selectableDeleteCount > 0
         && selectableDeleteRowIndexes.every((rowIndex) => selectedDeleteRows.has(rowIndex));
-    const emptyStateTitle = totalRowCount === 0
-        ? '还没有任何条目'
-        : '没有匹配到相关条目';
-    const emptyStateDesc = totalRowCount === 0
-        ? '你可以先创建第一条记录，后续会在这里以结构化列表形式展示。'
-        : `试试缩短关键词，或清空当前搜索“${searchQuery}”。`;
+    let emptyStateTitle = '没有匹配到相关条目';
+    let emptyStateDesc = `试试缩短关键词，或清空当前搜索“${searchQuery}”。`;
+    if (totalRowCount === 0) {
+        emptyStateTitle = '还没有任何条目';
+        emptyStateDesc = '你可以先创建第一条记录，后续会在这里以结构化列表形式展示。';
+    } else if (onlyShowReviewUpdates && reviewUpdatedRowCount === 0) {
+        emptyStateTitle = '本楼没有可审核更新';
+        emptyStateDesc = '审核结果中没有命中这张表的新增或修改行。';
+    } else if (onlyShowReviewUpdates && searchQuery) {
+        emptyStateTitle = '本楼更新中没有匹配项';
+        emptyStateDesc = `当前只显示本楼更新，且没有更新行匹配“${searchQuery}”。`;
+    }
     const toolbarHint = state.lockManageMode
         ? '锁定管理中：点击右侧标签切换条目锁定状态。'
         : state.deleteManageMode
             ? '删除管理中：点击右侧圆圈选择条目，可在标题栏全选、清空或批量删除。'
-            : '点击条目进入详情页；支持搜索、锁定、删除与新增操作。';
+            : onlyShowReviewUpdates
+                ? '当前仅显示审核中命中的本楼更新行；搜索和排序会继续叠加生效。'
+                : '点击条目进入详情页；支持搜索、锁定、删除与新增操作。';
 
     return {
         genericStylePayload,
@@ -148,6 +192,8 @@ function buildGenericListPageViewModel(options = {}) {
         showAddAction,
         showLockAction,
         showDeleteAction,
+        onlyShowReviewUpdates,
+        reviewUpdatedRowCount,
         deletingAny,
         deletingRowIndex: state.deletingRowIndex,
         deletingSelection: !!state.deletingSelection,
@@ -317,12 +363,14 @@ function resolveGenericListRegionPatchPlan(changedKeys = []) {
         updateNav: changedKeySet.has('deleteManageMode')
             || changedKeySet.has('listSearchQuery')
             || changedKeySet.has('listSortDescending')
+            || changedKeySet.has('onlyShowReviewUpdates')
             || changedKeySet.has('lockState')
             || deleteSelectionChanged,
-        updateToolbarActions: changedKeySet.has('listSearchQuery') || changedKeySet.has('listSortDescending'),
-        updateToolbarInfo: changedKeySet.has('listSearchQuery') || changedKeySet.has('lockManageMode') || changedKeySet.has('deleteManageMode') || deleteSelectionChanged,
+        updateToolbarActions: changedKeySet.has('listSearchQuery') || changedKeySet.has('listSortDescending') || changedKeySet.has('onlyShowReviewUpdates'),
+        updateToolbarInfo: changedKeySet.has('listSearchQuery') || changedKeySet.has('onlyShowReviewUpdates') || changedKeySet.has('lockManageMode') || changedKeySet.has('deleteManageMode') || deleteSelectionChanged,
         updateContent: changedKeySet.has('listSearchQuery')
             || changedKeySet.has('listSortDescending')
+            || changedKeySet.has('onlyShowReviewUpdates')
             || changedKeySet.has('lockManageMode')
             || changedKeySet.has('deleteManageMode')
             || changedKeySet.has('lockState')
@@ -468,6 +516,7 @@ export function renderGenericListPage(options = {}) {
         headers,
         rawHeaders,
         genericMatch,
+        sheetKey,
         searchQueryOverride,
     }).selectableDeleteRowIndexes || [];
 
@@ -479,6 +528,7 @@ export function renderGenericListPage(options = {}) {
             headers,
             rawHeaders,
             genericMatch,
+            sheetKey,
         });
         const nextRegionHtml = buildGenericListRegionHtml(tableName, nextViewModel);
         const patchPlan = resolveGenericListRegionPatchPlan(changedKeys);
@@ -522,6 +572,7 @@ export function renderGenericListPage(options = {}) {
         headers,
         rawHeaders,
         genericMatch,
+        sheetKey,
     });
     const regionHtml = buildGenericListRegionHtml(tableName, viewModel);
     const canPatchExistingList = !!container.querySelector(GENERIC_LIST_ROOT_SELECTOR);

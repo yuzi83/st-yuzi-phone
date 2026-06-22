@@ -136,7 +136,7 @@ async function testSiblingNavigationRestoresDetailScroll() {
 
 async function testBackRestoresListScrollOnly() {
     const harness = await bindHarness();
-    await harness.container.click(new FakeElement('.phone-nav-back'));
+    await harness.container.click(new FakeElement('[data-action="detail-back"]'));
 
     assert.equal(harness.state.mode, 'list', '返回按钮应返回列表模式');
     assert.equal(harness.state.rowIndex, -1, '返回按钮应清理详情 rowIndex');
@@ -144,6 +144,15 @@ async function testBackRestoresListScrollOnly() {
         'render:-1',
         'restore-list',
     ], '返回列表只应恢复 listScrollTop，不应触发 detail scroll helper');
+}
+
+async function testGenericNavBackDoesNotTriggerDetailBack() {
+    const harness = await bindHarness();
+    await harness.container.click(new FakeElement('.phone-nav-back'));
+
+    assert.equal(harness.state.mode, 'detail', '泛用 nav-back 不应被详情控制器当作详情返回处理');
+    assert.equal(harness.state.rowIndex, 0, '泛用 nav-back 不应清理详情 rowIndex');
+    assert.deepEqual(harness.calls, [], '泛用 nav-back 不应触发详情页本地返回副作用');
 }
 
 async function testInvalidPagerTargetDoesNotRestoreDetailScroll() {
@@ -211,6 +220,7 @@ async function testScrollPreserverClampAndNoBodyNoop() {
 async function main() {
     await testSiblingNavigationRestoresDetailScroll();
     await testBackRestoresListScrollOnly();
+    await testGenericNavBackDoesNotTriggerDetailBack();
     await testInvalidPagerTargetDoesNotRestoreDetailScroll();
     await testSavingSkipsSiblingNavigation();
     await testSingleRowSkipsSiblingNavigation();
@@ -219,6 +229,7 @@ async function main() {
     console.log('[generic-detail-sibling-scroll-behavior-check] 检查通过');
     console.log('- OK | sibling 翻页按 capture -> render -> restore 恢复详情滚动');
     console.log('- OK | 返回列表只恢复 listScrollTop');
+    console.log('- OK | 详情控制器不再把泛用 nav-back 当作详情返回处理');
     console.log('- OK | 非法 target、saving、单行场景不触发详情滚动恢复');
     console.log('- OK | detailScrollTop 底层 capture/restore 支持 clamp 与无滚动容器 no-op');
 }

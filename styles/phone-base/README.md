@@ -10,6 +10,7 @@
 - `07-settings-modern.css`：现代设置页样式主层
 - `08-image-crop.css`：图片裁剪相关现代样式
 - `09-table-manage-detail.css`：现代表格管理 / 详情主层
+- `12-table-update-review.css`：审核系统 App 与表格更新审阅页样式层
 - `10-scroll-generic-patches.css`：滚动与 generic patch 层
 - `11-api-dialog-worldbook.css`：API / worldbook 对话框补层
 

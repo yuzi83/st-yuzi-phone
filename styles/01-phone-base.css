@@ -7,7 +7,7 @@
    Active modern layers
    - foundation: [`styles/phone-base/00-phone-tokens.css`](styles/phone-base/00-phone-tokens.css:1), [`styles/phone-base/01-shell-system.css`](styles/phone-base/01-shell-system.css:1)
    - page shell: [`styles/phone-base/02-page-home.css`](styles/phone-base/02-page-home.css:1), [`styles/phone-base/05-update-fusion-feedback.css`](styles/phone-base/05-update-fusion-feedback.css:1)
-   - layout / settings / table: [`styles/phone-base/06-layout-nav-core.css`](styles/phone-base/06-layout-nav-core.css:1), [`styles/phone-base/07-settings-modern.css`](styles/phone-base/07-settings-modern.css:1), [`styles/phone-base/09-table-manage-detail.css`](styles/phone-base/09-table-manage-detail.css:1)
+   - layout / settings / table: [`styles/phone-base/06-layout-nav-core.css`](styles/phone-base/06-layout-nav-core.css:1), [`styles/phone-base/07-settings-modern.css`](styles/phone-base/07-settings-modern.css:1), [`styles/phone-base/09-table-manage-detail.css`](styles/phone-base/09-table-manage-detail.css:1), [`styles/phone-base/12-table-update-review.css`](styles/phone-base/12-table-update-review.css:1)
    - patches / dialogs: [`styles/phone-base/10-scroll-generic-patches.css`](styles/phone-base/10-scroll-generic-patches.css:1), [`styles/phone-base/11-api-dialog-worldbook.css`](styles/phone-base/11-api-dialog-worldbook.css:1)
    ======================================== */
 
@@ -25,6 +25,7 @@
 @import url('./phone-base/07-settings-modern.css');
 @import url('./phone-base/08-image-crop.css');
 @import url('./phone-base/09-table-manage-detail.css');
+@import url('./phone-base/12-table-update-review.css');
 
 /* patches / dialog helpers */
 @import url('./phone-base/10-scroll-generic-patches.css');

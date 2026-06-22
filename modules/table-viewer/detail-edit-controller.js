@@ -103,7 +103,8 @@ export function bindGenericDetailEditController(options = {}) {
         const target = event.target instanceof HTMLElement ? event.target : null;
         if (!target) return;
 
-        if (target.closest('.phone-nav-back')) {
+        const detailBackEl = target.closest('[data-action="detail-back"]');
+        if (detailBackEl instanceof HTMLElement && container.contains(detailBackEl)) {
             state.returnToListMode();
             if (typeof render === 'function') {
                 render();

@@ -3,6 +3,7 @@ import {
     getSheetKeys,
 } from '../../../phone-core/data-api.js';
 import { VARIABLE_MANAGER_APP } from '../../../variable-manager/index.js';
+import { TABLE_UPDATE_REVIEW_APP_ID, TABLE_UPDATE_REVIEW_APP_NAME } from '../../../table-update-review/constants.js';
 import { getAvailableTheaterScenes, getGroupedTheaterSheetKeys } from '../../../phone-theater/data.js';
 
 const DOCK_ICON_SLOTS = Object.freeze([
@@ -60,6 +61,7 @@ export function collectAppearanceIconSlots(rawData = getTableData()) {
         }));
 
     return dedupeIconSlots([
+        { key: TABLE_UPDATE_REVIEW_APP_ID, name: TABLE_UPDATE_REVIEW_APP_NAME, type: 'system' },
         { key: VARIABLE_MANAGER_APP.id, name: VARIABLE_MANAGER_APP.name, type: 'system' },
         ...theaterItems,
         ...tableItems,

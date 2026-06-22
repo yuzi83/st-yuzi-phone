@@ -32,6 +32,7 @@ export {
 export {
     triggerManualUpdate,
     openVisualizerWithStatus,
+    openDatabaseUiWithStatus,
     openDatabaseSettingsWithStatus,
 } from './data-api/panel-actions.js';
 

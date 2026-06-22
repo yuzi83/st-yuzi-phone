@@ -83,9 +83,11 @@ export function bindHomeDockInteractions(dock, dockApps, container, deps = {}) {
     const {
         navigateTo,
         openVisualizerWithStatus,
+        openDatabaseUiWithStatus,
         openDatabaseSettingsWithStatus,
         runtime,
     } = deps;
+    const openDatabaseEntryWithStatus = openDatabaseUiWithStatus || openDatabaseSettingsWithStatus;
 
     if (!(dock instanceof HTMLElement)) return;
 
@@ -130,7 +132,7 @@ export function bindHomeDockInteractions(dock, dockApps, container, deps = {}) {
             handleDockAction(app, container, {
                 navigateTo,
                 openVisualizerWithStatus,
-                openDatabaseSettingsWithStatus,
+                openDatabaseUiWithStatus: openDatabaseEntryWithStatus,
                 runtime,
             });
         }, 150);

@@ -20,7 +20,7 @@ import {
     getTableData,
     getSheetKeys,
     openVisualizerWithStatus,
-    openDatabaseSettingsWithStatus,
+    openDatabaseUiWithStatus,
 } from '../phone-core/data-api.js';
 import { navigateTo } from '../phone-core/routing.js';
 import { getPhoneSettings } from '../settings.js';
@@ -180,7 +180,7 @@ export function renderHomeScreen(container) {
     bindHomeDockInteractions(dock, viewModel.dockApps, container, {
         navigateTo,
         openVisualizerWithStatus,
-        openDatabaseSettingsWithStatus,
+        openDatabaseUiWithStatus,
         runtime: interactionRuntime,
     });
 }

@@ -37,7 +37,7 @@ export function buildGenericDetailPageHtml(options = {}) {
         <div class="phone-app-page phone-generic-root ${genericStylePayload.className}" data-generic-template-id="${escapeHtmlAttr(genericStylePayload.templateId)}" ${genericStylePayload.dataAttrs} style="${genericStylePayload.styleAttr}">
             ${genericStylePayload.scopedCss ? `<style class="phone-generic-template-inline-style">${genericStylePayload.scopedCss}</style>` : ''}
             <div class="phone-nav-bar phone-generic-slot-nav">
-                <button type="button" class="phone-nav-back">${PHONE_ICONS.back}<span>返回</span></button>
+                <button type="button" class="phone-nav-back" data-action="detail-back">${PHONE_ICONS.back}<span>返回</span></button>
                 <span class="phone-nav-title">${escapeHtml(title)}</span>
             </div>
             <div class="phone-app-body phone-table-body phone-generic-slot-body">

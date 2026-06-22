@@ -31,6 +31,7 @@ const logger = Logger.withScope({ scope: 'phone-core/preload', feature: 'route' 
  */
 const ROUTE_MODULES = [
     '../phone-home/render.js',
+    '../table-update-review/index.js',
     '../table-viewer/render.js',
     '../settings-app/render.js',
     '../phone-fusion/render.js',

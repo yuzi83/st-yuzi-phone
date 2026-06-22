@@ -3,6 +3,12 @@ import { formatTableCountBadge, getHomeDockApps, getSheetRowCount, normalizeHidd
 import { getIconForSheet, getTextIcon } from './icons.js';
 import { VARIABLE_MANAGER_APP, getVariableManagerIcon } from '../variable-manager/index.js';
 import { getAvailableTheaterScenes, getGroupedTheaterSheetKeys } from '../phone-theater/data.js';
+import {
+    TABLE_UPDATE_REVIEW_APP_ICON_TEXT,
+    TABLE_UPDATE_REVIEW_APP_ID,
+    TABLE_UPDATE_REVIEW_APP_NAME,
+    TABLE_UPDATE_REVIEW_ROUTE,
+} from '../table-update-review/constants.js';
 
 function buildTheaterAppIconHtml(scene, customIcon = '') {
     const name = String(scene?.name || '小剧场');
@@ -21,6 +27,25 @@ export function buildHomeScreenViewModel(rawData, phoneSettings, deps = {}) {
     const hideTableCountBadge = !!phoneSettings?.hideTableCountBadge;
 
     const apps = [];
+
+    if (!hiddenTableApps[TABLE_UPDATE_REVIEW_APP_ID]) {
+        const reviewCustomIcon = phoneSettings?.appIcons?.[TABLE_UPDATE_REVIEW_APP_ID] || '';
+        const reviewIconHtml = reviewCustomIcon
+            ? `<img src="${escapeHtmlAttr(reviewCustomIcon)}" class="phone-app-icon-img" alt="${escapeHtmlAttr(TABLE_UPDATE_REVIEW_APP_NAME)}">`
+            : `<div class="phone-app-icon-svg">${getTextIcon(TABLE_UPDATE_REVIEW_APP_ICON_TEXT, '#34C759', '#007AFF')}</div>`;
+        apps.push({
+            key: TABLE_UPDATE_REVIEW_APP_ID,
+            name: TABLE_UPDATE_REVIEW_APP_NAME,
+            iconHtml: reviewIconHtml,
+            badgeText: '',
+            totalCount: 0,
+            animationDelay: '0s',
+            isSystemApp: true,
+            route: TABLE_UPDATE_REVIEW_ROUTE,
+            sortOrder: Number.POSITIVE_INFINITY,
+            sortName: TABLE_UPDATE_REVIEW_APP_NAME,
+        });
+    }
 
     if (!hiddenTableApps[VARIABLE_MANAGER_APP.id]) {
         const vmCustomIcon = phoneSettings?.appIcons?.[VARIABLE_MANAGER_APP.id] || '';

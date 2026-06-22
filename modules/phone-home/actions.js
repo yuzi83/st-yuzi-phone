@@ -53,9 +53,11 @@ export async function handleDockAction(app, container, deps = {}) {
     const {
         navigateTo,
         openVisualizerWithStatus,
+        openDatabaseUiWithStatus,
         openDatabaseSettingsWithStatus,
         runtime = null,
     } = deps;
+    const openDatabaseEntryWithStatus = openDatabaseUiWithStatus || openDatabaseSettingsWithStatus;
 
     if (!app || app.action !== 'invoke') {
         if (typeof navigateTo === 'function') {
@@ -71,8 +73,8 @@ export async function handleDockAction(app, container, deps = {}) {
     try {
         if (app.id === 'visualizer' && typeof openVisualizerWithStatus === 'function') {
             result = await openVisualizerWithStatus({ timeoutMs: 4000 });
-        } else if (app.id === 'db_settings' && typeof openDatabaseSettingsWithStatus === 'function') {
-            result = await openDatabaseSettingsWithStatus({ timeoutMs: 4000 });
+        } else if (app.id === 'db_settings' && typeof openDatabaseEntryWithStatus === 'function') {
+            result = await openDatabaseEntryWithStatus({ timeoutMs: 4000 });
         } else {
             result = { ok: false, message: '未支持的快捷操作' };
         }

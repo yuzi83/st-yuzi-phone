@@ -18,6 +18,10 @@ import {
     startSmallCalendarDerivedFieldsInjection,
     stopSmallCalendarDerivedFieldsInjection,
 } from './derived-fields/small-calendar-derived-fields.js';
+import {
+    startTableUpdateReviewService,
+    stopTableUpdateReviewService,
+} from '../table-update-review/service.js';
 import { getPhoneCoreState, phoneRuntime, resetPhoneCoreState, resetPhoneRuntimeScope } from './state.js';
 import { startDataWatcherForNotifications, stopDataWatcherForNotifications } from './notifications.js';
 import {
@@ -168,6 +172,7 @@ function initializePhoneRuntimeBindings(state = getPhoneCoreState()) {
     initSmartRefreshListener();
     startChronicleTodayRelationInjection();
     startSmallCalendarDerivedFieldsInjection();
+    startTableUpdateReviewService();
     scheduleShellWindowInteractions(state);
     ensureVisibilityLifecycle(state);
 
@@ -224,6 +229,7 @@ function cleanupPhoneRuntimeBindings(state = getPhoneCoreState()) {
     clearRouteRenderSubscription(state);
     stopSmallCalendarDerivedFieldsInjection();
     stopChronicleTodayRelationInjection();
+    stopTableUpdateReviewService();
     unregisterTableUpdateListener();
     unregisterTableFillStartListener();
     destroyPhoneWindowInteractions();

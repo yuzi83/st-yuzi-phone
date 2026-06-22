@@ -34,10 +34,21 @@ export function buildGenericListToolbarActionsHtml(options = {}) {
         totalRowCount = 0,
         showSearch = true,
         sortDescending = false,
+        onlyShowReviewUpdates = false,
+        reviewUpdatedRowCount = 0,
     } = options;
+    const reviewCount = Math.max(0, Number(reviewUpdatedRowCount || 0));
 
     return `
         ${showSearch && searchQuery ? '<button type="button" class="phone-generic-toolbar-btn" data-action="clear-search" data-clear-search="1">清空搜索</button>' : ''}
+        <button
+            type="button"
+            class="phone-generic-toolbar-btn phone-generic-review-filter-btn ${onlyShowReviewUpdates ? 'is-active' : ''}"
+            data-action="toggle-review-updates-only"
+            data-toggle-review-updates-only="1"
+            aria-pressed="${onlyShowReviewUpdates ? 'true' : 'false'}"
+            ${!onlyShowReviewUpdates && reviewCount <= 0 ? 'disabled' : ''}
+        >${onlyShowReviewUpdates ? `本楼更新 ${reviewCount}` : '只看本楼更新'}</button>
         <button
             type="button"
             class="phone-generic-toolbar-btn phone-generic-sort-btn ${sortDescending ? 'is-active' : ''}"
@@ -57,10 +68,18 @@ export function buildGenericListToolbarInfoHtml(options = {}) {
         toolbarHint = '',
         showResultCount = true,
         showToolbarHint = true,
+        onlyShowReviewUpdates = false,
+        reviewUpdatedRowCount = 0,
     } = options;
+    const reviewCount = Math.max(0, Number(reviewUpdatedRowCount || 0));
+    const resultText = onlyShowReviewUpdates
+        ? (searchQuery
+            ? `本楼更新筛选 ${visibleCount}/${reviewCount}`
+            : `本楼更新 ${visibleCount}/${reviewCount}`)
+        : (searchQuery ? `筛选结果 ${visibleCount}/${totalRowCount}` : `共 ${totalRowCount} 条记录`);
 
     return `
-        ${showResultCount ? `<span class="phone-generic-result-pill">${searchQuery ? `筛选结果 ${visibleCount}/${totalRowCount}` : `共 ${totalRowCount} 条记录`}</span>` : ''}
+        ${showResultCount ? `<span class="phone-generic-result-pill">${resultText}</span>` : ''}
         ${showToolbarHint ? `<span class="phone-generic-toolbar-hint">${escapeHtml(toolbarHint)}</span>` : ''}
     `;
 }
@@ -192,13 +211,31 @@ function buildGenericEmptyStateHtml(options = {}) {
         totalRowCount = 0,
         emptyStateTitle = '',
         emptyStateDesc = '',
+        searchQuery = '',
+        onlyShowReviewUpdates = false,
+        reviewUpdatedRowCount = 0,
     } = options;
+    const reviewCount = Math.max(0, Number(reviewUpdatedRowCount || 0));
+    const hasSearchQuery = String(searchQuery || '').trim().length > 0;
+    let emptyAction = 'clear-search';
+    let emptyActionType = 'clear-search';
+    let emptyActionLabel = '清空搜索';
+
+    if (totalRowCount === 0) {
+        emptyAction = 'add-row';
+        emptyActionType = 'add';
+        emptyActionLabel = '新增第一条记录';
+    } else if (onlyShowReviewUpdates && (!hasSearchQuery || reviewCount <= 0)) {
+        emptyAction = 'toggle-review-updates-only';
+        emptyActionType = 'show-all';
+        emptyActionLabel = '显示全部条目';
+    }
 
     return `
         <div class="phone-empty-msg phone-generic-empty-state">
             <div class="phone-generic-empty-title">${escapeHtml(emptyStateTitle)}</div>
             <div class="phone-generic-empty-desc">${escapeHtml(emptyStateDesc)}</div>
-            <button type="button" class="phone-generic-empty-action" data-action="${totalRowCount === 0 ? 'add-row' : 'clear-search'}" data-empty-action="${totalRowCount === 0 ? 'add' : 'clear-search'}">${totalRowCount === 0 ? '新增第一条记录' : '清空搜索'}</button>
+            <button type="button" class="phone-generic-empty-action" data-action="${emptyAction}" data-empty-action="${emptyActionType}">${emptyActionLabel}</button>
         </div>
     `;
 }
@@ -218,6 +255,9 @@ export function buildGenericListContentHtml(options = {}) {
         lockManageMode = false,
         deleteManageMode = false,
         totalRowCount = 0,
+        searchQuery = '',
+        onlyShowReviewUpdates = false,
+        reviewUpdatedRowCount = 0,
     } = options;
 
     if (visibleCount > 0) {
@@ -251,6 +291,9 @@ export function buildGenericListContentHtml(options = {}) {
         totalRowCount,
         emptyStateTitle,
         emptyStateDesc,
+        searchQuery,
+        onlyShowReviewUpdates,
+        reviewUpdatedRowCount,
     });
 }
 
@@ -306,6 +349,8 @@ export function buildGenericListPageHtml(options = {}) {
         lockManageMode = false,
         deleteManageMode = false,
         sortDescending = false,
+        onlyShowReviewUpdates = false,
+        reviewUpdatedRowCount = 0,
     } = options;
 
     return `
@@ -331,6 +376,8 @@ export function buildGenericListPageHtml(options = {}) {
                             showResultCount,
                             showToolbarHint,
                             sortDescending,
+                            onlyShowReviewUpdates,
+                            reviewUpdatedRowCount,
                         })}
                     </div>
                     <div data-generic-list-region="content">
@@ -343,6 +390,9 @@ export function buildGenericListPageHtml(options = {}) {
                             showListArrow,
                             deletingAny,
                             deletingRowIndex,
+                            searchQuery,
+                            onlyShowReviewUpdates,
+                            reviewUpdatedRowCount,
                             emptyStateTitle,
                             emptyStateDesc,
                             lockManageMode,

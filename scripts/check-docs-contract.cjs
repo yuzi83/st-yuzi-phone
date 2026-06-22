@@ -35,14 +35,28 @@ function collectMarkdownLinks(content) {
     const linkPattern = /\[[^\]\n]+\]\(([^)]+)\)/g;
     for (const match of content.matchAll(linkPattern)) {
         const rawTarget = match[1].trim();
-        if (!rawTarget || rawTarget.startsWith('#') || /^[a-z][a-z0-9+.-]*:/i.test(rawTarget)) {
+        if (!rawTarget || rawTarget.startsWith('#')) {
             continue;
         }
-        const targetWithoutAnchor = rawTarget.split('#')[0].split(':')[0];
+
+        const targetWithoutAnchor = rawTarget.split('#')[0];
+        const localLineLinkMatch = targetWithoutAnchor.match(/^(.+\.[a-z0-9_-]+):\d+$/i);
+        const normalizedTarget = localLineLinkMatch
+            ? localLineLinkMatch[1]
+            : targetWithoutAnchor;
+
+        if (/^[a-z][a-z0-9+.-]*:/i.test(normalizedTarget)) {
+            continue;
+        }
+
         if (!targetWithoutAnchor) continue;
-        links.push({ rawTarget, targetWithoutAnchor });
+        links.push({ rawTarget, targetWithoutAnchor: normalizedTarget });
     }
     return links;
+}
+
+function hasAll(content, snippets) {
+    return snippets.every(snippet => has(content, snippet));
 }
 
 function assertLinksExist(results, sourceFile, content) {
@@ -69,15 +83,51 @@ function main() {
     check(results, FILES.docsReadme, 'docs README 指向审查问题台账', has(docsReadme, '[`review-issue-ledger.md`](./review-issue-ledger.md)'));
     check(results, FILES.docsReadme, 'docs README 指向构建发布说明', has(docsReadme, '[`../BUILD.md`](../BUILD.md)'));
     check(results, FILES.docsReadme, 'docs README 指向真实数据库 API 文档', has(docsReadme, '[`reference/API_DOCUMENTATION.md`](./reference/API_DOCUMENTATION.md)'));
-    check(results, FILES.docsReadme, 'docs README 不再指向不存在的 docs/api.md', !has(docsReadme, './api.md') && !has(docsReadme, '](api.md)'));
+    check(results, FILES.docsReadme, 'docs README 不再指向不存在的 docs/api.md', !/\]\((?:\.\/)?api\.md(?::\d+)?(?:#[^)]+)?\)/.test(docsReadme));
     check(results, FILES.docsReadme, 'docs README 明确 docs 与 plans 边界', has(docsReadme, '未实施的计划不写入'));
 
     check(results, FILES.architectureGuide, 'architecture guide 样式链接使用上级 styles 路径', !has(architectureGuide, '](styles/'));
-    check(results, FILES.architectureGuide, 'architecture guide 不再引用不存在的 api.md', !has(architectureGuide, '](api.md)'));
+    check(results, FILES.architectureGuide, 'architecture guide 不再引用不存在的 api.md', !/\]\(api\.md(?::\d+)?(?:#[^)]+)?\)/.test(architectureGuide));
     check(results, FILES.architectureGuide, 'architecture guide 指向 reference/API_DOCUMENTATION.md', has(architectureGuide, '[`reference/API_DOCUMENTATION.md`](reference/API_DOCUMENTATION.md)'));
     check(results, FILES.architectureGuide, 'architecture guide 新增功能清单包含 check:ci', has(architectureGuide, '[`npm run check:ci`](../package.json:12)'));
     check(results, FILES.architectureGuide, 'architecture guide 新增功能清单包含 dist manifest 入口', has(architectureGuide, '[`dist/yuzi-phone.bundle.js`](../dist/yuzi-phone.bundle.js)') && has(architectureGuide, '[`dist/yuzi-phone.bundle.css`](../dist/yuzi-phone.bundle.css)'));
     check(results, FILES.architectureGuide, 'architecture guide 当前文档边界区分 docs 与 plans', has(architectureGuide, '演进规划保存在 [`plans/`](../plans)'));
+    check(results, FILES.architectureGuide, 'architecture guide 登记 Table Update Review 审核 App', hasAll(architectureGuide, [
+        'Table Update Review 审核 App',
+        'Table Update Review 是系统 App',
+        '净变化',
+    ]));
+    check(results, FILES.architectureGuide, 'architecture guide 登记 table-update-review route', hasAll(architectureGuide, [
+        'table-update-review route',
+        'renderTableUpdateReview',
+        '../modules/table-update-review/index.js',
+    ]));
+    check(results, FILES.architectureGuide, 'architecture guide 登记审核 App Home 注入', hasAll(architectureGuide, [
+        'TABLE_UPDATE_REVIEW_APP_ID',
+        'TABLE_UPDATE_REVIEW_ROUTE',
+        '../modules/phone-home/view-model.js',
+    ]));
+    check(results, FILES.architectureGuide, 'architecture guide 登记审核 App route preload', hasAll(architectureGuide, [
+        'ROUTE_MODULES',
+        '../modules/phone-core/preload.js',
+        '../table-update-review/index.js',
+    ]));
+    check(results, FILES.architectureGuide, 'architecture guide 登记审核 App 路由渲染入口', hasAll(architectureGuide, [
+        'loadRouteRenderer',
+        '../modules/phone-core/route-renderer.js',
+        'table-update-review',
+        'renderTableUpdateReview',
+    ]));
+    check(results, FILES.architectureGuide, 'architecture guide 登记审核到通用表详情跳转合同', hasAll(architectureGuide, [
+        'pending navigation intent',
+        'table-generic:<sheetKey>',
+        'Table Viewer',
+    ]));
+    check(results, FILES.architectureGuide, 'architecture guide 登记审核返回语义边界', hasAll(architectureGuide, [
+        '不要为了审核返回链路修改',
+        'navigateBack',
+        '详情本地返回和列表路由返回必须保持不同 action 语义',
+    ]));
 
     check(results, FILES.reviewLedger, 'review ledger 顶部包含当前工程结构优化状态', has(reviewLedger, '## 当前工程结构优化状态'));
     check(results, FILES.reviewLedger, 'review ledger 记录 P0 归档', has(reviewLedger, '2026-05-01_1958_P0工程结构边界修复.md'));

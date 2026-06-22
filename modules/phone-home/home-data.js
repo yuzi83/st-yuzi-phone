@@ -15,7 +15,7 @@ export function getHomeDockApps() {
             name: '数据库',
             icon: getTextIcon('数', '#5AC8FA', '#007AFF'),
             action: 'invoke',
-            pendingMessage: '正在打开数据库设置面板...',
+            pendingMessage: '正在打开数据库界面...',
         },
         { id: 'fusion', name: '缝合', icon: PHONE_ICONS.puzzle, route: 'fusion' },
     ];

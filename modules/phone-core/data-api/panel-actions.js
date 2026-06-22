@@ -1,5 +1,6 @@
 import { Logger } from '../../error-handler.js';
 import { getDB, sleep, withTimeout } from '../db-bridge.js';
+import { openDatabaseUi, openDatabaseVisualizerUi } from './database-ui-bridge.js';
 
 const logger = Logger.withScope({ scope: 'phone-core/data-api/panel-actions', feature: 'db-api' });
 
@@ -67,74 +68,44 @@ export async function triggerManualUpdate() {
 
 export async function openVisualizerWithStatus(options = {}) {
     const timeoutMs = Number(options.timeoutMs);
-    const api = getDB();
-
-    if (!api || typeof api.openVisualizer !== 'function') {
-        return {
-            ok: false,
-            code: 'api_unavailable',
-            message: '可视化编辑器接口不可用，请确认数据库插件已加载',
-        };
-    }
-
     try {
-        await withTimeout(
-            Promise.resolve(api.openVisualizer()),
+        return await withTimeout(
+            openDatabaseVisualizerUi(),
             timeoutMs || 4000,
             '打开可视化编辑器超时',
         );
-        return {
-            ok: true,
-            code: 'ok',
-            message: '已打开可视化编辑器',
-        };
     } catch (error) {
         const isTimeout = /超时/.test(String(error?.message || ''));
         return {
             ok: false,
             code: isTimeout ? 'timeout' : 'failed',
+            source: 'bridge',
             message: isTimeout ? '打开可视化编辑器超时' : `打开可视化编辑器失败：${error?.message || '未知错误'}`,
         };
     }
 }
 
-export async function openDatabaseSettingsWithStatus(options = {}) {
+export async function openDatabaseUiWithStatus(options = {}) {
     const timeoutMs = Number(options.timeoutMs);
-    const api = getDB();
-
-    if (!api || typeof api.openSettings !== 'function') {
-        return {
-            ok: false,
-            code: 'api_unavailable',
-            message: '数据库设置接口不可用，请确认数据库插件已加载',
-        };
-    }
-
     try {
-        const result = await withTimeout(
-            Promise.resolve(api.openSettings()),
+        return await withTimeout(
+            openDatabaseUi(),
             timeoutMs || 4000,
-            '打开数据库设置面板超时',
+            '打开数据库界面超时',
         );
-        if (result === false) {
-            return {
-                ok: false,
-                code: 'failed',
-                message: '打开数据库设置面板失败',
-            };
-        }
-        await sleep(120);
-        return {
-            ok: true,
-            code: 'ok',
-            message: '已打开数据库设置面板',
-        };
     } catch (error) {
         const isTimeout = /超时/.test(String(error?.message || ''));
         return {
             ok: false,
             code: isTimeout ? 'timeout' : 'failed',
-            message: isTimeout ? '打开数据库设置面板超时' : `打开数据库设置面板失败：${error?.message || '未知错误'}`,
+            source: 'bridge',
+            message: isTimeout ? '打开数据库界面超时' : `打开数据库界面失败：${error?.message || '未知错误'}`,
         };
     }
+}
+
+// 兼容旧调用方的历史函数名；实际语义已迁移为“打开数据库 UI”，旧设置面板只作为 bridge fallback。
+// 新代码应优先注入 openDatabaseUiWithStatus，不要继续传播 Settings 命名。
+export async function openDatabaseSettingsWithStatus(options = {}) {
+    return openDatabaseUiWithStatus(options);
 }

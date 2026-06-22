@@ -10,6 +10,7 @@ const FILES = {
     readme: 'styles/README.md',
     phoneBaseReadme: 'styles/phone-base/README.md',
     shell: 'styles/phone-base/01-shell-system.css',
+    tableUpdateReview: 'styles/phone-base/12-table-update-review.css',
     settingsModern: 'styles/phone-base/07-settings-modern.css',
     fontLibrary: 'modules/settings-app/services/appearance-settings/font-library-service.js',
 };
@@ -55,6 +56,12 @@ function check(results, fileKey, description, ok) {
     results.push({ file: FILES[fileKey] || fileKey, description, ok });
 }
 
+function appearsBefore(content, firstSnippet, secondSnippet) {
+    const firstIndex = content.indexOf(firstSnippet);
+    const secondIndex = content.indexOf(secondSnippet);
+    return firstIndex >= 0 && secondIndex >= 0 && firstIndex < secondIndex;
+}
+
 function main() {
     const contents = Object.fromEntries(
         Object.entries(FILES).map(([key, relativePath]) => [key, read(relativePath)])
@@ -76,9 +83,56 @@ function main() {
     check(results, 'base', 'base 入口继续导入 settings modern', has(contents.base, "@import url('./phone-base/07-settings-modern.css');"));
     check(results, 'base', 'base 入口继续导入 table manage detail', has(contents.base, "@import url('./phone-base/09-table-manage-detail.css');"));
     check(results, 'base', 'base 入口继续导入 scroll patches', has(contents.base, "@import url('./phone-base/10-scroll-generic-patches.css');"));
+    check(results, 'base', 'base 入口继续导入 table update review', has(contents.base, "@import url('./phone-base/12-table-update-review.css');"));
+    check(results, 'base', 'base 入口保持 table manage detail 在 table update review 之前', appearsBefore(contents.base, "@import url('./phone-base/09-table-manage-detail.css');", "@import url('./phone-base/12-table-update-review.css');"));
+    check(results, 'base', 'base 入口保持 table update review 在 scroll patches 之前', appearsBefore(contents.base, "@import url('./phone-base/12-table-update-review.css');", "@import url('./phone-base/10-scroll-generic-patches.css');"));
     check(results, 'base', 'base 入口不再默认加载 table legacy', !has(contents.base, "@import url('./phone-base/03-table-legacy.css');"));
     check(results, 'base', 'base 入口不再默认加载 settings legacy', !has(contents.base, "@import url('./phone-base/04-settings-legacy.css');"));
     check(results, 'base', 'base 入口不再保留已清理的 Legacy archive 注释段落', !has(contents.base, 'Legacy archive'));
+
+    check(results, 'tableUpdateReview', '审核页样式层文件存在并被合同读取', exists(FILES.tableUpdateReview));
+    for (const selector of [
+        '.tur-page',
+        '.tur-nav',
+        '.tur-nav-back',
+        '.tur-body',
+        '.tur-content',
+        '.tur-summary',
+        '.tur-kicker',
+        '.tur-metrics',
+        '.tur-table-list',
+        '.tur-table-card',
+        '.tur-table-header',
+        '.tur-table-count',
+        '.tur-change-list',
+        '.tur-change-item',
+        '.tur-change-type',
+        '.tur-change-main',
+        '.tur-row-title',
+        '.tur-change-fields',
+        '.tur-field-block',
+        '.tur-field-name',
+        '.tur-field-before',
+        '.tur-field-arrow',
+        '.tur-field-after',
+        '.tur-field-value',
+        '.tur-empty',
+    ]) {
+        check(results, 'tableUpdateReview', `审核页样式层包含关键选择器 ${selector}`, has(contents.tableUpdateReview, selector));
+    }
+    check(results, 'tableUpdateReview', '审核页样式层不再保留刷新按钮选择器', !has(contents.tableUpdateReview, '.tur-refresh-btn'));
+    check(results, 'tableUpdateReview', '审核页白天模式标题栏使用审核页文本色保证可读', has(contents.tableUpdateReview, '.tur-nav .phone-nav-title')
+        && has(contents.tableUpdateReview, 'color: var(--tur-text);'));
+    check(results, 'tableUpdateReview', '审核页包含 details/summary 折叠态样式', has(contents.tableUpdateReview, '.tur-table-card[open]')
+        && has(contents.tableUpdateReview, '.tur-table-summary'));
+    check(results, 'tableUpdateReview', '审核页删除态样式包含红线、轻红底和不可点击视觉', has(contents.tableUpdateReview, '.tur-change-item.is-delete')
+        && has(contents.tableUpdateReview, 'border-left')
+        && has(contents.tableUpdateReview, 'cursor: default'));
+    check(results, 'tableUpdateReview', '审核页长文本有截断样式', has(contents.tableUpdateReview, 'text-overflow: ellipsis')
+        && has(contents.tableUpdateReview, 'overflow: hidden')
+        && has(contents.tableUpdateReview, 'white-space: nowrap'));
+    check(results, 'tableUpdateReview', '审核页变更说明样式匹配模板 small 元素', has(contents.tableUpdateReview, '.tur-change-main small'));
+    check(results, 'tableUpdateReview', '审核页不再保留字段更多提示样式', !has(contents.tableUpdateReview, '.tur-field-more'));
 
     const homeOverlayBlock = getCssRuleBlock(contents.home, '.phone-home-overlay');
     check(results, 'home', '主页不再保留整屏 overlay 规则', homeOverlayBlock.length === 0);
@@ -138,8 +192,12 @@ function main() {
     check(results, 'readme', 'styles README 不再指向已清理的 legacy README', !has(contents.readme, '`styles/legacy/README.md`'));
     check(results, 'readme', 'styles README 不再指向已清理的 legacy phone-base README', !has(contents.readme, '`styles/legacy/phone-base/README.md`'));
     check(results, 'readme', 'styles README 说明收口原则', has(contents.readme, '## 当前收口原则'));
+    check(results, 'readme', 'styles README 登记 table update review 样式层', has(contents.readme, '`12-table-update-review.css`'));
+    check(results, 'readme', 'styles README 保持 table update review 在 scroll patches 之前', appearsBefore(contents.readme, '`12-table-update-review.css`', '`10-scroll-generic-patches.css`'));
 
     check(results, 'phoneBaseReadme', 'phone-base README 说明 modern active', has(contents.phoneBaseReadme, '## modern active'));
+    check(results, 'phoneBaseReadme', 'phone-base README 登记 table update review 样式层', has(contents.phoneBaseReadme, '`12-table-update-review.css`'));
+    check(results, 'phoneBaseReadme', 'phone-base README 保持 table update review 在 scroll patches 之前', appearsBefore(contents.phoneBaseReadme, '`12-table-update-review.css`', '`10-scroll-generic-patches.css`'));
     check(results, 'phoneBaseReadme', 'phone-base README 不再保留已清理的 legacy archive 段落', !has(contents.phoneBaseReadme, '## legacy archive'));
 
     for (const removedPath of REMOVED_FILES) {

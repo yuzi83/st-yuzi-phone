@@ -51,17 +51,27 @@ function main() {
     check(results, 'renderer', 'renderer 行级 patch 使用实时锚点 insertBefore', has(contents.renderer, 'list.insertBefore(node, referenceNode);'));
     check(results, 'renderer', 'renderer 行级 patch 失败时回退到全量内容刷新', has(contents.renderer, 'contentRegion.innerHTML = regionHtml.contentHtml;'));
     check(results, 'renderer', 'renderer 行级 patch 失败日志接入 Logger', has(contents.renderer, "Logger.withScope({ scope: 'table-viewer/list-page-renderer'"));
+    check(results, 'renderer', 'renderer 使用审核 store 单次读取当前表更新集合', has(contents.renderer, 'getUpdatedRowsForSheet(sheetKey)') && !has(contents.renderer, 'hasReviewUpdatesForRow(sheetKey'));
+    check(results, 'renderer', 'renderer 在搜索前应用只看本楼更新过滤', has(contents.renderer, 'const reviewFilteredRows = onlyShowReviewUpdates') && contents.renderer.indexOf('const reviewFilteredRows = onlyShowReviewUpdates') < contents.renderer.indexOf('const filteredRows = searchQueryLower'));
+    check(results, 'renderer', 'renderer 审核过滤优先 rowId 并仅在无 rowId 时回退 rowIndex', has(contents.renderer, 'const normalizedReviewRowId = String(reviewRowId || \'\').trim();') && has(contents.renderer, 'const reviewUpdated = normalizedReviewRowId') && has(contents.renderer, '? reviewRowIds.has(normalizedReviewRowId)') && has(contents.renderer, ': reviewRowIndexes.has(Number(rowIndex));'));
+    check(results, 'renderer', 'renderer 审核过滤不允许 rowId 与 rowIndex 并列 OR 判定', !has(contents.renderer, 'reviewRowIds.has(String(reviewRowId)))\n            || reviewRowIndexes.has(Number(rowIndex))'));
+    check(results, 'renderer', 'renderer 将只看本楼更新纳入 toolbar actions/info/content/nav patch', has(contents.renderer, "changedKeySet.has('onlyShowReviewUpdates')") && has(contents.renderer, 'updateToolbarActions') && has(contents.renderer, 'updateToolbarInfo') && has(contents.renderer, 'updateContent'));
 
     check(results, 'template', '模板继续提供搜索 region', has(contents.template, 'data-generic-toolbar-region="search"'));
     check(results, 'template', '模板继续提供稳定搜索输入 id', has(contents.template, 'id="phone-generic-list-search"'));
     check(results, 'template', '模板继续暴露 toolbar region 容器', has(contents.template, 'data-generic-list-region="toolbar"'));
     check(results, 'template', '模板行节点继续暴露 data-row-key', has(contents.template, 'data-row-key='));
     check(results, 'template', '模板行节点继续暴露 data-row-version', has(contents.template, 'data-row-version='));
+    check(results, 'template', '模板提供只看本楼更新按钮与 aria-pressed', has(contents.template, 'data-action="toggle-review-updates-only"') && has(contents.template, 'aria-pressed="${onlyShowReviewUpdates ? \'true\' : \'false\'}"'));
+    check(results, 'template', '模板允许已开启的本楼更新过滤被关闭', has(contents.template, "${!onlyShowReviewUpdates && reviewCount <= 0 ? 'disabled' : ''}"));
+    check(results, 'template', '模板 review-only 空态提供显示全部动作', has(contents.template, "emptyAction = 'toggle-review-updates-only';") && has(contents.template, "emptyActionType = 'show-all';"));
+    check(results, 'template', '模板把 review 过滤状态传入 toolbar 和 content', has(contents.template, 'onlyShowReviewUpdates,') && has(contents.template, 'reviewUpdatedRowCount,'));
 
     check(results, 'runtime', 'runtime 继续维护 LIST_STATE_REFRESH_KEYS', has(contents.runtime, 'const LIST_STATE_REFRESH_KEYS = new Set(['));
     check(results, 'runtime', 'runtime 继续对 listSearchQuery 触发局部刷新', has(contents.runtime, "'listSearchQuery'"));
     check(results, 'runtime', 'runtime 继续对 listSortDescending 触发局部刷新', has(contents.runtime, "'listSortDescending'"));
     check(results, 'runtime', 'runtime 已将 deletingRowIndex 纳入局部刷新键', has(contents.runtime, "'deletingRowIndex'"));
+    check(results, 'runtime', 'runtime 已将 onlyShowReviewUpdates 纳入局部刷新键', has(contents.runtime, "'onlyShowReviewUpdates'"));
     check(results, 'runtime', 'runtime 继续在 list 模式下派发订阅刷新', has(contents.runtime, "if (state.mode !== 'list') return;"));
     check(results, 'runtime', 'runtime 继续通过 activeListRefreshHandler 驱动局部刷新', has(contents.runtime, 'activeListRefreshHandler(Array.isArray(changedKeys) ? changedKeys : []);'));
 

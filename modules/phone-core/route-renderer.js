@@ -35,6 +35,16 @@ async function loadRouteRenderer(route, renderToken) {
         };
     }
 
+    if (route === 'table-update-review') {
+        const { renderTableUpdateReview } = await import('../table-update-review/index.js');
+        return {
+            routeType: 'table-update-review',
+            render(page) {
+                renderTableUpdateReview(page, { renderToken });
+            },
+        };
+    }
+
     if (route.startsWith('app:')) {
         const sheetKey = route.replace('app:', '').trim();
         const [{ getTableData }, { resolveTheaterSceneBySheetKey }] = await Promise.all([

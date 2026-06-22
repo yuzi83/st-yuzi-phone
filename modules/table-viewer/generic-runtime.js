@@ -21,6 +21,8 @@ import { renderGenericListPage } from './list-page-renderer.js';
 import { renderGenericDetailPage } from './detail-page-renderer.js';
 import { createDdlFieldMetadata } from './ddl-field-metadata.js';
 import { showInlineToast } from './shared-ui.js';
+import { consumePendingTableReviewNavigationIntent } from '../table-update-review/navigation-intent.js';
+import { resolveReviewIntentTargetRowIndex } from './review-intent-resolver.js';
 
 const logger = Logger.withScope({ scope: 'table-viewer/generic-runtime', feature: 'table-viewer' });
 
@@ -112,7 +114,20 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
         rawHeaders,
     });
     const state = createTableViewerState(sheetKey);
-    if (hooks.forceListMode === true || hooks.initialMode === 'list') {
+    let enteredReviewDetail = false;
+    const reviewNavigationIntent = consumePendingTableReviewNavigationIntent(sheetKey);
+    if (reviewNavigationIntent) {
+        const { rowIndex } = resolveReviewIntentTargetRowIndex(reviewNavigationIntent, {
+            rows,
+            headers,
+            rawHeaders,
+        });
+        if (rowIndex >= 0) {
+            state.enterDetailMode(rowIndex);
+            enteredReviewDetail = true;
+        }
+    }
+    if ((hooks.forceListMode === true || hooks.initialMode === 'list') && !enteredReviewDetail) {
         state.returnToListMode();
     }
     const scrollPreserver = createTableViewerScrollPreserver(container, state, undefined, viewerRuntime);
@@ -127,6 +142,7 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
         'deletingRowIndex',
         'selectedDeleteRowIndexes',
         'deletingSelection',
+        'onlyShowReviewUpdates',
     ]);
 
     const setListRefreshHandler = (handler) => {

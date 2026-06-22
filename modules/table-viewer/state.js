@@ -13,8 +13,19 @@ const DIAGNOSTIC_STATE_KEYS = new Set([
     'deletingRowIndex',
     'selectedDeleteRowIndexes',
     'deletingSelection',
+    'onlyShowReviewUpdates',
     'pendingExternalTableUpdate',
 ]);
+
+let sharedOnlyShowReviewUpdates = false;
+
+export function getSharedOnlyShowReviewUpdates() {
+    return sharedOnlyShowReviewUpdates;
+}
+
+export function setSharedOnlyShowReviewUpdates(next) {
+    sharedOnlyShowReviewUpdates = next === true;
+}
 
 function normalizeRowIndexList(rowIndexes = []) {
     return Array.from(new Set((Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes])
@@ -155,6 +166,7 @@ export class TableViewerState {
                             deletingRowIndex: this._state.deletingRowIndex,
                             selectedDeleteRowIndexes: this._state.selectedDeleteRowIndexes,
                             deletingSelection: this._state.deletingSelection,
+                            onlyShowReviewUpdates: this._state.onlyShowReviewUpdates,
                         },
                     },
                 });
@@ -562,6 +574,7 @@ export function createTableViewerState(sheetKey) {
         detailScrollTop: 0,
         listSearchQuery: '',
         listSortDescending: false,
+        onlyShowReviewUpdates: getSharedOnlyShowReviewUpdates(),
         pendingExternalTableUpdate: null,
     });
 

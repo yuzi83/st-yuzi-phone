@@ -1,5 +1,6 @@
 import { Logger } from '../error-handler.js';
 import { showConfirmDialog } from '../settings-app/ui/confirm-dialog.js';
+import { setSharedOnlyShowReviewUpdates } from './state.js';
 
 const logger = Logger.withScope({ scope: 'table-viewer/list-controller', feature: 'table-viewer' });
 const GENERIC_LIST_CONTROLLER_KEY = '__stYuziGenericListController';
@@ -457,6 +458,11 @@ async function handleActionClick(container, actionEl) {
             return;
         case 'toggle-sort':
             context.state.set('listSortDescending', !context.state.listSortDescending);
+            return;
+        case 'toggle-review-updates-only':
+            const nextOnlyShowReviewUpdates = !context.state.onlyShowReviewUpdates;
+            setSharedOnlyShowReviewUpdates(nextOnlyShowReviewUpdates);
+            context.state.set('onlyShowReviewUpdates', nextOnlyShowReviewUpdates);
             return;
         case 'clear-search':
             context.state.set('listSearchQuery', '');
