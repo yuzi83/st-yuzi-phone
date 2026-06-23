@@ -1,4 +1,5 @@
 import { Logger } from '../error-handler.js';
+import defaultPhoneToggleIcon from '../../assets/icons/default-toggle-phone-data-url.js';
 import {
     normalizePhoneAiInstructionSegmentMainSlot,
 } from '../phone-core/chat-support/ai-instruction-slots.js';
@@ -118,10 +119,10 @@ export const defaultSettings = {
     },
     beautifyActiveTemplateIdGeneric: 'builtin.generic.table.v1',
     dockIconSize: 48,
-    phoneToggleStyleSize: 44,
-    phoneToggleStyleShape: 'rounded',
+    phoneToggleStyleSize: 56,
+    phoneToggleStyleShape: 'circle',
     appearanceActivePackId: '',
-    phoneToggleCoverImage: null,
+    phoneToggleCoverImage: defaultPhoneToggleIcon,
     appearanceResourcePool: {
         wallpapers: [],
         icons: [],
