@@ -15,7 +15,6 @@ import {
     generateColor,
     getAvatarText,
 } from '../view-utils.js';
-import { bindStableActionDelegate } from './action-delegate.js';
 import { getCurrentAiInstructionPresetNameText } from './shared.js';
 
 const MESSAGE_CONVERSATION_VIEW_KEY = '__stYuziMessageConversationView';
@@ -29,11 +28,90 @@ function getMessageConversationViewContext(container) {
 function setMessageConversationViewContext(container, options = {}) {
     if (!(container instanceof HTMLElement)) return null;
 
-    const currentContext = getMessageConversationViewContext(container) || {};
+    const currentContext = getMessageConversationViewContext(container) || {
+        delegatedBound: false,
+    };
     Object.assign(currentContext, options);
-    currentContext.active = true;
+    if (currentContext.state && typeof currentContext.state === 'object') {
+        currentContext.state.stableTapGuards = currentContext.state.stableTapGuards && typeof currentContext.state.stableTapGuards === 'object'
+            ? currentContext.state.stableTapGuards
+            : Object.create(null);
+    }
     container[MESSAGE_CONVERSATION_VIEW_KEY] = currentContext;
     return currentContext;
+}
+
+const POINTER_CLICK_SUPPRESS_MS = {
+    mouse: 80,
+    touch: 450,
+    pen: 450,
+    unknown: 80,
+};
+
+function normalizePointerType(value) {
+    const pointerType = String(value || 'unknown').trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(POINTER_CLICK_SUPPRESS_MS, pointerType) ? pointerType : 'unknown';
+}
+
+function getEventTime(event) {
+    return Number.isFinite(event?.timeStamp) ? Number(event.timeStamp) : Date.now();
+}
+
+function getStableTapGuard(context, action) {
+    const guardKey = String(action || '').trim() || '__default__';
+    const state = context?.state && typeof context.state === 'object' ? context.state : null;
+    if (!state) {
+        return {
+            lastPointerHandledAt: -Infinity,
+            lastPointerType: 'unknown',
+        };
+    }
+    const guards = state?.stableTapGuards && typeof state.stableTapGuards === 'object'
+        ? state.stableTapGuards
+        : (state.stableTapGuards = Object.create(null));
+    const existingGuard = guards[guardKey];
+    if (existingGuard && typeof existingGuard === 'object') {
+        return existingGuard;
+    }
+
+    const guard = {
+        lastPointerHandledAt: -Infinity,
+        lastPointerType: 'unknown',
+    };
+    guards[guardKey] = guard;
+    return guard;
+}
+
+function markPointerHandled(context, action, event) {
+    const guard = getStableTapGuard(context, action);
+    guard.lastPointerType = normalizePointerType(event?.pointerType);
+    guard.lastPointerHandledAt = getEventTime(event);
+}
+
+function shouldSuppressSyntheticClick(context, action, event) {
+    const guard = getStableTapGuard(context, action);
+    const suppressWindow = POINTER_CLICK_SUPPRESS_MS[normalizePointerType(guard.lastPointerType)] ?? POINTER_CLICK_SUPPRESS_MS.unknown;
+    const elapsed = getEventTime(event) - guard.lastPointerHandledAt;
+    return elapsed >= 0 && elapsed <= suppressWindow;
+}
+
+function consumeEvent(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+}
+
+function getActionElement(event, container) {
+    const target = event?.target instanceof Element ? event.target : null;
+    if (!target || !(container instanceof HTMLElement) || !container.contains(target)) return null;
+    const actionEl = target.closest('[data-action]');
+    return actionEl instanceof HTMLElement && container.contains(actionEl) ? actionEl : null;
+}
+
+function isDisabledActionElement(actionEl) {
+    if (!(actionEl instanceof HTMLElement)) return true;
+    if (typeof HTMLButtonElement !== 'undefined' && actionEl instanceof HTMLButtonElement && actionEl.disabled) return true;
+    if (typeof HTMLButtonElement === 'undefined' && 'disabled' in actionEl && actionEl.disabled === true) return true;
+    return actionEl.getAttribute('aria-disabled') === 'true';
 }
 
 function openConversation(container, convId) {
@@ -79,58 +157,51 @@ function dispatchConversationAction(container, context, actionEl) {
 
 function bindMessageConversationViewController(container) {
     const context = getMessageConversationViewContext(container);
-    if (!(container instanceof HTMLElement) || !context) return { dispose: () => {} };
+    if (!(container instanceof HTMLElement) || !context) return;
+    if (context.delegatedBound) return;
 
     const runtime = context.viewerRuntime && typeof context.viewerRuntime === 'object' ? context.viewerRuntime : null;
-    const sharedPointerGuards = context.actionGuardStore && typeof context.actionGuardStore === 'object' ? context.actionGuardStore : null;
     const addListener = runtime?.addEventListener
         ? (...args) => runtime.addEventListener(...args)
         : (target, type, listener, options) => {
             target.addEventListener(type, listener, options);
             return () => target.removeEventListener(type, listener, options);
         };
-    const cleanups = [];
-    let disposed = false;
-    const addCleanup = (cleanup) => {
-        if (typeof cleanup !== 'function') return;
-        if (disposed) {
-            cleanup();
+
+    addListener(container, 'pointerup', (event) => {
+        const currentContext = getMessageConversationViewContext(container);
+        const actionEl = getActionElement(event, container);
+        if (!currentContext || !actionEl) return;
+        if (isDisabledActionElement(actionEl)) return;
+        const action = String(actionEl.dataset.action || '').trim();
+        if (!action) return;
+        if (!['nav-back', 'open-conversation', 'open-contact-picker'].includes(action)) return;
+        markPointerHandled(currentContext, action, event);
+        consumeEvent(event);
+        dispatchConversationAction(container, currentContext, actionEl);
+    });
+
+    addListener(container, 'click', (event) => {
+        const currentContext = getMessageConversationViewContext(container);
+        const actionEl = getActionElement(event, container);
+        if (!currentContext || !actionEl) return;
+        if (isDisabledActionElement(actionEl)) return;
+
+        const action = String(actionEl.dataset.action || '').trim();
+        if (!action) return;
+        if (!['nav-back', 'open-conversation', 'open-contact-picker'].includes(action)) return;
+        if (shouldSuppressSyntheticClick(currentContext, action, event)) {
+            consumeEvent(event);
             return;
         }
-        cleanups.push(cleanup);
-    };
-    const dispose = () => {
-        if (disposed) return;
-        disposed = true;
-        context.active = false;
-        while (cleanups.length > 0) {
-            cleanups.pop()?.();
-        }
-        if (getMessageConversationViewContext(container) === context) {
-            delete container[MESSAGE_CONVERSATION_VIEW_KEY];
-        }
-    };
+        consumeEvent(event);
+        dispatchConversationAction(container, currentContext, actionEl);
+    });
 
-    addCleanup(bindStableActionDelegate({
-        container,
-        runtime,
-        actions: ['nav-back', 'open-conversation', 'open-contact-picker'],
-        sharedPointerGuards,
-        isActive: () => {
-            const currentContext = getMessageConversationViewContext(container);
-            return currentContext === context && context.active !== false && context.state?.mode === 'conversation';
-        },
-        onAction: ({ actionEl }) => {
-            const currentContext = getMessageConversationViewContext(container);
-            if (currentContext !== context || context.active === false) return;
-            dispatchConversationAction(container, currentContext, actionEl);
-        },
-    }).dispose);
-
-    addCleanup(addListener(container, 'change', (event) => {
+    addListener(container, 'change', (event) => {
         const currentContext = getMessageConversationViewContext(container);
         const target = event.target instanceof HTMLSelectElement ? event.target : null;
-        if (currentContext !== context || context.active === false || !currentContext?.state || !(target instanceof HTMLSelectElement) || !container.contains(target)) {
+        if (!currentContext?.state || !(target instanceof HTMLSelectElement) || !container.contains(target)) {
             return;
         }
         if (target.dataset.action !== 'select-prompt-preset') {
@@ -146,9 +217,15 @@ function bindMessageConversationViewController(container) {
             return;
         }
         showInlineToast(container, result?.message || '切换预设失败', true);
-    }));
+    });
 
-    return { dispose };
+    context.delegatedBound = true;
+    runtime?.registerCleanup?.(() => {
+        const currentContext = getMessageConversationViewContext(container);
+        if (currentContext) {
+            currentContext.delegatedBound = false;
+        }
+    });
 }
 
 export function renderMessageConversationView(options = {}) {
@@ -165,7 +242,6 @@ export function renderMessageConversationView(options = {}) {
         renderKeepScroll,
         renderContactPicker,
         viewerRuntime,
-        actionGuardStore,
     } = options;
 
     if (!(container instanceof HTMLElement) || !state || typeof readSpecialField !== 'function') return;
@@ -231,20 +307,18 @@ export function renderMessageConversationView(options = {}) {
         </div>
     `;
 
-    const viewContext = setMessageConversationViewContext(container, {
+    setMessageConversationViewContext(container, {
         state,
         readSpecialField,
         createDraftConversationId,
         render,
         renderKeepScroll,
         viewerRuntime,
-        actionGuardStore,
     });
     bindWheelBridge(container);
-    const session = bindMessageConversationViewController(container);
+    bindMessageConversationViewController(container);
 
     if (state.contactPickerVisible && typeof renderContactPicker === 'function') {
         renderContactPicker();
     }
-    return session || { dispose: () => { if (viewContext) viewContext.active = false; } };
 }

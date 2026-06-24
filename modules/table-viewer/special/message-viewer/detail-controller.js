@@ -1,5 +1,3 @@
-import { bindStableActionDelegate } from './action-delegate.js';
-
 const MESSAGE_DETAIL_CONTROLLER_KEY = '__stYuziMessageDetailController';
 
 function getMessageDetailControllerContext(container) {
@@ -12,15 +10,44 @@ function setMessageDetailControllerContext(container, options = {}) {
     if (!(container instanceof HTMLElement)) return null;
 
     const currentContext = getMessageDetailControllerContext(container) || {
+        delegatedBound: false,
+        stableTapGuards: Object.create(null),
         overlayFreshTapGuards: Object.create(null),
     };
     Object.assign(currentContext, options);
-    currentContext.active = true;
+    const stateStableTapGuards = currentContext.state?.stableTapGuards && typeof currentContext.state.stableTapGuards === 'object'
+        ? currentContext.state.stableTapGuards
+        : null;
+    currentContext.stableTapGuards = stateStableTapGuards
+        || (currentContext.stableTapGuards && typeof currentContext.stableTapGuards === 'object'
+            ? currentContext.stableTapGuards
+            : Object.create(null));
+    if (currentContext.state && typeof currentContext.state === 'object') {
+        currentContext.state.stableTapGuards = currentContext.stableTapGuards;
+    }
     currentContext.overlayFreshTapGuards = currentContext.overlayFreshTapGuards && typeof currentContext.overlayFreshTapGuards === 'object'
         ? currentContext.overlayFreshTapGuards
         : Object.create(null);
     container[MESSAGE_DETAIL_CONTROLLER_KEY] = currentContext;
     return currentContext;
+}
+
+function getStableTapGuard(context, action) {
+    const guardKey = String(action || '').trim() || '__default__';
+    const guards = context?.stableTapGuards && typeof context.stableTapGuards === 'object'
+        ? context.stableTapGuards
+        : (context.stableTapGuards = Object.create(null));
+    const existingGuard = guards[guardKey];
+    if (existingGuard && typeof existingGuard === 'object') {
+        return existingGuard;
+    }
+
+    const guard = {
+        lastPointerHandledAt: -Infinity,
+        lastPointerType: 'unknown',
+    };
+    guards[guardKey] = guard;
+    return guard;
 }
 
 const POINTER_CLICK_SUPPRESS_MS = {
@@ -41,6 +68,19 @@ function getPointerClickSuppressWindow(pointerType) {
 
 function getEventTime(event) {
     return Number.isFinite(event?.timeStamp) ? Number(event.timeStamp) : Date.now();
+}
+
+function shouldSuppressSyntheticClick(context, action, event) {
+    const guard = getStableTapGuard(context, action);
+    const suppressWindow = getPointerClickSuppressWindow(guard.lastPointerType);
+    const elapsed = getEventTime(event) - guard.lastPointerHandledAt;
+    return elapsed >= 0 && elapsed <= suppressWindow;
+}
+
+function markPointerHandled(context, action, event) {
+    const guard = getStableTapGuard(context, action);
+    guard.lastPointerType = normalizePointerType(event?.pointerType);
+    guard.lastPointerHandledAt = getEventTime(event);
 }
 
 function getOverlayFreshTapGuard(context, kind) {
@@ -84,10 +124,23 @@ function consumeEvent(event) {
     event?.stopPropagation?.();
 }
 
+function getActionElement(event, container) {
+    const target = event?.target instanceof Element ? event.target : null;
+    if (!target || !(container instanceof HTMLElement) || !container.contains(target)) return null;
+    const actionEl = target.closest('[data-action]');
+    return actionEl instanceof HTMLElement && container.contains(actionEl) ? actionEl : null;
+}
+
+function isDisabledActionElement(actionEl) {
+    if (!(actionEl instanceof HTMLElement)) return true;
+    if (typeof HTMLButtonElement !== 'undefined' && actionEl instanceof HTMLButtonElement && actionEl.disabled) return true;
+    if (typeof HTMLButtonElement === 'undefined' && 'disabled' in actionEl && actionEl.disabled === true) return true;
+    return actionEl.getAttribute('aria-disabled') === 'true';
+}
+
 function getDetailContextForEvent(container) {
     const context = getMessageDetailControllerContext(container);
     if (!(container instanceof HTMLElement) || !context?.state) return null;
-    if (context.active === false) return null;
     if (context.state.mode !== 'detail') return null;
     return context;
 }
@@ -362,7 +415,7 @@ function dispatchDetailAction(container, context, actionEl, event = null) {
     if (!action) return false;
 
     switch (action) {
-        case 'detail-back':
+        case 'nav-back':
             handleNavBack(context);
             return true;
         case 'toggle-delete-mode':
@@ -414,66 +467,29 @@ function dispatchDetailAction(container, context, actionEl, event = null) {
 }
 
 function bindMessageDetailDelegates(container, context) {
-    if (!(container instanceof HTMLElement) || !context) return { dispose: () => {} };
+    if (!(container instanceof HTMLElement) || !context || context.delegatedBound) return;
 
     const runtime = context.viewerRuntime && typeof context.viewerRuntime === 'object' ? context.viewerRuntime : null;
-    const sharedPointerGuards = context.actionGuardStore && typeof context.actionGuardStore === 'object' ? context.actionGuardStore : null;
     const addListener = runtime?.addEventListener
         ? (...args) => runtime.addEventListener(...args)
         : (target, type, listener, options) => {
             target.addEventListener(type, listener, options);
             return () => target.removeEventListener(type, listener, options);
         };
-    const cleanups = [];
-    let disposed = false;
-    const addCleanup = (cleanup) => {
-        if (typeof cleanup !== 'function') return;
-        if (disposed) {
-            cleanup();
-            return;
-        }
-        cleanups.push(cleanup);
-    };
-    const dispose = () => {
-        if (disposed) return;
-        disposed = true;
-        context.active = false;
-        while (cleanups.length > 0) {
-            cleanups.pop()?.();
-        }
-    };
 
-    addCleanup(bindStableActionDelegate({
-        container,
-        runtime,
-        sharedPointerGuards,
-        actions: [
-            'detail-back',
-            'toggle-delete-mode',
-            'select-all',
-            'clear-selection',
-            'delete-selection',
-            'toggle-row-selection',
-            'open-media-preview',
-            'close-media-preview',
-            'send-message',
-            'stop-message',
-            'retry-message',
-            'retry-archive',
-            'open-attachment-dialog',
-            'close-attachment-dialog',
-            'save-compose-media',
-            'clear-compose-media',
-        ],
-        isActive: () => getDetailContextForEvent(container) === context,
-        onAction: ({ actionEl, event }) => {
-            const currentContext = getDetailContextForEvent(container);
-            if (!currentContext) return;
-            dispatchDetailAction(container, currentContext, actionEl, event);
-        },
-    }).dispose);
+    addListener(container, 'pointerup', (event) => {
+        const currentContext = getDetailContextForEvent(container);
+        const actionEl = getActionElement(event, container);
+        if (!currentContext || !actionEl) return;
+        if (isDisabledActionElement(actionEl)) return;
+        const action = String(actionEl.dataset.action || '').trim();
+        if (!action) return;
+        markPointerHandled(currentContext, action, event);
+        consumeEvent(event);
+        dispatchDetailAction(container, currentContext, actionEl, event);
+    });
 
-    addCleanup(addListener(container, 'click', (event) => {
+    addListener(container, 'click', (event) => {
         const currentContext = getDetailContextForEvent(container);
         const target = event.target instanceof HTMLElement ? event.target : null;
         if (!currentContext || !target || !container.contains(target)) return;
@@ -494,9 +510,20 @@ function bindMessageDetailDelegates(container, context) {
             return;
         }
 
-    }));
+        const actionEl = getActionElement(event, container);
+        if (!actionEl) return;
+        if (isDisabledActionElement(actionEl)) return;
+        const action = String(actionEl.dataset.action || '').trim();
+        if (!action) return;
+        if (shouldSuppressSyntheticClick(currentContext, action, event)) {
+            consumeEvent(event);
+            return;
+        }
+        consumeEvent(event);
+        dispatchDetailAction(container, currentContext, actionEl, event);
+    });
 
-    addCleanup(addListener(container, 'input', (event) => {
+    addListener(container, 'input', (event) => {
         const currentContext = getDetailContextForEvent(container);
         const attachmentInput = getAttachmentInputFromEvent(event, container);
         if (currentContext && attachmentInput instanceof HTMLTextAreaElement) {
@@ -523,18 +550,24 @@ function bindMessageDetailDelegates(container, context) {
         } else {
             resizeCompose(currentContext, composeInput);
         }
-    }));
+    });
 
-    addCleanup(addListener(container, 'keydown', (event) => {
+    addListener(container, 'keydown', (event) => {
         const currentContext = getDetailContextForEvent(container);
         const composeInput = getComposeInputFromEvent(event, container);
         if (!currentContext || !(composeInput instanceof HTMLTextAreaElement)) return;
         if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
         consumeEvent(event);
         handleSendMessage(currentContext);
-    }));
+    });
 
-    return { dispose };
+    context.delegatedBound = true;
+    runtime?.registerCleanup?.(() => {
+        const currentContext = getMessageDetailControllerContext(container);
+        if (currentContext) {
+            currentContext.delegatedBound = false;
+        }
+    });
 }
 
 export function bindMessageDetailController(options = {}) {
@@ -561,7 +594,6 @@ export function bindMessageDetailController(options = {}) {
         handleRetryMessage,
         handleStopMessage,
         closeMediaPreview,
-        actionGuardStore,
         viewerRuntime,
     } = options;
 
@@ -590,7 +622,6 @@ export function bindMessageDetailController(options = {}) {
         handleRetryMessage,
         handleStopMessage,
         closeMediaPreview,
-        actionGuardStore,
         viewerRuntime,
     });
 
@@ -599,13 +630,5 @@ export function bindMessageDetailController(options = {}) {
         resizeCompose(context, composeInput);
     }
 
-    const delegateSession = bindMessageDetailDelegates(container, context);
-    return {
-        dispose() {
-            context.active = false;
-            delegateSession?.dispose?.();
-            const currentContext = getMessageDetailControllerContext(container);
-            if (currentContext === context) delete container[MESSAGE_DETAIL_CONTROLLER_KEY];
-        },
-    };
+    bindMessageDetailDelegates(container, context);
 }

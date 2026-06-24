@@ -164,7 +164,7 @@ export function renderMessageDetailView(options = {}) {
         <div class="phone-app-page phone-special-app phone-special-message ${stylePayload.className}" ${stylePayload.dataAttrs} style="${stylePayload.styleAttr}">
             ${stylePayload.scopedCss ? `<style class="phone-special-template-inline-style">${stylePayload.scopedCss}</style>` : ''}
             <div class="phone-nav-bar">
-                <button type="button" class="phone-nav-back" data-action="detail-back">${PHONE_ICONS.back}<span>返回</span></button>
+                <button type="button" class="phone-nav-back" data-action="nav-back">${PHONE_ICONS.back}<span>返回</span></button>
                 <span class="phone-nav-title">${escapeHtml(detailTitle || tableName)}</span>
                 <button type="button" class="phone-special-nav-action-btn ${state.deleteManageMode ? 'is-active' : ''}" data-action="toggle-delete-mode">${state.deleteManageMode ? '完成' : '删除'}</button>
             </div>

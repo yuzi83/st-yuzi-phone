@@ -121,7 +121,7 @@ function dispatch(container, type, target, props = {}) {
 
 function createHarness(bindMessageDetailController) {
     const container = new FakeElement('container');
-    const calls = { render: 0, renderKeepScroll: 0, send: 0, stop: 0 };
+    const calls = { render: 0, renderKeepScroll: 0, send: 0 };
     const state = {
         mode: 'detail',
         conversationId: 'conv_a',
@@ -135,7 +135,7 @@ function createHarness(bindMessageDetailController) {
         sending: false,
         errorText: '',
     };
-    const session = bindMessageDetailController({
+    bindMessageDetailController({
         container,
         state,
         conversationId: 'conv_a',
@@ -145,13 +145,12 @@ function createHarness(bindMessageDetailController) {
         renderKeepScroll: () => { calls.renderKeepScroll += 1; },
         normalizeMediaDesc: (value) => String(value || '').trim(),
         handleSendMessage: () => { calls.send += 1; },
-        handleStopMessage: () => { calls.stop += 1; },
         closeMediaPreview: () => {
             state.mediaPreview = null;
             calls.renderKeepScroll += 1;
         },
     });
-    return { container, calls, state, session };
+    return { container, calls, state };
 }
 
 function actionElement(action, options = {}) {
@@ -161,8 +160,6 @@ function actionElement(action, options = {}) {
     if (options.mediaKind) el.dataset.mediaKind = options.mediaKind;
     if (options.description) el.dataset.description = options.description;
     if (options.mediaLabel) el.dataset.mediaLabel = options.mediaLabel;
-    if (options.defaultAction) el.dataset.defaultAction = options.defaultAction;
-    if (options.tapIdentity) el.dataset.tapIdentity = options.tapIdentity;
     if (options.disabled) el.disabled = true;
     if (options.ariaDisabled) el.setAttribute('aria-disabled', 'true');
     return el;
@@ -200,89 +197,6 @@ function testDisabledActionsAreIgnored(bindMessageDetailController) {
     harness.container.appendChild(normalAction);
     dispatch(harness.container, 'click', normalAction, { timeStamp: 2000 });
     assert.equal(harness.calls.send, 1, '普通非 button action 不应被 disabled 保险误拦截');
-}
-
-function testSharedGuardSuppressesCrossSessionSyntheticClick(bindStableActionDelegate) {
-    const sharedPointerGuards = Object.create(null);
-    const detailContainer = new FakeElement('detail-container');
-    const detailBack = actionElement('detail-back', { button: true });
-    detailContainer.appendChild(detailBack);
-    let detailBackCalls = 0;
-    const detailSession = bindStableActionDelegate({
-        container: detailContainer,
-        actions: ['detail-back'],
-        sharedPointerGuards,
-        onAction: () => { detailBackCalls += 1; },
-    });
-
-    dispatch(detailContainer, 'pointerup', detailBack, { timeStamp: 17000, pointerType: 'touch' });
-    assert.equal(detailBackCalls, 1, 'detail-back pointerup 应先执行详情内返回');
-    detailSession.dispose();
-
-    const conversationContainer = new FakeElement('conversation-container');
-    const navBack = actionElement('nav-back', { button: true });
-    conversationContainer.appendChild(navBack);
-    let navBackCalls = 0;
-    bindStableActionDelegate({
-        container: conversationContainer,
-        actions: ['nav-back'],
-        sharedPointerGuards,
-        onAction: () => { navBackCalls += 1; },
-    });
-
-    dispatch(conversationContainer, 'click', navBack, { timeStamp: 17100, pointerType: 'touch' });
-    assert.equal(navBackCalls, 0, 'detail-back 后跨 session synthetic click 不得触发新会话页 nav-back');
-    dispatch(conversationContainer, 'pointerup', navBack, { timeStamp: 17600, pointerType: 'touch' });
-    assert.equal(navBackCalls, 1, '保护窗后的第二次真实 tap 应能触发 nav-back');
-}
-
-function testSendSyntheticClickDoesNotBecomeStop(bindMessageDetailController) {
-    const harness = createHarness(bindMessageDetailController);
-    const sendButton = actionElement('send-message', { button: true, defaultAction: 'send-message' });
-    harness.container.appendChild(sendButton);
-
-    dispatch(harness.container, 'pointerup', sendButton, { timeStamp: 13000, pointerType: 'touch' });
-    assert.equal(harness.calls.send, 1, 'touch pointerup 应触发发送');
-    assert.equal(harness.calls.stop, 0, '发送 pointerup 不应触发取消');
-
-    sendButton.dataset.action = 'stop-message';
-    dispatch(harness.container, 'click', sendButton, { timeStamp: 13100, pointerType: 'touch' });
-    assert.equal(harness.calls.send, 1, '同一次 tap 的合成 click 不应重复发送');
-    assert.equal(harness.calls.stop, 0, 'send-message 后 action 变成 stop-message 时，同一次合成 click 不得取消等待');
-
-    dispatch(harness.container, 'pointerup', sendButton, { timeStamp: 13600, pointerType: 'touch' });
-    assert.equal(harness.calls.stop, 1, '第二次真实 tap 才能触发取消等待');
-}
-
-function testClickFallbackStillWorks(bindMessageDetailController) {
-    const harness = createHarness(bindMessageDetailController);
-    const sendButton = actionElement('send-message', { button: true, defaultAction: 'send-message' });
-    harness.container.appendChild(sendButton);
-
-    dispatch(harness.container, 'click', sendButton, { timeStamp: 14000 });
-    assert.equal(harness.calls.send, 1, '没有 pointerup 的桌面 click fallback 应继续触发发送');
-}
-
-function testDetailBackStaysInsideMessageViewer(bindMessageDetailController) {
-    const harness = createHarness(bindMessageDetailController);
-    const backButton = actionElement('detail-back', { button: true });
-    harness.container.appendChild(backButton);
-
-    dispatch(harness.container, 'click', backButton, { timeStamp: 15000 });
-    assert.equal(harness.state.mode, 'conversation', 'detail-back 应返回消息列表');
-    assert.equal(harness.state.conversationId, null, 'detail-back 应清空当前会话 id');
-    assert.equal(harness.calls.render, 1, 'detail-back 应触发 message-viewer 内部 render');
-}
-
-function testDisposedSessionIgnoresLateEvents(bindMessageDetailController) {
-    const harness = createHarness(bindMessageDetailController);
-    const sendButton = actionElement('send-message', { button: true, defaultAction: 'send-message' });
-    harness.container.appendChild(sendButton);
-    harness.session.dispose();
-
-    dispatch(harness.container, 'click', sendButton, { timeStamp: 16000 });
-    dispatch(harness.container, 'pointerup', sendButton, { timeStamp: 16100, pointerType: 'touch' });
-    assert.equal(harness.calls.send, 0, '已 dispose 的旧 session 不应响应迟到事件');
 }
 
 function testAttachmentInputDoesNotTouchDraftOrSend(bindMessageDetailController) {
@@ -414,14 +328,8 @@ function testFreshMediaPreviewMaskClickDoesNotClose(bindMessageDetailController)
 async function main() {
     installDomGlobals();
     const { bindMessageDetailController } = await import(toModuleUrl('modules/table-viewer/special/message-viewer/detail-controller.js'));
-    const { bindStableActionDelegate } = await import(toModuleUrl('modules/table-viewer/special/message-viewer/action-delegate.js'));
 
     testDisabledActionsAreIgnored(bindMessageDetailController);
-    testSendSyntheticClickDoesNotBecomeStop(bindMessageDetailController);
-    testClickFallbackStillWorks(bindMessageDetailController);
-    testDetailBackStaysInsideMessageViewer(bindMessageDetailController);
-    testDisposedSessionIgnoresLateEvents(bindMessageDetailController);
-    testSharedGuardSuppressesCrossSessionSyntheticClick(bindStableActionDelegate);
     testAttachmentInputDoesNotTouchDraftOrSend(bindMessageDetailController);
     testComposeInputStillUpdatesDraftAndSends(bindMessageDetailController);
     testOpenSaveClearAndCloseAttachmentDialog(bindMessageDetailController);
@@ -431,11 +339,6 @@ async function main() {
 
     console.log('[message-viewer-controller-check] 检查通过');
     console.log('- OK | disabled 与 aria-disabled action 被委托层拦截');
-    console.log('- OK | send-message 后同一次合成 click 不会误触发 stop-message');
-    console.log('- OK | 桌面 click fallback 仍可触发 action');
-    console.log('- OK | detail-back 只返回消息列表');
-    console.log('- OK | 已 dispose 的旧 session 不响应迟到事件');
-    console.log('- OK | detail-back 后跨 session synthetic click 不会误触发 conversation nav-back');
     console.log('- OK | 附件 textarea input 不污染草稿且 Enter 不触发发送');
     console.log('- OK | compose textarea 仍更新草稿且 Enter 发送');
     console.log('- OK | 附件 open/save/clear/close 校验 conversationId 与 media kind');
