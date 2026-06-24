@@ -4,20 +4,29 @@ import { clampNumber } from '../../utils/object.js';
 import { STORAGE_BUDGETS } from '../constants.js';
 import { buildButtonStylePageHtml } from '../layout/frame.js';
 import { pickImageFile, estimateBase64Bytes } from '../services/media-upload.js';
+import { PHONE_ICONS } from '../../phone-home/icons.js';
 
-function buildToggleCoverPreviewHtml(shape, coverDataUrl, sizePx = 44) {
-    const safeShape = String(shape || 'rounded') === 'circle' ? 'circle' : 'rounded';
+function buildToggleCoverPreviewHtml(shape, coverDataUrl, sizePx = 40) {
+    const safeShape = String(shape || 'circle') === 'rounded' ? 'rounded' : 'circle';
     const safeCover = String(coverDataUrl || '').trim();
-    const safeSize = clampNumber(sizePx, 32, 72, 44);
-    if (!safeCover) {
-        return '<div class="phone-empty-msg">未设置封面</div>';
-    }
+    const safeSize = clampNumber(sizePx, 32, 72, 40);
+    const coverStyle = safeCover
+        ? `background-image:url('${escapeHtmlAttr(safeCover)}');`
+        : '';
+    const stateClass = safeCover ? 'has-cover' : 'no-cover';
+    const shapeClass = safeShape === 'circle' ? 'is-circle' : 'is-rounded';
+    const textHtml = safeShape === 'circle' || safeCover
+        ? ''
+        : '<span class="phone-toggle-preview-text">玉子</span>';
+
     return `
         <div class="phone-toggle-preview-shell">
-            <div class="phone-toggle-preview-button ${safeShape === 'circle' ? 'is-circle' : 'is-rounded'}"
-                style="background-image:url('${escapeHtmlAttr(safeCover)}');--phone-toggle-preview-size:${escapeHtmlAttr(safeSize)}px;"
+            <div class="phone-toggle-preview-button ${shapeClass} ${stateClass}"
+                style="${coverStyle}--phone-toggle-preview-size:${escapeHtmlAttr(safeSize)}px;"
                 role="img"
-                aria-label="按钮封面预览">
+                aria-label="${safeCover ? '按钮封面预览' : '毛玻璃按钮预览'}">
+                <span class="phone-toggle-preview-icon">${PHONE_ICONS.phone || ''}</span>
+                ${textHtml}
             </div>
         </div>
     `;
@@ -49,8 +58,8 @@ export function renderButtonStylePage(ctx) {
     const showToast = buttonStylePageService.showToast;
 
     const settings = getPhoneSettings();
-    const currentSize = clampNumber(settings.phoneToggleStyleSize, 32, 72, 44);
-    const currentShape = String(settings.phoneToggleStyleShape || 'rounded') === 'circle' ? 'circle' : 'rounded';
+    const currentSize = clampNumber(settings.phoneToggleStyleSize, 32, 72, 40);
+    const currentShape = String(settings.phoneToggleStyleShape || 'circle') === 'rounded' ? 'rounded' : 'circle';
     const currentCover = typeof settings.phoneToggleCoverImage === 'string' && settings.phoneToggleCoverImage.trim()
         ? settings.phoneToggleCoverImage.trim()
         : '';
@@ -136,7 +145,7 @@ export function renderButtonStylePage(ctx) {
     addCleanup(() => saveToggleSizeDebounced.flush?.());
 
     const setSizeValue = (raw, withToast = false, immediate = false) => {
-        const next = clampNumber(raw, 32, 72, 44);
+        const next = clampNumber(raw, 32, 72, 40);
         if (sizeRange) sizeRange.value = String(next);
         if (sizeInput) sizeInput.value = String(next);
 
@@ -153,7 +162,7 @@ export function renderButtonStylePage(ctx) {
         const latestCover = typeof getPhoneSettings().phoneToggleCoverImage === 'string'
             ? getPhoneSettings().phoneToggleCoverImage.trim()
             : '';
-        if (latestCover) renderCoverPreview(getCurrentShape(), latestCover, next);
+        renderCoverPreview(getCurrentShape(), latestCover, next);
     };
 
     addListener(sizeRange, 'input', () => {
@@ -174,7 +183,7 @@ export function renderButtonStylePage(ctx) {
             const latestCover = typeof getPhoneSettings().phoneToggleCoverImage === 'string'
                 ? getPhoneSettings().phoneToggleCoverImage.trim()
                 : '';
-            if (latestCover) renderCoverPreview(nextShape, latestCover, getCurrentSize());
+            renderCoverPreview(nextShape, latestCover, getCurrentSize());
             savePhoneSetting('phoneToggleStyleShape', nextShape);
             emitToggleStyleUpdated();
             showToast(container, nextShape === 'circle' ? '按钮已切换为圆形（文字已隐藏）' : '按钮已切换为长方形');

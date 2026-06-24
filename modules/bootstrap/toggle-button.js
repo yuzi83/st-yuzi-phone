@@ -21,6 +21,10 @@ export const DOM_IDS = Object.freeze({
 const toggleEventManager = new EventManager();
 let boundToggleButton = null;
 
+const DEFAULT_TOGGLE_SIZE = 40;
+const DEFAULT_TOGGLE_SHAPE = 'circle';
+const TOGGLE_LABEL = '玉子';
+
 export function applyPhoneToggleVisibility(btn, settings = getPhoneSettings()) {
     if (!(btn instanceof HTMLElement)) return;
 
@@ -33,9 +37,9 @@ export function applyPhoneToggleVisibility(btn, settings = getPhoneSettings()) {
 export function applyPhoneToggleVisualStyle(btn, settings = getPhoneSettings()) {
     if (!(btn instanceof HTMLElement)) return;
 
-    const size = clampNumber(settings?.phoneToggleStyleSize, 32, 72, 44);
-    const shapeRaw = String(settings?.phoneToggleStyleShape || 'rounded').trim();
-    const shape = shapeRaw === 'circle' ? 'circle' : 'rounded';
+    const size = clampNumber(settings?.phoneToggleStyleSize, 32, 72, DEFAULT_TOGGLE_SIZE);
+    const shapeRaw = String(settings?.phoneToggleStyleShape || DEFAULT_TOGGLE_SHAPE).trim();
+    const shape = shapeRaw === 'rounded' ? 'rounded' : DEFAULT_TOGGLE_SHAPE;
     const coverRaw = typeof settings?.phoneToggleCoverImage === 'string'
         ? settings.phoneToggleCoverImage.trim()
         : '';
@@ -63,16 +67,16 @@ function getPhoneToggleMetrics(btn, settings = getPhoneSettings()) {
         }
     }
 
-    const size = clampNumber(settings?.phoneToggleStyleSize, 32, 72, 44);
-    const shapeRaw = String(settings?.phoneToggleStyleShape || 'rounded').trim();
-    const shape = shapeRaw === 'circle' ? 'circle' : 'rounded';
+    const size = clampNumber(settings?.phoneToggleStyleSize, 32, 72, DEFAULT_TOGGLE_SIZE);
+    const shapeRaw = String(settings?.phoneToggleStyleShape || DEFAULT_TOGGLE_SHAPE).trim();
+    const shape = shapeRaw === 'rounded' ? 'rounded' : DEFAULT_TOGGLE_SHAPE;
 
-    if (shape === 'circle') {
+    if (shape === DEFAULT_TOGGLE_SHAPE) {
         return { width: size, height: size };
     }
 
     return {
-        width: Math.round(size * 2.6),
+        width: Math.round(size * 2.1),
         height: size,
     };
 }
@@ -281,10 +285,14 @@ export function createPhoneToggleButton(options = {}) {
     if (!btn) {
         const root = createPhoneRoot();
         const isMobile = isMobileDevice();
+        const settings = getPhoneSettings();
+        const shapeRaw = String(settings?.phoneToggleStyleShape || DEFAULT_TOGGLE_SHAPE).trim();
+        const shape = shapeRaw === 'rounded' ? 'rounded' : DEFAULT_TOGGLE_SHAPE;
+        const shapeClass = shape === 'rounded' ? 'yuzi-phone-toggle-shape-rounded' : 'yuzi-phone-toggle-shape-circle';
 
         btn = document.createElement('div');
         btn.id = DOM_IDS.toggle;
-        btn.className = `yuzi-phone-toggle yuzi-phone-toggle-shape-rounded ${isMobile ? 'yuzi-phone-toggle-mobile' : ''}`;
+        btn.className = `yuzi-phone-toggle ${shapeClass} ${isMobile ? 'yuzi-phone-toggle-mobile' : ''}`;
 
         const iconSpan = document.createElement('span');
         iconSpan.className = 'yuzi-phone-toggle-icon';
@@ -292,7 +300,7 @@ export function createPhoneToggleButton(options = {}) {
 
         const textSpan = document.createElement('span');
         textSpan.className = 'yuzi-phone-toggle-text';
-        textSpan.textContent = '玉子手机';
+        textSpan.textContent = TOGGLE_LABEL;
 
         btn.appendChild(iconSpan);
         btn.appendChild(textSpan);

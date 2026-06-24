@@ -236,18 +236,27 @@ export function buildAppearancePageHtml({
     });
 }
 
-function buildToggleCoverPreviewHtml(shape, coverDataUrl, sizePx = 44) {
-    const safeShape = String(shape || 'rounded') === 'circle' ? 'circle' : 'rounded';
+function buildToggleCoverPreviewHtml(shape, coverDataUrl, sizePx = 40) {
+    const safeShape = String(shape || 'circle') === 'rounded' ? 'rounded' : 'circle';
     const safeCover = String(coverDataUrl || '').trim();
-    if (!safeCover) {
-        return '<div class="phone-empty-msg">未设置封面</div>';
-    }
+    const safeSize = Number.isFinite(Number(sizePx)) ? Math.max(32, Math.min(72, Math.round(Number(sizePx)))) : 40;
+    const coverStyle = safeCover
+        ? `background-image:url('${escapeHtmlAttr(safeCover)}');`
+        : '';
+    const stateClass = safeCover ? 'has-cover' : 'no-cover';
+    const shapeClass = safeShape === 'circle' ? 'is-circle' : 'is-rounded';
+    const textHtml = safeShape === 'circle' || safeCover
+        ? ''
+        : '<span class="phone-toggle-preview-text">玉子</span>';
+
     return `
         <div class="phone-toggle-preview-shell">
-            <div class="phone-toggle-preview-button ${safeShape === 'circle' ? 'is-circle' : 'is-rounded'}"
-                style="background-image:url('${escapeHtmlAttr(safeCover)}');--phone-toggle-preview-size:${escapeHtmlAttr(sizePx)}px;"
+            <div class="phone-toggle-preview-button ${shapeClass} ${stateClass}"
+                style="${coverStyle}--phone-toggle-preview-size:${escapeHtmlAttr(safeSize)}px;"
                 role="img"
-                aria-label="按钮封面预览">
+                aria-label="${safeCover ? '按钮封面预览' : '毛玻璃按钮预览'}">
+                <span class="phone-toggle-preview-icon">${PHONE_ICONS.phone || ''}</span>
+                ${textHtml}
             </div>
         </div>
     `;
@@ -284,7 +293,7 @@ export function buildButtonStylePageHtml({ currentSize, currentShape, currentCov
                     <input type="range" min="32" max="72" step="1" id="phone-toggle-style-size-range" value="${escapeHtmlAttr(currentSize)}">
                     <input type="number" min="32" max="72" step="1" id="phone-toggle-style-size-input" class="phone-settings-input" value="${escapeHtmlAttr(currentSize)}">
                 </div>
-                <p class="phone-settings-desc">建议范围 36~56，移动端默认 44。</p>
+                <p class="phone-settings-desc">建议范围 36~56，默认 40。</p>
             `,
         })}
 

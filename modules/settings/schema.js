@@ -118,8 +118,8 @@ export const defaultSettings = {
     },
     beautifyActiveTemplateIdGeneric: 'builtin.generic.table.v1',
     dockIconSize: 48,
-    phoneToggleStyleSize: 44,
-    phoneToggleStyleShape: 'rounded',
+    phoneToggleStyleSize: 40,
+    phoneToggleStyleShape: 'circle',
     appearanceActivePackId: '',
     phoneToggleCoverImage: null,
     appearanceResourcePool: {

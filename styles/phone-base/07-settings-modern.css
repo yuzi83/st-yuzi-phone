@@ -1638,40 +1638,103 @@
     align-items: center;
     justify-content: center;
     min-height: 140px;
-    padding: 10px;
+    padding: 16px;
 }
 
 .phone-toggle-preview-button {
-    --phone-toggle-preview-size: 44px;
-    width: calc(var(--phone-toggle-preview-size) * 2.6);
-    min-width: calc(var(--phone-toggle-preview-size) * 2.6);
+    --phone-toggle-preview-size: 40px;
+    width: calc(var(--phone-toggle-preview-size) * 2.1);
+    min-width: calc(var(--phone-toggle-preview-size) * 2.1);
     height: var(--phone-toggle-preview-size);
     min-height: var(--phone-toggle-preview-size);
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #f8fbfd;
     border-radius: 999px;
-    border: 0;
-    background-color: rgba(58, 55, 49, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.46);
+    background-color: rgba(226, 236, 244, 0.18);
+    background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.34), rgba(226, 236, 244, 0.18));
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    box-shadow: inset 0 0 0 1px rgba(58, 55, 49, 0.08);
+    box-shadow:
+        0 16px 38px rgba(42, 60, 76, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.62),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.14);
+    overflow: hidden;
+    position: relative;
+    backdrop-filter: blur(14px) saturate(1.25);
+    -webkit-backdrop-filter: blur(14px) saturate(1.25);
+}
+
+.phone-toggle-preview-button::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.04) 45%, rgba(255, 255, 255, 0.16));
+    pointer-events: none;
+    opacity: 0.74;
 }
 
 .phone-toggle-preview-button.is-circle {
     width: var(--phone-toggle-preview-size);
     min-width: var(--phone-toggle-preview-size);
+    padding: 0;
     border-radius: 999px;
 }
 
 .phone-toggle-preview-button.is-rounded {
-    width: calc(var(--phone-toggle-preview-size) * 2.6);
-    min-width: calc(var(--phone-toggle-preview-size) * 2.6);
+    width: calc(var(--phone-toggle-preview-size) * 2.1);
+    min-width: calc(var(--phone-toggle-preview-size) * 2.1);
+}
+
+.phone-toggle-preview-button.has-cover {
+    border: 0;
+    background-color: transparent;
+    box-shadow: 0 10px 24px rgba(42, 60, 76, 0.22);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+.phone-toggle-preview-button.has-cover::before,
+.phone-toggle-preview-button.has-cover .phone-toggle-preview-icon,
+.phone-toggle-preview-button.has-cover .phone-toggle-preview-text,
+.phone-toggle-preview-button.is-circle .phone-toggle-preview-text {
+    display: none;
+}
+
+.phone-toggle-preview-icon,
+.phone-toggle-preview-text {
+    position: relative;
+    z-index: 1;
+}
+
+.phone-toggle-preview-icon {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.phone-toggle-preview-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.phone-toggle-preview-text {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
 .phone-settings-page #phone-toggle-cover-preview.phone-settings-preview {
     margin-top: 2px;
     border-radius: 8px;
     border: 1px solid rgba(58, 55, 49, 0.06);
-    background: rgba(255, 255, 255, 0.45);
+    background: linear-gradient(135deg, rgba(223, 232, 238, 0.68), rgba(170, 184, 196, 0.34));
 }
 
 .phone-settings-page .phone-appearance-switch-list,

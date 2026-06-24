@@ -106,10 +106,10 @@ function main() {
         has(contents.toggleCss, '.yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-cover-only .yuzi-phone-toggle-icon,')
         && has(contents.toggleCss, '.yuzi-phone-root .yuzi-phone-toggle.yuzi-phone-toggle-cover-only .yuzi-phone-toggle-text {')
         && has(contents.toggleCss, 'display: none;'));
-    pushCheck(results, 'toggleCss', '长方形宽度按 2.6 比例变量计算',
-        has(contents.toggleCss, '--yuzi-phone-toggle-rounded-width: calc(var(--yuzi-phone-toggle-size) * 2.6);'));
+    pushCheck(results, 'toggleCss', '长方形宽度按 2.1 比例变量计算',
+        has(contents.toggleCss, '--yuzi-phone-toggle-rounded-width: calc(var(--yuzi-phone-toggle-size) * 2.1);'));
     pushCheck(results, 'toggleButton', 'toggle-button rounded metrics 与 CSS 比例一致',
-        has(contents.toggleButton, 'width: Math.round(size * 2.6),')
+        has(contents.toggleButton, 'width: Math.round(size * 2.1),')
         && has(contents.toggleButton, 'height: size,'));
     pushCheck(results, 'appearanceBuilder', '按钮封面预览使用真实 toggle preview 结构',
         has(contents.appearanceBuilder, 'phone-toggle-preview-button'));
