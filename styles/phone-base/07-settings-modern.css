@@ -1694,7 +1694,7 @@
 .phone-toggle-preview-button.has-cover {
     border: 0;
     background-color: transparent;
-    box-shadow: 0 10px 24px rgba(42, 60, 76, 0.22);
+    box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
 }
