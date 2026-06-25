@@ -98,10 +98,16 @@ export function renderMessageTable(container, context, deps = {}) {
         selectedMessageRowIndexes: [],
         pendingArchive: null,
         skipSheetSyncOnce: false,
-        stableTapGuards: Object.create(null),
     };
 
     const runtime = viewerRuntime && typeof viewerRuntime === 'object' ? viewerRuntime : null;
+    let activeViewSession = null;
+    const actionGuardStore = Object.create(null);
+    const registerRuntimeCleanup = runtime?.registerCleanup
+        ? (cleanup) => runtime.registerCleanup(cleanup)
+        : (viewerEventManager?.registerCleanup
+            ? (cleanup) => viewerEventManager.registerCleanup(cleanup)
+            : () => {});
     const addRuntimeListener = runtime?.addEventListener
         ? (...args) => runtime.addEventListener(...args)
         : viewerEventManager?.add
@@ -110,6 +116,46 @@ export function renderMessageTable(container, context, deps = {}) {
                 target.addEventListener(type, handler, options);
                 return () => target.removeEventListener(type, handler, options);
             };
+
+    const createViewSession = () => {
+        const cleanups = [];
+        let disposed = false;
+        return {
+            addCleanup(cleanup) {
+                if (typeof cleanup !== 'function') return;
+                if (disposed) {
+                    cleanup();
+                    return;
+                }
+                cleanups.push(cleanup);
+            },
+            dispose() {
+                if (disposed) return;
+                disposed = true;
+                while (cleanups.length > 0) {
+                    cleanups.pop()?.();
+                }
+            },
+            isActive() {
+                return !disposed && activeViewSession === this;
+            },
+        };
+    };
+
+    const disposeActiveViewSession = () => {
+        const session = activeViewSession;
+        activeViewSession = null;
+        session?.dispose?.();
+    };
+
+    const beginViewSession = () => {
+        disposeActiveViewSession();
+        activeViewSession = createViewSession();
+        return activeViewSession;
+    };
+
+    registerRuntimeCleanup(() => disposeActiveViewSession());
+
     const requestRuntimeFrame = runtime?.requestAnimationFrame
         ? (callback) => runtime.requestAnimationFrame(callback)
         : (callback) => requestAnimationFrame(callback);
@@ -141,7 +187,8 @@ export function renderMessageTable(container, context, deps = {}) {
         return Math.min(Math.max(0, Number(rawTop) || 0), maxTop);
     };
 
-    const restoreScrollInFrames = (targetTop, remainingFrames = 2) => {
+    const restoreScrollInFrames = (targetTop, remainingFrames = 2, sessionFence = activeViewSession) => {
+        if (sessionFence && activeViewSession !== sessionFence) return;
         const scrollElement = getMessageDetailScrollElement(container);
         if (!scrollElement) return;
 
@@ -149,7 +196,7 @@ export function renderMessageTable(container, context, deps = {}) {
         if (remainingFrames <= 0) return;
 
         requestRuntimeFrame(() => {
-            restoreScrollInFrames(targetTop, remainingFrames - 1);
+            restoreScrollInFrames(targetTop, remainingFrames - 1, sessionFence);
         });
     };
 
@@ -165,10 +212,11 @@ export function renderMessageTable(container, context, deps = {}) {
         try {
             render();
         } finally {
-            restoreScrollInFrames(prevTop, 2);
+            const sessionFence = activeViewSession;
+            restoreScrollInFrames(prevTop, 2, sessionFence);
             requestRuntimeFrame(() => {
                 requestRuntimeFrame(() => {
-                    if (!container.isConnected) return;
+                    if (!container.isConnected || (sessionFence && activeViewSession !== sessionFence)) return;
                     container.style.removeProperty('min-height');
                 });
             });
@@ -358,12 +406,13 @@ export function renderMessageTable(container, context, deps = {}) {
         }
     };
 
-    addRuntimeListener(window, 'yuzi-phone-table-updated', handleExternalTableUpdate);
+    registerRuntimeCleanup(addRuntimeListener(window, 'yuzi-phone-table-updated', handleExternalTableUpdate));
 
     const renderConversationList = () => {
+        const viewSession = beginViewSession();
         state.pendingArchive = null;
         syncRowsFromSheet();
-        renderMessageConversationView({
+        const childSession = renderMessageConversationView({
             container,
             tableName,
             state,
@@ -376,6 +425,10 @@ export function renderMessageTable(container, context, deps = {}) {
             renderKeepScroll,
             renderContactPicker,
             viewerRuntime: runtime,
+            actionGuardStore,
+        });
+        viewSession.addCleanup(() => {
+            childSession?.dispose?.();
         });
     };
 
@@ -393,6 +446,7 @@ export function renderMessageTable(container, context, deps = {}) {
     };
 
     const renderContactPicker = () => {
+        const sessionFence = activeViewSession;
         const pickerEl = document.createElement('div');
         pickerEl.className = 'phone-special-contact-picker-mask phone-special-viewport-overlay';
 
@@ -433,32 +487,41 @@ export function renderMessageTable(container, context, deps = {}) {
         };
 
         const inputEl = /** @type {HTMLInputElement|null} */ (pickerEl.querySelector('.phone-special-contact-picker-input'));
-        addRuntimeListener(pickerEl.querySelector('.phone-special-contact-picker-confirm-btn'), 'click', () => {
+        sessionFence?.addCleanup?.(addRuntimeListener(pickerEl.querySelector('.phone-special-contact-picker-confirm-btn'), 'click', () => {
+            if (activeViewSession !== sessionFence) return;
             selectContact(inputEl?.value || '');
-        });
+        }));
 
         if (inputEl) {
-            addRuntimeListener(inputEl, 'keydown', (e) => {
+            sessionFence?.addCleanup?.(addRuntimeListener(inputEl, 'keydown', (e) => {
+                if (activeViewSession !== sessionFence) return;
                 if (e.key === 'Enter' && !e.isComposing) {
                     e.preventDefault();
                     selectContact(inputEl.value || '');
                 }
+            }));
+            requestRuntimeFrame(() => {
+                if (activeViewSession !== sessionFence || !inputEl.isConnected) return;
+                inputEl.focus();
             });
-            requestRuntimeFrame(() => inputEl.focus());
         }
 
-        addRuntimeListener(pickerEl.querySelector('.phone-special-contact-picker-cancel-btn'), 'click', () => {
+        sessionFence?.addCleanup?.(addRuntimeListener(pickerEl.querySelector('.phone-special-contact-picker-cancel-btn'), 'click', () => {
+            if (activeViewSession !== sessionFence) return;
             state.contactPickerVisible = false;
             renderKeepScroll();
-        });
+        }));
 
-        addRuntimeListener(pickerEl, 'click', (e) => {
+        sessionFence?.addCleanup?.(addRuntimeListener(pickerEl, 'click', (e) => {
+            if (activeViewSession !== sessionFence) return;
             if (e.target === pickerEl) {
                 state.contactPickerVisible = false;
                 renderKeepScroll();
             }
+        }));
+        sessionFence?.addCleanup?.(() => {
+            pickerEl.remove();
         });
-        runtime?.registerCleanup?.(() => pickerEl.remove());
     };
 
     const executeDeleteSelectedMessages = async (conversationId) => {
@@ -531,6 +594,7 @@ export function renderMessageTable(container, context, deps = {}) {
     };
 
     const renderMessageDetail = () => {
+        const viewSession = beginViewSession();
         syncRowsFromSheet();
         const detailView = renderMessageDetailView({
             container,
@@ -541,7 +605,10 @@ export function renderMessageTable(container, context, deps = {}) {
             templateMatch,
             type,
         });
-        if (!detailView) return;
+        if (!detailView) {
+            disposeActiveViewSession();
+            return;
+        }
 
         const {
             conversationId,
@@ -549,7 +616,7 @@ export function renderMessageTable(container, context, deps = {}) {
             rowEntriesInConv,
         } = detailView;
 
-        bindMessageDetailController({
+        const childSession = bindMessageDetailController({
             container,
             state,
             conversationId,
@@ -572,7 +639,11 @@ export function renderMessageTable(container, context, deps = {}) {
             handleRetryMessage,
             handleStopMessage,
             closeMediaPreview,
+            actionGuardStore,
             viewerRuntime: runtime,
+        });
+        viewSession.addCleanup(() => {
+            childSession?.dispose?.();
         });
     };
 
