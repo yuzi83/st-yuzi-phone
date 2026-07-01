@@ -156,6 +156,30 @@ function createRoutePage(isBack = false) {
     return page;
 }
 
+function getRoutePages(screen) {
+    if (!(screen instanceof HTMLElement)) {
+        return [];
+    }
+
+    return Array.from(screen.children)
+        .filter((child) => child instanceof HTMLElement && child.classList.contains('phone-page'));
+}
+
+function getCurrentRoutePage(screen) {
+    const routePages = getRoutePages(screen);
+    return routePages.length > 0 ? routePages[routePages.length - 1] : null;
+}
+
+function removeStaleRoutePages(screen, retainedPages = []) {
+    const retainedPageSet = new Set(retainedPages.filter((page) => page instanceof HTMLElement));
+
+    for (const routePage of getRoutePages(screen)) {
+        if (retainedPageSet.has(routePage)) continue;
+        routePage.setAttribute('aria-hidden', 'true');
+        routePage.remove();
+    }
+}
+
 function createRouteRenderContext(route, opts = {}, state = getPhoneCoreState()) {
     const screen = document.querySelector('.phone-screen');
     if (!(screen instanceof HTMLElement)) {
@@ -186,12 +210,12 @@ function createRouteRenderContext(route, opts = {}, state = getPhoneCoreState())
         screen,
         renderToken,
         isBack,
-        oldContent: screen.firstElementChild,
+        oldContent: getCurrentRoutePage(screen),
         page: createRoutePage(isBack),
     };
 }
 
-function schedulePreviousPageRemoval(oldContent, exitClass, renderToken) {
+function schedulePreviousPageRemoval(oldContent, exitClass) {
     if (!(oldContent instanceof HTMLElement)) {
         return false;
     }
@@ -201,7 +225,7 @@ function schedulePreviousPageRemoval(oldContent, exitClass, renderToken) {
     oldContent.style.pointerEvents = 'none';
 
     phoneRuntime.setTimeout(() => {
-        if (!oldContent.isConnected || !isActiveRouteRender(renderToken)) return;
+        if (!oldContent.isConnected) return;
         oldContent.setAttribute('aria-hidden', 'true');
         oldContent.remove();
     }, EXIT_ANIM_MS);
@@ -252,9 +276,10 @@ function commitRoutePage({ screen, page, oldContent, route, renderToken, isBack 
 
     const exitClass = isBack ? 'phone-page-exit-back' : 'phone-page-exit';
     screen.appendChild(page);
+    removeStaleRoutePages(screen, [oldContent, page]);
     bindPhoneScrollGuards(page);
     hardenPhoneInteractionDefaults(page);
-    schedulePreviousPageRemoval(oldContent, exitClass, renderToken);
+    schedulePreviousPageRemoval(oldContent, exitClass);
     activateCommittedRoutePage(page, route, renderToken);
 
     return true;
@@ -265,7 +290,7 @@ function scheduleRouteCommit({ screen, page, oldContent, route, renderToken, isB
 
     phoneRuntime.setTimeout(() => {
         if (!isRenderableScreen(screen, renderToken)) {
-            logger.warn({
+            logger.debug({
                 action: 'commit.schedule.skip',
                 message: 'route 页面延迟提交跳过：screen 不可渲染或 token 已过期',
                 context: {
