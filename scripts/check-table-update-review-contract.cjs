@@ -100,6 +100,7 @@ function main() {
         'tur-field-name',
         'tur-field-before',
         'tur-field-after',
+        'is-single-value',
     ]) {
         check(results, 'templates', `审核页模板包含结构类 ${selector}`, has(contents.templates, selector));
     }
@@ -120,9 +121,17 @@ function main() {
         && has(contents.templates, "normalized === 'id'")
         && has(contents.templates, "normalized === '行号'")
         && has(contents.templates, 'const displayFields = getVisibleReviewFields(fields);')
-        && has(contents.templates, 'return displayFields.map((field) => `')
+        && has(contents.templates, 'return displayFields.map((field) => {')
         && !has(contents.templates, 'tur-field-more')
         && !has(contents.templates, 'restCount'));
+    check(results, 'templates', '审核页字段摘要按 change.type 区分单值和双值展示', has(contents.templates, "function buildFieldSummaryHtml(fields = [], changeType = 'update')")
+        && has(contents.templates, "if (changeType === 'insert')")
+        && has(contents.templates, "if (changeType === 'delete')")
+        && has(contents.templates, 'tur-field-block is-insert is-single-value')
+        && has(contents.templates, 'tur-field-block is-delete is-single-value')
+        && has(contents.templates, 'tur-field-block is-update')
+        && has(contents.templates, '<span class="tur-field-arrow">→</span>')
+        && has(contents.templates, 'buildFieldSummaryHtml(change.fields, change.type)'));
     check(results, 'templates', '审核页摘要显示 AI 回复序号而非真实楼层号', has(contents.templates, 'function formatAiReplyFloorText')
         && has(contents.templates, 'Math.floor(realFloorId / 2) + 1') && has(contents.templates, 'AI 回复第'));
 

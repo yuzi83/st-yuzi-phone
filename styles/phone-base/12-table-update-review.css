@@ -54,6 +54,7 @@
 #yuzi-phone-standalone .tur-field-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #yuzi-phone-standalone .tur-change-fields { margin-top: 8px; }
 #yuzi-phone-standalone .tur-field-block { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr) auto minmax(0, 1fr); gap: 5px; align-items: center; border: 1px solid var(--tur-border); border-radius: 9px; background: rgba(255,255,255,.38); padding: 6px; font-size: 11px; }
+#yuzi-phone-standalone .tur-field-block.is-single-value { grid-template-columns: minmax(0, .8fr) minmax(0, 2fr); }
 #yuzi-phone-standalone .tur-field-name { color: var(--tur-muted); font-weight: 700; }
 #yuzi-phone-standalone .tur-field-before { color: var(--tur-danger); }
 #yuzi-phone-standalone .tur-field-arrow { color: var(--tur-muted); }

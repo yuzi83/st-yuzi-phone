@@ -28,16 +28,44 @@ function formatAiReplyFloorText(floorId) {
     return `AI 回复第 ${Math.floor(realFloorId / 2) + 1} 楼`;
 }
 
-function buildFieldSummaryHtml(fields = []) {
+function formatReviewFieldValue(value) {
+    const text = String(value ?? '');
+    return text === '' ? '空' : text;
+}
+
+function buildFieldSummaryHtml(fields = [], changeType = 'update') {
     const displayFields = getVisibleReviewFields(fields);
-    return displayFields.map((field) => `
-        <span class="tur-field-block" title="${escapeHtmlAttr(`${field.field}: ${field.before || '空'} → ${field.after || '空'}`)}">
-            <span class="tur-field-name">${escapeHtml(field.field || '字段')}</span>
-            <span class="tur-field-value tur-field-before">${escapeHtml(field.before || '空')}</span>
-            <span class="tur-field-arrow">→</span>
-            <span class="tur-field-value tur-field-after">${escapeHtml(field.after || '空')}</span>
-        </span>
-    `).join('');
+    return displayFields.map((field) => {
+        const fieldName = field.field || '字段';
+        if (changeType === 'insert') {
+            const value = formatReviewFieldValue(field.after);
+            return `
+                <span class="tur-field-block is-insert is-single-value" title="${escapeHtmlAttr(`${fieldName}: ${value}`)}">
+                    <span class="tur-field-name">${escapeHtml(fieldName)}</span>
+                    <span class="tur-field-value tur-field-after">${escapeHtml(value)}</span>
+                </span>
+            `;
+        }
+        if (changeType === 'delete') {
+            const value = formatReviewFieldValue(field.before);
+            return `
+                <span class="tur-field-block is-delete is-single-value" title="${escapeHtmlAttr(`${fieldName}: ${value}`)}">
+                    <span class="tur-field-name">${escapeHtml(fieldName)}</span>
+                    <span class="tur-field-value tur-field-before">${escapeHtml(value)}</span>
+                </span>
+            `;
+        }
+        const before = formatReviewFieldValue(field.before);
+        const after = formatReviewFieldValue(field.after);
+        return `
+            <span class="tur-field-block is-update" title="${escapeHtmlAttr(`${fieldName}: ${before} → ${after}`)}">
+                <span class="tur-field-name">${escapeHtml(fieldName)}</span>
+                <span class="tur-field-value tur-field-before">${escapeHtml(before)}</span>
+                <span class="tur-field-arrow">→</span>
+                <span class="tur-field-value tur-field-after">${escapeHtml(after)}</span>
+            </span>
+        `;
+    }).join('');
 }
 
 function buildChangeItemHtml(change = {}) {
@@ -52,7 +80,7 @@ function buildChangeItemHtml(change = {}) {
                     <strong class="tur-row-title" title="${escapeHtmlAttr(title)}">${escapeHtml(title)}</strong>
                     <small>${escapeHtml(rowLabel)} · 已删除，仅展示净变化</small>
                 </span>
-                <span class="tur-change-fields">${buildFieldSummaryHtml(change.fields)}</span>
+                <span class="tur-change-fields">${buildFieldSummaryHtml(change.fields, change.type)}</span>
             </article>
         `;
     }
@@ -67,7 +95,7 @@ function buildChangeItemHtml(change = {}) {
                 <strong class="tur-row-title" title="${escapeHtmlAttr(title)}">${escapeHtml(title)}</strong>
                 <small>${escapeHtml(rowLabel)}</small>
             </span>
-            <span class="tur-change-fields">${buildFieldSummaryHtml(change.fields)}</span>
+            <span class="tur-change-fields">${buildFieldSummaryHtml(change.fields, change.type)}</span>
         </button>
     `;
 }

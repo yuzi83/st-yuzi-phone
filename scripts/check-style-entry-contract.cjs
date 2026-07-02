@@ -120,6 +120,8 @@ function main() {
     ]) {
         check(results, 'tableUpdateReview', `审核页样式层包含关键选择器 ${selector}`, has(contents.tableUpdateReview, selector));
     }
+    check(results, 'tableUpdateReview', '审核页字段单值展示使用两列 grid 布局', has(contents.tableUpdateReview, '.tur-field-block.is-single-value')
+        && has(contents.tableUpdateReview, 'grid-template-columns: minmax(0, .8fr) minmax(0, 2fr);'));
     check(results, 'tableUpdateReview', '审核页样式层不再保留刷新按钮选择器', !has(contents.tableUpdateReview, '.tur-refresh-btn'));
     check(results, 'tableUpdateReview', '审核页白天模式标题栏使用审核页文本色保证可读', has(contents.tableUpdateReview, '.tur-nav .phone-nav-title')
         && has(contents.tableUpdateReview, 'color: var(--tur-text);'));
