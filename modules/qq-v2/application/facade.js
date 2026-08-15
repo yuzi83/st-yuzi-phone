@@ -1627,7 +1627,14 @@ export function createQQV2Facade(options = {}) {
                 }
                 if (!active || notifiedScopeId !== initialScopeId) return;
                 try {
-                    listener(Object.freeze({ status: 'changed', scopeId: initialScopeId }));
+                    const reason = asText(event?.reason, 64);
+                    const conversationId = asText(event?.conversationId, 256);
+                    listener(Object.freeze({
+                        status: 'changed',
+                        scopeId: initialScopeId,
+                        ...(reason ? { reason } : {}),
+                        ...(conversationId ? { conversationId } : {}),
+                    }));
                 } catch {
                     // Subscriber failures must not break the runtime notification path.
                 }

@@ -115,6 +115,7 @@ function createHarness(mod, kind, options = {}) {
             fillStartSubscribers.add(fn);
             return () => fillStartSubscribers.delete(fn);
         }),
+        getTableAvailability: async () => ({ status: 'present' }),
         queryTableRows: wrap('availability', () => availability),
         query: wrap('query', () => query),
         mutation: wrap('mutation', () => mutation),

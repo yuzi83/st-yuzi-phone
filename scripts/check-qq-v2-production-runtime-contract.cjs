@@ -19,6 +19,16 @@ async function waitUntil(predicate, description, timeoutMs = 1600) {
     throw new Error(`Timed out waiting for ${description}`);
 }
 
+function deferred() {
+    let resolve;
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+}
+
 async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
     const {
         createMemoryQQV2StateStore,
@@ -352,7 +362,11 @@ async function testProductionWorldbookScanUsesScenarioSpecificHistoryWindows() {
         message: { type: 'text', content: 'manual-current' },
     });
     await waitUntil(() => scanCalls.length === 1, 'the private reply worldbook scan');
-    assert.deepEqual(scanCalls[0], {
+    assert.deepEqual({
+        layer: scanCalls[0].layer,
+        people: scanCalls[0].people,
+        history: scanCalls[0].history,
+    }, {
         layer: 'person',
         people: ['Alice'],
         history: [
@@ -368,11 +382,18 @@ async function testProductionWorldbookScanUsesScenarioSpecificHistoryWindows() {
             'manual-current',
         ],
     });
+    assert.equal(scanCalls[0].scopeId, scopeId);
+    assert.equal(scanCalls[0].scopeSession.scopeId, scopeId);
+    assert.equal(scanCalls[0].scopeSession.isReady(), true);
 
     await runtime.configureProactive({ scopeId, settings: { enabled: true, everyTurns: 1 } });
     await runtime.handleCharacterMessageRendered('story-1', 'normal');
     await waitUntil(() => scanCalls.length === 2, 'the private proactive worldbook scan');
-    assert.deepEqual(scanCalls[1], {
+    assert.deepEqual({
+        layer: scanCalls[1].layer,
+        people: scanCalls[1].people,
+        history: scanCalls[1].history,
+    }, {
         layer: 'person',
         people: ['Alice', 'Bob'],
         history: [
@@ -384,6 +405,8 @@ async function testProductionWorldbookScanUsesScenarioSpecificHistoryWindows() {
             'bob-5',
         ],
     });
+    assert.equal(scanCalls[1].scopeId, scopeId);
+    assert.strictEqual(scanCalls[1].scopeSession, scanCalls[0].scopeSession);
     runtime.destroy();
 }
 
@@ -463,10 +486,139 @@ async function testProductionRuntimeCountsOnlyOneEligibleNormalStoryReply() {
     }];
     await runtime.handleCharacterMessageRendered(1, 'swipe');
 
-    assert.deepEqual(counted, [{
+    assert.equal(counted.length, 1);
+    assert.deepEqual({
+        scopeId: counted[0].scopeId,
+        message: counted[0].message,
+    }, {
         scopeId: 'st:character:alice:chat-events',
         message: storyMessages[0],
-    }]);
+    });
+    assert.equal(counted[0].scopeSession.scopeId, 'st:character:alice:chat-events');
+    assert.equal(counted[0].scopeSession.isReady(), true);
+}
+
+async function testScopeTransitionCancelsPreviousScopeBeforeSlowInitialization() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeA = 'st:character:alice:chat-cancel-a';
+    const scopeB = 'st:character:alice:chat-cancel-b';
+    let currentScopeId = scopeA;
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    const scopeBWorldbookLookupStarted = deferred();
+    const releaseScopeBWorldbookLookup = deferred();
+    const requestCancellations = [];
+    const proactiveCancellations = [];
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return { scopeId: currentScopeId, chatId: currentScopeId, chatFile: currentScopeId, hostType: 'character', hostId: 'alice' };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return ''; },
+            readStoryMessages() { return []; },
+            readRawContext() { return {}; },
+        },
+        stateStore,
+        repository,
+        requestService: {
+            cancelScope(input) { requestCancellations.push(input); },
+            getConversationState() { return {}; },
+            cancelConversation() {},
+        },
+        proactiveService: {
+            cancelScope(input) { proactiveCancellations.push(input); },
+            async getState() { return { enabled: false, everyTurns: 5, count: 0, nextKind: 'private' }; },
+            async recordSuccessfulStoryReply() {},
+        },
+        projectionService: { async retryPending() {}, async syncConversation() {} },
+        worldbookGateway: {
+            async getCurrentCharacterBookNames(scopeId) {
+                if (scopeId === scopeB) {
+                    scopeBWorldbookLookupStarted.resolve();
+                    await releaseScopeBWorldbookLookup.promise;
+                }
+                return { primary: '', additional: [] };
+            },
+        },
+        worldbookContextGateway: { async runDryRun() { return []; } },
+    });
+    await runtime.initialize();
+
+    currentScopeId = scopeB;
+    const transition = runtime.handleChatChanged();
+    await scopeBWorldbookLookupStarted.promise;
+    assert.deepEqual(requestCancellations, [{ scopeId: scopeA, reason: 'scope-changed' }]);
+    assert.deepEqual(proactiveCancellations, [{ scopeId: scopeA }]);
+    releaseScopeBWorldbookLookup.resolve();
+    await transition;
+    runtime.destroy();
+}
+
+async function testAbaStaleStorySessionCannotBeCountedAsReenteredScope() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeA = 'st:character:alice:chat-story-a';
+    const scopeB = 'st:character:alice:chat-story-b';
+    let currentScopeId = scopeA;
+    const staleCounterStarted = deferred();
+    const releaseStaleCounter = deferred();
+    const received = [];
+    const counted = [];
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() { return { scopeId: currentScopeId, chatId: currentScopeId, chatFile: currentScopeId, hostType: 'character', hostId: 'alice' }; },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return ''; },
+            readStoryMessages() { return [{ messageId: 0, role: 'assistant', content: 'reply', isHidden: false, isSystem: false }]; },
+            readRawContext() { return {}; },
+        },
+        stateStore: createMemoryQQV2StateStore(),
+        requestService: { cancelScope() {}, getConversationState() { return {}; }, cancelConversation() {} },
+        proactiveService: {
+            cancelScope() {},
+            async getState() { return { enabled: false, everyTurns: 5, count: 0, nextKind: 'private' }; },
+            async recordSuccessfulStoryReply(input) {
+                received.push(input);
+                if (received.length === 1) {
+                    staleCounterStarted.resolve();
+                    await releaseStaleCounter.promise;
+                }
+                if (input.scopeSession.isReady()) counted.push(input);
+            },
+        },
+        projectionService: { async retryPending() {}, async syncConversation() {} },
+        worldbookContextGateway: { async runDryRun() { return []; } },
+    });
+    await runtime.initialize();
+
+    const staleEvent = runtime.handleCharacterMessageRendered(0, 'normal');
+    await staleCounterStarted.promise;
+    const staleSession = received[0].scopeSession;
+
+    currentScopeId = scopeB;
+    await runtime.handleChatChanged();
+    currentScopeId = scopeA;
+    await runtime.handleChatChanged();
+
+    releaseStaleCounter.resolve();
+    await staleEvent;
+    assert.equal(counted.length, 0);
+    assert.equal(staleSession.scopeId, scopeA);
+    assert.equal(staleSession.isCurrent(), false);
+    assert.equal(staleSession.isReady(), false);
+
+    await runtime.handleCharacterMessageRendered(0, 'normal');
+    assert.equal(received.length, 2);
+    assert.equal(counted.length, 1);
+    assert.strictEqual(counted[0], received[1]);
+    assert.equal(received[1].scopeId, scopeA);
+    assert.equal(received[1].scopeSession.scopeId, scopeA);
+    assert.equal(received[1].scopeSession.isReady(), true);
+    assert.notEqual(received[1].scopeSession.generation, staleSession.generation);
+    runtime.destroy();
 }
 
 async function testProductionRuntimeKeepsWorldbookProjectionBeforeConversationDeletion() {
@@ -739,9 +891,10 @@ async function testProductionRuntimeCancelsLateSaveAndCleansOldScopeThroughCurre
     });
     await scopeALoadStarted;
     currentScopeId = scopeB;
+    const switching = runtime.handleChatChanged();
     releaseScopeALoad();
-    await assert.rejects(syncing, (error) => error?.code === 'worldbook_sync_pending');
-    await runtime.handleChatChanged();
+    await assert.rejects(syncing, (error) => error?.code === 'scope_inactive');
+    await switching;
 
     const finalEntries = Object.values(books.get('QQ').entries);
     assert.equal(finalEntries.filter((entry) => entry.extensions?.yuziPhoneQQV2?.scopeId === scopeA).length, 0);
@@ -1170,6 +1323,54 @@ async function testProductionRuntimeQueriesDoNotCreateOrThrowForAnUnseenScope() 
     runtime.destroy();
 }
 
+async function testListWorldbooksWithoutReadyScopeDoesNotCreateScopeOrReachGateway() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeId = 'st:character:alice:chat-worldbook-not-ready';
+    const stateStore = createMemoryQQV2StateStore();
+    const baseRepository = createQQV2Repository({ stateStore });
+    let ensureScopeCalls = 0;
+    let gatewayCalls = 0;
+    const repository = {
+        ...baseRepository,
+        ensureScope(...args) {
+            ensureScopeCalls += 1;
+            return baseRepository.ensureScope(...args);
+        },
+    };
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() { return { scopeId, chatId: scopeId, chatFile: scopeId, hostType: 'character', hostId: 'alice' }; },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return ''; },
+            readStoryMessages() { return []; },
+            readRawContext() { return {}; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        backend: { async generate() {}, async loadModels() { return []; } },
+        projectionService: { async retryPending() {}, async syncConversation() {} },
+        worldbookGateway: {
+            async listBookNames() {
+                gatewayCalls += 1;
+                return ['must-not-be-read'];
+            },
+        },
+        worldbookContextGateway: { async runDryRun() { return []; } },
+    });
+
+    const result = await runtime.listWorldbooks({ scopeId });
+    const state = await stateStore.read();
+    runtime.destroy();
+
+    assert.deepEqual(result, []);
+    assert.equal(ensureScopeCalls, 0);
+    assert.equal(state.scopes[scopeId], undefined);
+    assert.equal(gatewayCalls, 0);
+}
+
 async function testProductionFacadeBridgesPrivateProfilesMediaAndUnreadState() {
     const {
         createMemoryQQV2StateStore,
@@ -1379,6 +1580,167 @@ async function testProductionRuntimeTracksUnreadOnlyForClosedConversations() {
     runtime.destroy();
 }
 
+async function testOpenConversationDoesNotRestoreStaleOpenStateOrNotify() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeA = 'st:character:alice:chat-open-stale-a';
+    const scopeB = 'st:character:alice:chat-open-stale-b';
+    let currentScopeId = scopeA;
+    let delayNextScopeAOpen = false;
+    const openStarted = deferred();
+    const releaseOpen = deferred();
+    const stateStore = createMemoryQQV2StateStore();
+    const baseRepository = createQQV2Repository({ stateStore });
+    const repository = {
+        ...baseRepository,
+        async openConversation(...args) {
+            const result = await baseRepository.openConversation(...args);
+            if (delayNextScopeAOpen && args[0] === scopeA) {
+                delayNextScopeAOpen = false;
+                openStarted.resolve();
+                await releaseOpen.promise;
+            }
+            return result;
+        },
+    };
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return { scopeId: currentScopeId, chatId: currentScopeId, chatFile: currentScopeId, hostType: 'character', hostId: 'alice' };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return ''; },
+            readStoryMessages() { return []; },
+            readRawContext() { return {}; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        requestService: { cancelScope() {}, getConversationState() { return {}; }, cancelConversation() {} },
+        proactiveService: { cancelScope() {}, async getState() { return { enabled: false, everyTurns: 5, count: 0, nextKind: 'private' }; } },
+        projectionService: { async retryPending() {}, async syncConversation() {} },
+        worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
+        worldbookContextGateway: { async runDryRun() { return []; } },
+    });
+    await runtime.initialize();
+    const privateChat = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
+    const events = [];
+    const unsubscribe = runtime.subscribe((event) => events.push(event));
+
+    delayNextScopeAOpen = true;
+    const opening = runtime.openConversation({
+        scopeId: scopeA,
+        conversationId: privateChat.conversation.conversationId,
+    }).then(
+        (value) => ({ status: 'fulfilled', value }),
+        (reason) => ({ status: 'rejected', reason }),
+    );
+    await openStarted.promise;
+
+    currentScopeId = scopeB;
+    await runtime.handleChatChanged();
+    releaseOpen.resolve();
+    const outcome = await opening;
+
+    assert.equal(outcome.status, 'rejected');
+    assert.equal(outcome.reason?.code, 'scope_inactive');
+    assert.deepEqual(events.filter((event) => event.reason === 'conversation-opened'), []);
+
+    currentScopeId = scopeA;
+    await runtime.handleChatChanged();
+    assert.deepEqual(await runtime.closeConversation({
+        scopeId: scopeA,
+        conversationId: privateChat.conversation.conversationId,
+    }), {
+        conversationId: privateChat.conversation.conversationId,
+        closed: false,
+    });
+
+    unsubscribe();
+    runtime.destroy();
+}
+
+async function testCloseConversationDoesNotClearReopenedStateAfterScopeAba() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeA = 'st:character:alice:chat-close-stale-a';
+    const scopeB = 'st:character:alice:chat-close-stale-b';
+    let currentScopeId = scopeA;
+    let delayNextScopeAEnsure = false;
+    const ensureStarted = deferred();
+    const releaseEnsure = deferred();
+    const stateStore = createMemoryQQV2StateStore();
+    const baseRepository = createQQV2Repository({ stateStore });
+    const repository = {
+        ...baseRepository,
+        async ensureScope(...args) {
+            const result = await baseRepository.ensureScope(...args);
+            if (delayNextScopeAEnsure && args[0] === scopeA) {
+                delayNextScopeAEnsure = false;
+                ensureStarted.resolve();
+                await releaseEnsure.promise;
+            }
+            return result;
+        },
+    };
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return { scopeId: currentScopeId, chatId: currentScopeId, chatFile: currentScopeId, hostType: 'character', hostId: 'alice' };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return ''; },
+            readStoryMessages() { return []; },
+            readRawContext() { return {}; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        requestService: { cancelScope() {}, getConversationState() { return {}; }, cancelConversation() {} },
+        proactiveService: { cancelScope() {}, async getState() { return { enabled: false, everyTurns: 5, count: 0, nextKind: 'private' }; } },
+        projectionService: { async retryPending() {}, async syncConversation() {} },
+        worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
+        worldbookContextGateway: { async runDryRun() { return []; } },
+    });
+    await runtime.initialize();
+    const privateChat = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
+
+    delayNextScopeAEnsure = true;
+    const closing = runtime.closeConversation({
+        scopeId: scopeA,
+        conversationId: privateChat.conversation.conversationId,
+    }).then(
+        (value) => ({ status: 'fulfilled', value }),
+        (reason) => ({ status: 'rejected', reason }),
+    );
+    await ensureStarted.promise;
+
+    currentScopeId = scopeB;
+    await runtime.handleChatChanged();
+    currentScopeId = scopeA;
+    await runtime.handleChatChanged();
+    await runtime.openConversation({
+        scopeId: scopeA,
+        conversationId: privateChat.conversation.conversationId,
+    });
+
+    releaseEnsure.resolve();
+    const outcome = await closing;
+    assert.equal(outcome.status, 'rejected');
+    assert.equal(outcome.reason?.code, 'scope_inactive');
+    assert.deepEqual(await runtime.closeConversation({
+        scopeId: scopeA,
+        conversationId: privateChat.conversation.conversationId,
+    }), {
+        conversationId: privateChat.conversation.conversationId,
+        closed: true,
+    });
+
+    runtime.destroy();
+}
+
 async function testDeleteMessagesKeepsTheCallerProjectionSnapshot() {
     const {
         createMemoryQQV2StateStore,
@@ -1441,12 +1803,386 @@ async function testDeleteMessagesKeepsTheCallerProjectionSnapshot() {
         storyTime: '2042-05-20 09:30',
     });
 
-    assert.deepEqual(projectionCalls, [{
+    assert.equal(projectionCalls.length, 1);
+    assert.deepEqual({
+        scopeId: projectionCalls[0].scopeId,
+        conversationId: projectionCalls[0].conversationId,
+        userName: projectionCalls[0].userName,
+        storyTime: projectionCalls[0].storyTime,
+    }, {
         scopeId,
         conversationId: privateChat.conversation.conversationId,
         userName: 'Facade snapshot user',
         storyTime: '2042-05-20 09:30',
+    });
+    assert.equal(projectionCalls[0].scopeSession.scopeId, scopeId);
+    assert.equal(projectionCalls[0].scopeSession.isReady(), true);
+    runtime.destroy();
+}
+
+async function testDeleteMessagesStopsBeforeNotifyingWhenWorldbookSessionBecomesStale() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeA = 'st:character:alice:chat-delete-worldbook-a';
+    const scopeB = 'st:character:alice:chat-delete-worldbook-b';
+    let currentScopeId = scopeA;
+    const notifications = [];
+    let syncScopeSession = null;
+    const syncStarted = deferred();
+    const releaseSync = deferred();
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return { scopeId: currentScopeId, chatId: currentScopeId, chatFile: currentScopeId, hostType: 'character', hostId: 'alice' };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return ''; },
+            readStoryMessages() { return []; },
+            readRawContext() { return {}; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        requestService: {
+            cancelScope() {},
+            getConversationState() { return {}; },
+            async cancelConversation() {},
+            async reconcileConversation() {},
+        },
+        proactiveService: {
+            cancelScope() {},
+            async getState() { return { enabled: false, everyTurns: 5, count: 0, nextKind: 'private' }; },
+        },
+        projectionService: {
+            async retryPending() {},
+            async syncConversation({ scopeSession }) {
+                syncScopeSession = scopeSession;
+                syncStarted.resolve();
+                await releaseSync.promise;
+            },
+        },
+        worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
+        worldbookContextGateway: { async runDryRun() { return []; } },
+    });
+    await runtime.initialize();
+    const privateChat = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
+    const [message] = await repository.appendMessages(scopeA, privateChat.conversation.conversationId, [{
+        senderId: '__self__',
+        senderType: 'self',
+        type: 'text',
+        content: 'Delete then switch',
+        storyTime: '',
     }]);
+    const unsubscribe = runtime.subscribe((event) => { notifications.push(event); });
+
+    const deleting = runtime.deleteMessages({
+        scopeId: scopeA,
+        conversationId: privateChat.conversation.conversationId,
+        messageIds: [message.messageId],
+    });
+    await syncStarted.promise;
+
+    currentScopeId = scopeB;
+    const transition = runtime.handleChatChanged();
+    await waitUntil(
+        () => syncScopeSession?.isCurrent() === false,
+        'the delete-messages projection session becoming stale',
+    );
+    releaseSync.resolve();
+    await assert.rejects(deleting, (error) => error?.code === 'scope_inactive');
+    await transition;
+    unsubscribe();
+    runtime.destroy();
+
+    assert.equal(notifications.some((event) => event.scopeId === scopeA), false);
+}
+
+async function testDeleteMessagesStopsWhenCapturedScopeSessionBecomesStaleDuringAwait() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeA = 'st:character:alice:chat-delete-aba-a';
+    const scopeB = 'st:character:alice:chat-delete-aba-b';
+    let currentScopeId = scopeA;
+    let blockNextScopeAEnsure = false;
+    let deleteCalls = 0;
+    const deleteEnsureStarted = deferred();
+    const releaseDeleteEnsure = deferred();
+    const stateStore = createMemoryQQV2StateStore();
+    const baseRepository = createQQV2Repository({ stateStore });
+    const repository = {
+        ...baseRepository,
+        async ensureScope(...args) {
+            if (blockNextScopeAEnsure && args[0] === scopeA) {
+                blockNextScopeAEnsure = false;
+                deleteEnsureStarted.resolve();
+                await releaseDeleteEnsure.promise;
+            }
+            return baseRepository.ensureScope(...args);
+        },
+        deleteMessages(...args) {
+            deleteCalls += 1;
+            return baseRepository.deleteMessages(...args);
+        },
+    };
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return { scopeId: currentScopeId, chatId: currentScopeId, chatFile: currentScopeId, hostType: 'character', hostId: 'alice' };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return ''; },
+            readStoryMessages() { return []; },
+            readRawContext() { return {}; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        requestService: {
+            cancelScope() {},
+            getConversationState() { return {}; },
+            async cancelConversation() {},
+            async reconcileConversation() {},
+        },
+        proactiveService: {
+            cancelScope() {},
+            async getState() { return { enabled: false, everyTurns: 5, count: 0, nextKind: 'private' }; },
+        },
+        projectionService: { async retryPending() {}, async syncConversation() {} },
+        worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
+        worldbookContextGateway: { async runDryRun() { return []; } },
+    });
+    await runtime.initialize();
+    const privateChat = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
+    const [message] = await baseRepository.appendMessages(scopeA, privateChat.conversation.conversationId, [{
+        senderId: '__self__',
+        senderType: 'self',
+        type: 'text',
+        content: 'Keep me after ABA',
+        storyTime: '',
+    }]);
+
+    blockNextScopeAEnsure = true;
+    const deleting = runtime.deleteMessages({
+        scopeId: scopeA,
+        conversationId: privateChat.conversation.conversationId,
+        messageIds: [message.messageId],
+    }).then(
+        (value) => ({ status: 'fulfilled', value }),
+        (reason) => ({ status: 'rejected', reason }),
+    );
+    await deleteEnsureStarted.promise;
+
+    currentScopeId = scopeB;
+    await runtime.handleChatChanged();
+    currentScopeId = scopeA;
+    await runtime.handleChatChanged();
+    releaseDeleteEnsure.resolve();
+    await deleting;
+
+    const remainingMessages = await baseRepository.listMessages(scopeA, privateChat.conversation.conversationId);
+    runtime.destroy();
+
+    assert.equal(deleteCalls, 0);
+    assert.deepEqual(remainingMessages.map((item) => item.messageId), [message.messageId]);
+}
+
+async function testDeleteConversationStopsBeforeLocalDeleteWhenCapturedScopeSessionBecomesStale() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeA = 'st:character:alice:chat-delete-conversation-a';
+    const scopeB = 'st:character:alice:chat-delete-conversation-b';
+    let currentScopeId = scopeA;
+    let deleteCalls = 0;
+    let rollbackCalls = 0;
+    let removalScopeSession = null;
+    const removalStarted = deferred();
+    const releaseRemoval = deferred();
+    const stateStore = createMemoryQQV2StateStore();
+    const baseRepository = createQQV2Repository({ stateStore });
+    const repository = {
+        ...baseRepository,
+        deleteConversation(...args) {
+            deleteCalls += 1;
+            return baseRepository.deleteConversation(...args);
+        },
+    };
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return { scopeId: currentScopeId, chatId: currentScopeId, chatFile: currentScopeId, hostType: 'character', hostId: 'alice' };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return ''; },
+            readStoryMessages() { return []; },
+            readRawContext() { return {}; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        requestService: {
+            cancelScope() {},
+            getConversationState() { return {}; },
+            async cancelConversation() {},
+            async reconcileConversation() {},
+            handleConversationDeleted() {},
+        },
+        proactiveService: {
+            cancelScope() {},
+            async getState() { return { enabled: false, everyTurns: 5, count: 0, nextKind: 'private' }; },
+        },
+        projectionService: {
+            async retryPending() {},
+            async syncConversation() {},
+            async removeConversationProjection({ scopeSession }) {
+                removalScopeSession = scopeSession;
+                removalStarted.resolve();
+                await releaseRemoval.promise;
+                return {
+                    status: 'removed',
+                    async rollback() {
+                        rollbackCalls += 1;
+                        return { status: 'restored' };
+                    },
+                };
+            },
+        },
+        worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
+        worldbookContextGateway: { async runDryRun() { return []; } },
+    });
+    await runtime.initialize();
+    const privateChat = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
+
+    const deleting = runtime.deleteConversation({
+        scopeId: scopeA,
+        conversationId: privateChat.conversation.conversationId,
+    }).then(
+        (value) => ({ status: 'fulfilled', value }),
+        (reason) => ({ status: 'rejected', reason }),
+    );
+    await removalStarted.promise;
+
+    currentScopeId = scopeB;
+    const transition = runtime.handleChatChanged();
+    await waitUntil(
+        () => removalScopeSession?.isCurrent() === false,
+        'the deletion session becoming stale',
+    );
+    releaseRemoval.resolve();
+    const outcome = await deleting;
+    await transition;
+    const remainingConversation = await baseRepository.getConversation(scopeA, privateChat.conversation.conversationId);
+    runtime.destroy();
+
+    assert.equal(deleteCalls, 0);
+    assert.equal(rollbackCalls, 0);
+    assert.equal(outcome.status, 'rejected');
+    assert.equal(outcome.reason?.code, 'scope_inactive');
+    assert.notEqual(remainingConversation, null);
+}
+
+async function testDeleteConversationStopsAfterCommittedDeleteWhenScopeBecomesStale() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeA = 'st:character:alice:chat-delete-committed-a';
+    const scopeB = 'st:character:alice:chat-delete-committed-b';
+    let currentScopeId = scopeA;
+    let deletedRequestStateCalls = 0;
+    const deleteCommitted = deferred();
+    const releaseDelete = deferred();
+    const stateStore = createMemoryQQV2StateStore();
+    const baseRepository = createQQV2Repository({ stateStore });
+    const repository = {
+        ...baseRepository,
+        async deleteConversation(...args) {
+            const result = await baseRepository.deleteConversation(...args);
+            deleteCommitted.resolve();
+            await releaseDelete.promise;
+            return result;
+        },
+    };
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return { scopeId: currentScopeId, chatId: currentScopeId, chatFile: currentScopeId, hostType: 'character', hostId: 'alice' };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return ''; },
+            readStoryMessages() { return []; },
+            readRawContext() { return {}; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        requestService: {
+            cancelScope() {},
+            getConversationState() { return {}; },
+            async cancelConversation() {},
+            handleConversationDeleted() { deletedRequestStateCalls += 1; },
+        },
+        proactiveService: {
+            cancelScope() {},
+            async getState() { return { enabled: false, everyTurns: 5, count: 0, nextKind: 'private' }; },
+        },
+        projectionService: {
+            async retryPending() {},
+            async syncConversation() {},
+            async removeConversationProjection() { return { status: 'removed' }; },
+        },
+        worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
+        worldbookContextGateway: { async runDryRun() { return []; } },
+    });
+    await runtime.initialize();
+    const deletedConversation = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
+    const survivor = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Bea' });
+    const events = [];
+    const unsubscribe = runtime.subscribe((event) => events.push(event));
+
+    const deleting = runtime.deleteConversation({
+        scopeId: scopeA,
+        conversationId: deletedConversation.conversation.conversationId,
+    }).then(
+        (value) => ({ status: 'fulfilled', value }),
+        (reason) => ({ status: 'rejected', reason }),
+    );
+    await deleteCommitted.promise;
+    assert.equal(
+        (await baseRepository.getConversation(scopeA, deletedConversation.conversation.conversationId))?.status,
+        'contact',
+        'the deletion must commit before the stale session is released',
+    );
+
+    currentScopeId = scopeB;
+    await runtime.handleChatChanged();
+    currentScopeId = scopeA;
+    await runtime.handleChatChanged();
+    await runtime.openConversation({
+        scopeId: scopeA,
+        conversationId: survivor.conversation.conversationId,
+    });
+    events.length = 0;
+
+    releaseDelete.resolve();
+    const outcome = await deleting;
+
+    assert.equal(outcome.status, 'rejected');
+    assert.equal(outcome.reason?.code, 'scope_inactive');
+    assert.equal(deletedRequestStateCalls, 0);
+    assert.deepEqual(events, []);
+    assert.deepEqual(await runtime.closeConversation({
+        scopeId: scopeA,
+        conversationId: survivor.conversation.conversationId,
+    }), {
+        conversationId: survivor.conversation.conversationId,
+        closed: true,
+    });
+
+    unsubscribe();
     runtime.destroy();
 }
 
@@ -1852,6 +2588,8 @@ async function main() {
     await testProductionRuntimeOwnsTheCurrentScopeAndFacade();
     await testProductionWorldbookScanUsesScenarioSpecificHistoryWindows();
     await testProductionRuntimeCountsOnlyOneEligibleNormalStoryReply();
+    await testScopeTransitionCancelsPreviousScopeBeforeSlowInitialization();
+    await testAbaStaleStorySessionCannotBeCountedAsReenteredScope();
     await testProductionRuntimeKeepsWorldbookProjectionBeforeConversationDeletion();
     await testProductionRuntimeCancelsLateSaveAndCleansOldScopeThroughCurrentHostContext();
     await testDefaultRuntimeEntryExposesTheProductionFacade();
@@ -1860,9 +2598,16 @@ async function main() {
     await testProductionFacadeListsOnlyExistingWorldbooks();
     await testProductionRuntimeInitializesDefaultWorldbookOncePerScope();
     await testProductionRuntimeQueriesDoNotCreateOrThrowForAnUnseenScope();
+    await testListWorldbooksWithoutReadyScopeDoesNotCreateScopeOrReachGateway();
     await testProductionFacadeBridgesPrivateProfilesMediaAndUnreadState();
     await testProductionRuntimeTracksUnreadOnlyForClosedConversations();
+    await testOpenConversationDoesNotRestoreStaleOpenStateOrNotify();
+    await testCloseConversationDoesNotClearReopenedStateAfterScopeAba();
     await testDeleteMessagesKeepsTheCallerProjectionSnapshot();
+    await testDeleteMessagesStopsBeforeNotifyingWhenWorldbookSessionBecomesStale();
+    await testDeleteMessagesStopsWhenCapturedScopeSessionBecomesStaleDuringAwait();
+    await testDeleteConversationStopsBeforeLocalDeleteWhenCapturedScopeSessionBecomesStale();
+    await testDeleteConversationStopsAfterCommittedDeleteWhenScopeBecomesStale();
     await testProductionFacadeOwnsRevocableMediaRenderLeases();
     await testProductionRuntimeExposesRetryableManualCancellation();
     await testSharedWorldbookConversationSyncIsSerial();

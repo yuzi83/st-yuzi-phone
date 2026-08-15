@@ -1,3 +1,5 @@
+import { createQQV2ScopeCoordinator } from './scope-coordinator.js';
+
 function cloneScope(scope) {
     return scope ? { ...scope } : null;
 }
@@ -25,6 +27,7 @@ function cloneWorldbookLifecycle(value) {
     if (!value) return null;
     return Object.freeze({
         scope: cloneScope(value.scope),
+        scopeSession: value.scopeSession,
         entries: Object.freeze(value.entries.map(entry => ({ ...entry }))),
     });
 }
@@ -41,6 +44,12 @@ export function createQQV2Runtime(options = {}) {
     const onScopeChanged = typeof options.onScopeChanged === 'function'
         ? options.onScopeChanged
         : () => {};
+    const onScopeReady = typeof options.onScopeReady === 'function'
+        ? options.onScopeReady
+        : () => {};
+    const onUnavailable = typeof options.onUnavailable === 'function'
+        ? options.onUnavailable
+        : () => {};
     const onDestroy = typeof options.onDestroy === 'function'
         ? options.onDestroy
         : () => {};
@@ -51,67 +60,52 @@ export function createQQV2Runtime(options = {}) {
         ? options.onWorldInfoActivated
         : () => {};
 
-    let phase = 'idle';
-    let activeScope = null;
     let worldbookLifecycle = null;
-    let epoch = 0;
-    let scopeTransition = Promise.resolve();
 
-    const markHostUnavailable = () => {
-        epoch += 1;
-        activeScope = null;
-        worldbookLifecycle = null;
-        phase = 'unavailable';
-    };
-
-    const performEnterCurrentScope = async () => {
-        if (phase === 'destroyed') return null;
-        let nextScope;
-        try {
-            nextScope = host.readScope();
-        } catch (error) {
-            if (error?.code === 'host_unavailable') {
-                markHostUnavailable();
-            }
-            throw error;
-        }
-        const changed = activeScope?.scopeId !== nextScope.scopeId;
-        if (changed) {
+    const coordinator = createQQV2ScopeCoordinator({
+        readScope: () => host.readScope(),
+        async onTransition({ previous, current }) {
             worldbookLifecycle = null;
-            epoch += 1;
-            await onScopeChanged(cloneScope(nextScope), epoch);
-            if (phase === 'destroyed') return null;
-        }
-        activeScope = nextScope;
-        return cloneScope(activeScope);
+            await onScopeChanged(cloneScope(current.scope), current.generation, current, previous);
+        },
+        onReady: onScopeReady,
+        async onUnavailable(details) {
+            worldbookLifecycle = null;
+            await onUnavailable(details);
+        },
+        onDestroy(details) {
+            worldbookLifecycle = null;
+            return onDestroy(details);
+        },
+    });
+
+    const refreshScope = async () => {
+        const scopeSession = await coordinator.refresh();
+        if (!scopeSession?.isReady()) return null;
+        return cloneScope(scopeSession?.scope);
     };
 
-    const enterCurrentScope = () => {
-        const task = scopeTransition.then(performEnterCurrentScope, performEnterCurrentScope);
-        scopeTransition = task.catch(() => {});
-        return task;
+    const captureReadyScopeSession = (expectedScopeId) => {
+        const scopeSession = coordinator.capture(expectedScopeId);
+        return scopeSession?.isReady() ? scopeSession : null;
     };
 
     return Object.freeze({
         async initialize() {
-            if (phase === 'destroyed') {
+            if (coordinator.getStatus().phase === 'destroyed') {
                 throw new Error('已销毁的 QQ v2 runtime 不能再次初始化');
             }
-            const scope = await enterCurrentScope();
-            phase = 'ready';
-            return scope;
+            return refreshScope();
         },
         async handleChatChanged() {
-            if (phase === 'destroyed') return null;
-            const scope = await enterCurrentScope();
-            phase = 'ready';
-            return scope;
+            return refreshScope();
         },
         async handleCharacterMessageRendered(messageId, generationType) {
-            if (phase === 'destroyed') return null;
-            const scope = await enterCurrentScope();
+            const scopeSession = captureReadyScopeSession();
+            if (!scopeSession) return null;
             const facts = Object.freeze({
-                scope,
+                scope: cloneScope(scopeSession.scope),
+                scopeSession,
                 messageId: asText(messageId, 180),
                 generationType: asText(generationType, 80),
                 storyTime: typeof host.readStoryTime === 'function' ? asText(host.readStoryTime(), 512) : '',
@@ -123,10 +117,11 @@ export function createQQV2Runtime(options = {}) {
             return facts;
         },
         async handleWorldInfoActivated(entries) {
-            if (phase === 'destroyed') return null;
-            const scope = await enterCurrentScope();
+            const scopeSession = captureReadyScopeSession();
+            if (!scopeSession) return null;
             worldbookLifecycle = Object.freeze({
-                scope,
+                scope: cloneScope(scopeSession.scope),
+                scopeSession,
                 entries: Object.freeze(asEntries(entries)
                     .filter(entry => entry && typeof entry === 'object' && !Array.isArray(entry))
                     .map(entry => ({ ...entry }))),
@@ -136,26 +131,28 @@ export function createQQV2Runtime(options = {}) {
             return facts;
         },
         getActiveScope() {
-            return cloneScope(activeScope);
+            return cloneScope(coordinator.getCurrentSession()?.scope);
         },
         getWorldInfoLifecycle() {
             return cloneWorldbookLifecycle(worldbookLifecycle);
         },
+        captureScopeSession(expectedScopeId) {
+            return coordinator.capture(expectedScopeId);
+        },
+        runHostMutation(operation) {
+            return coordinator.runHostMutation(operation);
+        },
         getStatus() {
+            const status = coordinator.getStatus();
             return Object.freeze({
-                phase,
-                scopeId: activeScope?.scopeId || '',
+                phase: status.phase,
+                scopeId: status.scopeId,
                 worldbookScopeId: worldbookLifecycle?.scope?.scopeId || '',
-                epoch,
+                epoch: status.generation,
             });
         },
         destroy() {
-            if (phase === 'destroyed') return;
-            epoch += 1;
-            activeScope = null;
-            worldbookLifecycle = null;
-            phase = 'destroyed';
-            onDestroy();
+            coordinator.destroy();
         },
     });
 }

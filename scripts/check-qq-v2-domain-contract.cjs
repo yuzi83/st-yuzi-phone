@@ -453,6 +453,141 @@ async function testAiActionBatchIsAtomicAndNewConversationNeedsFirstMessage() {
     assert.equal((await repository.listMessages('scope-a', result.createdConversationIds[0])).length, 1);
 }
 
+async function testScopedProjectionWriteRevalidatesInsideTransaction() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    const { conversation } = await repository.createPrivateConversation('scope-a', { name: 'Alice' });
+    const before = (await repository.getConversation('scope-a', conversation.conversationId)).injection.projection;
+
+    let releaseBlocker;
+    let markBlockerEntered;
+    const blockerEntered = new Promise((resolve) => { markBlockerEntered = resolve; });
+    const blocker = stateStore.transact(async () => {
+        markBlockerEntered();
+        await new Promise((resolve) => { releaseBlocker = resolve; });
+    });
+    await blockerEntered;
+
+    let current = true;
+    const scopeSession = {
+        scopeId: 'scope-a',
+        isCurrent: () => current,
+        assertCurrent() {
+            if (current) return this;
+            const error = new Error('QQ scope scope-a is no longer current');
+            error.code = 'scope_inactive';
+            throw error;
+        },
+    };
+    const write = repository.setConversationProjection(
+        'scope-a',
+        conversation.conversationId,
+        { bookName: '不应写入', managedBookNames: ['不应写入'], pending: true },
+        { scopeSession },
+    );
+    const rejected = assert.rejects(write, (error) => error?.code === 'scope_inactive');
+    current = false;
+    releaseBlocker();
+
+    await blocker;
+    await rejected;
+    assert.deepEqual(
+        (await repository.getConversation('scope-a', conversation.conversationId)).injection.projection,
+        before,
+        '失效 Scope Session 的排队事务不得修改 projection 状态',
+    );
+}
+
+async function testScopedProactiveConfigurationRevalidatesInsideTransaction() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    await repository.ensureScope('scope-a');
+    const before = await repository.getProactiveSettings('scope-a');
+
+    let releaseBlocker;
+    let markBlockerEntered;
+    const blockerEntered = new Promise((resolve) => { markBlockerEntered = resolve; });
+    const blocker = stateStore.transact(async () => {
+        markBlockerEntered();
+        await new Promise((resolve) => { releaseBlocker = resolve; });
+    });
+    await blockerEntered;
+
+    let current = true;
+    const scopeSession = {
+        scopeId: 'scope-a',
+        isCurrent: () => current,
+        assertCurrent() {
+            if (current) return this;
+            const error = new Error('QQ scope scope-a is no longer current');
+            error.code = 'scope_inactive';
+            throw error;
+        },
+    };
+    const write = repository.updateProactiveSettings(
+        'scope-a',
+        { enabled: true, everyTurns: 1 },
+        { scopeSession },
+    );
+    const rejected = assert.rejects(write, (error) => error?.code === 'scope_inactive');
+    current = false;
+    releaseBlocker();
+
+    await blocker;
+    await rejected;
+    assert.deepEqual(
+        await repository.getProactiveSettings('scope-a'),
+        before,
+        '失效 Scope Session 的排队事务不得修改主动消息配置',
+    );
+}
+
+async function testScopedConversationOpenRevalidatesInsideTransaction() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    const { conversation } = await repository.createPrivateConversation('scope-a', { name: 'Alice' });
+    await repository.incrementConversationUnread('scope-a', conversation.conversationId, 2);
+
+    let releaseBlocker;
+    let markBlockerEntered;
+    const blockerEntered = new Promise((resolve) => { markBlockerEntered = resolve; });
+    const blocker = stateStore.transact(async () => {
+        markBlockerEntered();
+        await new Promise((resolve) => { releaseBlocker = resolve; });
+    });
+    await blockerEntered;
+
+    let current = true;
+    const scopeSession = {
+        scopeId: 'scope-a',
+        isCurrent: () => current,
+        assertCurrent() {
+            if (current) return this;
+            const error = new Error('QQ scope scope-a is no longer current');
+            error.code = 'scope_inactive';
+            throw error;
+        },
+    };
+    const open = repository.openConversation('scope-a', conversation.conversationId, { scopeSession });
+    const rejected = assert.rejects(open, (error) => error?.code === 'scope_inactive');
+    current = false;
+    releaseBlocker();
+
+    await blocker;
+    await rejected;
+    assert.equal(
+        (await repository.getConversation('scope-a', conversation.conversationId)).unreadCount,
+        2,
+        'A queued stale Scope Session must not clear unread state.',
+    );
+}
+
 async function main() {
     await testScopeIsolationAndStablePeople();
     await testMessagesKeepStoryTimeAndDeletedQuotesDoNotLeakOriginalContent();
@@ -468,6 +603,9 @@ async function main() {
     await testOpeningConversationClearsItsUnreadCounter();
     await testGroupManagementUsesCurrentUsersRealPermission();
     await testAiActionBatchIsAtomicAndNewConversationNeedsFirstMessage();
+    await testScopedProjectionWriteRevalidatesInsideTransaction();
+    await testScopedProactiveConfigurationRevalidatesInsideTransaction();
+    await testScopedConversationOpenRevalidatesInsideTransaction();
     console.log('[qq-v2-domain-contract] passed');
 }
 

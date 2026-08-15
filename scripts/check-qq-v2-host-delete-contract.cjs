@@ -188,11 +188,32 @@ async function testDuplicateFilenameLookupFailureKeepsEveryCandidateScope() {
     fixture.runtime.destroy();
 }
 
+async function testGroupDeletionStaysUnconfirmedWithoutCleanupSideEffects() {
+    const fixture = await createFixture();
+    const groupScope = {
+        scopeId: 'st:group:group-a',
+        hostType: 'group',
+        hostId: 'group-a',
+        chatId: 'group-a',
+        chatFile: 'group-a',
+    };
+    await fixture.repository.ensureScope(groupScope.scopeId, groupScope);
+    fixture.events.length = 0;
+
+    const result = await fixture.runtime.handleGroupChatDeleted('group-a');
+
+    assert.deepEqual(result, { status: 'skipped', reason: 'group-delete-not-confirmed' });
+    assert.deepEqual(fixture.events, []);
+    assert.ok(await fixture.repository.getScope(groupScope.scopeId));
+    fixture.runtime.destroy();
+}
+
 async function main() {
     await testHostDeletionRemovesProjectionBeforeScopeAndKeepsGlobalImages();
     await testProjectionFailureKeepsTheSourceScope();
     await testDuplicateFilenamesAreDisambiguatedByRemainingHostChats();
     await testDuplicateFilenameLookupFailureKeepsEveryCandidateScope();
+    await testGroupDeletionStaysUnconfirmedWithoutCleanupSideEffects();
     console.log('[qq-v2-host-delete-contract] passed');
 }
 

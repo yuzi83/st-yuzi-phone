@@ -1,22 +1,18 @@
 import { Logger } from '../../error-handler.js';
-import { executeSqlMutationViaApi, querySqlViaApi, queryTableRowsViaApi } from '../data-api.js';
+import { executeSqlMutationViaApi, getTableAvailabilityViaApi, querySqlViaApi, queryTableRowsViaApi } from '../data-api.js';
 import { subscribeTableFillStart, subscribeTableUpdate } from '../callbacks.js';
 import { createDerivedFieldService, readDerivedField } from './derived-field-service.js';
+import { resolveFirstAvailableTableCandidate } from './table-candidate-resolver.js';
 import {
     CHRONICLE_TODAY_RELATION_ANCHOR_REQUIRED_COLUMNS,
     CHRONICLE_TODAY_RELATION_ANCHOR_TABLES,
     CHRONICLE_TODAY_RELATION_REQUIRED_COLUMNS,
+    CHRONICLE_TODAY_RELATION_TABLES,
     buildChronicleTodayRelationSignatureSql,
     buildChronicleTodayRelationUpdateSql,
 } from './chronicle-today-relation-sql.js';
 
-export { CHRONICLE_TODAY_RELATION_ANCHOR_TABLES };
-
-const STRUCTURAL_QUERY_FAILURE_CODES = new Set([
-    'alias_conflict',
-    'table_not_found',
-    'column_not_resolved',
-]);
+export { CHRONICLE_TODAY_RELATION_ANCHOR_TABLES, CHRONICLE_TODAY_RELATION_TABLES };
 
 const defaultLogger = Logger.withScope({
     scope: 'phone-core/derived-fields/chronicle-today-relation',
@@ -28,6 +24,7 @@ const defaultDeps = Object.freeze({
     clearTimeout: (...args) => globalThis.clearTimeout(...args),
     subscribeUpdate: subscribeTableUpdate,
     subscribeFillStart: subscribeTableFillStart,
+    getTableAvailability: getTableAvailabilityViaApi,
     queryTableRows: queryTableRowsViaApi,
     query: querySqlViaApi,
     mutation: executeSqlMutationViaApi,
@@ -76,40 +73,36 @@ function buildSchemaBlockedResult(failures) {
     };
 }
 
-function classifyContextQueryFailure(tableName, result) {
-    if (result?.code === 'runtime_not_ready') return { status: 'runtime-not-ready' };
-    if (STRUCTURAL_QUERY_FAILURE_CODES.has(result?.code)) {
-        return buildSchemaBlockedResult([{ tableName, result }]);
-    }
-    return { status: 'query-failed', result };
+function normalizeCandidateContextResult(candidate) {
+    if (candidate.status === 'schema-blocked') return buildSchemaBlockedResult(candidate.failures);
+    if (candidate.status === 'absent') return { status: 'completed' };
+    return candidate;
 }
 
 export async function resolveChronicleTodayRelationContext(deps, runtime = {}) {
-    const chronicle = await deps.queryTableRows({
-        tableName: 'chronicle',
+    const chronicleCandidate = await resolveFirstAvailableTableCandidate({
+        deps,
+        tableNames: CHRONICLE_TODAY_RELATION_TABLES,
         columns: CHRONICLE_TODAY_RELATION_REQUIRED_COLUMNS,
-        limit: 1,
+        runtime,
     });
-    if (runtime.shouldPause?.()) return { status: 'fill-active' };
-    if (!chronicle?.ok) return classifyContextQueryFailure('chronicle', chronicle);
+    if (chronicleCandidate.status !== 'ready') return normalizeCandidateContextResult(chronicleCandidate);
 
-    const anchorFailures = [];
-    for (const anchorTable of CHRONICLE_TODAY_RELATION_ANCHOR_TABLES) {
-        const result = await deps.queryTableRows({
-            tableName: anchorTable,
-            columns: CHRONICLE_TODAY_RELATION_ANCHOR_REQUIRED_COLUMNS,
-            limit: 1,
-        });
-        if (runtime.shouldPause?.()) return { status: 'fill-active' };
-        if (result?.ok) return { status: 'ready', context: { anchorTable } };
-        if (result?.code === 'runtime_not_ready') return { status: 'runtime-not-ready' };
-        if (!STRUCTURAL_QUERY_FAILURE_CODES.has(result?.code)) {
-            return { status: 'query-failed', result };
-        }
-        anchorFailures.push({ tableName: anchorTable, result });
-    }
+    const anchorCandidate = await resolveFirstAvailableTableCandidate({
+        deps,
+        tableNames: CHRONICLE_TODAY_RELATION_ANCHOR_TABLES,
+        columns: CHRONICLE_TODAY_RELATION_ANCHOR_REQUIRED_COLUMNS,
+        runtime,
+    });
+    if (anchorCandidate.status !== 'ready') return normalizeCandidateContextResult(anchorCandidate);
 
-    return buildSchemaBlockedResult(anchorFailures);
+    return {
+        status: 'ready',
+        context: {
+            chronicleTable: chronicleCandidate.tableName,
+            anchorTable: anchorCandidate.tableName,
+        },
+    };
 }
 
 const service = createDerivedFieldService({
@@ -119,9 +112,9 @@ const service = createDerivedFieldService({
     mutationRetryDelayMs: 2000,
     maxSignatureRetry: 1,
     resolveContext: resolveChronicleTodayRelationContext,
-    buildSignatureSql: (context) => buildChronicleTodayRelationSignatureSql(context.anchorTable),
+    buildSignatureSql: (context) => buildChronicleTodayRelationSignatureSql(context.anchorTable, context.chronicleTable),
     normalizeSignature,
-    buildMutationSql: (context) => buildChronicleTodayRelationUpdateSql(context.anchorTable),
+    buildMutationSql: (context) => buildChronicleTodayRelationUpdateSql(context.anchorTable, context.chronicleTable),
     getInvalidWarning(signature) {
         if (!signature?.invalidRowIds) return null;
         return {

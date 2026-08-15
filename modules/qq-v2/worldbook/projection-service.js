@@ -344,6 +344,16 @@ function disabledError() {
     return error;
 }
 
+function inactiveScopeError() {
+    const error = new Error('QQ 作用域已切换，当前世界书操作已取消');
+    error.code = 'worldbook_scope_inactive';
+    return error;
+}
+
+function isInactiveScopeError(error) {
+    return error?.code === 'scope_inactive' || error?.code === 'worldbook_scope_inactive';
+}
+
 /** QQ 消息到世界书条目的唯一投影模块。只处理调用方传入的作用域和明确记录过的目标书。 */
 export function createQQV2WorldbookProjectionService(options = {}) {
     const repository = options.repository;
@@ -365,7 +375,7 @@ export function createQQV2WorldbookProjectionService(options = {}) {
             ? (scopeId) => repository.getWorldbookSettings(scopeId)
             : null,
         update: typeof repository.updateWorldbookSettings === 'function'
-            ? (scopeId, patch) => repository.updateWorldbookSettings(scopeId, patch)
+            ? (scopeId, patch, operationOptions) => repository.updateWorldbookSettings(scopeId, patch, operationOptions)
             : null,
     };
     if (options.worldbookSettings
@@ -373,39 +383,91 @@ export function createQQV2WorldbookProjectionService(options = {}) {
         throw new TypeError('QQ v2 worldbook projection service 需要有效的 worldbookSettings');
     }
 
-    const getProjectionData = async (scopeId, conversationId) => {
-        const data = await repository.getWorldbookProjectionData(scopeId, conversationId);
-        if (typeof worldbookSettings.get !== 'function') return data;
-        return { ...data, settings: clone(await worldbookSettings.get(scopeId)) };
+    const assertScopeSessionCurrent = (scopeSession, allowInactiveScope = false) => {
+        if (allowInactiveScope || !scopeSession) return;
+        try {
+            if (scopeSession.isCurrent?.() === true && scopeSession.signal?.aborted !== true) return;
+        } catch {
+            // The stable public error below hides coordinator implementation details.
+        }
+        throw inactiveScopeError();
     };
 
-    const loadBook = async (name, scopeId, allowInactiveScope = false) => {
+    const runScoped = async (operation, scopeSession, allowInactiveScope = false) => {
+        assertScopeSessionCurrent(scopeSession, allowInactiveScope);
+        const result = await operation();
+        assertScopeSessionCurrent(scopeSession, allowInactiveScope);
+        return result;
+    };
+
+    const getProjectionData = async (scopeId, conversationId, scopeSession = null, allowInactiveScope = false) => {
+        const data = await runScoped(
+            () => repository.getWorldbookProjectionData(scopeId, conversationId),
+            scopeSession,
+            allowInactiveScope,
+        );
+        if (typeof worldbookSettings.get !== 'function') return data;
+        const settings = await runScoped(
+            () => worldbookSettings.get(scopeId, { scopeSession, allowInactiveScope }),
+            scopeSession,
+            allowInactiveScope,
+        );
+        return { ...data, settings: clone(settings) };
+    };
+
+    const loadBook = async (name, scopeId, allowInactiveScope = false, scopeSession = null) => {
         const bookName = asText(name, 256);
         if (!bookName) throw targetError('请先选择 QQ 目标世界书');
-        const book = await worldbookGateway.loadBook(bookName, scopeId, { allowInactiveScope });
+        const book = await runScoped(
+            () => worldbookGateway.loadBook(bookName, scopeId, { allowInactiveScope, scopeSession }),
+            scopeSession,
+            allowInactiveScope,
+        );
         if (!book) throw targetError(`QQ 世界书 ${bookName} 不存在`);
         return clone(book);
     };
 
-    const loadOptionalBook = async (name, scopeId, allowInactiveScope = false) => {
+    const loadOptionalBook = async (name, scopeId, allowInactiveScope = false, scopeSession = null) => {
         const bookName = asText(name, 256);
         if (!bookName) return null;
-        const book = await worldbookGateway.loadBook(bookName, scopeId, { allowInactiveScope });
+        const book = await runScoped(
+            () => worldbookGateway.loadBook(bookName, scopeId, { allowInactiveScope, scopeSession }),
+            scopeSession,
+            allowInactiveScope,
+        );
         return book ? clone(book) : null;
     };
 
-    const saveBook = (name, book, scopeId, allowInactiveScope = false) => (
-        worldbookGateway.saveBook(name, book, scopeId, { allowInactiveScope })
+    const saveBook = (name, book, scopeId, allowInactiveScope = false, scopeSession = null) => runScoped(
+        () => worldbookGateway.saveBook(name, book, scopeId, { allowInactiveScope, scopeSession }),
+        scopeSession,
+        allowInactiveScope,
     );
 
-    const privateConversations = async (scopeId) => (
-        (await repository.listConversations(scopeId)).filter((conversation) => conversation.kind === 'private')
-    );
+    const privateConversations = async (scopeId, scopeSession = null, allowInactiveScope = false) => {
+        const conversations = await runScoped(
+            () => repository.listConversations(scopeId),
+            scopeSession,
+            allowInactiveScope,
+        );
+        return conversations.filter((conversation) => conversation.kind === 'private');
+    };
 
-    const setPending = async (scopeId, conversationId, names = []) => repository.setConversationProjection(
+    const setPending = async (
         scopeId,
         conversationId,
-        { managedBookNames: uniqueNames(names), pending: true },
+        names = [],
+        scopeSession = null,
+        allowInactiveScope = false,
+    ) => runScoped(
+        () => repository.setConversationProjection(
+            scopeId,
+            conversationId,
+            { managedBookNames: uniqueNames(names), pending: true },
+            { scopeSession, allowInactiveScope },
+        ),
+        scopeSession,
+        allowInactiveScope,
     );
 
     const restoreBook = async ({
@@ -415,119 +477,163 @@ export function createQQV2WorldbookProjectionService(options = {}) {
         conversationId = '',
         conversationIds = null,
         allowInactiveScope = false,
+        scopeSession = null,
     }) => {
-        const current = await loadBook(name, scopeId, allowInactiveScope);
+        const current = await loadBook(name, scopeId, allowInactiveScope, scopeSession);
         if (conversationIds) restoreConversationEntries(current, scopeId, conversationIds, entries);
         else restoreOwnedEntries(current, scopeId, entries, conversationId);
-        await saveBook(name, current, scopeId, allowInactiveScope);
+        await saveBook(name, current, scopeId, allowInactiveScope, scopeSession);
     };
 
     const removeProjection = async (scopeId, conversationId, data, {
         clearSelected = false,
         allowInactiveScope = false,
+        scopeSession = null,
     } = {}) => {
-        if (clearSelected) await repository.clearSelectedMessagesForInjection(scopeId, conversationId);
+        if (clearSelected) {
+            await runScoped(
+                () => repository.clearSelectedMessagesForInjection(scopeId, conversationId, { scopeSession, allowInactiveScope }),
+                scopeSession,
+                allowInactiveScope,
+            );
+        }
         const names = trackedBookNames(data);
         const snapshots = [];
         try {
             for (const name of names) {
-                const book = await loadOptionalBook(name, scopeId, allowInactiveScope);
+                const book = await loadOptionalBook(name, scopeId, allowInactiveScope, scopeSession);
                 if (!book) continue;
                 const entries = ownedEntries(book, scopeId, conversationId).map(([key, entry]) => [key, clone(entry)]);
                 if (removeOwnedEntries(book, scopeId, conversationId)) {
                     snapshots.push({ name, entries });
-                    await saveBook(name, book, scopeId, allowInactiveScope);
+                    await saveBook(name, book, scopeId, allowInactiveScope, scopeSession);
                 }
             }
             const previousProjection = clone(data.conversation.injection.projection);
-            await repository.setConversationProjection(scopeId, conversationId, {
-                bookName: '', entryUid: null, managedBookNames: [], pending: false,
-            });
+            await runScoped(
+                () => repository.setConversationProjection(scopeId, conversationId, {
+                    bookName: '', entryUid: null, managedBookNames: [], pending: false,
+                }, { scopeSession, allowInactiveScope }),
+                scopeSession,
+                allowInactiveScope,
+            );
             return {
                 status: 'removed',
                 rollback: async () => {
                     try {
                         for (const snapshot of snapshots) {
-                            await restoreBook({ ...snapshot, scopeId, conversationId, allowInactiveScope });
+                            await restoreBook({ ...snapshot, scopeId, conversationId, allowInactiveScope, scopeSession });
                         }
-                        await repository.setConversationProjection(scopeId, conversationId, previousProjection);
+                        await runScoped(
+                            () => repository.setConversationProjection(
+                                scopeId,
+                                conversationId,
+                                previousProjection,
+                                { scopeSession, allowInactiveScope },
+                            ),
+                            scopeSession,
+                            allowInactiveScope,
+                        );
                         return { status: 'restored' };
-                    } catch {
-                        await setPending(scopeId, conversationId, names).catch(() => {});
+                    } catch (error) {
+                        if (isInactiveScopeError(error)) return { status: 'pending', reason: 'scope-inactive' };
+                        try {
+                            await setPending(scopeId, conversationId, names, scopeSession, allowInactiveScope);
+                        } catch (pendingError) {
+                            if (isInactiveScopeError(pendingError)) return { status: 'pending', reason: 'scope-inactive' };
+                        }
                         return { status: 'pending' };
                     }
                 },
             };
-        } catch {
-            await setPending(scopeId, conversationId, names).catch(() => {});
+        } catch (error) {
+            if (isInactiveScopeError(error)) throw error;
+            try {
+                await setPending(scopeId, conversationId, names, scopeSession, allowInactiveScope);
+            } catch (pendingError) {
+                if (isInactiveScopeError(pendingError)) throw pendingError;
+            }
             return { status: 'pending' };
         }
     };
 
-    const syncConversation = async ({ scopeId, conversationId, userName = '', storyTime = '' } = {}) => {
-        const data = await getProjectionData(scopeId, conversationId);
+    const syncConversation = async ({ scopeId, scopeSession = null, conversationId, userName = '', storyTime = '' } = {}) => {
+        const data = await getProjectionData(scopeId, conversationId, scopeSession);
         if (!data.settings.enabled || !data.conversation.injection.enabled) {
-            return removeProjection(scopeId, conversationId, data);
+            return removeProjection(scopeId, conversationId, data, { scopeSession });
         }
         const targetName = asText(data.settings.bookName, 256);
         const names = trackedBookNames(data);
         try {
-            const target = await loadBook(targetName, scopeId);
+            const target = await loadBook(targetName, scopeId, false, scopeSession);
             const projection = buildProjectionContent(data, asText(userName, 256), storyTime);
             let entry = null;
             if (projection.hasMessages) entry = writeEntry(target, data, projection.content, scopeId);
             else removeOwnedEntries(target, scopeId, conversationId);
-            await saveBook(targetName, target, scopeId);
+            await saveBook(targetName, target, scopeId, false, scopeSession);
 
             for (const name of names.filter((item) => item !== targetName)) {
-                const staleBook = await loadOptionalBook(name, scopeId);
+                const staleBook = await loadOptionalBook(name, scopeId, false, scopeSession);
                 if (!staleBook) continue;
                 if (removeOwnedEntries(staleBook, scopeId, conversationId)) {
-                    await saveBook(name, staleBook, scopeId);
+                    await saveBook(name, staleBook, scopeId, false, scopeSession);
                 }
             }
-            await repository.setConversationProjection(scopeId, conversationId, {
-                bookName: entry ? targetName : '',
-                entryUid: entry?.uid ?? null,
-                managedBookNames: entry ? [targetName] : [],
-                pending: false,
-            });
+            await runScoped(
+                () => repository.setConversationProjection(scopeId, conversationId, {
+                    bookName: entry ? targetName : '',
+                    entryUid: entry?.uid ?? null,
+                    managedBookNames: entry ? [targetName] : [],
+                    pending: false,
+                }, { scopeSession }),
+                scopeSession,
+            );
             return entry ? { status: 'synced', entryUid: entry.uid } : { status: 'empty' };
         } catch (error) {
             if (error?.code === 'worldbook_target_invalid') throw error;
-            await setPending(scopeId, conversationId, uniqueNames([...names, targetName])).catch(() => {});
+            if (isInactiveScopeError(error)) throw error;
+            try {
+                await setPending(scopeId, conversationId, uniqueNames([...names, targetName]), scopeSession);
+            } catch (pendingError) {
+                if (isInactiveScopeError(pendingError)) throw pendingError;
+            }
             return { status: 'pending' };
         }
     };
 
-    const reconcileScope = async ({ scopeId, userName = '', storyTime = '' } = {}) => {
-        const conversations = await privateConversations(scopeId);
+    const reconcileScope = async ({ scopeId, scopeSession = null, userName = '', storyTime = '' } = {}) => {
+        const conversations = await privateConversations(scopeId, scopeSession);
         const results = [];
         for (const conversation of conversations) {
-            results.push(await syncConversation({ scopeId, conversationId: conversation.conversationId, userName, storyTime }));
+            assertScopeSessionCurrent(scopeSession);
+            results.push(await syncConversation({ scopeId, scopeSession, conversationId: conversation.conversationId, userName, storyTime }));
         }
         return results;
     };
 
-    const removeScopeProjections = async ({ scopeId, allowInactiveScope = true } = {}) => {
-        const conversations = await privateConversations(scopeId);
+    const removeScopeProjections = async ({ scopeId, allowInactiveScope = true, scopeSession = null } = {}) => {
+        const conversations = await privateConversations(scopeId, scopeSession, allowInactiveScope);
         const conversationIds = new Set(conversations.map((conversation) => conversation.conversationId));
         const dataList = [];
         for (const conversation of conversations) {
-            dataList.push(await getProjectionData(scopeId, conversation.conversationId));
+            dataList.push(await getProjectionData(scopeId, conversation.conversationId, scopeSession, allowInactiveScope));
         }
-        const settings = await worldbookSettings.get(scopeId);
+        const settings = await runScoped(
+            () => worldbookSettings.get(scopeId, { scopeSession, allowInactiveScope }),
+            scopeSession,
+            allowInactiveScope,
+        );
         const names = uniqueNames([settings.bookName, ...dataList.flatMap(trackedBookNames)]);
         const snapshots = [];
         try {
             for (const name of names) {
-                const book = await loadOptionalBook(name, scopeId, allowInactiveScope);
+                const book = await loadOptionalBook(name, scopeId, allowInactiveScope, scopeSession);
                 if (!book) continue;
                 const entries = ownedEntriesForConversations(book, scopeId, conversationIds)
                     .map(([key, entry]) => [key, clone(entry)]);
                 if (removeEntriesForConversations(book, scopeId, conversationIds)) {
                     snapshots.push({ name, entries });
-                    await saveBook(name, book, scopeId, allowInactiveScope);
+                    await saveBook(name, book, scopeId, allowInactiveScope, scopeSession);
                 }
             }
             const previous = new Map(dataList.map((data) => [
@@ -535,48 +641,77 @@ export function createQQV2WorldbookProjectionService(options = {}) {
                 clone(data.conversation.injection.projection),
             ]));
             for (const conversation of conversations) {
-                await repository.setConversationProjection(scopeId, conversation.conversationId, {
-                    bookName: '', entryUid: null, managedBookNames: [], pending: false,
-                });
+                await runScoped(
+                    () => repository.setConversationProjection(scopeId, conversation.conversationId, {
+                        bookName: '', entryUid: null, managedBookNames: [], pending: false,
+                    }, { scopeSession, allowInactiveScope }),
+                    scopeSession,
+                    allowInactiveScope,
+                );
             }
             return {
                 status: 'removed',
                 rollback: async () => {
                     try {
                         for (const snapshot of snapshots) {
-                            await restoreBook({ ...snapshot, scopeId, conversationIds, allowInactiveScope });
+                            await restoreBook({ ...snapshot, scopeId, conversationIds, allowInactiveScope, scopeSession });
                         }
                         for (const [conversationId, projection] of previous) {
-                            await repository.setConversationProjection(scopeId, conversationId, projection);
+                            await runScoped(
+                                () => repository.setConversationProjection(
+                                    scopeId,
+                                    conversationId,
+                                    projection,
+                                    { scopeSession, allowInactiveScope },
+                                ),
+                                scopeSession,
+                                allowInactiveScope,
+                            );
                         }
                         return { status: 'restored' };
-                    } catch {
+                    } catch (error) {
+                        if (isInactiveScopeError(error)) return { status: 'pending', reason: 'scope-inactive' };
                         for (const conversation of conversations) {
-                            await setPending(scopeId, conversation.conversationId, names).catch(() => {});
+                            try {
+                                await setPending(
+                                    scopeId,
+                                    conversation.conversationId,
+                                    names,
+                                    scopeSession,
+                                    allowInactiveScope,
+                                );
+                            } catch (pendingError) {
+                                if (isInactiveScopeError(pendingError)) return { status: 'pending', reason: 'scope-inactive' };
+                            }
                         }
                         return { status: 'pending' };
                     }
                 },
             };
-        } catch {
+        } catch (error) {
+            if (isInactiveScopeError(error)) throw error;
             for (const conversation of conversations) {
-                await setPending(scopeId, conversation.conversationId, names).catch(() => {});
+                try {
+                    await setPending(scopeId, conversation.conversationId, names, scopeSession, allowInactiveScope);
+                } catch (pendingError) {
+                    if (isInactiveScopeError(pendingError)) throw pendingError;
+                }
             }
             return { status: 'pending' };
         }
     };
 
-    const migrateTarget = async ({ scopeId, current, next, userName, storyTime }) => {
+    const migrateTarget = async ({ scopeId, scopeSession = null, current, next, userName, storyTime }) => {
         const oldName = asText(current.bookName, 256);
         const newName = asText(next.bookName, 256);
-        const conversations = await privateConversations(scopeId);
+        const conversations = await privateConversations(scopeId, scopeSession);
         const conversationIds = new Set(conversations.map((conversation) => conversation.conversationId));
         const dataList = [];
         for (const conversation of conversations) {
-            dataList.push(await getProjectionData(scopeId, conversation.conversationId));
+            dataList.push(await getProjectionData(scopeId, conversation.conversationId, scopeSession));
         }
-        const oldBook = await loadBook(oldName, scopeId);
-        const newBook = await loadBook(newName, scopeId);
+        const oldBook = await loadBook(oldName, scopeId, false, scopeSession);
+        const newBook = await loadBook(newName, scopeId, false, scopeSession);
         const oldSnapshot = ownedEntriesForConversations(oldBook, scopeId, conversationIds)
             .map(([key, entry]) => [key, clone(entry)]);
         const newSnapshot = ownedEntriesForConversations(newBook, scopeId, conversationIds)
@@ -606,43 +741,78 @@ export function createQQV2WorldbookProjectionService(options = {}) {
         let settingsWriteStarted = false;
         try {
             newWriteStarted = true;
-            await saveBook(newName, newBook, scopeId);
+            await saveBook(newName, newBook, scopeId, false, scopeSession);
             if (removeEntriesForConversations(oldBook, scopeId, conversationIds)) {
                 oldWriteStarted = true;
-                await saveBook(oldName, oldBook, scopeId);
+                await saveBook(oldName, oldBook, scopeId, false, scopeSession);
             }
             settingsWriteStarted = true;
-            await worldbookSettings.update(scopeId, next);
+            await runScoped(
+                () => worldbookSettings.update(scopeId, next, { scopeSession }),
+                scopeSession,
+            );
             for (const conversation of conversations) {
                 const state = states.get(conversation.conversationId) || { bookName: '', entryUid: null };
-                await repository.setConversationProjection(scopeId, conversation.conversationId, {
-                    ...state,
-                    managedBookNames: state.bookName ? [newName] : [],
-                    pending: false,
-                });
+                await runScoped(
+                    () => repository.setConversationProjection(scopeId, conversation.conversationId, {
+                        ...state,
+                        managedBookNames: state.bookName ? [newName] : [],
+                        pending: false,
+                    }, { scopeSession }),
+                    scopeSession,
+                );
             }
             return { status: 'migrated' };
         } catch (error) {
+            if (isInactiveScopeError(error)) throw error;
             let rollbackPending = false;
+            const rollbackStep = async (operation) => {
+                try {
+                    await operation();
+                } catch (rollbackError) {
+                    if (isInactiveScopeError(rollbackError)) throw rollbackError;
+                    rollbackPending = true;
+                }
+            };
             if (oldWriteStarted) {
-                await restoreBook({
-                    name: oldName, entries: oldSnapshot, scopeId, conversationIds,
-                }).catch(() => { rollbackPending = true; });
+                await rollbackStep(() => restoreBook({
+                    name: oldName, entries: oldSnapshot, scopeId, conversationIds, scopeSession,
+                }));
             }
             if (newWriteStarted) {
-                await restoreBook({
-                    name: newName, entries: newSnapshot, scopeId, conversationIds,
-                }).catch(() => { rollbackPending = true; });
+                await rollbackStep(() => restoreBook({
+                    name: newName, entries: newSnapshot, scopeId, conversationIds, scopeSession,
+                }));
             }
             if (settingsWriteStarted) {
-                await worldbookSettings.update(scopeId, current).catch(() => { rollbackPending = true; });
+                await rollbackStep(() => runScoped(
+                    () => worldbookSettings.update(scopeId, current, { scopeSession }),
+                    scopeSession,
+                ));
             }
             for (const [conversationId, projection] of previousProjections) {
-                await repository.setConversationProjection(scopeId, conversationId, projection).catch(() => { rollbackPending = true; });
+                await rollbackStep(() => runScoped(
+                    () => repository.setConversationProjection(
+                        scopeId,
+                        conversationId,
+                        projection,
+                        { scopeSession },
+                    ),
+                    scopeSession,
+                ));
             }
             if (rollbackPending) {
                 for (const conversation of conversations) {
-                    await setPending(scopeId, conversation.conversationId, [oldName, newName]).catch(() => {});
+                    try {
+                        await setPending(
+                            scopeId,
+                            conversation.conversationId,
+                            [oldName, newName],
+                            scopeSession,
+                        );
+                    } catch (pendingError) {
+                        if (isInactiveScopeError(pendingError)) throw pendingError;
+                    }
                 }
             }
             error.rollbackPending = rollbackPending;
@@ -652,70 +822,110 @@ export function createQQV2WorldbookProjectionService(options = {}) {
 
     const setMessagesSelected = async ({
         scopeId,
+        scopeSession = null,
         conversationId,
         messageIds = [],
         selected,
         userName = '',
         storyTime = '',
     } = {}) => {
-        const global = await worldbookSettings.get(scopeId);
-        const conversation = await repository.getConversation(scopeId, conversationId);
+        const global = await runScoped(() => worldbookSettings.get(scopeId, { scopeSession }), scopeSession);
+        const conversation = await runScoped(
+            () => repository.getConversation(scopeId, conversationId),
+            scopeSession,
+        );
         if (!global.enabled || !conversation?.injection?.enabled) throw disabledError();
         const ids = [...new Set(messageIds.map((id) => asText(id, 256)).filter(Boolean))];
-        await repository.setMessagesSelectedForInjection(scopeId, conversationId, ids, selected);
-        return syncConversation({ scopeId, conversationId, userName, storyTime });
+        await runScoped(
+            () => repository.setMessagesSelectedForInjection(
+                scopeId,
+                conversationId,
+                ids,
+                selected,
+                { scopeSession },
+            ),
+            scopeSession,
+        );
+        return syncConversation({ scopeId, scopeSession, conversationId, userName, storyTime });
     };
 
     return Object.freeze({
-        async setGlobalSettings({ scopeId, settings = {}, userName = '', storyTime = '' } = {}) {
-            const current = await worldbookSettings.get(scopeId);
+        async setGlobalSettings({ scopeId, scopeSession = null, settings = {}, userName = '', storyTime = '' } = {}) {
+            const current = await runScoped(() => worldbookSettings.get(scopeId, { scopeSession }), scopeSession);
             const next = { ...current, ...settings };
             if (settings.timeWindow) next.timeWindow = settings.timeWindow;
-            if (next.enabled) await loadBook(next.bookName, scopeId);
+            if (next.enabled) await loadBook(next.bookName, scopeId, false, scopeSession);
             const changingTarget = current.enabled
                 && next.enabled
                 && current.bookName
                 && next.bookName
                 && current.bookName !== next.bookName;
-            if (changingTarget) return migrateTarget({ scopeId, current, next, userName, storyTime });
+            if (changingTarget) return migrateTarget({ scopeId, scopeSession, current, next, userName, storyTime });
 
-            const saved = await worldbookSettings.update(scopeId, settings);
+            const saved = await runScoped(
+                () => worldbookSettings.update(scopeId, settings, { scopeSession }),
+                scopeSession,
+            );
             if (!saved.enabled) {
-                await repository.clearAllSelectedMessagesForInjection();
-                const result = await removeScopeProjections({ scopeId, allowInactiveScope: false });
+                await runScoped(
+                    () => repository.clearAllSelectedMessagesForInjection({ scopeSession }),
+                    scopeSession,
+                );
+                const result = await removeScopeProjections({ scopeId, allowInactiveScope: false, scopeSession });
                 return { ...result, status: result.status === 'removed' ? 'disabled' : result.status };
             }
-            const results = await reconcileScope({ scopeId, userName, storyTime });
+            const results = await reconcileScope({ scopeId, scopeSession, userName, storyTime });
             return { status: results.some((result) => result.status === 'pending') ? 'pending' : 'saved', results };
         },
-        async setConversationInjection({ scopeId, conversationId, injection = {}, userName = '', storyTime = '' } = {}) {
-            const global = await worldbookSettings.get(scopeId);
-            const current = await repository.getConversation(scopeId, conversationId);
+        async setConversationInjection({ scopeId, scopeSession = null, conversationId, injection = {}, userName = '', storyTime = '' } = {}) {
+            const global = await runScoped(() => worldbookSettings.get(scopeId, { scopeSession }), scopeSession);
+            const current = await runScoped(
+                () => repository.getConversation(scopeId, conversationId),
+                scopeSession,
+            );
             const nextEnabled = Object.hasOwn(injection, 'enabled') ? injection.enabled === true : current?.injection?.enabled === true;
-            if (global.enabled && nextEnabled) await loadBook(global.bookName, scopeId);
-            await repository.updateConversationInjection(scopeId, conversationId, injection);
-            if (!nextEnabled) await repository.clearSelectedMessagesForInjection(scopeId, conversationId);
-            return syncConversation({ scopeId, conversationId, userName, storyTime });
+            if (global.enabled && nextEnabled) await loadBook(global.bookName, scopeId, false, scopeSession);
+            await runScoped(
+                () => repository.updateConversationInjection(
+                    scopeId,
+                    conversationId,
+                    injection,
+                    { scopeSession },
+                ),
+                scopeSession,
+            );
+            if (!nextEnabled) {
+                await runScoped(
+                    () => repository.clearSelectedMessagesForInjection(
+                        scopeId,
+                        conversationId,
+                        { scopeSession },
+                    ),
+                    scopeSession,
+                );
+            }
+            return syncConversation({ scopeId, scopeSession, conversationId, userName, storyTime });
         },
-        async setMessageSelected({ scopeId, conversationId, messageId, selected, userName = '', storyTime = '' } = {}) {
+        async setMessageSelected({ scopeId, scopeSession = null, conversationId, messageId, selected, userName = '', storyTime = '' } = {}) {
             return setMessagesSelected({
-                scopeId, conversationId, messageIds: [messageId], selected, userName, storyTime,
+                scopeId, scopeSession, conversationId, messageIds: [messageId], selected, userName, storyTime,
             });
         },
         setMessagesSelected,
         syncConversation,
         reconcileScope,
         removeScopeProjections,
-        async removeConversationProjection({ scopeId, conversationId } = {}) {
-            const data = await getProjectionData(scopeId, conversationId);
-            return removeProjection(scopeId, conversationId, data, { allowInactiveScope: true });
+        async removeConversationProjection({ scopeId, scopeSession = null, conversationId } = {}) {
+            const data = await getProjectionData(scopeId, conversationId, scopeSession);
+            return removeProjection(scopeId, conversationId, data, { scopeSession });
         },
-        async retryPending({ scopeId, userName = '', storyTime = '' } = {}) {
-            const conversations = await privateConversations(scopeId);
+        async retryPending({ scopeId, scopeSession = null, userName = '', storyTime = '' } = {}) {
+            const conversations = await privateConversations(scopeId, scopeSession);
             const results = [];
             for (const conversation of conversations) {
+                assertScopeSessionCurrent(scopeSession);
                 if (!conversation.injection?.projection?.pending) continue;
-                results.push(await syncConversation({ scopeId, conversationId: conversation.conversationId, userName, storyTime }));
+                results.push(await syncConversation({ scopeId, scopeSession, conversationId: conversation.conversationId, userName, storyTime }));
             }
             return results;
         },

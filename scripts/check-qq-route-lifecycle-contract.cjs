@@ -70,6 +70,14 @@ async function main() {
     assert.equal(firstApps.created[0].options.shell, shell);
     await firstListener({ status: 'changed', scopeId: 'scope-a' });
     assert.equal(firstApps.created[0].refreshes, 1, 'same-scope Facade updates refresh the mounted QQ root');
+    await firstListener({
+        status: 'changed',
+        scopeId: 'scope-a',
+        reason: 'conversation-opened',
+        conversationId: 'private-1',
+    });
+    assert.equal(firstApps.created[0].refreshes, 1,
+        'opening a conversation updates external unread projections without rerendering the navigating QQ root');
     await firstListener({ status: 'changed', scopeId: 'scope-b' });
     assert.equal(firstApps.created[0].refreshes, 1, 'a mismatched scope event cannot update this QQ root');
     firstPage.isConnected = false;

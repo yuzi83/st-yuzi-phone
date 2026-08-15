@@ -21,8 +21,8 @@ async function main() {
             return () => listeners.delete(listener);
         },
     };
-    const emit = async () => {
-        for (const listener of [...listeners]) await listener({ privateRuntimeState: 'must-not-leak' });
+    const emit = async (event = {}) => {
+        for (const listener of [...listeners]) await listener({ privateRuntimeState: 'must-not-leak', ...event });
     };
     const facade = createQQV2Facade({ runtime });
     const receivedA = [];
@@ -33,14 +33,28 @@ async function main() {
     assert.deepEqual(receivedA, [{ status: 'changed', scopeId: 'scope-a' }]);
     assert.equal(JSON.stringify(receivedA).includes('must-not-leak'), false);
 
+    await emit({
+        scopeId: 'scope-a',
+        reason: 'conversation-opened',
+        conversationId: 'private-1',
+        privateNavigationState: 'must-not-leak',
+    });
+    assert.deepEqual(receivedA.at(-1), {
+        status: 'changed',
+        scopeId: 'scope-a',
+        reason: 'conversation-opened',
+        conversationId: 'private-1',
+    });
+    assert.equal(JSON.stringify(receivedA).includes('privateNavigationState'), false);
+
     scopeId = 'scope-b';
     await emit();
-    assert.deepEqual(receivedA, [{ status: 'changed', scopeId: 'scope-a' }]);
+    assert.equal(receivedA.length, 2);
 
     unsubscribeA();
     scopeId = 'scope-a';
     await emit();
-    assert.deepEqual(receivedA, [{ status: 'changed', scopeId: 'scope-a' }]);
+    assert.equal(receivedA.length, 2);
 
     scopeId = 'scope-b';
     const receivedB = [];

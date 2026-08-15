@@ -1,6 +1,11 @@
 export const CHRONICLE_TODAY_RELATION_ANCHOR_TABLES = Object.freeze([
+    'quanjushujubiao',
     'global_state',
     'current_status',
+]);
+export const CHRONICLE_TODAY_RELATION_TABLES = Object.freeze([
+    'jiyaobiao',
+    'chronicle',
 ]);
 export const CHRONICLE_TODAY_RELATION_REQUIRED_COLUMNS = Object.freeze([
     'row_id',
@@ -10,6 +15,7 @@ export const CHRONICLE_TODAY_RELATION_REQUIRED_COLUMNS = Object.freeze([
 export const CHRONICLE_TODAY_RELATION_ANCHOR_REQUIRED_COLUMNS = Object.freeze(['row_id', 'cur_time']);
 
 const CHRONICLE_TODAY_RELATION_ANCHOR_TABLE_NAMES = new Set(CHRONICLE_TODAY_RELATION_ANCHOR_TABLES);
+const CHRONICLE_TODAY_RELATION_TABLE_NAMES = new Set(CHRONICLE_TODAY_RELATION_TABLES);
 
 const CHINESE_SMALL_INTEGER_LABELS = [
     '零', '一', '二', '三', '四', '五', '六', '七', '八', '九',
@@ -34,6 +40,12 @@ export function normalizeChronicleTodayRelationAnchorTable(anchorTable = 'global
     const tableName = String(anchorTable ?? '').trim();
     if (CHRONICLE_TODAY_RELATION_ANCHOR_TABLE_NAMES.has(tableName)) return tableName;
     throw new TypeError(`Unsupported chronicle today_relation anchor table: ${tableName || '(empty)'}`);
+}
+
+export function normalizeChronicleTodayRelationTable(tableName = 'chronicle') {
+    const normalizedTableName = String(tableName ?? '').trim();
+    if (CHRONICLE_TODAY_RELATION_TABLE_NAMES.has(normalizedTableName)) return normalizedTableName;
+    throw new TypeError(`Unsupported chronicle today_relation table: ${normalizedTableName || '(empty)'}`);
 }
 
 function formatWholeUnitCount(count, unit) {
@@ -154,8 +166,9 @@ const TARGET_DATE_EXPRESSION = `COALESCE(
     date(SUBSTR(TRIM(time_span), 1, 10))
 )`;
 
-export function buildChronicleTodayRelationSignatureSql(anchorTable = 'global_state') {
+export function buildChronicleTodayRelationSignatureSql(anchorTable = 'global_state', tableName = 'chronicle') {
     const anchorTableName = normalizeChronicleTodayRelationAnchorTable(anchorTable);
+    const chronicleTableName = normalizeChronicleTodayRelationTable(tableName);
     return `WITH
 current_anchor AS (
     SELECT TRIM(cur_time) AS cur_time, date(SUBSTR(TRIM(cur_time), 1, 10)) AS today_date
@@ -170,7 +183,7 @@ chronicle_inputs AS (
         COALESCE(TRIM(today_relation), '') AS today_relation,
         ${TARGET_DATE_EXPRESSION} AS target_date,
         (SELECT today_date FROM current_anchor) AS today_date
-    FROM chronicle
+    FROM ${chronicleTableName}
 ),
 computed_relation AS (
     SELECT
@@ -211,8 +224,9 @@ SELECT
     COALESCE((SELECT COUNT(*) FROM pending_updates), 0) AS pending_update_count`;
 }
 
-export function buildChronicleTodayRelationUpdateSql(anchorTable = 'global_state') {
+export function buildChronicleTodayRelationUpdateSql(anchorTable = 'global_state', tableName = 'chronicle') {
     const anchorTableName = normalizeChronicleTodayRelationAnchorTable(anchorTable);
+    const chronicleTableName = normalizeChronicleTodayRelationTable(tableName);
     return `WITH
 current_anchor AS (
     SELECT date(SUBSTR(TRIM(cur_time), 1, 10)) AS today_date
@@ -226,7 +240,7 @@ parsed_chronicle AS (
         today_relation,
         ${TARGET_DATE_EXPRESSION} AS target_date,
         (SELECT today_date FROM current_anchor) AS today_date
-    FROM chronicle
+    FROM ${chronicleTableName}
 ),
 computed_relation AS (
     SELECT
@@ -235,7 +249,7 @@ computed_relation AS (
     FROM parsed_chronicle
     WHERE today_date IS NOT NULL AND target_date IS NOT NULL
 )
-UPDATE chronicle
+UPDATE ${chronicleTableName}
 SET today_relation = computed_relation.new_relation
 FROM computed_relation
 WHERE row_id = computed_relation.target_row_id
@@ -243,11 +257,12 @@ AND computed_relation.new_relation IS NOT NULL
 AND COALESCE(today_relation, '') <> COALESCE(computed_relation.new_relation, '')`;
 }
 
-export function buildChronicleInvalidTimeSpanDebugSql() {
+export function buildChronicleInvalidTimeSpanDebugSql(tableName = 'chronicle') {
+    const chronicleTableName = normalizeChronicleTodayRelationTable(tableName);
     return `WITH
 chronicle_inputs AS (
     SELECT row_id, COALESCE(TRIM(time_span), '') AS time_span, ${TARGET_DATE_EXPRESSION} AS target_date
-    FROM chronicle
+    FROM ${chronicleTableName}
 )
 SELECT row_id, time_span
 FROM chronicle_inputs

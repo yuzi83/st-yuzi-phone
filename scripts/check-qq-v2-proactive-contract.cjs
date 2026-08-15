@@ -222,6 +222,78 @@ async function testConfigurationCreatesAnEmptyCurrentScopeOnDemand() {
     });
 }
 
+async function testStateAndConfigurationReuseTheProvidedScopeSession() {
+    const { createQQV2ProactiveService } = await importModule('modules/qq-v2/proactive/service.js');
+    const { repository, scopeId } = createProactiveRepositoryFixture();
+    const requestService = createRequestServiceFixture();
+    const scopeSession = Object.freeze({
+        scopeId,
+        isCurrent: () => true,
+        isReady: () => true,
+    });
+    const ensureSessions = [];
+    const resolverSessions = [];
+    const updateSessions = [];
+    const originalUpdate = repository.updateProactiveSettings;
+    repository.ensureScope = async (id, _metadata, options) => {
+        assert.equal(id, scopeId);
+        ensureSessions.push(options?.scopeSession);
+        return repository.getScope(id);
+    };
+    repository.updateProactiveSettings = async (id, patch, options) => {
+        updateSessions.push(options?.scopeSession);
+        return originalUpdate(id, patch);
+    };
+    const service = createQQV2ProactiveService({
+        repository,
+        requestService,
+        captureScopeSession() {
+            assert.fail('an explicitly provided scope session must not be recaptured');
+        },
+        runtimeSettingsResolver: async (_scopeId, scope, options) => {
+            resolverSessions.push(options?.scopeSession);
+            return scope.settings;
+        },
+    });
+
+    await service.getState(scopeId, { scopeSession });
+    await service.configure({ scopeId, scopeSession, enabled: true, everyTurns: 2 });
+
+    assert.deepEqual(ensureSessions, [scopeSession, scopeSession]);
+    assert.deepEqual(resolverSessions, [scopeSession]);
+    assert.deepEqual(updateSessions, [scopeSession]);
+}
+
+async function testExplicitInactiveConfigurationSessionIsNotRecaptured() {
+    const { createQQV2ProactiveService } = await importModule('modules/qq-v2/proactive/service.js');
+    const { repository, scopeId } = createProactiveRepositoryFixture();
+    const requestService = createRequestServiceFixture();
+    let captures = 0;
+    let updates = 0;
+    const originalUpdate = repository.updateProactiveSettings;
+    repository.updateProactiveSettings = async (...args) => {
+        updates += 1;
+        return originalUpdate(...args);
+    };
+    const service = createQQV2ProactiveService({
+        repository,
+        requestService,
+        captureScopeSession() {
+            captures += 1;
+            return { scopeId, isCurrent: () => true, isReady: () => true };
+        },
+    });
+    const scopeSession = { scopeId, isCurrent: () => false, isReady: () => true };
+
+    await assert.rejects(
+        () => service.configure({ scopeId, scopeSession, enabled: true }),
+        (error) => error?.code === 'scope_inactive',
+    );
+    assert.equal(captures, 0);
+    assert.equal(updates, 0);
+    assert.deepEqual(requestService.cancelledScopes, []);
+}
+
 async function testReconfigurationDuringCountCannotQueueAStaleCycle() {
     const { createQQV2ProactiveService } = await importModule('modules/qq-v2/proactive/service.js');
     const { repository, scopeId } = createProactiveRepositoryFixture();
@@ -249,6 +321,82 @@ async function testReconfigurationDuringCountCannotQueueAStaleCycle() {
         counted: false,
         triggered: false,
         skipped: 'configuration-changed',
+    });
+    assert.equal(requestService.proactiveEntries.length, 0);
+}
+
+async function testInactiveScopeSessionCannotCountOrQueueAProactiveCycle() {
+    const { createQQV2ProactiveService } = await importModule('modules/qq-v2/proactive/service.js');
+    const { repository, scopeId } = createProactiveRepositoryFixture();
+    const requestService = createRequestServiceFixture();
+    let ready = false;
+    const service = createQQV2ProactiveService({
+        repository,
+        requestService,
+        captureScopeSession: (capturedScopeId) => {
+            assert.equal(capturedScopeId, scopeId);
+            return { isCurrent: () => true, isReady: () => ready };
+        },
+    });
+    await service.configure({
+        scopeId,
+        scopeSession: { scopeId, isCurrent: () => true, isReady: () => true },
+        enabled: true,
+        everyTurns: 1,
+    });
+
+    assert.deepEqual(await service.recordSuccessfulStoryReply({
+        scopeId,
+        message: { role: 'assistant', content: '作用域尚未就绪' },
+    }), {
+        counted: false,
+        triggered: false,
+        skipped: 'scope-session-inactive',
+    });
+    assert.equal(requestService.proactiveEntries.length, 0);
+    assert.equal((await service.getState(scopeId)).count, 0);
+
+    ready = true;
+    const result = await service.recordSuccessfulStoryReply({
+        scopeId,
+        message: { role: 'assistant', content: '作用域已经就绪' },
+    });
+    assert.equal(result.queued, true);
+    assert.equal(requestService.proactiveEntries.length, 1);
+}
+
+async function testScopeSessionInvalidatedDuringCountCannotQueueAProactiveCycle() {
+    const { createQQV2ProactiveService } = await importModule('modules/qq-v2/proactive/service.js');
+    const { repository, scopeId } = createProactiveRepositoryFixture();
+    const requestService = createRequestServiceFixture();
+    const originalConsume = repository.consumeProactiveStoryReply;
+    const pendingConsume = deferred();
+    let current = true;
+    let consumeStarted = false;
+    repository.consumeProactiveStoryReply = async (...args) => {
+        consumeStarted = true;
+        await originalConsume(...args);
+        return pendingConsume.promise;
+    };
+    const service = createQQV2ProactiveService({
+        repository,
+        requestService,
+        captureScopeSession: () => ({ isCurrent: () => current, isReady: () => true }),
+    });
+    await service.configure({ scopeId, enabled: true, everyTurns: 1 });
+
+    const record = service.recordSuccessfulStoryReply({
+        scopeId,
+        message: { role: 'assistant', content: '切换中的正文回复' },
+    });
+    await waitUntil(() => consumeStarted, 'the story reply counter to begin before scope invalidation');
+    current = false;
+    pendingConsume.resolve({ enabled: true, everyTurns: 1, count: 0, nextKind: 'group', triggered: true, kind: 'private' });
+
+    assert.deepEqual(await record, {
+        counted: false,
+        triggered: false,
+        skipped: 'scope-session-inactive',
     });
     assert.equal(requestService.proactiveEntries.length, 0);
 }
@@ -346,16 +494,26 @@ async function testPrivateCycleBuildsOnePromptAndCommitsCurrentBatch() {
     const requestService = createRequestServiceFixture();
     const generated = [];
     const committed = [];
+    const promptContexts = [];
     const projected = [];
+    const scopeSession = Object.freeze({
+        scopeId,
+        isCurrent: () => true,
+        isReady: () => true,
+    });
     const service = createQQV2ProactiveService({
         repository,
         requestService,
+        captureScopeSession: () => scopeSession,
         apiPresetResolver: async (id) => ({ id, model: 'qq-model' }),
         promptPresetResolver: async (id) => ({
             id,
             blocks: [{ role: 'system', content: '人物={{私聊主动人物}}\n记录={{私聊主动记录}}\n正文={{正文上下文}}\n表情={{可用表情}}' }],
         }),
-        getPromptContext: async () => ({ storyContext: '正文最近回合', worldbookContent: '世界书条目' }),
+        getPromptContext: async (input) => {
+            promptContexts.push(input);
+            return { storyContext: '正文最近回合', worldbookContent: '世界书条目' };
+        },
         listStickers: async () => [{ id: 'sticker-uuid-a', description: '<img src="data:image/png;base64,AAAA"> 开心' }],
         getStoryTime: () => '2042-05-01 20:00',
         backend: {
@@ -388,6 +546,8 @@ async function testPrivateCycleBuildsOnePromptAndCommitsCurrentBatch() {
     });
     assert.deepEqual(execution, { status: 'succeeded' });
     assert.equal(generated.length, 1);
+    assert.equal(promptContexts.length, 1);
+    assert.strictEqual(promptContexts[0].scopeSession, scopeSession);
     assert.equal(generated[0].preset.id, 'api-1');
     assert.deepEqual(generated[0].messages, [{
         role: 'system',
@@ -403,6 +563,7 @@ async function testPrivateCycleBuildsOnePromptAndCommitsCurrentBatch() {
     assert.deepEqual(committed[0].stickerReferences, { S1: 'sticker-uuid-a' });
     assert.equal(committed[0].isCurrent(), true);
     assert.equal(projected.length, 1);
+    assert.strictEqual(projected[0].scopeSession, scopeSession);
     assert.deepEqual(projected[0].conversationIds, ['private-1']);
 }
 
@@ -596,6 +757,57 @@ async function testCancelledLateResponseNeverCommitsActions() {
     assert.equal(commits, 0);
 }
 
+async function testCapturedScopeSessionInvalidationPreventsLateCommit() {
+    const { createQQV2ProactiveService } = await importModule('modules/qq-v2/proactive/service.js');
+    const { repository, scopeId } = createProactiveRepositoryFixture();
+    const requestService = createRequestServiceFixture();
+    const response = deferred();
+    let generated = false;
+    let sessionCurrent = true;
+    let sessionReady = true;
+    let commits = 0;
+    let projections = 0;
+    const service = createQQV2ProactiveService({
+        repository,
+        requestService,
+        captureScopeSession: () => ({
+            isCurrent: () => sessionCurrent,
+            isReady: () => sessionReady,
+        }),
+        apiPresetResolver: async () => ({ id: 'api-1' }),
+        promptPresetResolver: async () => ({ blocks: [] }),
+        backend: {
+            async generate() {
+                generated = true;
+                return response.promise;
+            },
+        },
+        async commitActions() {
+            commits += 1;
+            return { createdConversationIds: [] };
+        },
+        async syncWorldbook() {
+            projections += 1;
+        },
+    });
+    await service.configure({ scopeId, enabled: true, everyTurns: 1 });
+    await service.recordSuccessfulStoryReply({ scopeId, message: { role: 'assistant', content: '触发' } });
+
+    const running = requestService.proactiveEntries[0].execute({
+        scopeId,
+        signal: new AbortController().signal,
+        isCurrent: () => true,
+    });
+    await waitUntil(() => generated, 'the proactive backend request to start before scope invalidation');
+    sessionCurrent = false;
+    sessionReady = false;
+    response.resolve({ content: '<qq><none /></qq>' });
+
+    assert.deepEqual(await running, { status: 'cancelled' });
+    assert.equal(commits, 0);
+    assert.equal(projections, 0);
+}
+
 async function testManualQueueBusySkipsTheCycleButStillRotates() {
     const { createQQV2ProactiveService } = await importModule('modules/qq-v2/proactive/service.js');
     const repository = await createRepository();
@@ -717,7 +929,11 @@ async function testExitedGroupIsOnlyAReinviteCandidateAndDissolvedGroupsAreExclu
 async function main() {
     await testConfigurationDefaultsAndResets();
     await testConfigurationCreatesAnEmptyCurrentScopeOnDemand();
+    await testStateAndConfigurationReuseTheProvidedScopeSession();
+    await testExplicitInactiveConfigurationSessionIsNotRecaptured();
     await testReconfigurationDuringCountCannotQueueAStaleCycle();
+    await testInactiveScopeSessionCannotCountOrQueueAProactiveCycle();
+    await testScopeSessionInvalidatedDuringCountCannotQueueAProactiveCycle();
     await testOnlySuccessfulStoryRepliesCountAndKindsAlternate();
     await testPrivateOnlyModeNeverEnqueuesGroupCycles();
     await testPrivateCycleBuildsOnePromptAndCommitsCurrentBatch();
@@ -725,6 +941,7 @@ async function main() {
     await testPrivateCycleLimitsEachConversationHistoryIndependently();
     await testProjectionFailureDoesNotRollBackCommittedActions();
     await testCancelledLateResponseNeverCommitsActions();
+    await testCapturedScopeSessionInvalidationPreventsLateCommit();
     await testManualQueueBusySkipsTheCycleButStillRotates();
     await testGroupCycleExposesMemberAndFriendReferencesForNewGroups();
     await testExitedGroupIsOnlyAReinviteCandidateAndDissolvedGroupsAreExcluded();

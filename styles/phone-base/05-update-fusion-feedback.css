@@ -128,7 +128,24 @@
     box-shadow: inset 2px 0 0 var(--yuzi-settings-danger, #8B5E5E);
 }
 .phone-fusion-page .phone-fusion-col-check { width: 32px; flex-shrink: 0; }
-.phone-fusion-page .phone-fusion-col-check input { accent-color: var(--yuzi-settings-accent, #5B7A6A); width: 18px; height: 18px; }
+.phone-fusion-page .phone-fusion-col-check input.phone-fusion-check {
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+    -moz-appearance: checkbox !important;
+    display: inline-block !important;
+    width: 18px;
+    height: 18px;
+    accent-color: var(--yuzi-settings-accent, #5B7A6A);
+    background: initial !important;
+    box-shadow: none !important;
+    filter: none !important;
+    transform: none !important;
+}
+.phone-fusion-page .phone-fusion-col-check input.phone-fusion-check::before,
+.phone-fusion-page .phone-fusion-col-check input.phone-fusion-check::after {
+    content: none !important;
+    display: none !important;
+}
 .phone-fusion-page .phone-fusion-col-name { flex: 1; min-width: 0; font-weight: 500; }
 .phone-fusion-page .phone-fusion-col-source { width: 72px; text-align: right; flex-shrink: 0; font-size: 13px; }
 .phone-fusion-page .phone-fusion-col-cols { width: 36px; text-align: right; flex-shrink: 0; color: var(--yuzi-settings-text-secondary, #7A7772); font-size: 13px; }

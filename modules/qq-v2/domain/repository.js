@@ -330,6 +330,29 @@ function getGroupConversation(scope, group) {
     return getConversation(scope, group.conversationId);
 }
 
+function messageWithQuote(scope, message) {
+    if (!message) return null;
+    return {
+        ...copy(message),
+        quote: message.quoteMessageId
+            ? scope.messages[message.quoteMessageId]
+                ? { status: 'available', messageId: message.quoteMessageId, content: scope.messages[message.quoteMessageId].content }
+                : { status: 'deleted', messageId: message.quoteMessageId, content: '' }
+            : null,
+    };
+}
+
+function conversationSummary(scope, conversation) {
+    const group = conversation.kind === 'group' ? scope.groups[conversation.groupId] || null : null;
+    const person = conversation.kind === 'private' ? scope.people[conversation.personId] || null : null;
+    return {
+        conversation: copy(conversation),
+        person: copy(person),
+        group: copy(group),
+        lastMessage: messageWithQuote(scope, scope.messages[conversation.lastMessageId]),
+    };
+}
+
 function getScopeAsset(state, scope, assetId) {
     const id = asText(assetId, 256);
     const asset = scope.assets[id] || findImageLibraryAsset(state, id);
@@ -763,11 +786,30 @@ export function createQQV2Repository(options = {}) {
         throw new TypeError('QQ v2 repository 需要 stateStore');
     }
 
-    const saveImageLibraryAssets = async (scopeId, inputs = []) => {
+    const assertScopeMutationCurrent = (scopeId, operationOptions = {}) => {
+        if (operationOptions?.allowInactiveScope === true || !operationOptions?.scopeSession) return;
+        const scopeSession = operationOptions.scopeSession;
+        try {
+            if (asText(scopeSession.scopeId, 512) !== asText(scopeId, 512)) throw new Error('scope mismatch');
+            if (typeof scopeSession.assertCurrent === 'function') scopeSession.assertCurrent();
+            else if (scopeSession.isCurrent?.() !== true) throw new Error('scope inactive');
+            if (scopeSession.signal?.aborted === true) throw new Error('scope aborted');
+            return;
+        } catch {
+            throw new QQV2DomainError('QQ 作用域已失效', 'scope_inactive');
+        }
+    };
+
+    const transactScoped = (scopeId, operationOptions, mutator) => stateStore.transact((state) => {
+        assertScopeMutationCurrent(scopeId, operationOptions);
+        return mutator(state);
+    });
+
+    const saveImageLibraryAssets = async (scopeId, inputs = [], operationOptions = {}) => {
         if (!Array.isArray(inputs) || inputs.length === 0) {
             throw new QQV2DomainError('Image library assets must be a non-empty array', 'image_assets_required');
         }
-        return stateStore.transact((state) => {
+        return transactScoped(scopeId, operationOptions, (state) => {
             getScope(state, scopeId, false);
             const records = inputs.map((input) => {
                 const { library, kind } = imageLibraryKind(input?.library);
@@ -804,8 +846,8 @@ export function createQQV2Repository(options = {}) {
     };
 
     return Object.freeze({
-        async ensureScope(scopeId, hostMetadata = null) {
-            return stateStore.transact((state) => {
+        async ensureScope(scopeId, hostMetadata = null, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, true);
                 const normalized = normalizeHostMetadata(hostMetadata, scope.scopeId);
                 if (normalized) scope.hostMetadata = normalized;
@@ -852,8 +894,8 @@ export function createQQV2Repository(options = {}) {
             const scope = getScope(state, scopeId, false);
             return copy(scope.settings.proactive);
         },
-        async updateProactiveSettings(scopeId, patch = {}) {
-            return stateStore.transact((state) => {
+        async updateProactiveSettings(scopeId, patch = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, true);
                 const current = scope.settings.proactive;
                 const next = { ...current };
@@ -873,8 +915,8 @@ export function createQQV2Repository(options = {}) {
                 return copy(next);
             });
         },
-        async consumeProactiveStoryReply(scopeId, configuration = null) {
-            return stateStore.transact((state) => {
+        async consumeProactiveStoryReply(scopeId, configuration = null, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const persisted = scope.settings.proactive;
                 const source = configuration && typeof configuration === 'object' && !Array.isArray(configuration)
@@ -905,8 +947,8 @@ export function createQQV2Repository(options = {}) {
             const scope = getScope(state, scopeId, false);
             return copy(getEffectiveWorldbookSettings(state, scope));
         },
-        async initializeWorldbookDefault(scopeId, bookName) {
-            return stateStore.transact((state) => {
+        async initializeWorldbookDefault(scopeId, bookName, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, true);
                 if (scope.worldbookDefaultResolved) return copy(getEffectiveWorldbookSettings(state, scope));
                 if (!scope.settings.worldbook.bookName) {
@@ -916,8 +958,8 @@ export function createQQV2Repository(options = {}) {
                 return copy(getEffectiveWorldbookSettings(state, scope));
             });
         },
-        async updateWorldbookSettings(scopeId, patch = {}) {
-            return stateStore.transact((state) => {
+        async updateWorldbookSettings(scopeId, patch = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, true);
                 const current = scope.settings.worldbook;
                 const next = { ...current };
@@ -958,21 +1000,34 @@ export function createQQV2Repository(options = {}) {
             const scope = getScope(state, scopeId, false);
             return Object.values(scope.conversations).sort((left, right) => right.lastSequence - left.lastSequence).map(copy);
         },
+        async listConversationSummaries(scopeId) {
+            const state = await stateStore.read();
+            const scope = getScope(state, scopeId, false);
+            return Object.values(scope.conversations)
+                .sort((left, right) => right.lastSequence - left.lastSequence)
+                .map((conversation) => conversationSummary(scope, conversation));
+        },
+        async getConversationSummary(scopeId, conversationId) {
+            const state = await stateStore.read();
+            const scope = getScope(state, scopeId, false);
+            const conversation = scope.conversations[asText(conversationId, 256)];
+            return conversation ? conversationSummary(scope, conversation) : null;
+        },
         async getConversation(scopeId, conversationId) {
             const state = await stateStore.read();
             const scope = getScope(state, scopeId, false);
             return scope.conversations[conversationId] ? copy(scope.conversations[conversationId]) : null;
         },
-        async openConversation(scopeId, conversationId) {
-            return stateStore.transact((state) => {
+        async openConversation(scopeId, conversationId, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 conversation.unreadCount = 0;
                 return copy({ conversationId: conversation.conversationId, unreadCount: 0 });
             });
         },
-        async incrementConversationUnread(scopeId, conversationId, amount = 1) {
-            return stateStore.transact((state) => {
+        async incrementConversationUnread(scopeId, conversationId, amount = 1, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 const increment = Number(amount);
@@ -984,8 +1039,8 @@ export function createQQV2Repository(options = {}) {
                 return copy({ conversationId: conversation.conversationId, unreadCount: conversation.unreadCount });
             });
         },
-        async updateConversationInjection(scopeId, conversationId, patch = {}) {
-            return stateStore.transact((state) => {
+        async updateConversationInjection(scopeId, conversationId, patch = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 const current = conversation.injection;
@@ -1013,8 +1068,8 @@ export function createQQV2Repository(options = {}) {
                 return copy(conversation.injection);
             });
         },
-        async setMessageSelectedForInjection(scopeId, conversationId, messageId, selected) {
-            return stateStore.transact((state) => {
+        async setMessageSelectedForInjection(scopeId, conversationId, messageId, selected, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 const message = scope.messages[asText(messageId, 256)];
@@ -1029,8 +1084,8 @@ export function createQQV2Repository(options = {}) {
                 return copy({ message, injection: conversation.injection });
             });
         },
-        async setMessagesSelectedForInjection(scopeId, conversationId, messageIds, selected) {
-            return stateStore.transact((state) => {
+        async setMessagesSelectedForInjection(scopeId, conversationId, messageIds, selected, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 const ids = [...new Set((Array.isArray(messageIds) ? messageIds : [])
@@ -1053,8 +1108,8 @@ export function createQQV2Repository(options = {}) {
                 return copy({ messages, injection: conversation.injection });
             });
         },
-        async clearSelectedMessagesForInjection(scopeId, conversationId) {
-            return stateStore.transact((state) => {
+        async clearSelectedMessagesForInjection(scopeId, conversationId, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 for (const message of Object.values(scope.messages)) {
@@ -1064,8 +1119,8 @@ export function createQQV2Repository(options = {}) {
                 return copy(conversation.injection);
             });
         },
-        async clearAllSelectedMessagesForInjection() {
-            return stateStore.transact((state) => {
+        async clearAllSelectedMessagesForInjection(operationOptions = {}) {
+            return transactScoped(operationOptions?.scopeSession?.scopeId, operationOptions, (state) => {
                 let cleared = 0;
                 for (const scope of Object.values(state.scopes || {})) {
                     ensureScopeQQV2State(scope);
@@ -1080,8 +1135,8 @@ export function createQQV2Repository(options = {}) {
                 return cleared;
             });
         },
-        async setConversationProjection(scopeId, conversationId, patch = {}) {
-            return stateStore.transact((state) => {
+        async setConversationProjection(scopeId, conversationId, patch = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 const current = conversation.injection.projection;
@@ -1123,8 +1178,8 @@ export function createQQV2Repository(options = {}) {
             const scope = getScope(state, scopeId, false);
             return copy(scope.selfProfile);
         },
-        async updateCurrentProfile(scopeId, profile = {}) {
-            return stateStore.transact((state) => {
+        async updateCurrentProfile(scopeId, profile = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const current = scope.selfProfile;
                 const previousAvatarAssetId = current.avatarAssetId;
@@ -1148,8 +1203,8 @@ export function createQQV2Repository(options = {}) {
                 return copy(current);
             });
         },
-        async updatePrivateProfile(scopeId, conversationId, profile = {}) {
-            return stateStore.transact((state) => {
+        async updatePrivateProfile(scopeId, conversationId, profile = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 if (conversation.kind !== 'private') {
@@ -1212,8 +1267,8 @@ export function createQQV2Repository(options = {}) {
                 return copy({ group, conversation });
             });
         },
-        async createPrivateConversation(scopeId, input = {}) {
-            return stateStore.transact((state) => {
+        async createPrivateConversation(scopeId, input = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, true);
                 const formalName = exactContactFormalName(input.name);
                 let person = Object.values(scope.people).find((candidate) => candidate.formalName === formalName) || null;
@@ -1242,8 +1297,8 @@ export function createQQV2Repository(options = {}) {
                 return { created: true, person: copy(person), conversation: copy(conversation) };
             });
         },
-        async removePrivateFriend(scopeId, conversationId, input = {}) {
-            return stateStore.transact((state) => {
+        async removePrivateFriend(scopeId, conversationId, input = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 if (conversation.kind !== 'private') {
@@ -1263,8 +1318,8 @@ export function createQQV2Repository(options = {}) {
                 return { removed: true, conversation: copy(conversation), person: copy(person) };
             });
         },
-        async handleIncomingTransfer(scopeId, conversationId, messageId, action, storyTime = '') {
-            return stateStore.transact((state) => {
+        async handleIncomingTransfer(scopeId, conversationId, messageId, action, storyTime = '', operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 if (conversation.kind !== 'private') {
@@ -1348,25 +1403,18 @@ export function createQQV2Repository(options = {}) {
             return Object.values(scope.messages)
                 .filter((message) => message.conversationId === conversationId)
                 .sort((left, right) => left.sequence - right.sequence)
-                .map((message) => ({
-                    ...copy(message),
-                    quote: message.quoteMessageId
-                        ? scope.messages[message.quoteMessageId]
-                            ? { status: 'available', messageId: message.quoteMessageId, content: scope.messages[message.quoteMessageId].content }
-                            : { status: 'deleted', messageId: message.quoteMessageId, content: '' }
-                        : null,
-                }));
+                .map((message) => messageWithQuote(scope, message));
         },
-        async appendMessages(scopeId, conversationId, inputs) {
-            return stateStore.transact((state) => {
+        async appendMessages(scopeId, conversationId, inputs, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 if (!Array.isArray(inputs) || inputs.length === 0) throw new QQV2DomainError('至少需要一条消息', 'message_required');
                 return inputs.map((input) => appendOneMessage(scope, conversation, input));
             });
         },
-        async deleteMessages(scopeId, conversationId, messageIds) {
-            return stateStore.transact((state) => {
+        async deleteMessages(scopeId, conversationId, messageIds, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 const ids = [...new Set(Array.isArray(messageIds) ? messageIds.map((id) => asText(id, 256)).filter(Boolean) : [])];
@@ -1390,8 +1438,8 @@ export function createQQV2Repository(options = {}) {
                 return { deletedMessageIds };
             });
         },
-        async saveScopeAsset(scopeId, input = {}) {
-            return stateStore.transact((state) => {
+        async saveScopeAsset(scopeId, input = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversationId = asText(input.conversationId, 256);
                 if (conversationId) getConversation(scope, conversationId);
@@ -1420,8 +1468,8 @@ export function createQQV2Repository(options = {}) {
             return copy(scope.assets[id] || findImageLibraryAsset(state, id));
         },
         saveImageLibraryAssets,
-        async saveImageLibraryAsset(scopeId, input = {}) {
-            return (await saveImageLibraryAssets(scopeId, [input]))[0];
+        async saveImageLibraryAsset(scopeId, input = {}, operationOptions = {}) {
+            return (await saveImageLibraryAssets(scopeId, [input], operationOptions))[0];
         },
         async listImageLibraryAssets(scopeId, library) {
             const state = await stateStore.read();
@@ -1430,8 +1478,8 @@ export function createQQV2Repository(options = {}) {
                 .sort((left, right) => Number(right.createdAt || 0) - Number(left.createdAt || 0))
                 .map(copy);
         },
-        async deleteImageLibraryAssets(scopeId, assetIds) {
-            return stateStore.transact((state) => {
+        async deleteImageLibraryAssets(scopeId, assetIds, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 getScope(state, scopeId, false);
                 const ids = [...new Set(Array.isArray(assetIds) ? assetIds.map((id) => asText(id, 256)).filter(Boolean) : [])];
                 const scopes = Object.values(state.scopes || {});
@@ -1528,8 +1576,8 @@ export function createQQV2Repository(options = {}) {
                 }));
             });
         },
-        async deleteConversation(scopeId, conversationId) {
-            return stateStore.transact((state) => {
+        async deleteConversation(scopeId, conversationId, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
                 const group = conversation.kind === 'group' ? getGroup(scope, conversation.groupId) : null;
@@ -1578,7 +1626,7 @@ export function createQQV2Repository(options = {}) {
             });
         },
         async applyAIActions(scopeId, actions, options = {}) {
-            return stateStore.transact((state) => {
+            return transactScoped(scopeId, options, (state) => {
                 if (typeof options.isCurrent === 'function' && !options.isCurrent()) {
                     throw new QQV2DomainError('AI 动作批次已被新的请求取代', 'request_cancelled');
                 }

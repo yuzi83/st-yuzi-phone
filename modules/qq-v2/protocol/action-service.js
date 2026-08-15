@@ -83,6 +83,7 @@ export function createQQV2ActionService(options = {}) {
                 references,
                 storyTime: input.storyTime,
                 handledUserSequences: input.handledUserSequences,
+                scopeSession: input.scopeSession,
                 isCurrent,
             });
         },

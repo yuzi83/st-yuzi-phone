@@ -142,6 +142,46 @@ async function main() {
     assert.doesNotMatch(css, /min-inline-size:\s*var\(--yuzi-qq-nav-item-width\)/,
         'a later Figma rule must not prevent root navigation items from shrinking');
 
+    assert.match(app, /createElement\('div', 'yuzi-qq-dialog-body'\)/,
+        'shared QQ dialogs must isolate a scrollable content body from their title and actions');
+    for (const [property, value] of [
+        ['inline-size', 'min(var(--yuzi-qq-dialog-width), 100%)'],
+        ['min-inline-size', '0'],
+        ['max-block-size', '100%'],
+        ['overflow', 'hidden'],
+    ]) {
+        assert.equal(finalRuleDeclaration(css, '.yuzi-qq-dialog', property), value,
+            `.yuzi-qq-dialog ${property} must keep the modal inside a narrow phone screen`);
+    }
+    assert.equal(finalRuleDeclaration(css, '.yuzi-qq-dialog-body', 'overflow'), 'auto',
+        'dialog content must scroll independently while actions remain reachable');
+    assert.match(css, /@container yuzi-phone-screen \(max-width: 240px\)\s*\{[\s\S]*?\.yuzi-qq-dialog-actions\s*\{[\s\S]*?flex-direction:\s*column;/,
+        'very narrow phone screens must stack dialog actions instead of clipping them');
+
+    assert.match(app, /yuzi-qq-message-root-list[^']*yuzi-qq-root-scroll-list/,
+        'the message root must use the shared root scrolling primitive');
+    assert.match(app, /yuzi-qq-contact-root-list[^']*yuzi-qq-root-scroll-list/,
+        'the contacts root must use the shared root scrolling primitive');
+    for (const selector of ['.yuzi-qq-message-root-list', '.yuzi-qq-contact-root-list']) {
+        assert.equal(finalRuleDeclaration(css, selector, 'overflow-y'), 'auto',
+            `${selector} must own vertical scrolling inside its fixed QQ root chrome`);
+        assert.equal(finalRuleDeclaration(css, selector, 'min-block-size'), '0',
+            `${selector} must be allowed to shrink inside the list sheet`);
+    }
+    assert.match(app, /key:\s*'contact-root'[\s\S]*?getRoot:\s*\(\)\s*=>\s*viewport\?\.querySelector\('\.yuzi-qq-contact-root-list'\)/,
+        'the contacts root must participate in the shared scroll-state module');
+    assert.match(app, /const closeConversationSwipe = \(\) => \{[\s\S]*?classList\.remove\('is-swiped'\)/,
+        'closing a swiped conversation row must reuse a local DOM update instead of rerendering the QQ root');
+    assert.equal(finalRuleDeclaration(css, '.yuzi-qq-root-scroll-list > *', 'flex'), '0 0 auto',
+        'root list entries must keep their intrinsic height and overflow into scrolling');
+    assert.equal(finalRuleDeclaration(css, '.yuzi-qq-dialog-form textarea', 'resize'), 'none',
+        'shared dialog textareas must not expose a browser resize handle');
+    assert.equal(
+        finalRuleDeclaration(css, '.yuzi-qq-sticker-upload-details .yuzi-qq-sticker-description-input', 'resize'),
+        'none',
+        'batch sticker description inputs must not expose a browser resize handle',
+    );
+
     console.log('[qq-responsive-contract] passed');
 }
 

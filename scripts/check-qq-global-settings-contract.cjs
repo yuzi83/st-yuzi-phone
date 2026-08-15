@@ -10,6 +10,31 @@ function deferred() {
     return { promise, resolve };
 }
 
+function scopeSession(scopeId) {
+    const controller = new AbortController();
+    let current = true;
+    const session = Object.freeze({
+        scopeId,
+        signal: controller.signal,
+        isCurrent() {
+            return current && !controller.signal.aborted;
+        },
+        assertCurrent() {
+            if (session.isCurrent()) return session;
+            const error = new Error(`QQ scope ${scopeId} is no longer current`);
+            error.code = 'scope_inactive';
+            throw error;
+        },
+    });
+    return {
+        session,
+        revoke() {
+            current = false;
+            controller.abort('scope-changed');
+        },
+    };
+}
+
 async function testGlobalRuntimeStorage() {
     const { createMemoryQQV2StateStore } = await import('../modules/qq-v2/storage/state-store.js');
     const { createQQV2Repository } = await import('../modules/qq-v2/domain/repository.js');
@@ -161,6 +186,63 @@ async function testExistingSharedRuntimeMigration() {
         'the migrated shared record remains stable after switching scopes');
 }
 
+async function testQueuedGlobalRuntimeUpdateRejectsRevokedScopeSession() {
+    const { createMemoryQQV2StateStore } = await import('../modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await import('../modules/qq-v2/domain/repository.js');
+    const { createQQV2GlobalRuntimeSettings } = await import('../modules/qq-v2/application/global-runtime-settings.js');
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    await repository.ensureScope('scope-a');
+    const runtimeSettings = createQQV2GlobalRuntimeSettings({ stateStore });
+    await runtimeSettings.update('scope-a', { activeApiPresetId: 'baseline-api' });
+
+    const blockerStarted = deferred();
+    const releaseBlocker = deferred();
+    const blocker = stateStore.transact(async () => {
+        blockerStarted.resolve();
+        await releaseBlocker.promise;
+    });
+    await blockerStarted.promise;
+
+    const lease = scopeSession('scope-a');
+    const update = runtimeSettings.update(
+        'scope-a',
+        { activeApiPresetId: 'stale-api' },
+        { scopeSession: lease.session },
+    );
+    const rejected = assert.rejects(update, (error) => error?.code === 'scope_inactive');
+    lease.revoke();
+    releaseBlocker.resolve();
+    await blocker;
+
+    await rejected;
+    const state = await stateStore.read();
+    assert.equal(state.sharedResources['qq-v2.runtime-settings'].activeApiPresetId, 'baseline-api',
+        'a global settings update queued by a revoked scope session cannot commit');
+}
+
+async function testStaleGlobalRuntimeGetDoesNotCommitInitialMigration() {
+    const { createMemoryQQV2StateStore } = await import('../modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await import('../modules/qq-v2/domain/repository.js');
+    const { createQQV2GlobalRuntimeSettings } = await import('../modules/qq-v2/application/global-runtime-settings.js');
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    await repository.ensureScope('scope-a');
+    const runtimeSettings = createQQV2GlobalRuntimeSettings({ stateStore });
+    const lease = scopeSession('scope-a');
+    lease.revoke();
+
+    const result = await runtimeSettings.get('scope-a', { scopeSession: lease.session }).then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+    );
+    const state = await stateStore.read();
+    assert.equal(Object.hasOwn(state.sharedResources, 'qq-v2.runtime-settings'), false,
+        'a stale scope session cannot persist the first shared runtime settings migration');
+    assert.equal(result.error?.code, 'scope_inactive',
+        'a stale migration read rejects with the shared scope-inactive error');
+}
+
 function settings(label) {
     return {
         activeApiPresetId: `api-${label}`,
@@ -185,6 +267,8 @@ function settings(label) {
 async function main() {
     await testGlobalRuntimeStorage();
     await testExistingSharedRuntimeMigration();
+    await testQueuedGlobalRuntimeUpdateRejectsRevokedScopeSession();
+    await testStaleGlobalRuntimeGetDoesNotCommitInitialMigration();
     const { __test__ } = await import('../modules/qq-v2/ui/app.js');
     const { loadQQSettingsModel, saveQQSettings, createSettingsSaveQueue } = __test__;
     assert.equal(typeof loadQQSettingsModel, 'function', 'settings pages need a Facade-only read seam');

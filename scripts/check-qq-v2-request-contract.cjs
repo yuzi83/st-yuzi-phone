@@ -5,9 +5,19 @@ const { pathToFileURL } = require('node:url');
 
 const ROOT = process.cwd();
 
-function importModule(relativePath) {
+async function importModule(relativePath) {
     const href = pathToFileURL(path.join(ROOT, relativePath)).href;
-    return import(`${href}?contract=${Date.now()}-${Math.random()}`);
+    const imported = await import(`${href}?contract=${Date.now()}-${Math.random()}`);
+    if (relativePath !== 'modules/qq-v2/request/service.js') return imported;
+    return {
+        ...imported,
+        createQQV2RequestService(options = {}) {
+            return imported.createQQV2RequestService({
+                captureScopeSession: captureReadyScopeSession,
+                ...options,
+            });
+        },
+    };
 }
 
 async function testBackendProxyUsesSillyTavernAndRedactsTheKey() {
@@ -315,6 +325,38 @@ function deferred() {
     return { promise, resolve, reject };
 }
 
+function captureReadyScopeSession(scopeId) {
+    const controller = new AbortController();
+    return Object.freeze({
+        scopeId,
+        signal: controller.signal,
+        isCurrent: () => true,
+        isReady: () => true,
+    });
+}
+
+function createScopeSessionController(scopeId) {
+    const controller = new AbortController();
+    let current = true;
+    let ready = true;
+    return {
+        captureScopeSession(requestedScopeId) {
+            if (requestedScopeId !== scopeId) return null;
+            return Object.freeze({
+                scopeId,
+                signal: controller.signal,
+                isCurrent: () => current,
+                isReady: () => ready,
+            });
+        },
+        revoke(reason = 'scope-changed') {
+            current = false;
+            ready = false;
+            controller.abort(reason);
+        },
+    };
+}
+
 async function waitUntil(predicate, description, timeoutMs = 1600) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -332,10 +374,13 @@ async function testManualRequestPersistsUserMessageThenCommitsValidatedActions()
         repository: fixture.repository,
         apiPresetResolver: async (id) => ({ id, endpoint: 'https://example.test/v1', apiKey: 'secret', model: 'model-a' }),
         promptPresetResolver: async (id) => ({ id, messages: [{ role: 'system', content: 'rules' }] }),
-        buildManualRequest: async ({ preset, history, currentMessage }) => {
+        buildManualRequest: async ({ preset, history, currentMessage, scopeSession }) => {
             assert.equal(preset.id, 'prompt-private');
             assert.equal(history.length, 1);
             assert.equal(currentMessage.content, 'hello');
+            assert.equal(scopeSession.scopeId, fixture.scopeId);
+            assert.equal(scopeSession.isCurrent(), true);
+            assert.equal(scopeSession.isReady(), true);
             return [{ role: 'system', content: 'rules' }, { role: 'user', content: currentMessage.content }];
         },
         backend: {
@@ -718,8 +763,10 @@ async function testScopeSwitchCancelsOldWorkAndDropsItsLateResult() {
     const fixture = createQueueRepositoryFixture();
     const delayed = deferred();
     const backendCalls = [];
+    const scopeSessions = createScopeSessionController(fixture.scopeId);
     const service = createQQV2RequestService({
         repository: fixture.repository,
+        captureScopeSession: scopeSessions.captureScopeSession,
         apiPresetResolver: async () => ({ endpoint: 'https://example.test/v1', apiKey: 'secret', model: 'model-a' }),
         promptPresetResolver: async () => ({ messages: [] }),
         buildManualRequest: async () => [{ role: 'user', content: 'message' }],
@@ -735,7 +782,7 @@ async function testScopeSwitchCancelsOldWorkAndDropsItsLateResult() {
 
     await service.sendManual({ scopeId: fixture.scopeId, conversationId: 'private-a', message: { type: 'text', content: 'old scope' } });
     await waitUntil(() => backendCalls.length === 1, 'the old-scope request to start');
-    service.handleScopeChanged('st:character:bob:new-chat');
+    scopeSessions.revoke();
     assert.equal(backendCalls[0].signal.aborted, true);
 
     delayed.resolve({ content: '<qq><message /></qq>' });
@@ -746,6 +793,138 @@ async function testScopeSwitchCancelsOldWorkAndDropsItsLateResult() {
         pendingUserMessageCount: 0,
         error: '',
     });
+}
+
+async function testStaleScopeCannotPersistAManualMessageOrQueueProactiveWork() {
+    const { createQQV2RequestService, QQV2RequestError } = await importModule('modules/qq-v2/request/service.js');
+    const fixture = createRepositoryFixture();
+    const service = createQQV2RequestService({
+        repository: fixture.repository,
+        captureScopeSession: () => null,
+        apiPresetResolver: async () => ({ endpoint: 'https://example.test/v1', apiKey: 'secret', model: 'model-a' }),
+        promptPresetResolver: async () => ({ messages: [] }),
+        buildManualRequest: async () => [{ role: 'user', content: 'message' }],
+        backend: { async generate() { throw new Error('stale work must not run'); } },
+        parseResponse: () => [],
+        validateActions: (actions) => actions,
+    });
+
+    await assert.rejects(
+        service.sendManual({
+            scopeId: fixture.scopeId,
+            conversationId: fixture.conversationId,
+            message: { type: 'text', content: 'stale' },
+        }),
+        (error) => error instanceof QQV2RequestError && error.code === 'scope_stale',
+    );
+    assert.equal(fixture.messages.length, 0);
+    assert.throws(
+        () => service.enqueueProactive({ scopeId: fixture.scopeId, execute: async () => {} }),
+        (error) => error instanceof QQV2RequestError && error.code === 'scope_stale',
+    );
+    assert.deepEqual(service.getQueueState(), { active: null, queued: [] });
+}
+
+async function testSessionRevokedAfterPersistenceKeepsMessageButSkipsAIWork() {
+    const { createQQV2RequestService } = await importModule('modules/qq-v2/request/service.js');
+    const fixture = createRepositoryFixture();
+    const scopeSessions = createScopeSessionController(fixture.scopeId);
+    const backendCalls = [];
+    const service = createQQV2RequestService({
+        repository: fixture.repository,
+        captureScopeSession: scopeSessions.captureScopeSession,
+        apiPresetResolver: async () => ({ endpoint: 'https://example.test/v1', apiKey: 'secret', model: 'model-a' }),
+        promptPresetResolver: async () => ({ messages: [] }),
+        buildManualRequest: async () => [{ role: 'user', content: 'message' }],
+        backend: { async generate(input) { backendCalls.push(input); return { content: '<qq />' }; } },
+        parseResponse: () => [],
+        validateActions: (actions) => actions,
+        afterManualMutation(input) {
+            if (input.kind === 'user-message') scopeSessions.revoke('scope-changed-after-persistence');
+        },
+    });
+
+    const result = await service.sendManual({
+        scopeId: fixture.scopeId,
+        conversationId: fixture.conversationId,
+        message: { type: 'text', content: 'persisted first' },
+    });
+    assert.equal(result.message.content, 'persisted first');
+    assert.equal(fixture.messages.length, 1);
+    await service.waitForIdle();
+    assert.equal(backendCalls.length, 0);
+    assert.equal(fixture.applied.length, 0);
+    assert.deepEqual(service.getQueueState(), { active: null, queued: [] });
+}
+
+async function testCancelScopeClearsOnlyRequestWorkWithoutOwningTheScope() {
+    const { createQQV2RequestService } = await importModule('modules/qq-v2/request/service.js');
+    const fixture = createQueueRepositoryFixture();
+    const first = deferred();
+    const backendCalls = [];
+    const service = createQQV2RequestService({
+        repository: fixture.repository,
+        apiPresetResolver: async () => ({ endpoint: 'https://example.test/v1', apiKey: 'secret', model: 'model-a' }),
+        promptPresetResolver: async () => ({ messages: [] }),
+        buildManualRequest: async ({ history }) => [{ role: 'user', content: history.map((message) => message.content).join('|') }],
+        backend: {
+            async generate(input) {
+                backendCalls.push(input);
+                if (backendCalls.length === 1) return first.promise;
+                return { content: '<qq><message /></qq>' };
+            },
+        },
+        parseResponse: () => [{
+            type: 'message',
+            conversation: 'private-a',
+            messageType: 'text',
+            sender: 'person-a',
+            content: 'reply',
+        }],
+        validateActions: (actions) => actions,
+    });
+
+    await service.sendManual({
+        scopeId: fixture.scopeId,
+        conversationId: 'private-a',
+        message: { type: 'text', content: 'active request' },
+    });
+    await waitUntil(() => backendCalls.length === 1, 'the active scope request to start');
+    await service.sendManual({
+        scopeId: fixture.scopeId,
+        conversationId: 'private-b',
+        message: { type: 'text', content: 'queued request' },
+    });
+    assert.equal(service.getQueueState().queued.length, 1);
+    assert.equal(service.getConversationState(fixture.scopeId, 'private-b').phase, 'queued');
+
+    assert.equal(service.cancelScope({ scopeId: fixture.scopeId, reason: 'scope-transition' }), true);
+    assert.equal(backendCalls[0].signal.aborted, true);
+    assert.equal(backendCalls[0].signal.reason, 'scope-transition');
+    assert.deepEqual(service.getQueueState().queued, []);
+    assert.deepEqual(service.getConversationState(fixture.scopeId, 'private-a'), {
+        phase: 'idle',
+        pendingUserMessageCount: 0,
+        error: '',
+    });
+    assert.deepEqual(service.getConversationState(fixture.scopeId, 'private-b'), {
+        phase: 'idle',
+        pendingUserMessageCount: 0,
+        error: '',
+    });
+
+    first.resolve({ content: '<qq><message /></qq>' });
+    await service.waitForIdle();
+    assert.equal(fixture.applied.length, 0, 'a cancelled scope must reject a late backend result');
+
+    await service.sendManual({
+        scopeId: fixture.scopeId,
+        conversationId: 'private-a',
+        message: { type: 'text', content: 'same scope remains current' },
+    });
+    await service.waitForIdle();
+    assert.equal(backendCalls.length, 2);
+    assert.equal(fixture.applied.length, 1, 'cancelScope must not revoke the coordinator-owned session');
 }
 
 async function testReconcileAfterDeletionCancelsWorkWithoutCreatingAnotherRequest() {
@@ -958,6 +1137,9 @@ async function testProactiveWorkCanBeObservedAndCancelled() {
         },
     });
     await waitUntil(() => proactiveInput !== null, 'the proactive request to start');
+    assert.equal(proactiveInput.scopeSession.scopeId, fixture.scopeId);
+    assert.equal(proactiveInput.scopeSession.isCurrent(), true);
+    assert.equal(proactiveInput.scopeSession.isReady(), true);
     const queue = service.getQueueState();
     assert.equal(queue.active.kind, 'proactive');
     assert.equal(queue.active.requestId, scheduled.requestId);
@@ -1063,6 +1245,10 @@ async function testManualRequestCanCommitThroughTheProductionActionSeam() {
     assert.equal(mutations.length, 2);
     assert.equal(mutations[0].kind, 'user-message');
     assert.equal(mutations[1].kind, 'ai-actions');
+    assert.strictEqual(mutations[1].scopeSession, mutations[0].scopeSession);
+    assert.equal(mutations[1].scopeSession.scopeId, fixture.scopeId);
+    assert.equal(mutations[1].scopeSession.isCurrent(), true);
+    assert.equal(mutations[1].scopeSession.isReady(), true);
 }
 
 async function main() {
@@ -1077,6 +1263,9 @@ async function main() {
     await testFailureKeepsTheRealBatchForRetryWithoutDuplicatingUserMessages();
     await testManualCancellationKeepsTheBatchRetryableAndLeavesProactiveAlone();
     await testScopeSwitchCancelsOldWorkAndDropsItsLateResult();
+    await testStaleScopeCannotPersistAManualMessageOrQueueProactiveWork();
+    await testSessionRevokedAfterPersistenceKeepsMessageButSkipsAIWork();
+    await testCancelScopeClearsOnlyRequestWorkWithoutOwningTheScope();
     await testReconcileAfterDeletionCancelsWorkWithoutCreatingAnotherRequest();
     await testManualResponseCannotMutateAnotherConversation();
     await testQueuedRequestReadsTheLatestSelectedPresetAtExecutionTime();

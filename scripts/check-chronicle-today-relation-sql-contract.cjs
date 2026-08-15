@@ -52,14 +52,18 @@ async function main() {
     const debugSql = mod.buildChronicleInvalidTimeSpanDebugSql();
     const currentStatusSignatureSql = mod.buildChronicleTodayRelationSignatureSql('current_status');
     const currentStatusUpdateSql = mod.buildChronicleTodayRelationUpdateSql('current_status');
-    const allSql = `${signatureSql}\n${updateSql}\n${debugSql}\n${currentStatusSignatureSql}\n${currentStatusUpdateSql}`;
+    const pinyinSignatureSql = mod.buildChronicleTodayRelationSignatureSql('quanjushujubiao', 'jiyaobiao');
+    const pinyinUpdateSql = mod.buildChronicleTodayRelationUpdateSql('quanjushujubiao', 'jiyaobiao');
+    const pinyinDebugSql = mod.buildChronicleInvalidTimeSpanDebugSql('jiyaobiao');
+    const allSql = `${signatureSql}\n${updateSql}\n${debugSql}\n${currentStatusSignatureSql}\n${currentStatusUpdateSql}\n${pinyinSignatureSql}\n${pinyinUpdateSql}\n${pinyinDebugSql}`;
 
     assert.ok(Array.isArray(mod.CHRONICLE_TODAY_RELATION_ANCHOR_TABLES), 'SQL builder 必须导出集中 today anchor 表白名单数组');
     assert.deepStrictEqual(
         mod.CHRONICLE_TODAY_RELATION_ANCHOR_TABLES,
-        ['global_state', 'current_status'],
-        'today anchor 英文物理表名白名单必须集中维护并保持 global_state/current_status 优先级',
+        ['quanjushujubiao', 'global_state', 'current_status'],
+        'today anchor 候选表必须保持拼音优先与英文兼容回退顺序',
     );
+    assert.deepStrictEqual(mod.CHRONICLE_TODAY_RELATION_TABLES, ['jiyaobiao', 'chronicle'], '纪要目标表候选必须保持拼音优先与英文兼容回退顺序');
     assert.deepStrictEqual(
         mod.CHRONICLE_TODAY_RELATION_ANCHOR_REQUIRED_COLUMNS,
         ['row_id', 'cur_time'],
@@ -75,15 +79,20 @@ async function main() {
         assertNotIncludes(builderSource, needle, `SQL builder 不得保留旧物理 schema gate：${needle}`);
     });
 
-    ['WITH', 'UPDATE chronicle', 'today_relation', 'global_state', 'current_status', 'cur_time', 'time_span', 'julianday', 'new_relation IS NOT NULL', 'source_signature', 'input_signature', 'pending_update_count'].forEach((needle) => {
+    ['WITH', 'UPDATE chronicle', 'UPDATE jiyaobiao', 'today_relation', 'quanjushujubiao', 'global_state', 'current_status', 'cur_time', 'time_span', 'julianday', 'new_relation IS NOT NULL', 'source_signature', 'input_signature', 'pending_update_count'].forEach((needle) => {
         assertIncludes(allSql, needle, `SQL builder 必须包含 ${needle}`);
     });
-    assertSignatureContract(signatureSql, mod.CHRONICLE_TODAY_RELATION_ANCHOR_TABLES[0]);
-    assertSignatureContract(currentStatusSignatureSql, mod.CHRONICLE_TODAY_RELATION_ANCHOR_TABLES[1]);
-    assertIncludes(signatureSql, `FROM ${mod.CHRONICLE_TODAY_RELATION_ANCHOR_TABLES[0]}`, '默认 signature SQL 必须使用白名单第一项 global_state 锚点');
-    assertIncludes(updateSql, `FROM ${mod.CHRONICLE_TODAY_RELATION_ANCHOR_TABLES[0]}`, '默认 update SQL 必须使用白名单第一项 global_state 锚点');
+    assertSignatureContract(signatureSql, 'global_state');
+    assertSignatureContract(currentStatusSignatureSql, 'current_status');
+    assertSignatureContract(pinyinSignatureSql, 'quanjushujubiao');
+    assertIncludes(signatureSql, 'FROM global_state', '默认 signature SQL 必须继续兼容 global_state 锚点');
+    assertIncludes(updateSql, 'FROM global_state', '默认 update SQL 必须继续兼容 global_state 锚点');
     assertIncludes(currentStatusSignatureSql, 'FROM current_status', 'signature SQL 必须支持 current_status 锚点表');
     assertIncludes(currentStatusUpdateSql, 'FROM current_status', 'update SQL 必须支持 current_status 锚点表');
+    assertIncludes(pinyinSignatureSql, 'FROM quanjushujubiao', 'signature SQL 必须支持全局数据表拼音锚点');
+    assertIncludes(pinyinSignatureSql, 'FROM jiyaobiao', 'signature SQL 必须支持纪要表拼音目标');
+    assertIncludes(pinyinUpdateSql, 'UPDATE jiyaobiao', 'update SQL 必须支持纪要表拼音目标');
+    assertIncludes(pinyinDebugSql, 'FROM jiyaobiao', 'debug SQL 必须支持纪要表拼音目标');
     [
         'YYYY-MM-DD HH:MM ~ YYYY-MM-DD HH:MM',
         'non-ISO rows are treated as invalid inputs',

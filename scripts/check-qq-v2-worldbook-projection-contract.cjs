@@ -910,6 +910,138 @@ async function testLifecycleCleanupTreatsDeletedTargetBookAsAlreadyRemoved() {
     assert.equal(conversation.injection.projection.bookName, '');
 }
 
+async function testSyncConversationKeepsTheOriginalScopeSessionAcrossGatewayCalls() {
+    const { createQQV2WorldbookProjectionService } = await importModule('modules/qq-v2/worldbook/projection-service.js');
+    const repository = await createRepository();
+    const fixture = await createPrivateFixture(repository);
+    const storage = createWorldbookGateway({ 主书: { entries: {} } });
+    const setupService = createQQV2WorldbookProjectionService({ repository, worldbookGateway: storage });
+    await setupService.setGlobalSettings({
+        scopeId: fixture.scopeId,
+        settings: { enabled: true, bookName: '主书', timeWindow: { mode: 'all' } },
+        userName: '玩家',
+        storyTime: '2042-05-01 08:01',
+    });
+    await setupService.setConversationInjection({
+        scopeId: fixture.scopeId,
+        conversationId: fixture.conversation.conversationId,
+        injection: { enabled: true },
+        userName: '玩家',
+        storyTime: '2042-05-01 08:01',
+    });
+
+    const gatewayCalls = [];
+    const gateway = {
+        async loadBook(name, scopeId, options) {
+            gatewayCalls.push({ operation: 'load', scopeId, scopeSession: options?.scopeSession });
+            return storage.loadBook(name);
+        },
+        async saveBook(name, data, scopeId, options) {
+            gatewayCalls.push({ operation: 'save', scopeId, scopeSession: options?.scopeSession });
+            return storage.saveBook(name, data);
+        },
+    };
+    const service = createQQV2WorldbookProjectionService({ repository, worldbookGateway: gateway });
+    let currentSession;
+    const a1 = {
+        scopeId: fixture.scopeId,
+        generation: 1,
+        isCurrent: () => currentSession === a1,
+    };
+    const a2 = {
+        scopeId: fixture.scopeId,
+        generation: 3,
+        isCurrent: () => currentSession === a2,
+    };
+    currentSession = a1;
+
+    const result = await service.syncConversation({
+        scopeId: fixture.scopeId,
+        scopeSession: a1,
+        conversationId: fixture.conversation.conversationId,
+        userName: '玩家',
+        storyTime: '2042-05-01 08:01',
+    });
+
+    assert.equal(result.status, 'synced');
+    assert.ok(gatewayCalls.some((call) => call.operation === 'load'));
+    assert.ok(gatewayCalls.some((call) => call.operation === 'save'));
+    for (const call of gatewayCalls) {
+        assert.equal(call.scopeId, fixture.scopeId);
+        assert.strictEqual(call.scopeSession, a1);
+        assert.notStrictEqual(call.scopeSession, a2);
+    }
+    currentSession = a2;
+    assert.equal(a1.isCurrent(), false);
+    assert.equal(a2.isCurrent(), true);
+}
+
+async function testInactiveScopeSessionDoesNotMarkProjectionPending() {
+    const { createQQV2WorldbookProjectionService } = await importModule('modules/qq-v2/worldbook/projection-service.js');
+    const repository = await createRepository();
+    const fixture = await createPrivateFixture(repository);
+    const storage = createWorldbookGateway({ 主书: { entries: {} } });
+    const setupService = createQQV2WorldbookProjectionService({ repository, worldbookGateway: storage });
+    await setupService.setGlobalSettings({
+        scopeId: fixture.scopeId,
+        settings: { enabled: true, bookName: '主书', timeWindow: { mode: 'all' } },
+        userName: '玩家',
+        storyTime: '2042-05-01 08:01',
+    });
+    await setupService.setConversationInjection({
+        scopeId: fixture.scopeId,
+        conversationId: fixture.conversation.conversationId,
+        injection: { enabled: true },
+        userName: '玩家',
+        storyTime: '2042-05-01 08:01',
+    });
+    const projectionBefore = clone((await repository.getConversation(
+        fixture.scopeId,
+        fixture.conversation.conversationId,
+    )).injection.projection);
+
+    let currentSession;
+    const a1 = {
+        scopeId: fixture.scopeId,
+        generation: 1,
+        isCurrent: () => currentSession === a1,
+    };
+    currentSession = a1;
+    const gateway = {
+        async loadBook(name) {
+            return storage.loadBook(name);
+        },
+        async saveBook() {
+            await Promise.resolve();
+            currentSession = null;
+            const error = new Error('作用域已切换');
+            error.code = 'worldbook_scope_inactive';
+            throw error;
+        },
+    };
+    const service = createQQV2WorldbookProjectionService({ repository, worldbookGateway: gateway });
+    let failure = null;
+    try {
+        await service.syncConversation({
+            scopeId: fixture.scopeId,
+            scopeSession: a1,
+            conversationId: fixture.conversation.conversationId,
+            userName: '玩家',
+            storyTime: '2042-05-01 08:01',
+        });
+    } catch (error) {
+        failure = error;
+    }
+
+    assert.equal(a1.isCurrent(), false);
+    assert.deepEqual(
+        (await repository.getConversation(fixture.scopeId, fixture.conversation.conversationId)).injection.projection,
+        projectionBefore,
+        '失效 Scope Session 不得恢复或标记 Repository projection 为 pending',
+    );
+    assert.equal(failure?.code, 'worldbook_scope_inactive');
+}
+
 async function main() {
     await testProjectionUsesRealEntryAndGlobalGateKeepsConversationIntent();
     await testInjectedWorldbookSettingsOverrideRepositoryProjectionSettings();
@@ -926,6 +1058,8 @@ async function main() {
     await testInactiveScopeCleanupRemovesNativeMarkers();
     await testScopeLifecycleRemovalPreservesDataAndReconcileRebuildsProjection();
     await testLifecycleCleanupTreatsDeletedTargetBookAsAlreadyRemoved();
+    await testSyncConversationKeepsTheOriginalScopeSessionAcrossGatewayCalls();
+    await testInactiveScopeSessionDoesNotMarkProjectionPending();
     console.log('[qq-v2-worldbook-projection-contract] passed');
 }
 

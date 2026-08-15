@@ -61,6 +61,10 @@ function normalizeTableName(tableName) {
     return String(tableName || '').trim();
 }
 
+function normalizeTableAlias(tableName) {
+    return normalizeTableName(tableName).toLowerCase();
+}
+
 function normalizePayload(data) {
     return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
 }
@@ -266,6 +270,23 @@ function resolvePhysicalTableNameFromSheet(sheet, fallbackTableName = '') {
 
     const fallbackName = normalizeTableName(fallbackTableName);
     return isSafeSqlIdentifier(fallbackName) ? fallbackName : '';
+}
+
+function isSheetTableAliasMatch(sheetKey, sheet, tableName) {
+    const safeTableName = normalizeTableAlias(tableName);
+    if (!safeTableName) return false;
+
+    const sourceData = sheet?.sourceData && typeof sheet.sourceData === 'object' ? sheet.sourceData : {};
+    const aliases = [
+        sheetKey,
+        sheet?.uid,
+        sheet?.name,
+        sourceData.tableName,
+        sourceData.physicalTableName,
+        resolvePhysicalTableNameFromSheet(sheet),
+        ...(Array.isArray(sourceData.tableAliases) ? sourceData.tableAliases : []),
+    ];
+    return aliases.some((alias) => normalizeTableAlias(alias) === safeTableName);
 }
 
 function normalizeRowId(value) {
@@ -624,6 +645,29 @@ export async function getTableDataAsync(timeout = DEFAULT_API_TIMEOUT) {
         );
     }
     return null;
+}
+
+export function getTableAvailabilityViaApi(tableName) {
+    const safeTableName = normalizeTableAlias(tableName);
+    if (!safeTableName) return { status: 'absent' };
+
+    try {
+        const api = getDB();
+        if (!api || typeof api.exportTableAsJson !== 'function') {
+            return { status: 'unavailable' };
+        }
+
+        const rawData = api.exportTableAsJson();
+        if (!rawData || typeof rawData !== 'object' || Array.isArray(rawData)) {
+            return { status: 'unavailable' };
+        }
+
+        return Object.entries(rawData).some(([sheetKey, sheet]) => isSheetTableAliasMatch(sheetKey, sheet, safeTableName))
+            ? { status: 'present' }
+            : { status: 'absent' };
+    } catch {
+        return { status: 'unavailable' };
+    }
 }
 
 export function processTableData(rawData) {

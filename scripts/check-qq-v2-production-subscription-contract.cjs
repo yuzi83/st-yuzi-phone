@@ -49,7 +49,12 @@ async function main() {
     });
     assert.deepEqual(currentFacadeEvents, [
         { status: 'changed', scopeId: 'scope-b' },
-        { status: 'changed', scopeId: 'scope-b' },
+        {
+            status: 'changed',
+            scopeId: 'scope-b',
+            reason: 'conversation-opened',
+            conversationId: beryl.conversation.conversationId,
+        },
         { status: 'changed', scopeId: 'scope-b' },
         { status: 'changed', scopeId: 'scope-b' },
     ]);
@@ -58,7 +63,12 @@ async function main() {
     await runtime.createPrivateConversation({ scopeId: 'scope-b', name: 'Cora' });
     assert.deepEqual(currentFacadeEvents, [
         { status: 'changed', scopeId: 'scope-b' },
-        { status: 'changed', scopeId: 'scope-b' },
+        {
+            status: 'changed',
+            scopeId: 'scope-b',
+            reason: 'conversation-opened',
+            conversationId: beryl.conversation.conversationId,
+        },
         { status: 'changed', scopeId: 'scope-b' },
         { status: 'changed', scopeId: 'scope-b' },
     ]);

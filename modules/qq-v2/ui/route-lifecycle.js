@@ -6,6 +6,8 @@ function canReadSnapshot(result) {
     return result?.ok === true;
 }
 
+const LOCAL_NAVIGATION_REASONS = new Set(['conversation-opened']);
+
 /**
  * Binds one freshly-created QQ root renderer to one phone route page.
  * The route owns this object so late Facade work cannot affect another page.
@@ -68,6 +70,7 @@ export function createQQRouteLifecycle({
     };
 
     const refreshForEvent = (event) => {
+        if (LOCAL_NAVIGATION_REASONS.has(String(event?.reason || '').trim())) return Promise.resolve();
         if (String(event?.scopeId || '').trim() !== activeScopeId || !isRefreshActive() || !app) {
             return Promise.resolve();
         }

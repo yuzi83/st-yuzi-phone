@@ -34,7 +34,7 @@ async function main() {
     assert.match(composer, /data-phone-bottom-bar/, 'the chat composer must opt into the shared Home Indicator safe-area contract');
 
     const render = sourceSlice(app, 'const render = async', 'const submitComposer =');
-    assert.match(render, /scrollSnapshot\s*\|\|\s*\(page\?\.type\s*===\s*'chat'[\s\S]*state:\s*\{\s*mode:\s*'bottom'\s*\}/,
+    assert.match(render, /immediateSnapshot\.scrollSnapshot\s*\|\|\s*\(page\?\.type\s*===\s*'chat'[\s\S]*state:\s*\{\s*mode:\s*'bottom'\s*\}/,
         'entering a chat without a saved scroll anchor must start at the latest message');
 
     assert.match(

@@ -62,6 +62,14 @@ function maxContextOf(context) {
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : 8192;
 }
 
+function assertCurrentScopeSession(scopeSession) {
+    if (!scopeSession || scopeSession.isCurrent?.()) return;
+    throw new QQV2WorldbookContextError(
+        'QQ 作用域已切换，当前世界书扫描已取消',
+        'worldbook_scope_inactive',
+    );
+}
+
 /**
  * Runs Tavern's own worldbook dry-run and captures the final activated entry
  * set. It never reads a full lorebook or turns dry-run aggregate text into
@@ -74,7 +82,19 @@ export function createQQV2SillyTavernWorldbookContextGateway(options = {}) {
         : getFreshSillyTavernContext;
     let pending = Promise.resolve();
 
-    const run = async ({ people = [], history = [] } = {}) => {
+    const captureScopeSession = typeof options.captureScopeSession === 'function'
+        ? options.captureScopeSession
+        : null;
+
+    const run = async ({ people = [], history = [], scopeId = '', scopeSession = null } = {}) => {
+        const session = scopeSession || captureScopeSession?.(scopeId) || null;
+        if (scopeId && captureScopeSession && !session) {
+            throw new QQV2WorldbookContextError(
+                'QQ 作用域已切换，当前世界书扫描已取消',
+                'worldbook_scope_inactive',
+            );
+        }
+        assertCurrentScopeSession(session);
         const context = resolveContext(getContext);
         const eventName = context.eventTypes?.WORLDINFO_SCAN_DONE || 'worldinfo_scan_done';
         const eventSource = context.eventSource;
@@ -88,6 +108,7 @@ export function createQQV2SillyTavernWorldbookContextGateway(options = {}) {
         eventSource.on(eventName, capture);
         try {
             await context.getWorldInfoPrompt(scanChat(people, history), maxContextOf(context), true);
+            assertCurrentScopeSession(session);
             return Object.freeze([...(finalEntries || [])].map((entry) => Object.freeze({ ...entry })));
         } finally {
             if (typeof eventSource.removeListener === 'function') {

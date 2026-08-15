@@ -31,6 +31,7 @@ import {
     voiceDurationSeconds,
 } from './narrative-tools.js';
 import { createRenderLeaseCoordinator } from './render-lease-coordinator.js';
+import { createViewSnapshotCache } from './view-snapshot-cache.js';
 import {
     downloadImageLibraryPack,
     pickImageLibraryPackFile,
@@ -593,6 +594,17 @@ export function shouldCloseConversationSwipe(openedConversationId, targetConvers
     return Boolean(opened && opened !== asText(targetConversationId) && opened !== asText(actionConversationId));
 }
 
+function createMediaRenderLeaseCoordinator(facade, { cacheLimit = 0 } = {}) {
+    return createRenderLeaseCoordinator({
+        acquire: async (assetId) => {
+            const result = await facade.query.mediaRender({ assetId });
+            return result?.ok && result.render?.leaseId && result.render?.url ? result.render : null;
+        },
+        release: (render) => facade.intent.releaseMediaRender?.({ leaseId: render.leaseId }),
+        cacheLimit,
+    });
+}
+
 export const __test__ = Object.freeze({
     loadMessageRootModel,
     loadContactsRootModel,
@@ -633,10 +645,12 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
     let openedChatId = '';
     let openSwipeConversationId = '';
     let emojiOpen = false;
+    let displayedViewKey = '';
     const drafts = new Map();
     const messageSelection = createMessageSelection();
     let messageSelectionConversationId = '';
     const pages = new Map();
+    const conversationSnapshots = new Map();
     const jumpCounts = new Map();
     const renderLeaseSessions = new Map();
     const selectedImageAssetIds = new Set();
@@ -650,27 +664,32 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         imageLibrarySelectionMode = false;
     };
 
-    const mediaRenderLeases = createRenderLeaseCoordinator({
-        acquire: async (assetId) => {
-            const result = await facade.query.mediaRender({ assetId });
-            return result?.ok && result.render?.leaseId && result.render?.url ? result.render : null;
-        },
-        release: (render) => facade.intent.releaseMediaRender?.({ leaseId: render.leaseId }),
-    });
+    const mediaRenderLeases = createMediaRenderLeaseCoordinator(facade);
+    const backgroundRenderLeases = createMediaRenderLeaseCoordinator(facade, { cacheLimit: 8 });
+    const avatarRenderLeases = createMediaRenderLeaseCoordinator(facade, { cacheLimit: 48 });
     const stickerRenderLeases = createRenderLeaseCoordinator({
         acquire: async (stickerId) => {
             const result = await facade.query.stickerRender?.({ stickerId });
             return result?.ok && result.render?.leaseId && result.render?.url ? result.render : null;
         },
         release: (render) => facade.intent.releaseStickerRender?.({ leaseId: render.leaseId }),
+        cacheLimit: 96,
     });
 
-    const currentViewKey = () => {
+    const requestedViewKey = () => {
         if (!page) return `tab:${tab}`;
         const id = asText(page.conversationId || page.kind);
         return `page:${asText(page.type)}${id ? `:${id}` : ''}`;
     };
+    const currentViewKey = () => displayedViewKey || requestedViewKey();
     const currentScopeKey = () => asText(scopeId) || 'qq-local-app';
+
+    const viewSnapshotCache = createViewSnapshotCache({
+        limit: 4,
+        onEvict(snapshot) {
+            snapshot?.holder?.replaceChildren?.();
+        },
+    });
 
     const viewScrollState = createPhoneViewScrollState({
         getScopeKey: currentScopeKey,
@@ -679,16 +698,28 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
     viewScrollState.register({
         key: 'message-root',
         matches: (viewKey) => viewKey === 'tab:messages',
-        getRoot: () => viewport?.querySelector('[data-qq-message-root]'),
+        getRoot: () => viewport?.querySelector('.yuzi-qq-message-root-list'),
         mode: 'anchor',
         stickToBottom: false,
         getItems: (element) => element.querySelectorAll('[data-qq-conversation-id]'),
         getKey: (item) => asText(item.dataset.qqConversationId),
     });
     viewScrollState.register({
+        key: 'contact-root',
+        matches: (viewKey) => viewKey === 'tab:contacts',
+        getRoot: () => viewport?.querySelector('.yuzi-qq-contact-root-list'),
+        mode: 'offset',
+    });
+    viewScrollState.register({
         key: 'private-chat',
         matches: (viewKey) => viewKey.startsWith('page:chat:'),
-        getRoot: () => viewport?.querySelector(`[data-qq-message-stream="${asText(page?.conversationId)}"]`),
+        getRoot: () => {
+            const viewKey = currentViewKey();
+            const conversationId = viewKey.startsWith('page:chat:') ? viewKey.slice('page:chat:'.length) : '';
+            return conversationId
+                ? viewport?.querySelector(`[data-qq-message-stream="${conversationId}"]`)
+                : null;
+        },
         mode: 'anchor',
         getItems: (element) => element.querySelectorAll('[data-qq-scroll-key]'),
         getKey: (item) => asText(item.dataset.qqScrollKey),
@@ -774,9 +805,9 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         }
         const assetId = asText(person?.avatarAssetId);
         const token = renderEpoch;
-        const mediaSession = leaseSessionFor(token)?.media;
-        if (assetId && mediaSession) {
-            const cached = mediaSession.peek(assetId);
+        const avatarSession = leaseSessionFor(token)?.avatars;
+        if (assetId && avatarSession) {
+            const cached = avatarSession.peek(assetId);
             if (cached?.url) {
                 const image = createElement('img');
                 image.alt = '';
@@ -784,8 +815,8 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
                 element.classList.add('has-image');
                 element.replaceChildren(image);
             } else {
-                void mediaSession.load(assetId).then((render) => {
-                    if (!render?.url || !isActive(token) || !element.isConnected) return;
+                void avatarSession.load(assetId).then((render) => {
+                    if (!render?.url || !isActive(token)) return;
                     const image = createElement('img');
                     image.alt = '';
                     image.src = render.url;
@@ -834,7 +865,7 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         return result?.ok ? asObject(result.context) : {};
     };
 
-    const identityAvatar = async (context, title, token) => {
+    const identityAvatar = (context, profile, title, token) => {
         const identity = asObject(context?.user);
         const element = createButton('', 'yuzi-qq-identity-avatar yuzi-qq-current-profile-trigger', {
             'aria-label': '\u5f53\u524d\u7528\u6237\u8d44\u6599', 'data-qq-current-profile': '1', title: '\u5f53\u524d\u7528\u6237\u8d44\u6599',
@@ -848,31 +879,35 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             element.classList.add('has-image');
             element.replaceChildren(image);
         }
-        const profileResult = await facade.query.currentProfile?.();
-        const profile = profileResult?.ok ? asObject(profileResult.profile) : {};
         const assetId = asText(profile.avatarAssetId);
-        const mediaSession = leaseSessionFor(token)?.media;
-        if (!assetId || !mediaSession) return element;
-        try {
-            const media = mediaSession.peek(assetId) || await mediaSession.load(assetId);
-            if (!media?.url || !isActive(token)) return element;
+        const avatarSession = leaseSessionFor(token)?.avatars;
+        if (!assetId || !avatarSession) return element;
+        const cached = avatarSession.peek(assetId);
+        if (cached?.url) {
             const image = createElement('img');
             image.alt = '';
-            image.src = media.url;
+            image.src = cached.url;
             element.classList.add('has-image');
             element.replaceChildren(image);
-        } catch {
-            // Host avatar or the blue initial remains available when a local asset cannot render.
+        } else {
+            void avatarSession.load(assetId).then((render) => {
+                if (!render?.url || !isActive(token)) return;
+                const image = createElement('img');
+                image.alt = '';
+                image.src = render.url;
+                element.classList.add('has-image');
+                element.replaceChildren(image);
+            }).catch(() => {});
         }
         return element;
     };
 
     const getConversation = async (conversationId) => {
         const result = await facade.query.conversation({ conversationId });
-        return result?.ok ? result.conversation : null;
+        if (!result?.ok || !result.conversation) return null;
+        conversationSnapshots.set(conversationId, result.conversation);
+        return result.conversation;
     };
-
-    const getCurrentStoryTime = async () => asText((await getCurrentContext()).storyTime);
 
     const getMessageState = (conversationId) => pages.get(conversationId) || { ...EMPTY_PAGE };
 
@@ -912,6 +947,15 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             exitMessageSelection(conversationId);
             void facade.intent.closeConversation?.({ conversationId });
         }
+    };
+
+    const closeConversationSwipe = () => {
+        if (!openSwipeConversationId) return false;
+        viewport?.querySelectorAll('.yuzi-qq-message-conversation-swipe-row.is-swiped').forEach((row) => {
+            row.classList.remove('is-swiped');
+        });
+        openSwipeConversationId = '';
+        return true;
     };
 
     const loadMessages = async (conversationId, { beforeSequence, prepend = false } = {}) => {
@@ -994,7 +1038,11 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         actionsClassName = '',
     } = {}) => {
         const header = createElement('header', `yuzi-qq-identity-header${className ? ` ${className}` : ''}`);
-        const context = await getCurrentContext();
+        const [context, profileResult] = await Promise.all([
+            getCurrentContext(),
+            facade.query.currentProfile?.(),
+        ]);
+        const profile = profileResult?.ok ? asObject(profileResult.profile) : {};
         const copy = createElement('div', 'yuzi-qq-identity-copy');
         const heading = createElement('h1', `yuzi-qq-identity-title${titleClassName ? ` ${titleClassName}` : ''}`);
         heading.textContent = showPresence ? asText(context.user?.name) || title : title;
@@ -1008,7 +1056,7 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         if (showPresence) copy.append(status);
         const actions = createElement('div', `yuzi-qq-identity-actions${actionsClassName ? ` ${actionsClassName}` : ''}`);
         if (action) actions.append(action);
-        header.append(await identityAvatar(context, title, token), copy, actions);
+        header.append(identityAvatar(context, profile, title, token), copy, actions);
         return header;
     };
 
@@ -1074,7 +1122,11 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             heading.textContent = title;
             dialog.append(heading);
         }
-        if (content) dialog.append(content);
+        if (content) {
+            const body = createElement('div', 'yuzi-qq-dialog-body');
+            body.append(content);
+            dialog.append(body);
+        }
         if (actions.length) {
             const controls = createElement('div', 'yuzi-qq-dialog-actions');
             actions.forEach((action) => controls.append(action));
@@ -1151,7 +1203,6 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
     };
 
     const go = (next) => {
-        if (page?.type === 'chat' && next?.type !== 'chat') closeOpenedChat();
         closeEmojiPanel();
         page = { ...next, returnTo: page ? { ...page } : null };
         void render();
@@ -1165,8 +1216,17 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         return render();
     };
 
+    const pageStackContainsChat = (conversationId) => {
+        let candidate = page;
+        while (candidate) {
+            if (candidate.type === 'chat' && candidate.conversationId === conversationId) return true;
+            candidate = candidate.returnTo;
+        }
+        return false;
+    };
+
     const openChat = async (conversation) => {
-        let target = conversation;
+        let target = conversationSnapshots.get(asText(conversation?.conversationId)) || conversation;
         if (conversation?.status === 'contact') {
             const created = await facade.intent.createPrivateConversation({ name: contactFormalName(conversation) });
             if (!created?.ok) {
@@ -1175,15 +1235,25 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             }
             target = created.result?.conversation || conversation;
         }
+        const conversationId = asText(target?.conversationId);
+        if (!conversationId) return;
+        conversationSnapshots.set(conversationId, target);
+        jumpCounts.delete(conversationId);
+        go({ type: 'chat', conversationId });
         const opened = await facade.intent.openConversation({ conversationId: target.conversationId });
         if (!opened?.ok) {
             report(new Error(opened?.error?.message || '无法打开会话'));
+            if (page?.type === 'chat' && page.conversationId === conversationId) {
+                page = page.returnTo || null;
+                void render();
+            }
             return;
         }
-        openedChatId = target.conversationId;
-        jumpCounts.delete(target.conversationId);
-        await loadMessages(target.conversationId);
-        go({ type: 'chat', conversationId: target.conversationId });
+        if (!pageStackContainsChat(conversationId)) {
+            void facade.intent.closeConversation?.({ conversationId });
+            return;
+        }
+        openedChatId = conversationId;
     };
 
     const renderConversationRow = (model) => {
@@ -1235,13 +1305,17 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             'aria-label': '新建会话', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: '新建会话', 'data-qq-add-contact': '1',
         });
         add.append(createIcon('plus'));
-                main.append(await makeRootIdentityHeader(token, '消息', {
-            action: add,
-            className: 'yuzi-qq-message-root-header',
-            titleClassName: 'yuzi-qq-message-root-title',
-            statusClassName: 'yuzi-qq-message-root-status',
-            actionsClassName: 'yuzi-qq-message-root-actions',
-        }));
+        const [header, model] = await Promise.all([
+            makeRootIdentityHeader(token, '消息', {
+                action: add,
+                className: 'yuzi-qq-message-root-header',
+                titleClassName: 'yuzi-qq-message-root-title',
+                statusClassName: 'yuzi-qq-message-root-status',
+                actionsClassName: 'yuzi-qq-message-root-actions',
+            }),
+            loadMessageRootModel(facade),
+        ]);
+        main.append(header);
         if (!isActive(token)) return main;
         const sheet = createElement('section', 'yuzi-qq-list-sheet yuzi-qq-message-list-sheet yuzi-qq-message-root-sheet');
         const search = createElement('div', 'yuzi-qq-search yuzi-qq-message-root-search');
@@ -1250,12 +1324,13 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         searchLabel.textContent = '搜索';
         search.append(searchLabel);
         search.setAttribute('aria-hidden', 'true');
-        const list = createElement('div', 'yuzi-qq-conversation-list yuzi-qq-message-root-list');
+        const list = createElement('div', 'yuzi-qq-conversation-list yuzi-qq-message-root-list yuzi-qq-root-scroll-list');
         sheet.append(search, list);
         main.append(sheet);
-        const model = await loadMessageRootModel(facade);
-        if (!isActive(token)) return main;
-        model.rows.forEach((row) => list.append(renderConversationRow(row)));
+        model.rows.forEach((row) => {
+            conversationSnapshots.set(row.conversation.conversationId, row.conversation);
+            list.append(renderConversationRow(row));
+        });
         return main;
     };
 
@@ -1265,14 +1340,18 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         decorativeAdd.classList.add('yuzi-qq-contact-root-add-visual');
         decorativeAdd.setAttribute('aria-hidden', 'true');
         decorativeAdd.append(createIcon('user-plus'));
-                main.append(await makeRootIdentityHeader(token, '联系人', {
-            action: decorativeAdd,
-            className: 'yuzi-qq-contact-root-header',
-            titleClassName: 'yuzi-qq-contact-root-title',
-            statusClassName: 'yuzi-qq-contact-root-status',
-            showPresence: false,
-            actionsClassName: 'yuzi-qq-contact-root-actions',
-        }));
+        const [header, model] = await Promise.all([
+            makeRootIdentityHeader(token, '联系人', {
+                action: decorativeAdd,
+                className: 'yuzi-qq-contact-root-header',
+                titleClassName: 'yuzi-qq-contact-root-title',
+                statusClassName: 'yuzi-qq-contact-root-status',
+                showPresence: false,
+                actionsClassName: 'yuzi-qq-contact-root-actions',
+            }),
+            loadContactsRootModel(facade),
+        ]);
+        main.append(header);
         if (!isActive(token)) return main;
         const sheet = createElement('section', 'yuzi-qq-list-sheet yuzi-qq-contact-list-sheet yuzi-qq-contact-root-sheet');
         const search = createElement('div', 'yuzi-qq-search yuzi-qq-contact-root-search');
@@ -1291,17 +1370,16 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             item.setAttribute('aria-hidden', 'true');
             decorativeItems.append(item);
         });
-        const list = createElement('div', 'yuzi-qq-contact-list yuzi-qq-contact-root-list');
+        const list = createElement('div', 'yuzi-qq-contact-list yuzi-qq-contact-root-list yuzi-qq-root-scroll-list');
         sheet.append(search, decorativeItems, list);
         main.append(sheet);
-        const model = await loadContactsRootModel(facade);
-        if (!isActive(token)) return main;
         model.sections.forEach(({ letter, contacts }) => {
             const section = createElement('section', 'yuzi-qq-contact-section');
             const label = createElement('span', 'yuzi-qq-contact-section-label');
             label.textContent = letter;
             const rows = createElement('div', 'yuzi-qq-contact-section-list');
             contacts.forEach(({ conversation, formalName }) => {
+                conversationSnapshots.set(conversation.conversationId, conversation);
                 const row = createButton('', 'yuzi-qq-contact-row yuzi-qq-contact-root-row', { 'data-qq-profile': conversation.conversationId });
                 row.append(avatar(conversation, 'yuzi-qq-avatar yuzi-qq-contact-avatar'));
                 const copy = createElement('span', 'yuzi-qq-contact-copy');
@@ -1347,15 +1425,18 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         backgroundLayer.classList.add('yuzi-qq-profile-background-layer');
         main.append(backgroundLayer);
         if (backgroundAssetId) {
-            try {
-                const mediaSession = leaseSessionFor(token)?.media;
-                const media = mediaSession?.peek(backgroundAssetId) || await mediaSession?.load(backgroundAssetId);
-                if (media?.url && isActive(token)) {
-                    backgroundLayer.classList.add('has-profile-background');
-                    backgroundLayer.style.backgroundImage = `url("${media.url}")`;
-                }
-            } catch {
-                // The default profile surface remains available when its background cannot render.
+            const mediaSession = leaseSessionFor(token)?.background;
+            const applyBackground = (media) => {
+                if (!media?.url || !isActive(token)) return;
+                backgroundLayer.classList.add('has-profile-background');
+                backgroundLayer.style.backgroundImage = `url("${media.url}")`;
+            };
+            const cached = mediaSession?.peek(backgroundAssetId);
+            if (cached) applyBackground(cached);
+            else {
+                void mediaSession?.load(backgroundAssetId).then(applyBackground).catch(() => {
+                    // The default profile surface remains available when its background cannot render.
+                });
             }
         }
         if (!isActive(token)) return main;
@@ -1866,15 +1947,20 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
 
     const renderChat = async (token) => {
         const conversationId = page.conversationId;
+        const selectionMode = isMessageSelectionMode(conversationId);
         const previousState = getMessageState(conversationId);
         const previousStream = viewport?.querySelector(`[data-qq-message-stream="${conversationId}"]`);
         const atBottom = !previousStream
             || isScrollContainerNearBottom(previousStream);
-        await loadMessages(conversationId);
-        const conversation = await getConversation(conversationId);
+        const [conversation, currentContext, currentProfileResult, globalSettingsResult] = await Promise.all([
+            getConversation(conversationId),
+            getCurrentContext(),
+            facade.query.currentProfile?.(),
+            selectionMode ? facade.query.globalSettings?.() : Promise.resolve(null),
+            loadMessages(conversationId),
+        ]);
         const main = createElement('main', 'yuzi-qq-view yuzi-qq-chat-view yuzi-qq-private-chat-view');
         if (!conversation || !isActive(token)) return main;
-        const selectionMode = isMessageSelectionMode(conversationId);
         if (selectionMode) main.classList.add('is-message-selection-mode');
         const nextState = getMessageState(conversationId);
         const jumpDelta = countIncomingJumpMessages(nextState.items, new Set(previousState.items.map((message) => message.messageId)), { atBottom });
@@ -1882,12 +1968,7 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             jumpCounts.set(conversationId, (jumpCounts.get(conversationId) || 0) + jumpDelta);
         }
         main.append(makeChatHeader(conversation));
-        const [currentStoryTime, currentContext, currentProfileResult, globalSettingsResult] = await Promise.all([
-            getCurrentStoryTime(),
-            getCurrentContext(),
-            facade.query.currentProfile?.(),
-            selectionMode ? facade.query.globalSettings?.() : Promise.resolve(null),
-        ]);
+        const currentStoryTime = asText(currentContext.storyTime);
         const currentProfile = currentProfileResult?.ok ? asObject(currentProfileResult.profile) : {};
         const currentIdentity = {
             formalName: currentProfileName(currentContext),
@@ -1895,13 +1976,15 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             avatarUrl: asText(currentContext.user?.avatar),
         };
         if (conversation.backgroundAssetId) {
-            const mediaSession = leaseSessionFor(token)?.media;
-            const background = mediaSession?.peek(conversation.backgroundAssetId)
-                || await mediaSession?.load(conversation.backgroundAssetId);
-            if (background?.url && isActive(token)) {
+            const mediaSession = leaseSessionFor(token)?.background;
+            const applyBackground = (background) => {
+                if (!background?.url || !isActive(token)) return;
                 main.style.setProperty('--yuzi-qq-chat-background-image', `url("${background.url}")`);
                 main.classList.add('has-chat-background');
-            }
+            };
+            const cached = mediaSession?.peek(conversation.backgroundAssetId);
+            if (cached) applyBackground(cached);
+            else void mediaSession?.load(conversation.backgroundAssetId).then(applyBackground).catch(() => {});
         }
         const stream = renderMessageStream(conversation, currentStoryTime, currentIdentity);
         const composer = selectionMode
@@ -1967,14 +2050,16 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
     };
 
     const renderConversationSettings = async (token) => {
-        const conversation = await getConversation(page.conversationId);
+        const [conversation, globalSettingsResult] = await Promise.all([
+            getConversation(page.conversationId),
+            facade.query.globalSettings(),
+        ]);
         const { main, content } = makeSecondaryPage('\u804a\u5929\u8bbe\u7f6e', {
             className: 'yuzi-qq-conversation-settings-view',
             headerClassName: 'yuzi-qq-conversation-settings-header',
             titleClassName: 'yuzi-qq-conversation-settings-title',
         });
         if (!conversation || !isActive(token)) return main;
-        const globalSettingsResult = await facade.query.globalSettings();
         if (!isActive(token)) return main;
         const globalWorldbook = asObject(globalSettingsResult?.settings?.worldbook);
         const injection = asObject(conversation.injection);
@@ -2414,34 +2499,139 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         return renderSettingsRoot();
     };
 
+    const isSnapshotEligibleView = (viewKey) => (
+        viewKey === 'tab:messages'
+        || viewKey.startsWith('page:chat:')
+        || viewKey.startsWith('page:conversation-settings:')
+    );
+
+    const isBottomTabView = (viewKey) => viewKey.startsWith('tab:');
+
+    const createImmediateFrame = () => {
+        if (page?.type === 'chat') {
+            const conversation = conversationSnapshots.get(page.conversationId);
+            const main = createElement('main', 'yuzi-qq-view yuzi-qq-chat-view yuzi-qq-private-chat-view');
+            main.append(conversation
+                ? makeChatHeader(conversation)
+                : makeHeader('\u804a\u5929', { back: true, className: 'yuzi-qq-chat-header yuzi-qq-private-chat-header' }));
+            return main;
+        }
+        if (page?.type === 'conversation-settings') {
+            return makeSecondaryPage('\u804a\u5929\u8bbe\u7f6e', {
+                className: 'yuzi-qq-conversation-settings-view',
+                headerClassName: 'yuzi-qq-conversation-settings-header',
+                titleClassName: 'yuzi-qq-conversation-settings-title',
+            }).main;
+        }
+        if (page?.type === 'profile' || page?.type === 'current-profile') {
+            const main = createElement('main', 'yuzi-qq-view yuzi-qq-profile-view yuzi-qq-profile-page');
+            main.append(makeProfileTop());
+            return main;
+        }
+        if (page) {
+            const group = page.type === 'settings' ? qqSettingsGroup(page.kind) : null;
+            return makeSecondaryPage(group?.title || '\u8bbe\u7f6e').main;
+        }
+        if (tab === 'settings') return renderSettingsRoot();
+        const title = TABS.find(([id]) => id === tab)?.[1] || '\u6d88\u606f';
+        const rootName = tab === 'messages' ? 'message' : tab === 'contacts' ? 'contact' : tab;
+        const main = createElement('main', `yuzi-qq-view yuzi-qq-list-view yuzi-qq-${rootName}-root-view`);
+        main.append(makeHeader(title));
+        return main;
+    };
+
+    const detachViewport = () => {
+        const holder = createElement('div');
+        holder.append(...viewport.children);
+        return holder;
+    };
+
+    const prepareImmediateView = (targetViewKey, outgoingScrollSnapshot) => {
+        if (displayedViewKey === targetViewKey) {
+            return { scrollSnapshot: outgoingScrollSnapshot, deferred: false };
+        }
+
+        const cached = isSnapshotEligibleView(targetViewKey)
+            ? viewSnapshotCache.take(targetViewKey)
+            : null;
+        if (isBottomTabView(targetViewKey) && displayedViewKey && !cached) {
+            return { scrollSnapshot: null, deferred: true };
+        }
+
+        if (displayedViewKey && isSnapshotEligibleView(displayedViewKey)) {
+            viewSnapshotCache.store(displayedViewKey, {
+                holder: detachViewport(),
+                scrollSnapshot: outgoingScrollSnapshot,
+            });
+        } else {
+            viewport.replaceChildren();
+        }
+
+        if (cached?.holder) {
+            viewport.replaceChildren(...cached.holder.children);
+        } else {
+            viewport.replaceChildren(createImmediateFrame());
+            if (!page) viewport.append(makeNav());
+        }
+        displayedViewKey = targetViewKey;
+        return { scrollSnapshot: cached?.scrollSnapshot || null, deferred: false };
+    };
+
     const render = async ({ preserveEmoji = false } = {}) => {
         const scrollSnapshot = viewScrollState.capture();
-        const nextScrollSnapshot = scrollSnapshot || (page?.type === 'chat' ? {
-            scopeKey: currentScopeKey(),
-            viewKey: currentViewKey(),
-            registrationKey: 'private-chat',
-            state: { mode: 'bottom' },
-        } : null);
         const token = ++renderEpoch;
         const leaseSessions = {
             media: mediaRenderLeases.begin(),
+            background: backgroundRenderLeases.begin(),
+            avatars: avatarRenderLeases.begin(),
             stickers: stickerRenderLeases.begin(),
         };
         renderLeaseSessions.set(token, leaseSessions);
         clearOverlay();
         if (!preserveEmoji) closeEmojiPanel({ preserveScroll: false });
+        const targetViewKey = requestedViewKey();
+        const immediateSnapshot = prepareImmediateView(targetViewKey, scrollSnapshot);
+        const nextScrollSnapshot = immediateSnapshot.scrollSnapshot || (page?.type === 'chat' ? {
+            scopeKey: currentScopeKey(),
+            viewKey: targetViewKey,
+            registrationKey: 'private-chat',
+            state: { mode: 'bottom' },
+        } : null);
+        if (nextScrollSnapshot) viewScrollState.restore(nextScrollSnapshot, { token, isCurrent: isActive });
         try {
             const content = await renderPage(token);
             if (!isActive(token) || !viewport) {
-                await Promise.all([leaseSessions.media.abort(), leaseSessions.stickers.abort()]);
+                await Promise.all([
+                    leaseSessions.media.abort(),
+                    leaseSessions.background.abort(),
+                    leaseSessions.avatars.abort(),
+                    leaseSessions.stickers.abort(),
+                ]);
                 return;
+            }
+            if (immediateSnapshot.deferred && displayedViewKey && isSnapshotEligibleView(displayedViewKey)) {
+                viewSnapshotCache.store(displayedViewKey, {
+                    holder: detachViewport(),
+                    scrollSnapshot,
+                });
             }
             viewport.replaceChildren(content);
             if (!page) viewport.append(makeNav());
-            await Promise.all([leaseSessions.media.commit(), leaseSessions.stickers.commit()]);
+            displayedViewKey = targetViewKey;
+            await Promise.all([
+                leaseSessions.media.commit(),
+                leaseSessions.background.commit(),
+                leaseSessions.avatars.commit(),
+                leaseSessions.stickers.commit(),
+            ]);
             viewScrollState.restore(nextScrollSnapshot, { token, isCurrent: isActive });
         } catch (error) {
-            await Promise.all([leaseSessions.media.abort(), leaseSessions.stickers.abort()]);
+            await Promise.all([
+                leaseSessions.media.abort(),
+                leaseSessions.background.abort(),
+                leaseSessions.avatars.abort(),
+                leaseSessions.stickers.abort(),
+            ]);
             throw error;
         } finally {
             renderLeaseSessions.delete(token);
@@ -2976,6 +3166,11 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
                     || '\u5220\u9664\u5931\u8d25';
                 return;
             }
+            const deletedAssetIds = imageResult.result?.deletedAssetIds || assetIds;
+            await Promise.all([
+                avatarRenderLeases.invalidate(deletedAssetIds),
+                backgroundRenderLeases.invalidate(deletedAssetIds),
+            ]);
             clearImageLibrarySelection();
             clearOverlay();
             await render();
@@ -3093,9 +3288,7 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
     };
 
     const handleConversationListScroll = () => {
-        if (!openSwipeConversationId) return;
-        openSwipeConversationId = '';
-        void render();
+        closeConversationSwipe();
     };
 
     const handleClick = async (event) => {
@@ -3104,8 +3297,8 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         const targetConversationId = target.closest('[data-qq-conversation-id]')?.dataset.qqConversationId || '';
         const actionConversationId = target.dataset.qqDeleteConversation || '';
         if (shouldCloseConversationSwipe(openSwipeConversationId, targetConversationId, actionConversationId)) {
-            openSwipeConversationId = '';
-            return render();
+            closeConversationSwipe();
+            return;
         }
         if (target.dataset.qqTab) {
             closeOpenedChat();
@@ -3134,11 +3327,10 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         if (target.dataset.qqImageLibraryDelete) return confirmImageLibraryDeletion();
         if (target.dataset.qqChat) {
             if (openSwipeConversationId === target.dataset.qqChat) {
-                openSwipeConversationId = '';
-                return render();
+                closeConversationSwipe();
+                return;
             }
-            const conversation = await getConversation(target.dataset.qqChat);
-            if (conversation) await openChat(conversation);
+            await openChat({ conversationId: target.dataset.qqChat });
             return;
         }
         if (target.dataset.qqDeleteConversation) return confirmConversationDeletion(target.dataset.qqDeleteConversation);
@@ -3307,6 +3499,9 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             messageSelection.clearAll();
             messageSelectionConversationId = '';
             pages.clear();
+            conversationSnapshots.clear();
+            viewSnapshotCache.clear();
+            displayedViewKey = '';
             return render();
         },
         destroy() {
@@ -3316,13 +3511,21 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             closeTransientUi();
             messageSelection.clearAll();
             messageSelectionConversationId = '';
+            viewSnapshotCache.clear();
+            conversationSnapshots.clear();
+            displayedViewKey = '';
             window.removeEventListener('yuzi-phone-resize-start', handlePhoneResizeStart);
             viewport?.removeEventListener('pointerdown', handleEmojiPanelPointerDown);
             viewport?.removeEventListener('keydown', handleEmojiPanelKeyDown);
             viewport?.removeEventListener('scroll', handleConversationListScroll, true);
             messageMenu.dispose();
             viewScrollState.dispose();
-            void Promise.all([mediaRenderLeases.dispose(), stickerRenderLeases.dispose()]);
+            void Promise.all([
+                mediaRenderLeases.dispose(),
+                backgroundRenderLeases.dispose(),
+                avatarRenderLeases.dispose(),
+                stickerRenderLeases.dispose(),
+            ]);
             root?.classList.remove('yuzi-qq-app');
             root?.replaceChildren();
             root = null;

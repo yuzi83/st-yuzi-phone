@@ -144,6 +144,33 @@ async function testGatewayAllowsExplicitInactiveScopeCleanup() {
     ]);
 }
 
+async function testGatewayUsesSessionIdentityToRejectAbaWrites() {
+    const { createQQV2SillyTavernWorldbookGateway } = await importModule('modules/qq-v2/worldbook/st-gateway.js');
+    let current = null;
+    const createSession = (scopeId) => {
+        const session = { scopeId, isCurrent: () => current === session };
+        return session;
+    };
+    const firstA = createSession('scope-a');
+    current = firstA;
+    const gateway = createQQV2SillyTavernWorldbookGateway({
+        captureScopeSession: (scopeId) => current?.scopeId === scopeId ? current : null,
+        getContext: () => ({
+            async loadWorldInfo() {
+                const secondA = createSession('scope-a');
+                current = secondA;
+                return { entries: {} };
+            },
+            async saveWorldInfo() {},
+        }),
+    });
+
+    await assert.rejects(
+        gateway.loadBook('主书', 'scope-a', { scopeSession: firstA }),
+        (error) => error?.code === 'worldbook_scope_inactive',
+    );
+}
+
 async function testGatewayDoesNotFlattenUnavailableCharacterBindingReads() {
     const { createQQV2SillyTavernWorldbookGateway } = await importModule('modules/qq-v2/worldbook/st-gateway.js');
     const gateway = createQQV2SillyTavernWorldbookGateway();
@@ -157,6 +184,7 @@ async function main() {
     await testGatewayNormalizesInjectedWorldbookProviders();
     await testGatewayGuardsAsyncProviderReadsAgainstScopeChanges();
     await testGatewayAllowsExplicitInactiveScopeCleanup();
+    await testGatewayUsesSessionIdentityToRejectAbaWrites();
     await testGatewayDoesNotFlattenUnavailableCharacterBindingReads();
     console.log('[qq-v2-worldbook-gateway-contract] passed');
 }

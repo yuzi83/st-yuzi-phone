@@ -2,15 +2,22 @@ function normalizedKey(value) {
     return String(value ?? '').trim();
 }
 
-export function createRenderLeaseCoordinator({ acquire, release } = {}) {
+export function createRenderLeaseCoordinator({ acquire, release, cacheLimit = 0 } = {}) {
     if (typeof acquire !== 'function' || typeof release !== 'function') {
         throw new TypeError('Render lease coordinator needs acquire and release functions');
     }
 
+    const normalizedCacheLimit = Math.max(0, Math.trunc(Number(cacheLimit) || 0));
     const entries = new Map();
     const sessions = new Set();
     let mountedKeys = new Set();
     let disposed = false;
+    let accessSequence = 0;
+
+    const touch = (entry) => {
+        entry.lastUsed = ++accessSequence;
+        return entry;
+    };
 
     const retainedKeys = () => {
         const keys = new Set(mountedKeys);
@@ -20,9 +27,15 @@ export function createRenderLeaseCoordinator({ acquire, release } = {}) {
 
     const releaseUnused = async () => {
         const retained = retainedKeys();
+        const idle = [];
+        for (const [key, entry] of entries) {
+            if (!retained.has(key) && !entry.promise) idle.push([key, entry]);
+        }
+        idle.sort((left, right) => right[1].lastUsed - left[1].lastUsed);
+        const cached = new Set(idle.slice(0, disposed ? 0 : normalizedCacheLimit).map(([key]) => key));
         const releases = [];
         for (const [key, entry] of entries) {
-            if (retained.has(key) || entry.promise) continue;
+            if (retained.has(key) || cached.has(key) || entry.promise) continue;
             entries.delete(key);
             if (entry.value) releases.push(Promise.resolve(release(entry.value)).catch(() => {}));
         }
@@ -31,15 +44,19 @@ export function createRenderLeaseCoordinator({ acquire, release } = {}) {
 
     const loadEntry = async (key) => {
         let entry = entries.get(key);
-        if (entry?.value) return entry.value;
+        if (entry?.value) return touch(entry).value;
         if (!entry) {
-            entry = { value: null, promise: null };
+            entry = touch({ value: null, promise: null, invalidated: false, lastUsed: 0 });
             entries.set(key, entry);
         }
         if (!entry.promise) {
-            entry.promise = Promise.resolve(acquire(key)).then((value) => {
+            entry.promise = Promise.resolve(acquire(key)).then(async (value) => {
                 entry.promise = null;
-                if (value) entry.value = value;
+                if (disposed || entry.invalidated || entries.get(key) !== entry) {
+                    if (value) await Promise.resolve(release(value)).catch(() => {});
+                    return null;
+                }
+                if (value) touch(entry).value = value;
                 else entries.delete(key);
                 void releaseUnused();
                 return value || null;
@@ -61,7 +78,8 @@ export function createRenderLeaseCoordinator({ acquire, release } = {}) {
                 const key = normalizedKey(rawKey);
                 if (!key || this.closed) return null;
                 this.usedKeys.add(key);
-                return entries.get(key)?.value || null;
+                const entry = entries.get(key);
+                return entry?.value ? touch(entry).value : null;
             },
             async load(rawKey) {
                 const key = normalizedKey(rawKey);
@@ -89,6 +107,20 @@ export function createRenderLeaseCoordinator({ acquire, release } = {}) {
 
     return Object.freeze({
         begin,
+        async invalidate(rawKeys) {
+            const values = typeof rawKeys === 'string' ? [rawKeys] : [...(rawKeys || [])];
+            const releases = [];
+            values.map(normalizedKey).filter(Boolean).forEach((key) => {
+                mountedKeys.delete(key);
+                sessions.forEach((session) => session.usedKeys.delete(key));
+                const entry = entries.get(key);
+                if (!entry) return;
+                entry.invalidated = true;
+                entries.delete(key);
+                if (entry.value) releases.push(Promise.resolve(release(entry.value)).catch(() => {}));
+            });
+            await Promise.all(releases);
+        },
         async dispose() {
             disposed = true;
             sessions.forEach((session) => { session.closed = true; });

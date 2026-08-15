@@ -1,19 +1,14 @@
 import { Logger } from '../../error-handler.js';
-import { executeSqlMutationViaApi, querySqlViaApi, queryTableRowsViaApi } from '../data-api.js';
+import { executeSqlMutationViaApi, getTableAvailabilityViaApi, querySqlViaApi, queryTableRowsViaApi } from '../data-api.js';
 import { subscribeTableFillStart, subscribeTableUpdate } from '../callbacks.js';
 import { createDerivedFieldService, readDerivedField } from './derived-field-service.js';
+import { resolveFirstAvailableTableCandidate } from './table-candidate-resolver.js';
 import {
     SMALL_CALENDAR_DERIVED_FIELDS_REQUIRED_COLUMNS,
-    SMALL_CALENDAR_DERIVED_FIELDS_TABLE,
+    SMALL_CALENDAR_DERIVED_FIELDS_TABLES,
     buildSmallCalendarDerivedFieldsSignatureSql,
     buildSmallCalendarDerivedFieldsUpdateSql,
 } from './small-calendar-derived-fields-sql.js';
-
-const STRUCTURAL_QUERY_FAILURE_CODES = new Set([
-    'alias_conflict',
-    'table_not_found',
-    'column_not_resolved',
-]);
 
 const defaultLogger = Logger.withScope({
     scope: 'phone-core/derived-fields/small-calendar-derived-fields',
@@ -25,6 +20,7 @@ const defaultDeps = Object.freeze({
     clearTimeout: (...args) => globalThis.clearTimeout(...args),
     subscribeUpdate: subscribeTableUpdate,
     subscribeFillStart: subscribeTableFillStart,
+    getTableAvailability: getTableAvailabilityViaApi,
     queryTableRows: queryTableRowsViaApi,
     query: querySqlViaApi,
     mutation: executeSqlMutationViaApi,
@@ -42,25 +38,29 @@ function normalizeSignature(result) {
 }
 
 export async function resolveSmallCalendarDerivedFieldsContext(deps, runtime = {}) {
-    const result = await deps.queryTableRows({
-        tableName: SMALL_CALENDAR_DERIVED_FIELDS_TABLE,
+    const candidate = await resolveFirstAvailableTableCandidate({
+        deps,
+        tableNames: SMALL_CALENDAR_DERIVED_FIELDS_TABLES,
         columns: SMALL_CALENDAR_DERIVED_FIELDS_REQUIRED_COLUMNS,
-        limit: 1,
+        runtime,
     });
-    if (runtime.shouldPause?.()) return { status: 'fill-active' };
-    if (result?.ok) return { status: 'ready', context: null };
-    if (result?.code === 'runtime_not_ready') return { status: 'runtime-not-ready' };
-    if (!STRUCTURAL_QUERY_FAILURE_CODES.has(result?.code)) {
-        return { status: 'query-failed', result };
-    }
+    if (candidate.status === 'ready') return { status: 'ready', context: { tableName: candidate.tableName } };
+    if (candidate.status === 'absent') return { status: 'completed' };
+    if (candidate.status !== 'schema-blocked') return candidate;
+
+    const failures = candidate.failures.map(({ tableName, result }) => ({
+        tableName,
+        code: result?.code || 'query_failed',
+        message: result?.message || '未知结构错误',
+    }));
 
     return {
         status: 'completed',
         warning: {
-            key: `${result.code}:${result.message || ''}`,
+            key: failures.map((item) => `${item.tableName}:${item.code}:${item.message}`).join('|'),
             action: 'small-calendar-derived-fields.schema-blocked',
             message: '当前小日历表缺少相关字段，已跳过日期派生，不影响其他表格功能',
-            context: { code: result.code, message: result.message },
+            context: { failures },
         },
     };
 }
@@ -72,9 +72,9 @@ const service = createDerivedFieldService({
     mutationRetryDelayMs: 2000,
     maxSignatureRetry: 1,
     resolveContext: resolveSmallCalendarDerivedFieldsContext,
-    buildSignatureSql: buildSmallCalendarDerivedFieldsSignatureSql,
+    buildSignatureSql: (context) => buildSmallCalendarDerivedFieldsSignatureSql(context.tableName),
     normalizeSignature,
-    buildMutationSql: buildSmallCalendarDerivedFieldsUpdateSql,
+    buildMutationSql: (context) => buildSmallCalendarDerivedFieldsUpdateSql(context.tableName),
     getInvalidWarning(signature) {
         if (!signature?.invalidCount) return null;
         return {

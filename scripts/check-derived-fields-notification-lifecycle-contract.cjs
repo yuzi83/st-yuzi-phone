@@ -4,6 +4,7 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const SERVICE_PATH = path.join(ROOT, 'modules/phone-core/derived-fields/derived-field-service.js');
+const TABLE_CANDIDATE_RESOLVER_PATH = path.join(ROOT, 'modules/phone-core/derived-fields/table-candidate-resolver.js');
 const DERIVED_FIELD_ADAPTERS = [
     {
         path: path.join(ROOT, 'modules/phone-core/derived-fields/small-calendar-derived-fields.js'),
@@ -36,6 +37,7 @@ function readSection(source, startNeedle, endNeedle, label) {
 }
 
 const serviceSource = fs.readFileSync(SERVICE_PATH, 'utf8');
+const tableCandidateResolverSource = fs.readFileSync(TABLE_CANDIDATE_RESOLVER_PATH, 'utf8');
 
 [
     'const DEFAULT_DEBOUNCE_MS = 600;',
@@ -174,6 +176,15 @@ const getStateSource = readSection(serviceSource, 'function getState()', 'return
 assertIncludes(getStateSource, 'hasAvailabilityTimer', '测试状态必须暴露 availability timer');
 assertNotIncludes(getStateSource, 'hasProbeTimer', '测试状态不得继续暴露 probe timer');
 
+[
+    'getTableAvailability',
+    'queryTableRows',
+    'runtime_not_ready',
+    'runtime.shouldPause?.()',
+    'table_not_found',
+    'limit: 1',
+].forEach((needle) => assertIncludes(tableCandidateResolverSource, needle, `候选表选择器缺少派生字段适配合同 ${needle}`));
+
 for (const adapter of DERIVED_FIELD_ADAPTERS) {
     const source = fs.readFileSync(adapter.path, 'utf8');
     const basename = path.basename(adapter.path);
@@ -185,8 +196,7 @@ for (const adapter of DERIVED_FIELD_ADAPTERS) {
         'executeSqlMutationViaApi',
         'subscribeTableUpdate',
         'subscribeTableFillStart',
-        'runtime_not_ready',
-        'runtime.shouldPause?.()',
+        'resolveFirstAvailableTableCandidate',
         adapter.resolveContext,
         'source_signature',
         'input_signature',

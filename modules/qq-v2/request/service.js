@@ -12,10 +12,6 @@ function requestKey(scopeId, conversationId) {
     return `${scopeId}\u0000${conversationId}`;
 }
 
-function scopeFromRequestKey(key) {
-    return String(key).split('\u0000', 1)[0];
-}
-
 function isSelfMessage(message) {
     return message?.senderId === SELF_ID || message?.senderType === 'self';
 }
@@ -149,6 +145,7 @@ export function createQQV2RequestService(options = {}) {
     }
     const apiPresetResolver = requireFunction(options.apiPresetResolver, 'apiPresetResolver');
     const promptPresetResolver = requireFunction(options.promptPresetResolver, 'promptPresetResolver');
+    const captureScopeSession = requireFunction(options.captureScopeSession, 'captureScopeSession');
     const buildManualRequest = requireFunction(options.buildManualRequest, 'buildManualRequest');
     const parseResponse = requireFunction(options.parseResponse, 'parseResponse');
     const validateActions = requireFunction(options.validateActions, 'validateActions');
@@ -180,11 +177,79 @@ export function createQQV2RequestService(options = {}) {
     let wakeAt = 0;
     let resolveWake = null;
     let wakePromise = Promise.resolve();
-    let activeScopeId = '';
-    let scopeEpoch = 0;
 
     const setState = (key, state) => states.set(key, cloneState(state));
     const findNext = () => [...queued.values()].sort((left, right) => left.serial - right.serial)[0] || null;
+
+    const scopeSessionIsReady = (scopeSession) => {
+        try {
+            return scopeSession?.isCurrent?.() === true
+                && scopeSession?.isReady?.() === true
+                && scopeSession?.signal?.aborted !== true;
+        } catch {
+            return false;
+        }
+    };
+
+    const staleScopeError = (cause = null) => {
+        const error = new QQV2RequestError('QQ scope session is no longer current', 'scope_stale');
+        if (cause) error.cause = cause;
+        return error;
+    };
+
+    const captureReadyScopeSession = (scopeId) => {
+        let scopeSession;
+        try {
+            scopeSession = captureScopeSession(scopeId);
+        } catch (error) {
+            throw staleScopeError(error);
+        }
+        if (!scopeSession
+            || typeof scopeSession.isCurrent !== 'function'
+            || typeof scopeSession.isReady !== 'function'
+            || !scopeSession.signal
+            || typeof scopeSession.signal.addEventListener !== 'function'
+            || typeof scopeSession.signal.removeEventListener !== 'function'
+            || !scopeSessionIsReady(scopeSession)) {
+            throw staleScopeError();
+        }
+        return scopeSession;
+    };
+
+    const abortEntry = (entry, reason) => {
+        if (!entry || entry.controller.signal.aborted) return false;
+        try {
+            entry.controller.abort(reason);
+        } catch {
+            return false;
+        }
+        return true;
+    };
+
+    const releaseScopeSession = (entry) => {
+        entry?.releaseScopeSession?.();
+        if (entry) entry.releaseScopeSession = null;
+    };
+
+    const bindScopeSession = (entry, scopeSession) => {
+        releaseScopeSession(entry);
+        entry.scopeSession = scopeSession;
+        const onAbort = () => {
+            abortEntry(entry, scopeSession.signal.reason || 'scope-session-aborted');
+            if (entry.kind !== 'proactive') states.delete(entry.key);
+            if (queued.get(entry.key) === entry) {
+                queued.delete(entry.key);
+                releaseScopeSession(entry);
+                refreshWakeForNextEntry();
+            }
+        };
+        if (scopeSession.signal.aborted) {
+            onAbort();
+            return;
+        }
+        scopeSession.signal.addEventListener('abort', onAbort, { once: true });
+        entry.releaseScopeSession = () => scopeSession.signal.removeEventListener('abort', onAbort);
+    };
 
     const clearWakeTimer = () => {
         if (wakeTimer !== null) clearTimeout(wakeTimer);
@@ -218,8 +283,7 @@ export function createQQV2RequestService(options = {}) {
     const isCurrentEntry = (entry) => active === entry
         && !entry.controller.signal.aborted
         && !superseding.has(entry.key)
-        && entry.scopeId === activeScopeId
-        && entry.scopeEpoch === scopeEpoch;
+        && scopeSessionIsReady(entry.scopeSession);
 
     const notifyManualMutation = async (input) => {
         try {
@@ -246,7 +310,9 @@ export function createQQV2RequestService(options = {}) {
         }
 
         setState(key, { phase: 'running', pendingUserMessageCount: pending.length, error: '' });
-        const runtimeSettings = await runtimeSettingsResolver(entry.scopeId, scope) || scope.settings || {};
+        const runtimeSettings = await runtimeSettingsResolver(entry.scopeId, scope, {
+            scopeSession: entry.scopeSession,
+        }) || scope.settings || {};
         const apiPresetId = asText(runtimeSettings.activeApiPresetId, 256);
         const promptPresetId = asText(
             conversation.kind === 'group' ? runtimeSettings.groupReplyPresetId : runtimeSettings.privateReplyPresetId,
@@ -267,6 +333,7 @@ export function createQQV2RequestService(options = {}) {
 
         const requestBuild = normalizeManualRequestBuild(await buildManualRequest({
             scopeId: entry.scopeId,
+            scopeSession: entry.scopeSession,
             scope,
             runtimeSettings,
             conversation,
@@ -306,6 +373,7 @@ export function createQQV2RequestService(options = {}) {
                 stickerReferences,
                 storyTime,
                 handledUserSequences,
+                scopeSession: entry.scopeSession,
                 isCurrent: () => isCurrentEntry(entry),
             });
         } else {
@@ -330,6 +398,8 @@ export function createQQV2RequestService(options = {}) {
                 {
                     storyTime,
                     handledUserSequences,
+                    scopeSession: entry.scopeSession,
+                    isCurrent: () => isCurrentEntry(entry),
                 },
             );
         }
@@ -338,6 +408,7 @@ export function createQQV2RequestService(options = {}) {
             kind: 'ai-actions',
             scopeId: entry.scopeId,
             conversationId: entry.conversationId,
+            scopeSession: entry.scopeSession,
             storyTime,
             actionResult,
         });
@@ -347,6 +418,7 @@ export function createQQV2RequestService(options = {}) {
 
     const executeProactive = async (entry) => entry.execute({
         scopeId: entry.scopeId,
+        scopeSession: entry.scopeSession,
         signal: entry.controller.signal,
         isCurrent: () => isCurrentEntry(entry),
     });
@@ -354,6 +426,10 @@ export function createQQV2RequestService(options = {}) {
     const runEntry = async (entry) => {
         active = entry;
         try {
+            if (!isCurrentEntry(entry)) {
+                if (entry.kind !== 'proactive') states.delete(entry.key);
+                return;
+            }
             if (entry.kind === 'proactive') {
                 await executeProactive(entry);
             } else {
@@ -372,6 +448,7 @@ export function createQQV2RequestService(options = {}) {
                 });
             }
         } finally {
+            releaseScopeSession(entry);
             if (active === entry) active = null;
         }
     };
@@ -415,7 +492,8 @@ export function createQQV2RequestService(options = {}) {
         scheduleDrain();
     };
 
-    const enqueue = (scopeId, conversationId, options = {}) => {
+    const enqueue = (scopeId, conversationId, scopeSession, options = {}) => {
+        if (!scopeSessionIsReady(scopeSession)) throw staleScopeError();
         const key = requestKey(scopeId, conversationId);
         const readyAt = Date.now() + (options.coalesce === false ? 0 : MANUAL_COALESCING_DELAY_MS);
         let entry = queued.get(key);
@@ -427,13 +505,14 @@ export function createQQV2RequestService(options = {}) {
                 conversationId,
                 serial: Number.isInteger(options.serial) ? options.serial : serial += 1,
                 controller: new AbortController(),
-                scopeEpoch,
                 readyAt,
             };
             queued.set(key, entry);
         } else {
+            if (entry.controller.signal.aborted) entry.controller = new AbortController();
             entry.readyAt = readyAt;
         }
+        bindScopeSession(entry, scopeSession);
         const prior = states.get(key);
         setState(key, { phase: 'queued', pendingUserMessageCount: Math.max(1, prior?.pendingUserMessageCount || 0), error: '' });
         refreshWakeForNextEntry();
@@ -449,36 +528,36 @@ export function createQQV2RequestService(options = {}) {
         if (typeof input.execute !== 'function') {
             throw new TypeError('QQ proactive request needs execute');
         }
-        enterScope(scopeId);
+        const scopeSession = captureReadyScopeSession(scopeId);
         if (hasManualWork()) return Object.freeze({ queued: false, skipped: 'manual-pending' });
         if (active?.kind === 'proactive' || hasQueuedKind('proactive')) {
             return Object.freeze({ queued: false, skipped: 'proactive-pending' });
         }
         const requestId = `proactive-${serial += 1}`;
-        queued.set(requestId, {
+        const entry = {
             key: requestId,
             kind: 'proactive',
             requestId,
             scopeId,
             serial,
             controller: new AbortController(),
-            scopeEpoch,
             execute: input.execute,
-        });
+        };
+        queued.set(requestId, entry);
+        bindScopeSession(entry, scopeSession);
         scheduleDrain();
         return Object.freeze({ queued: true, requestId });
     };
 
     const preemptProactiveForManual = () => {
         for (const [key, entry] of queued) {
-            if (entry.kind === 'proactive') queued.delete(key);
+            if (entry.kind !== 'proactive') continue;
+            queued.delete(key);
+            abortEntry(entry, 'manual-preempted-proactive');
+            releaseScopeSession(entry);
         }
         if (active?.kind !== 'proactive') return;
-        try {
-            active.controller.abort('manual-preempted-proactive');
-        } catch {
-            // An already-cancelled request needs no further work.
-        }
+        abortEntry(active, 'manual-preempted-proactive');
     };
 
     const cancelProactive = (input = {}) => {
@@ -487,15 +566,13 @@ export function createQQV2RequestService(options = {}) {
         for (const [key, entry] of queued) {
             if (entry.kind === 'proactive' && (!scopeId || entry.scopeId === scopeId)) {
                 queued.delete(key);
+                abortEntry(entry, 'proactive-cancelled');
+                releaseScopeSession(entry);
                 cancelled = true;
             }
         }
         if (active?.kind === 'proactive' && (!scopeId || active.scopeId === scopeId)) {
-            try {
-                active.controller.abort('proactive-cancelled');
-            } catch {
-                // An already-cancelled request needs no further work.
-            }
+            abortEntry(active, 'proactive-cancelled');
             cancelled = true;
         }
         refreshWakeForNextEntry();
@@ -516,51 +593,41 @@ export function createQQV2RequestService(options = {}) {
             .map(summarizeQueueEntry)),
     });
 
-    const handleScopeChanged = (nextScopeId) => {
-        const normalizedScopeId = asText(nextScopeId, 512);
-        if (normalizedScopeId === activeScopeId) return false;
-        const priorScopeId = activeScopeId;
-        activeScopeId = normalizedScopeId;
-        scopeEpoch += 1;
+    const cancelScope = (input = {}) => {
+        const scopeId = asText(typeof input === 'string' ? input : input.scopeId, 512);
+        if (!scopeId) return false;
+        const reason = asText(typeof input === 'object' ? input.reason : '', 128) || 'scope-cancelled';
+        let cancelled = false;
         for (const [key, entry] of queued) {
-            if (!normalizedScopeId || entry.scopeId !== normalizedScopeId) queued.delete(key);
+            if (entry.scopeId !== scopeId) continue;
+            queued.delete(key);
+            abortEntry(entry, reason);
+            releaseScopeSession(entry);
+            cancelled = true;
         }
         for (const key of states.keys()) {
-            if (!normalizedScopeId || scopeFromRequestKey(key) !== normalizedScopeId) states.delete(key);
+            if (key.startsWith(`${scopeId}\u0000`)) states.delete(key);
         }
-        superseding.clear();
-        if (active && (!normalizedScopeId || active.scopeId !== normalizedScopeId)) {
-            try {
-                active.controller.abort('scope-changed');
-            } catch {
-                // The request may already have completed its abort transition.
-            }
+        for (const key of superseding) {
+            if (key.startsWith(`${scopeId}\u0000`)) superseding.delete(key);
         }
+        if (active?.scopeId === scopeId) cancelled = abortEntry(active, reason) || cancelled;
         refreshWakeForNextEntry();
-        return Boolean(priorScopeId || normalizedScopeId);
-    };
-
-    const enterScope = (scopeId) => {
-        if (!activeScopeId) {
-            activeScopeId = scopeId;
-            scopeEpoch += 1;
-            return;
-        }
-        if (activeScopeId !== scopeId) handleScopeChanged(scopeId);
+        return cancelled;
     };
 
     const cancelEntry = (key, reason) => {
-        queued.delete(key);
+        const queuedEntry = queued.get(key);
+        if (queuedEntry) {
+            queued.delete(key);
+            abortEntry(queuedEntry, reason);
+            releaseScopeSession(queuedEntry);
+        }
         if (active?.key !== key) {
             refreshWakeForNextEntry();
-            return false;
+            return Boolean(queuedEntry);
         }
-        try {
-            active.controller.abort(reason);
-        } catch {
-            // An already-cancelled request needs no further work.
-        }
-        return true;
+        return abortEntry(active, reason) || Boolean(queuedEntry);
     };
 
     const reconcileConversation = async (input = {}) => {
@@ -594,14 +661,12 @@ export function createQQV2RequestService(options = {}) {
             return Object.freeze({ cancelled: false, ...cloneState(states.get(key)) });
         }
 
-        queued.delete(key);
-        if (activeEntry) {
-            try {
-                activeEntry.controller.abort('manual-cancelled');
-            } catch {
-                // The request may already have completed its abort transition.
-            }
+        if (queuedEntry) {
+            queued.delete(key);
+            abortEntry(queuedEntry, 'manual-cancelled');
+            releaseScopeSession(queuedEntry);
         }
+        if (activeEntry) abortEntry(activeEntry, 'manual-cancelled');
         refreshWakeForNextEntry();
 
         const conversation = await repository.getConversation(scopeId, conversationId);
@@ -623,11 +688,11 @@ export function createQQV2RequestService(options = {}) {
             const scopeId = asText(input.scopeId, 512);
             const conversationId = asText(input.conversationId, 256);
             if (!scopeId || !conversationId) throw new QQV2RequestError('QQ scope and conversation are required', 'invalid_request');
+            const scopeSession = captureReadyScopeSession(scopeId);
             const conversation = await repository.getConversation(scopeId, conversationId);
             if (conversation?.kind !== 'private' || conversation?.status !== 'active') {
                 throw new QQV2RequestError('QQ currently supports active private conversations only', 'private_only');
             }
-            enterScope(scopeId);
             preemptProactiveForManual();
             const key = requestKey(scopeId, conversationId);
             const runningEntry = active?.key === key ? active : null;
@@ -635,11 +700,12 @@ export function createQQV2RequestService(options = {}) {
             const message = input.message && typeof input.message === 'object' ? input.message : {};
             let created;
             try {
+                if (!scopeSessionIsReady(scopeSession)) throw staleScopeError();
                 [created] = await repository.appendMessages(scopeId, conversationId, [{
                     ...message,
                     senderId: SELF_ID,
                     senderType: 'self',
-                }]);
+                }], { scopeSession });
             } catch (error) {
                 if (runningEntry) superseding.delete(key);
                 throw error;
@@ -648,18 +714,19 @@ export function createQQV2RequestService(options = {}) {
                 kind: 'user-message',
                 scopeId,
                 conversationId,
+                scopeSession,
                 storyTime: asText(getStoryTime(), 128),
                 message: created,
             });
+            if (!scopeSessionIsReady(scopeSession)) {
+                superseding.delete(key);
+                return Object.freeze({ message: created });
+            }
             if (runningEntry && active === runningEntry) {
-                enqueue(scopeId, conversationId, { serial: runningEntry.serial });
-                try {
-                    runningEntry.controller.abort('new-manual-message');
-                } catch {
-                    // An already-cancelled request needs no further work.
-                }
+                enqueue(scopeId, conversationId, scopeSession, { serial: runningEntry.serial });
+                abortEntry(runningEntry, 'new-manual-message');
             } else {
-                enqueue(scopeId, conversationId);
+                enqueue(scopeId, conversationId, scopeSession);
             }
             superseding.delete(key);
             return Object.freeze({ message: created });
@@ -668,7 +735,7 @@ export function createQQV2RequestService(options = {}) {
             const scopeId = asText(input.scopeId, 512);
             const conversationId = asText(input.conversationId, 256);
             if (!scopeId || !conversationId) throw new QQV2RequestError('QQ scope and conversation are required', 'invalid_request');
-            enterScope(scopeId);
+            const scopeSession = captureReadyScopeSession(scopeId);
             const conversation = await repository.getConversation(scopeId, conversationId);
             if (!conversation) throw new QQV2RequestError('QQ conversation no longer exists', 'conversation_missing');
             if (conversation.kind !== 'private' || conversation.status !== 'active') {
@@ -683,7 +750,7 @@ export function createQQV2RequestService(options = {}) {
                 setState(requestKey(scopeId, conversationId), { phase: 'idle', pendingUserMessageCount: 0, error: '' });
                 return Object.freeze({ queued: false, pendingUserMessageCount: 0 });
             }
-            enqueue(scopeId, conversationId, { coalesce: false });
+            enqueue(scopeId, conversationId, scopeSession, { coalesce: false });
             return Object.freeze({ queued: true, pendingUserMessageCount });
         },
         getConversationState(scopeId, conversationId) {
@@ -692,7 +759,7 @@ export function createQQV2RequestService(options = {}) {
         enqueueProactive,
         cancelProactive,
         getQueueState,
-        handleScopeChanged,
+        cancelScope,
         reconcileConversation,
         cancelManual,
         cancelConversation(input = {}) {

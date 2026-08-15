@@ -83,8 +83,8 @@
     --yuzi-phone-shell-bezel-outer-width: 8px;
 
     /* Figma 02 设计画板：主界面外壳与状态栏 */
-    --yuzi-phone-frame-reference-width: 418px;
-    --yuzi-phone-frame-reference-height: 890px;
+    --yuzi-phone-frame-reference-width: 280px;
+    --yuzi-phone-frame-reference-height: 596px;
     --yuzi-phone-frame-border-width: 6px;
     --yuzi-phone-frame-screen-inset: 8px;
     --yuzi-phone-screen-reference-width: 402px;

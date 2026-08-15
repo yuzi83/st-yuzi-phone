@@ -32,9 +32,24 @@ function scopeId(value) {
     return String(value ?? '').trim().slice(0, 512);
 }
 
-function assertActiveScope(expectedScopeId, getActiveScopeId, options = {}) {
+function assertActiveScope(expectedScopeId, captureScopeSession, getActiveScopeId, options = {}) {
     if (options.allowInactiveScope === true) return;
     const expected = scopeId(expectedScopeId);
+    const session = options.scopeSession
+        || (expected && typeof captureScopeSession === 'function' ? captureScopeSession(expected) : null);
+    if (session) {
+        if (scopeId(session.scopeId ?? session.scope?.scopeId) === expected && session.isCurrent?.()) return;
+        throw new QQV2WorldbookGatewayError(
+            'QQ 作用域已切换，当前世界书操作已取消',
+            'worldbook_scope_inactive',
+        );
+    }
+    if (expected && typeof captureScopeSession === 'function') {
+        throw new QQV2WorldbookGatewayError(
+            'QQ 作用域已切换，当前世界书操作已取消',
+            'worldbook_scope_inactive',
+        );
+    }
     if (!expected || typeof getActiveScopeId !== 'function') return;
     let active = '';
     try {
@@ -80,6 +95,9 @@ export function createQQV2SillyTavernWorldbookGateway(options = {}) {
     const getActiveScopeId = typeof options.getActiveScopeId === 'function'
         ? options.getActiveScopeId
         : null;
+    const captureScopeSession = typeof options.captureScopeSession === 'function'
+        ? options.captureScopeSession
+        : null;
     const listWorldbookNames = typeof options.getWorldbookNames === 'function'
         ? options.getWorldbookNames
         : () => getWorldbookNames({ strict: true });
@@ -88,16 +106,16 @@ export function createQQV2SillyTavernWorldbookGateway(options = {}) {
         : () => getCurrentCharacterWorldbooks({ strict: true });
 
     return Object.freeze({
-        async listBookNames(expectedScopeId) {
-            assertActiveScope(expectedScopeId, getActiveScopeId);
+        async listBookNames(expectedScopeId, operationOptions = {}) {
+            assertActiveScope(expectedScopeId, captureScopeSession, getActiveScopeId, operationOptions);
             const names = uniqueBookNames(await listWorldbookNames());
-            assertActiveScope(expectedScopeId, getActiveScopeId);
+            assertActiveScope(expectedScopeId, captureScopeSession, getActiveScopeId, operationOptions);
             return names;
         },
-        async getCurrentCharacterBookNames(expectedScopeId) {
-            assertActiveScope(expectedScopeId, getActiveScopeId);
+        async getCurrentCharacterBookNames(expectedScopeId, operationOptions = {}) {
+            assertActiveScope(expectedScopeId, captureScopeSession, getActiveScopeId, operationOptions);
             const source = await readCurrentCharacterWorldbooks();
-            assertActiveScope(expectedScopeId, getActiveScopeId);
+            assertActiveScope(expectedScopeId, captureScopeSession, getActiveScopeId, operationOptions);
             const primary = optionalBookName(source?.primary) || null;
             return {
                 primary,
@@ -105,17 +123,17 @@ export function createQQV2SillyTavernWorldbookGateway(options = {}) {
             };
         },
         async loadBook(name, expectedScopeId, operationOptions = {}) {
-            assertActiveScope(expectedScopeId, getActiveScopeId, operationOptions);
+            assertActiveScope(expectedScopeId, captureScopeSession, getActiveScopeId, operationOptions);
             const context = resolveWorldbookContext(getContext);
             const book = await context.loadWorldInfo(bookName(name));
-            assertActiveScope(expectedScopeId, getActiveScopeId, operationOptions);
+            assertActiveScope(expectedScopeId, captureScopeSession, getActiveScopeId, operationOptions);
             return book;
         },
         async saveBook(name, data, expectedScopeId, operationOptions = {}) {
-            assertActiveScope(expectedScopeId, getActiveScopeId, operationOptions);
+            assertActiveScope(expectedScopeId, captureScopeSession, getActiveScopeId, operationOptions);
             const context = resolveWorldbookContext(getContext);
             const result = await context.saveWorldInfo(bookName(name), data, true);
-            assertActiveScope(expectedScopeId, getActiveScopeId, operationOptions);
+            assertActiveScope(expectedScopeId, captureScopeSession, getActiveScopeId, operationOptions);
             return result;
         },
     });

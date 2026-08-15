@@ -315,9 +315,9 @@ SQL settlement 合同由 [`normalizeSqlMutationSettlement()`](../modules/phone-c
 - 成功判定必须严格遵守外部 API 契约：布尔接口只接受 `true`，插入接口只接受有效行号。
 - 批量删除的 partial failure 结果必须同时表达 `attemptedRowIndexes`、`failedRowIndexes`、`unattemptedRowIndexes` 与 `notDeletedRowIndexes`；`failedRowIndexes` 只表示已尝试但失败，UI 保留选择和反馈应优先消费 `notDeletedRowIndexes` 或映射后的 view 坐标，不要把“未尝试”伪装成“删除失败”。
 - UI 层不要直接调用 [`AutoCardUpdaterAPI`](../modules/phone-core/db-bridge.js:9)，应经 [`data-api.js`](../modules/phone-core/data-api.js:1) 或更具体 repository。
-- Raw SQL 派生字段如果需要读取某张表作为业务锚点，必须集中维护稳定的作者 DDL 表名候选；例如 [`chronicle-today-relation-sql.js`](../modules/phone-core/derived-fields/chronicle-today-relation-sql.js:1) 的 `CHRONICLE_TODAY_RELATION_ANCHOR_TABLES` 当前只允许 `global_state` 与 `current_status`，并要求候选表同时具备 `row_id` 与 `cur_time`。
-- 表/列结构检查必须走 `queryTableRowsViaApi()`，由数据库的别名解析层把作者 DDL 名、显示名、sheetKey 或 uid 绑定到当前拼音物理表；禁止再用 `sqlite_master`、`pragma_table_info()` 或字符串字面量检查结构。复杂 signature 与 mutation SQL 可以继续使用集中声明的作者 DDL 标识符，由数据库在执行前做 fail-closed 重绑定；不要扫描所有含 `cur_time` 的表猜测锚点。
-- Raw SQL mutation 的表名重绑定只应依赖 `UPDATE`、`FROM`、`JOIN` 等表声明位置，禁止使用 `chronicle.row_id`、`small_calendar_days.row_id` 这类“作者 DDL 表名 + 行身份”的限定引用关联目标行。批量派生更新应让计算 CTE 输出 `row_id AS target_row_id`，再通过 `UPDATE <作者 DDL 表名> ... FROM <计算 CTE> WHERE row_id = <计算 CTE>.target_row_id` 对号写回；`row_id` 仍是原表稳定身份，`target_row_id` 只负责消除内外层同名歧义。这样旧版物理表名可直接执行，新版拼音物理表也只需重绑定表声明，不会留下失效限定符。
+- Raw SQL 派生字段如果需要读取某张表，必须集中维护有序候选表名，并选择第一个“存在且必需字段完整”的表；[`chronicle-today-relation-sql.js`](../modules/phone-core/derived-fields/chronicle-today-relation-sql.js:1) 的日期锚点依次为 `quanjushujubiao`、`global_state`、`current_status`（要求 `row_id`、`cur_time`），纪要目标依次为 `jiyaobiao`、`chronicle`（要求 `row_id`、`time_span`、`today_relation`）；[`small-calendar-derived-fields-sql.js`](../modules/phone-core/derived-fields/small-calendar-derived-fields-sql.js:1) 的小日历目标依次为 `xiaorilibiao`、`small_calendar_days`（要求 `row_id`、`date_text`、`weekday_text`、`month_days`）。候选表缺失必须静默跳过，不得调用会输出缺表诊断的查询接口。
+- 候选表是否存在先走 `getTableAvailabilityViaApi()`；只有快照显示存在时才用 `queryTableRowsViaApi()` 做别名感知的字段检查。禁止再用 `sqlite_master`、`pragma_table_info()` 或字符串字面量检查结构。复杂 signature 与 mutation SQL 只可使用候选选择器给出的表名；不要扫描所有含 `cur_time` 的表猜测锚点。
+- Raw SQL mutation 的表名重绑定只应依赖 `UPDATE`、`FROM`、`JOIN` 等表声明位置，禁止使用 `chronicle.row_id`、`small_calendar_days.row_id` 这类“表名 + 行身份”的限定引用关联目标行。批量派生更新应让计算 CTE 输出 `row_id AS target_row_id`，再通过 `UPDATE <候选表名> ... FROM <计算 CTE> WHERE row_id = <计算 CTE>.target_row_id` 对号写回；`row_id` 仍是原表稳定身份，`target_row_id` 只负责消除内外层同名歧义。这样旧版 DDL 名与新版拼音物理表名都可以安全执行，不会留下失效限定符。
 - 派生 mutation 的合同测试不得只检查 SQL 字符串；必须至少覆盖原作者 DDL 表名直接执行，以及模拟数据库只重绑定表声明后的拼音物理表执行，防止逻辑表名前缀再次漏进关联条件。
 
 
@@ -358,6 +358,8 @@ sequenceDiagram
 
 - [`facade.js`](../modules/qq-v2/application/facade.js) 是未来 UI 的唯一应用入口，返回领域状态、可执行能力与失败或只读原因。
 - [`default-runtime.js`](../modules/qq-v2/runtime/default-runtime.js) 负责扩展级 runtime 生命周期与宿主事件转发；[`production-runtime.js`](../modules/qq-v2/application/production-runtime.js) 组合状态仓储、请求、世界书和主动消息服务。
+- [`runtime.js`](../modules/qq-v2/runtime/runtime.js) 通过 [`scope-coordinator.js`](../modules/qq-v2/runtime/scope-coordinator.js) 管理 Scope Session：每次 refresh 请求立即撤销旧 Session，即使 scopeId 相同也创建新 generation；宿主读取、转场与 ready 回调仍在单一 host mutation lane 串行，只有最新请求可发布 ready Session，旧 Session 的异步写入必须以 `scope_inactive` 停止。
+- 宿主 `CHAT_CHANGED` 完成新 Scope Session 后，若手机当前可见且 route 为 `qq` 或 `qq:*`，入口层必须重渲当前 route，让旧 QQ lifecycle 销毁并以新 Session 重挂；Facade 订阅故意只接收挂载时的 scope 事件，不能把跨 scope 通知当成普通页面刷新。
 - [`state-store.js`](../modules/qq-v2/storage/state-store.js) 保存 v2 领域状态；会话、消息、资源与世界书投影不写回表格。
 - [`action-service.js`](../modules/qq-v2/protocol/action-service.js) 解析并原子校验 AI 动作批次，[`projection-service.js`](../modules/qq-v2/worldbook/projection-service.js) 管理真实世界书条目投影与恢复。
 - [`conversation-swipe.js`](../modules/qq-v2/ui/conversation-swipe.js) 独立管理消息页会话行的横向拖动、开合吸附和滑动后点击抑制；拖动偏移通过 `--yuzi-qq-swipe-offset` 交给 CSS，删除确认与领域删除仍由 [`app.js`](../modules/qq-v2/ui/app.js) 和 Facade 负责。
@@ -1350,7 +1352,9 @@ graph TD
 
 - [`createPhoneViewScrollState()`](../modules/phone-core/view-scroll-state.js) 是跨 App 复用入口。页面必须显式注册页面 key、滚动根和恢复模式；动态列表使用稳定内容锚点，设置表单使用受限的 `scrollTop`。
 - 滚动快照同时绑定作用域 key、页面 key 和注册 key。切换 SillyTavern 聊天、QQ 根 Tab、会话或设置二级页后，旧快照必须失效，禁止把滚动位置串到另一个视图。
+- [`createViewSnapshotCache()`](../modules/qq-v2/ui/view-snapshot-cache.js) 只为消息根页、私聊页和会话设置页保留有限的上一帧 DOM，当前容量为 4；切换时必须先恢复目标快照，没有快照则立即提交固定页面框架，再从 Facade 后台读取事实数据并原子替换。图片资料等媒体密集页面不进入 DOM 快照缓存，禁止把该机制扩展成全页面常驻缓存。
 - [`createRenderLeaseCoordinator()`](../modules/qq-v2/ui/render-lease-coordinator.js) 管理 QQ 渲染期 Blob URL。新 DOM 完成替换前保留旧画面的租约；相同资源跨刷新复用，只有后继画面确认不再使用或 QQ 销毁时才释放。
+- 普通媒体保持零空闲缓存；聊天/资料背景、头像和表情分别使用独立的有限租约缓存，当前上限为 8、48、96。删除图片资料时必须同步失效头像与背景缓存，恢复 DOM 快照时不得引用已释放的 Blob URL。
 - Facade 高频通知由 QQ route lifecycle 合并为“一个进行中刷新 + 一个最新待刷新”。保存动作仍以运行时状态为事实源，但同一波通知不得并发重建多份页面。
 - 小手机 resize start 只关闭临时交互层并恢复当前视图锚点，不得为了响应 CSS 尺寸变化重建业务页面。
 

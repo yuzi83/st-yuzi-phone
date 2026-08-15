@@ -226,12 +226,33 @@ export function createQQV2GlobalRuntimeSettings(options = {}) {
         throw new TypeError('QQ v2 global runtime settings need a state store');
     }
 
+    const assertScopeMutationCurrent = (scopeId, operationOptions = {}) => {
+        if (operationOptions?.allowInactiveScope === true || !operationOptions?.scopeSession) return;
+        const scopeSession = operationOptions.scopeSession;
+        try {
+            if (asText(scopeSession.scopeId, 512) !== asText(scopeId, 512)) throw new Error('scope mismatch');
+            if (typeof scopeSession.assertCurrent === 'function') scopeSession.assertCurrent();
+            else if (scopeSession.isCurrent?.() !== true) throw new Error('scope inactive');
+            if (scopeSession.signal?.aborted === true) throw new Error('scope aborted');
+            return;
+        } catch {
+            const error = new Error('QQ 作用域已失效');
+            error.code = 'scope_inactive';
+            throw error;
+        }
+    };
+
+    const transactScoped = (scopeId, operationOptions, mutator) => stateStore.transact((state) => {
+        assertScopeMutationCurrent(scopeId, operationOptions);
+        return mutator(state);
+    });
+
     return Object.freeze({
-        async get(scopeId = '') {
-            return stateStore.transact((state) => clone(migrateSettings(state, scopeId)));
+        async get(scopeId = '', operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => clone(migrateSettings(state, scopeId)));
         },
-        async update(scopeId = '', patch = {}) {
-            return stateStore.transact((state) => {
+        async update(scopeId = '', patch = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
                 const current = migrateSettings(state, scopeId);
                 const next = applyPatch(current, patch);
                 const proactiveChanged = next.proactive.enabled !== current.proactive.enabled

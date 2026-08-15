@@ -100,14 +100,37 @@ export function createQQV2ProactiveService(options = {}) {
         || typeof requestService.enqueueProactive !== 'function') {
         throw new TypeError('QQ v2 主动周期需要主动请求仲裁接口');
     }
-    const epochs = new Map();
+    const configRevisionByScope = new Map();
     const privateOnly = options.privateOnly === true;
     const ensureScope = typeof repository.ensureScope === 'function' ? repository.ensureScope.bind(repository) : async () => {};
+    const captureScopeSession = typeof options.captureScopeSession === 'function'
+        ? options.captureScopeSession
+        : (scopeId) => Object.freeze({ scopeId, isCurrent: () => true, isReady: () => true });
 
-    const advanceEpoch = (scopeId) => {
-        const next = (epochs.get(scopeId) || 0) + 1;
-        epochs.set(scopeId, next);
+    const advanceConfigRevision = (scopeId) => {
+        const next = (configRevisionByScope.get(scopeId) || 0) + 1;
+        configRevisionByScope.set(scopeId, next);
         return next;
+    };
+
+    const isUsableScopeSession = (session) => {
+        try {
+            return typeof session?.isCurrent === 'function'
+                && typeof session?.isReady === 'function'
+                && session.isCurrent() === true
+                && session.isReady() === true;
+        } catch {
+            return false;
+        }
+    };
+
+    const captureUsableScopeSession = (scopeId) => {
+        try {
+            const session = captureScopeSession(scopeId);
+            return isUsableScopeSession(session) ? session : null;
+        } catch {
+            return null;
+        }
     };
 
     const listStickers = typeof options.listStickers === 'function' ? options.listStickers : async () => [];
@@ -140,6 +163,8 @@ export function createQQV2ProactiveService(options = {}) {
                 stickers: input.stickers,
                 stickerReferences: input.stickerReferences,
                 storyTime: input.storyTime,
+                scopeSession: input.scopeSession,
+                isCurrent: input.isCurrent,
             });
         }
         return null;
@@ -253,15 +278,17 @@ export function createQQV2ProactiveService(options = {}) {
         };
     };
 
-    const executeCycle = async ({ scopeId, kind, epoch, signal, isCurrent }) => {
+    const executeCycle = async ({ scopeId, kind, configRevision, scopeSession, signal, isCurrent }) => {
         if (privateOnly && kind !== 'private') return { status: 'cancelled' };
-        const current = () => epochs.get(scopeId) === epoch
+        const current = () => configRevisionByScope.get(scopeId) === configRevision
             && !signal?.aborted
+            && isUsableScopeSession(scopeSession)
             && (typeof isCurrent !== 'function' || isCurrent());
         if (!current()) return { status: 'cancelled' };
         const scope = await requireFunction(repository.getScope, 'repository.getScope')(scopeId);
         if (!scope || !current()) return { status: 'cancelled' };
-        const runtimeSettings = await runtimeSettingsResolver(scopeId, scope) || scope.settings || {};
+        const runtimeSettings = await runtimeSettingsResolver(scopeId, scope, { scopeSession }) || scope.settings || {};
+        if (!current()) return { status: 'cancelled' };
         const apiPresetId = asText(runtimeSettings.activeApiPresetId, 256);
         const promptPresetId = asText(
             kind === 'group' ? runtimeSettings.groupProactivePresetId : runtimeSettings.privateProactivePresetId,
@@ -294,6 +321,7 @@ export function createQQV2ProactiveService(options = {}) {
         const stickerCatalog = buildQQV2StickerCatalog(stickers);
         const promptContext = await getPromptContext({
             scopeId,
+            scopeSession,
             kind,
             scope,
             runtimeSettings,
@@ -301,6 +329,7 @@ export function createQQV2ProactiveService(options = {}) {
             friendReferences,
             storyTime,
         }) || {};
+        if (!current()) return { status: 'cancelled' };
         const variables = {
             ...promptContext,
             privatePerson: '无',
@@ -339,6 +368,7 @@ export function createQQV2ProactiveService(options = {}) {
             stickers: new Set(Object.keys(stickerCatalog.references)),
             stickerReferences: stickerCatalog.references,
             storyTime,
+            scopeSession,
             isCurrent: current,
         });
         if (!current()) return { status: 'cancelled' };
@@ -346,32 +376,38 @@ export function createQQV2ProactiveService(options = {}) {
             ...candidates.map((candidate) => candidate.conversationId),
             ...(Array.isArray(actionResult?.createdConversationIds) ? actionResult.createdConversationIds : []),
         ])];
+        if (!current()) return { status: 'cancelled' };
         try {
             await syncWorldbook({
                 scopeId,
+                scopeSession,
                 conversationIds,
                 storyTime,
                 userName: asText(getUserName(), 256),
                 actionResult,
             });
         } catch (error) {
+            if (!current()) return { status: 'cancelled' };
             try {
                 onProjectionError(error, { scopeId, conversationIds, storyTime, actionResult });
             } catch {
                 // Projection observers are diagnostic only and cannot turn a committed QQ batch into a failure.
             }
         }
+        if (!current()) return { status: 'cancelled' };
         return { status: 'succeeded' };
     };
 
     return Object.freeze({
-        async getState(scopeId) {
+        async getState(scopeId, options = {}) {
             const normalizedScopeId = asText(scopeId, 512);
             if (!normalizedScopeId) throw new QQV2ProactiveError('QQ 作用域 ID 不能为空', 'scope_required');
-            await ensureScope(normalizedScopeId);
+            const scopeSession = options?.scopeSession;
+            const operationOptions = scopeSession ? { scopeSession } : {};
+            const scope = await ensureScope(normalizedScopeId, null, operationOptions);
             const [state, runtimeSettings] = await Promise.all([
                 repository.getProactiveSettings(normalizedScopeId),
-                runtimeSettingsResolver(normalizedScopeId),
+                runtimeSettingsResolver(normalizedScopeId, scope, operationOptions),
             ]);
             const proactive = runtimeSettings?.proactive || {};
             const resolved = {
@@ -384,14 +420,21 @@ export function createQQV2ProactiveService(options = {}) {
         async configure(input = {}) {
             const scopeId = asText(input.scopeId, 512);
             if (!scopeId) throw new QQV2ProactiveError('QQ 作用域 ID 不能为空', 'scope_required');
-            await ensureScope(scopeId);
+            const scopeSession = Object.hasOwn(input, 'scopeSession')
+                ? input.scopeSession
+                : captureUsableScopeSession(scopeId);
+            if (!isUsableScopeSession(scopeSession)) {
+                throw new QQV2ProactiveError('QQ 作用域已失效', 'scope_inactive');
+            }
+            const operationOptions = { scopeSession };
+            await ensureScope(scopeId, null, operationOptions);
             const before = await repository.getProactiveSettings(scopeId);
             const patch = {};
             if (Object.hasOwn(input, 'enabled')) patch.enabled = input.enabled === true;
             if (Object.hasOwn(input, 'everyTurns')) patch.everyTurns = input.everyTurns;
-            const after = await repository.updateProactiveSettings(scopeId, patch);
+            const after = await repository.updateProactiveSettings(scopeId, patch, operationOptions);
             if (before.enabled !== after.enabled || before.everyTurns !== after.everyTurns) {
-                advanceEpoch(scopeId);
+                advanceConfigRevision(scopeId);
                 requestService.cancelProactive({ scopeId });
             }
             return cloneState(privateOnly ? { ...after, nextKind: 'private' } : after);
@@ -399,7 +442,24 @@ export function createQQV2ProactiveService(options = {}) {
         async recordSuccessfulStoryReply(input = {}) {
             const scopeId = asText(input.scopeId, 512);
             if (!scopeId) throw new QQV2ProactiveError('QQ 作用域 ID 不能为空', 'scope_required');
-            await ensureScope(scopeId);
+            const scopeSession = isUsableScopeSession(input.scopeSession)
+                ? input.scopeSession
+                : captureUsableScopeSession(scopeId);
+            if (!scopeSession) {
+                return Object.freeze({
+                    counted: false,
+                    triggered: false,
+                    skipped: 'scope-session-inactive',
+                });
+            }
+            await ensureScope(scopeId, null, { scopeSession });
+            if (!isUsableScopeSession(scopeSession)) {
+                return Object.freeze({
+                    counted: false,
+                    triggered: false,
+                    skipped: 'scope-session-inactive',
+                });
+            }
             if (!isSuccessfulStoryReply(input.message)) {
                 return Object.freeze({
                     counted: false,
@@ -407,14 +467,32 @@ export function createQQV2ProactiveService(options = {}) {
                     skipped: 'not-successful-story-reply',
                 });
             }
-            const epoch = epochs.get(scopeId) || 0;
-            const runtimeSettings = await runtimeSettingsResolver(scopeId);
-            const cycle = await repository.consumeProactiveStoryReply(scopeId, runtimeSettings?.proactive);
-            if (epochs.get(scopeId) !== epoch) {
+            const configRevision = configRevisionByScope.get(scopeId) || 0;
+            const runtimeSettings = await runtimeSettingsResolver(scopeId, null, { scopeSession });
+            if (!isUsableScopeSession(scopeSession)) {
+                return Object.freeze({
+                    counted: false,
+                    triggered: false,
+                    skipped: 'scope-session-inactive',
+                });
+            }
+            const cycle = await repository.consumeProactiveStoryReply(
+                scopeId,
+                runtimeSettings?.proactive,
+                { scopeSession },
+            );
+            if (configRevisionByScope.get(scopeId) !== configRevision) {
                 return Object.freeze({
                     counted: false,
                     triggered: false,
                     skipped: 'configuration-changed',
+                });
+            }
+            if (!isUsableScopeSession(scopeSession)) {
+                return Object.freeze({
+                    counted: false,
+                    triggered: false,
+                    skipped: 'scope-session-inactive',
                 });
             }
             if (!cycle.triggered) {
@@ -427,9 +505,21 @@ export function createQQV2ProactiveService(options = {}) {
                 });
             }
             const cycleKind = privateOnly ? 'private' : cycle.kind;
+            if (!isUsableScopeSession(scopeSession)) {
+                return Object.freeze({
+                    counted: false,
+                    triggered: false,
+                    skipped: 'scope-session-inactive',
+                });
+            }
             const queued = await requestService.enqueueProactive({
                 scopeId,
-                execute: (request) => executeCycle({ ...request, kind: cycleKind, epoch }),
+                execute: (request) => executeCycle({
+                    ...request,
+                    kind: cycleKind,
+                    configRevision,
+                    scopeSession,
+                }),
             });
             return Object.freeze({
                 counted: true,
@@ -442,7 +532,7 @@ export function createQQV2ProactiveService(options = {}) {
         cancelScope(input = {}) {
             const scopeId = asText(typeof input === 'string' ? input : input.scopeId, 512);
             if (!scopeId) return 0;
-            advanceEpoch(scopeId);
+            advanceConfigRevision(scopeId);
             return requestService.cancelProactive({ scopeId });
         },
     });

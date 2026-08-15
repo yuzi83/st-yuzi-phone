@@ -60,7 +60,7 @@ import {
     stopPhoneBackgroundServices,
 } from './modules/phone-core/background-services.js';
 import { getCurrentRoute } from './modules/phone-core/routing.js';
-import { requestHomePhoneRouteRender } from './modules/phone-core/route-runtime.js';
+import { requestCurrentPhoneRouteRender, requestHomePhoneRouteRender } from './modules/phone-core/route-runtime.js';
 import {
     destroyQQV2Runtime,
     handleQQV2CharacterMessageRendered,
@@ -333,6 +333,17 @@ function scheduleVisibleHomeRefreshAfterTableUpdate() {
     return true;
 }
 
+async function handleQQV2ChatChangedAndRefreshRoute(chatId) {
+    const scope = await handleQQV2ChatChanged(chatId);
+    if (!scope?.scopeId || isDestroying || !isPhoneVisibleForHomeRefresh()) return scope;
+
+    const route = getCurrentRoute();
+    if (route !== 'qq' && !route.startsWith('qq:')) return scope;
+
+    await requestCurrentPhoneRouteRender({ reason: 'qq-chat-changed' });
+    return scope;
+}
+
 function resetInitializationState() {
     initPromise = null;
     isInitializing = false;
@@ -393,7 +404,7 @@ async function registerEventListeners() {
     await registerPhoneEventListeners({
         onBackgroundChatChanged: handlePhoneBackgroundChatChanged,
         onVisiblePhoneRefresh: scheduleVisibleHomeRefreshAfterTableUpdate,
-        onQQV2ChatChanged: handleQQV2ChatChanged,
+        onQQV2ChatChanged: handleQQV2ChatChangedAndRefreshRoute,
         onQQV2ChatDeleted: handleQQV2ChatDeleted,
         onQQV2GroupChatDeleted: handleQQV2GroupChatDeleted,
         onQQV2CharacterMessageRendered: handleQQV2CharacterMessageRendered,

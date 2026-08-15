@@ -1,6 +1,7 @@
 export {
     getTableData,
     getTableDataAsync,
+    getTableAvailabilityViaApi,
     processTableData,
     getSheetKeys,
     updateTableCell,

@@ -1,4 +1,8 @@
 export const SMALL_CALENDAR_DERIVED_FIELDS_TABLE = 'small_calendar_days';
+export const SMALL_CALENDAR_DERIVED_FIELDS_TABLES = Object.freeze([
+    'xiaorilibiao',
+    SMALL_CALENDAR_DERIVED_FIELDS_TABLE,
+]);
 
 export const SMALL_CALENDAR_DERIVED_FIELDS_REQUIRED_COLUMNS = Object.freeze([
     'row_id',
@@ -6,6 +10,14 @@ export const SMALL_CALENDAR_DERIVED_FIELDS_REQUIRED_COLUMNS = Object.freeze([
     'weekday_text',
     'month_days',
 ]);
+
+const SMALL_CALENDAR_DERIVED_FIELDS_TABLE_NAMES = new Set(SMALL_CALENDAR_DERIVED_FIELDS_TABLES);
+
+export function normalizeSmallCalendarDerivedFieldsTable(tableName = SMALL_CALENDAR_DERIVED_FIELDS_TABLE) {
+    const normalizedTableName = String(tableName ?? '').trim();
+    if (SMALL_CALENDAR_DERIVED_FIELDS_TABLE_NAMES.has(normalizedTableName)) return normalizedTableName;
+    throw new TypeError(`Unsupported small calendar derived fields table: ${normalizedTableName || '(empty)'}`);
+}
 
 const VALID_DATE_CONDITION = `date_text IS NOT NULL
     AND TRIM(date_text) <> ''
@@ -25,7 +37,8 @@ const WEEKDAY_CASE_SQL = `CASE strftime('%w', date(TRIM(date_text)))
 
 const MONTH_DAYS_SQL = `CAST(strftime('%d', date(TRIM(date_text), 'start of month', '+1 month', '-1 day')) AS INTEGER)`;
 
-export function buildSmallCalendarDerivedFieldsSignatureSql() {
+export function buildSmallCalendarDerivedFieldsSignatureSql(tableName = SMALL_CALENDAR_DERIVED_FIELDS_TABLE) {
+    const calendarTableName = normalizeSmallCalendarDerivedFieldsTable(tableName);
     return `WITH
 calendar_inputs AS (
     SELECT
@@ -34,14 +47,14 @@ calendar_inputs AS (
         COALESCE(TRIM(weekday_text), '') AS weekday_text,
         COALESCE(CAST(month_days AS TEXT), '') AS month_days,
         CASE WHEN ${VALID_DATE_CONDITION} THEN 1 ELSE 0 END AS is_valid_date
-    FROM ${SMALL_CALENDAR_DERIVED_FIELDS_TABLE}
+    FROM ${calendarTableName}
 ),
 computed_calendar_fields AS (
     SELECT
         row_id,
         ${WEEKDAY_CASE_SQL} AS new_weekday_text,
         ${MONTH_DAYS_SQL} AS new_month_days
-    FROM ${SMALL_CALENDAR_DERIVED_FIELDS_TABLE}
+    FROM ${calendarTableName}
     WHERE ${VALID_DATE_CONDITION}
 ),
 ordered_sources AS (
@@ -76,17 +89,18 @@ SELECT
     COALESCE((SELECT COUNT(*) FROM pending_updates), 0) AS pending_update_count`;
 }
 
-export function buildSmallCalendarDerivedFieldsUpdateSql() {
+export function buildSmallCalendarDerivedFieldsUpdateSql(tableName = SMALL_CALENDAR_DERIVED_FIELDS_TABLE) {
+    const calendarTableName = normalizeSmallCalendarDerivedFieldsTable(tableName);
     return `WITH
 computed_calendar_fields AS (
     SELECT
         row_id AS target_row_id,
         ${WEEKDAY_CASE_SQL} AS new_weekday_text,
         ${MONTH_DAYS_SQL} AS new_month_days
-    FROM ${SMALL_CALENDAR_DERIVED_FIELDS_TABLE}
+    FROM ${calendarTableName}
     WHERE ${VALID_DATE_CONDITION}
 )
-UPDATE ${SMALL_CALENDAR_DERIVED_FIELDS_TABLE}
+UPDATE ${calendarTableName}
 SET
     weekday_text = computed_calendar_fields.new_weekday_text,
     month_days = computed_calendar_fields.new_month_days
