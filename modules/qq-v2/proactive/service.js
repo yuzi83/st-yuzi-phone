@@ -7,33 +7,20 @@ function asText(value, maxLength = 0) {
 }
 
 function requireRepository(repository) {
-    if (!repository
-        || typeof repository.getProactiveSettings !== 'function'
-        || typeof repository.updateProactiveSettings !== 'function'
-        || typeof repository.consumeProactiveStoryReply !== 'function') {
-        throw new TypeError('QQ v2 主动周期需要支持主动设置的 repository');
+    if (!repository || typeof repository !== 'object') {
+        throw new TypeError('QQ v2 主动周期需要有效的 repository');
     }
     return repository;
 }
 
 function cloneState(state) {
+    const everyTurns = Number(state?.everyTurns);
     return Object.freeze({
         enabled: state?.enabled === true,
-        everyTurns: Number(state?.everyTurns) || 5,
-        count: Number(state?.count) || 0,
-        nextKind: state?.nextKind === 'group' ? 'group' : 'private',
+        everyTurns: Number.isInteger(everyTurns) && everyTurns > 0 ? everyTurns : 5,
     });
 }
 
-function isSuccessfulStoryReply(message) {
-    return message?.role === 'assistant'
-        && message?.isSystem !== true
-        && message?.is_system !== true
-        && message?.isHidden !== true
-        && message?.is_hidden !== true
-        && message?.isSuccessful !== false
-        && message?.is_successful !== false;
-}
 
 function requireFunction(value, label) {
     if (typeof value !== 'function') throw new QQV2ProactiveError(`QQ 主动周期缺少 ${label}`, 'dependency_missing');
@@ -90,7 +77,7 @@ function buildGroupIdentity(candidates, friendReferences = []) {
 }
 
 /**
- * QQ 正文 N 轮主动周期的应用服务。网络、协议和投影在后续执行切片中经公开 seam 注入。
+ * QQ 主动周期的应用服务。网络、协议和投影在后续执行切片中经公开 seam 注入。
  */
 export function createQQV2ProactiveService(options = {}) {
     const repository = requireRepository(options.repository);
@@ -405,113 +392,35 @@ export function createQQV2ProactiveService(options = {}) {
             const scopeSession = options?.scopeSession;
             const operationOptions = scopeSession ? { scopeSession } : {};
             const scope = await ensureScope(normalizedScopeId, null, operationOptions);
-            const [state, runtimeSettings] = await Promise.all([
-                repository.getProactiveSettings(normalizedScopeId),
-                runtimeSettingsResolver(normalizedScopeId, scope, operationOptions),
-            ]);
-            const proactive = runtimeSettings?.proactive || {};
-            const resolved = {
-                ...state,
-                ...(Object.hasOwn(proactive, 'enabled') ? { enabled: proactive.enabled === true } : {}),
-                ...(Object.hasOwn(proactive, 'everyTurns') ? { everyTurns: proactive.everyTurns } : {}),
-            };
-            return cloneState(privateOnly ? { ...resolved, nextKind: 'private' } : resolved);
+            const runtimeSettings = await runtimeSettingsResolver(normalizedScopeId, scope, operationOptions);
+            return cloneState(runtimeSettings?.proactive);
         },
-        async configure(input = {}) {
-            const scopeId = asText(input.scopeId, 512);
-            if (!scopeId) throw new QQV2ProactiveError('QQ 作用域 ID 不能为空', 'scope_required');
-            const scopeSession = Object.hasOwn(input, 'scopeSession')
-                ? input.scopeSession
-                : captureUsableScopeSession(scopeId);
-            if (!isUsableScopeSession(scopeSession)) {
-                throw new QQV2ProactiveError('QQ 作用域已失效', 'scope_inactive');
-            }
-            const operationOptions = { scopeSession };
-            await ensureScope(scopeId, null, operationOptions);
-            const before = await repository.getProactiveSettings(scopeId);
-            const patch = {};
-            if (Object.hasOwn(input, 'enabled')) patch.enabled = input.enabled === true;
-            if (Object.hasOwn(input, 'everyTurns')) patch.everyTurns = input.everyTurns;
-            const after = await repository.updateProactiveSettings(scopeId, patch, operationOptions);
-            if (before.enabled !== after.enabled || before.everyTurns !== after.everyTurns) {
-                advanceConfigRevision(scopeId);
-                requestService.cancelProactive({ scopeId });
-            }
-            return cloneState(privateOnly ? { ...after, nextKind: 'private' } : after);
-        },
-        async recordSuccessfulStoryReply(input = {}) {
+        async enqueueProactiveCycle(input = {}) {
             const scopeId = asText(input.scopeId, 512);
             if (!scopeId) throw new QQV2ProactiveError('QQ 作用域 ID 不能为空', 'scope_required');
             const scopeSession = isUsableScopeSession(input.scopeSession)
                 ? input.scopeSession
                 : captureUsableScopeSession(scopeId);
             if (!scopeSession) {
-                return Object.freeze({
-                    counted: false,
-                    triggered: false,
-                    skipped: 'scope-session-inactive',
-                });
+                return Object.freeze({ triggered: false, queued: false, skipped: 'scope-session-inactive' });
             }
-            await ensureScope(scopeId, null, { scopeSession });
+            const scope = await ensureScope(scopeId, null, { scopeSession });
             if (!isUsableScopeSession(scopeSession)) {
-                return Object.freeze({
-                    counted: false,
-                    triggered: false,
-                    skipped: 'scope-session-inactive',
-                });
+                return Object.freeze({ triggered: false, queued: false, skipped: 'scope-session-inactive' });
             }
-            if (!isSuccessfulStoryReply(input.message)) {
-                return Object.freeze({
-                    counted: false,
-                    triggered: false,
-                    skipped: 'not-successful-story-reply',
-                });
-            }
-            const configRevision = configRevisionByScope.get(scopeId) || 0;
-            const runtimeSettings = await runtimeSettingsResolver(scopeId, null, { scopeSession });
-            if (!isUsableScopeSession(scopeSession)) {
-                return Object.freeze({
-                    counted: false,
-                    triggered: false,
-                    skipped: 'scope-session-inactive',
-                });
-            }
-            const cycle = await repository.consumeProactiveStoryReply(
-                scopeId,
-                runtimeSettings?.proactive,
-                { scopeSession },
-            );
+            const configRevision = configRevisionByScope.get(scopeId) ?? 0;
+            configRevisionByScope.set(scopeId, configRevision);
+            const runtimeSettings = await runtimeSettingsResolver(scopeId, scope, { scopeSession });
             if (configRevisionByScope.get(scopeId) !== configRevision) {
-                return Object.freeze({
-                    counted: false,
-                    triggered: false,
-                    skipped: 'configuration-changed',
-                });
+                return Object.freeze({ triggered: false, queued: false, skipped: 'configuration-changed' });
             }
             if (!isUsableScopeSession(scopeSession)) {
-                return Object.freeze({
-                    counted: false,
-                    triggered: false,
-                    skipped: 'scope-session-inactive',
-                });
+                return Object.freeze({ triggered: false, queued: false, skipped: 'scope-session-inactive' });
             }
-            if (!cycle.triggered) {
-                return Object.freeze({
-                    counted: cycle.enabled === true,
-                    triggered: false,
-                    cycleKind: null,
-                    queued: false,
-                    skipped: '',
-                });
+            if (runtimeSettings?.proactive?.enabled !== true) {
+                return Object.freeze({ triggered: false, queued: false, skipped: 'disabled' });
             }
-            const cycleKind = privateOnly ? 'private' : cycle.kind;
-            if (!isUsableScopeSession(scopeSession)) {
-                return Object.freeze({
-                    counted: false,
-                    triggered: false,
-                    skipped: 'scope-session-inactive',
-                });
-            }
+            const cycleKind = privateOnly || input.kind !== 'group' ? 'private' : 'group';
             const queued = await requestService.enqueueProactive({
                 scopeId,
                 execute: (request) => executeCycle({
@@ -522,7 +431,6 @@ export function createQQV2ProactiveService(options = {}) {
                 }),
             });
             return Object.freeze({
-                counted: true,
                 triggered: true,
                 cycleKind,
                 queued: queued?.queued === true,

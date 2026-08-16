@@ -500,52 +500,6 @@ async function testScopedProjectionWriteRevalidatesInsideTransaction() {
     );
 }
 
-async function testScopedProactiveConfigurationRevalidatesInsideTransaction() {
-    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
-    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
-    const stateStore = createMemoryQQV2StateStore();
-    const repository = createQQV2Repository({ stateStore });
-    await repository.ensureScope('scope-a');
-    const before = await repository.getProactiveSettings('scope-a');
-
-    let releaseBlocker;
-    let markBlockerEntered;
-    const blockerEntered = new Promise((resolve) => { markBlockerEntered = resolve; });
-    const blocker = stateStore.transact(async () => {
-        markBlockerEntered();
-        await new Promise((resolve) => { releaseBlocker = resolve; });
-    });
-    await blockerEntered;
-
-    let current = true;
-    const scopeSession = {
-        scopeId: 'scope-a',
-        isCurrent: () => current,
-        assertCurrent() {
-            if (current) return this;
-            const error = new Error('QQ scope scope-a is no longer current');
-            error.code = 'scope_inactive';
-            throw error;
-        },
-    };
-    const write = repository.updateProactiveSettings(
-        'scope-a',
-        { enabled: true, everyTurns: 1 },
-        { scopeSession },
-    );
-    const rejected = assert.rejects(write, (error) => error?.code === 'scope_inactive');
-    current = false;
-    releaseBlocker();
-
-    await blocker;
-    await rejected;
-    assert.deepEqual(
-        await repository.getProactiveSettings('scope-a'),
-        before,
-        '失效 Scope Session 的排队事务不得修改主动消息配置',
-    );
-}
-
 async function testScopedConversationOpenRevalidatesInsideTransaction() {
     const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
     const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
@@ -604,7 +558,6 @@ async function main() {
     await testGroupManagementUsesCurrentUsersRealPermission();
     await testAiActionBatchIsAtomicAndNewConversationNeedsFirstMessage();
     await testScopedProjectionWriteRevalidatesInsideTransaction();
-    await testScopedProactiveConfigurationRevalidatesInsideTransaction();
     await testScopedConversationOpenRevalidatesInsideTransaction();
     console.log('[qq-v2-domain-contract] passed');
 }

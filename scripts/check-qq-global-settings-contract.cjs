@@ -50,7 +50,7 @@ async function testGlobalRuntimeStorage() {
             privateProactivePresetId: 'legacy-proactive',
             hostContextTurns: 0,
             conversationHistoryLimit: 0,
-            proactive: { enabled: true, everyTurns: 4, count: 1, nextKind: 'group' },
+            proactive: { enabled: true, everyTurns: 4 },
             worldbook: {
                 bookName: 'scope-a-book',
                 timeWindow: { mode: 'relative', value: 2, unit: 'day' },
@@ -59,7 +59,6 @@ async function testGlobalRuntimeStorage() {
                 keywords: ['Legacy', 'legacy', ' dawn '],
             },
         });
-        state.scopes['scope-b'].settings.proactive.count = 1;
         state.sharedResources.worldbookInjectionEnabled = true;
     });
     const runtimeSettings = createQQV2GlobalRuntimeSettings({ stateStore });
@@ -115,22 +114,18 @@ async function testGlobalRuntimeStorage() {
     assert.equal(scopeASettings.worldbook.bookName, undefined,
         'an explicit bookName patch is ignored by shared runtime settings');
     assert.equal((await runtimeSettings.get('scope-b')).privateReplyPresetId, 'reply-global');
-    assert.equal((await repository.getProactiveSettings('scope-a')).count, 0,
-        'changing global proactive settings resets every scope progress');
-    assert.equal((await repository.getProactiveSettings('scope-b')).count, 0);
-
-    const proactive = (await runtimeSettings.get('scope-a')).proactive;
-    await repository.consumeProactiveStoryReply('scope-a', proactive);
-    await repository.consumeProactiveStoryReply('scope-b', proactive);
-    const triggered = await repository.consumeProactiveStoryReply('scope-a', proactive);
-    assert.equal(triggered.triggered, true);
-    assert.equal((await repository.getProactiveSettings('scope-a')).count, 0);
-    assert.equal((await repository.getProactiveSettings('scope-b')).count, 1,
-        'story progress remains isolated per scope');
+    assert.deepEqual(scopeASettings.proactive, { enabled: true, everyTurns: 2 });
+    assert.deepEqual((await runtimeSettings.get('scope-b')).proactive, { enabled: true, everyTurns: 2 },
+        '主动消息设置在所有聊天 scope 间共享');
+    const migratedState = await stateStore.read();
+    assert.equal(Object.hasOwn(migratedState.scopes['scope-a'].settings, 'proactive'), false,
+        '首次读取共享设置会删除旧 scope 主动消息字段');
+    assert.equal(Object.hasOwn(migratedState.scopes['scope-b'].settings, 'proactive'), false,
+        '迁移会删除其他聊天 scope 的旧主动消息字段');
 
     await runtimeSettings.update('scope-a', { proactive: { everyTurns: 3 } });
-    assert.equal((await repository.getProactiveSettings('scope-a')).count, 0);
-    assert.equal((await repository.getProactiveSettings('scope-b')).count, 0);
+    assert.deepEqual((await runtimeSettings.get('scope-a')).proactive, { enabled: true, everyTurns: 3 });
+    assert.deepEqual((await runtimeSettings.get('scope-b')).proactive, { enabled: true, everyTurns: 3 });
     assert.equal(await runtimeSettings.clearPresetReferences('scope-a', 'api-global', ['activeApiPresetId']), 1);
     assert.equal((await runtimeSettings.get('scope-b')).activeApiPresetId, '');
 }
@@ -252,7 +247,7 @@ function settings(label) {
         groupProactivePresetId: `hidden-group-proactive-${label}`,
         hostContextTurns: 4,
         conversationHistoryLimit: 12,
-        proactive: { enabled: true, everyTurns: 3, count: 1, nextKind: 'private' },
+        proactive: { enabled: true, everyTurns: 3 },
         worldbook: {
             enabled: true,
             bookName: `book-${label}`,
@@ -283,7 +278,7 @@ async function main() {
             activeApiPresetId: 'api-a',
             privateReplyPresetId: 'reply-a',
             privateProactivePresetId: 'proactive-a',
-            proactive: { enabled: true, everyTurns: 3, count: 0, nextKind: 'private' },
+            proactive: { enabled: true, everyTurns: 3 },
         }],
     ]);
     const calls = [];

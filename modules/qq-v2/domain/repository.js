@@ -115,7 +115,7 @@ function emptyScope(scopeId) {
             groupProactivePresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.groupProactive,
             hostContextTurns: 3,
             conversationHistoryLimit: 100,
-            proactive: { enabled: false, everyTurns: 5, count: 0, nextKind: 'private' },
+
             worldbook: {
                 bookName: '',
                 timeWindow: { mode: 'relative', value: 1, unit: 'month' },
@@ -137,33 +137,6 @@ function createDefaultWorldbookSettings() {
     };
 }
 
-function createDefaultProactiveSettings() {
-    return {
-        enabled: false,
-        everyTurns: 5,
-        count: 0,
-        nextKind: 'private',
-    };
-}
-
-function normalizeProactiveEveryTurns(value, fallback = 5) {
-    const number = Number(value);
-    return Number.isInteger(number) && number > 0 ? number : fallback;
-}
-
-function ensureScopeProactiveState(scope) {
-    if (!scope.settings || typeof scope.settings !== 'object') scope.settings = {};
-    const defaults = createDefaultProactiveSettings();
-    const current = scope.settings.proactive && typeof scope.settings.proactive === 'object'
-        ? scope.settings.proactive
-        : {};
-    scope.settings.proactive = {
-        enabled: current.enabled === true,
-        everyTurns: normalizeProactiveEveryTurns(current.everyTurns, defaults.everyTurns),
-        count: Number.isInteger(Number(current.count)) && Number(current.count) >= 0 ? Number(current.count) : 0,
-        nextKind: current.nextKind === 'group' ? 'group' : 'private',
-    };
-}
 
 function createDefaultInjection() {
     return {
@@ -268,7 +241,7 @@ function ensureConversationInjection(conversation) {
 
 function ensureScopeQQV2State(scope) {
     const needsSettingsMigration = scope.settingsVersion !== SCOPE_SETTINGS_VERSION;
-    ensureScopeProactiveState(scope);
+
     ensureScopeWorldbookState(scope);
     const usesLegacyZeroDefaults = needsSettingsMigration
         && Number(scope.settings.hostContextTurns) === 0
@@ -889,59 +862,7 @@ export function createQQV2Repository(options = {}) {
                 })
                 .map((scope) => scope.scopeId);
         },
-        async getProactiveSettings(scopeId) {
-            const state = await stateStore.read();
-            const scope = getScope(state, scopeId, false);
-            return copy(scope.settings.proactive);
-        },
-        async updateProactiveSettings(scopeId, patch = {}, operationOptions = {}) {
-            return transactScoped(scopeId, operationOptions, (state) => {
-                const scope = getScope(state, scopeId, true);
-                const current = scope.settings.proactive;
-                const next = { ...current };
-                if (Object.hasOwn(patch, 'enabled')) next.enabled = patch.enabled === true;
-                if (Object.hasOwn(patch, 'everyTurns')) {
-                    const everyTurns = Number(patch.everyTurns);
-                    if (!Number.isInteger(everyTurns) || everyTurns <= 0) {
-                        throw new QQV2DomainError('主动消息轮数必须是正整数', 'proactive_turns_invalid');
-                    }
-                    next.everyTurns = everyTurns;
-                }
-                if (next.enabled !== current.enabled || next.everyTurns !== current.everyTurns) {
-                    next.count = 0;
-                    next.nextKind = 'private';
-                }
-                scope.settings.proactive = next;
-                return copy(next);
-            });
-        },
-        async consumeProactiveStoryReply(scopeId, configuration = null, operationOptions = {}) {
-            return transactScoped(scopeId, operationOptions, (state) => {
-                const scope = getScope(state, scopeId, false);
-                const persisted = scope.settings.proactive;
-                const source = configuration && typeof configuration === 'object' && !Array.isArray(configuration)
-                    ? configuration
-                    : persisted;
-                const current = {
-                    ...persisted,
-                    enabled: Object.hasOwn(source, 'enabled') ? source.enabled === true : persisted.enabled,
-                    everyTurns: Object.hasOwn(source, 'everyTurns')
-                        ? normalizeProactiveEveryTurns(source.everyTurns, persisted.everyTurns)
-                        : persisted.everyTurns,
-                };
-                if (!current.enabled) return copy({ ...current, triggered: false, kind: null });
-                const next = { ...current, count: current.count + 1 };
-                if (next.count < next.everyTurns) {
-                    scope.settings.proactive = { ...persisted, count: next.count, nextKind: next.nextKind };
-                    return copy({ ...next, triggered: false, kind: null });
-                }
-                const kind = next.nextKind;
-                next.count = 0;
-                next.nextKind = kind === 'private' ? 'group' : 'private';
-                scope.settings.proactive = { ...persisted, count: next.count, nextKind: next.nextKind };
-                return copy({ ...next, triggered: true, kind });
-            });
-        },
+
         async getWorldbookSettings(scopeId) {
             const state = await stateStore.read();
             const scope = getScope(state, scopeId, false);

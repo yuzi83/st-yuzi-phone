@@ -24,7 +24,6 @@ async function testRefinementDefaultsAndExactContactRoute() {
     const scope = await repository.ensureScope('scope-a');
     assert.equal(scope.settings.hostContextTurns, 3, 'new QQ scopes default to three host-context turns');
     assert.equal(scope.settings.conversationHistoryLimit, 100, 'new QQ scopes default to one hundred private-history turns');
-    assert.equal(scope.settings.proactive.everyTurns, 5, 'proactive messages keep the approved five-turn default');
 
     const first = await repository.createPrivateConversation('scope-a', { name: 'Alice' });
     const duplicate = await repository.createPrivateConversation('scope-a', { name: 'Alice' });

@@ -127,6 +127,8 @@ function backfillSharedSettings(current, legacy) {
     const fallback = asObject(legacy);
     const worldbook = asObject(source.worldbook);
     const fallbackWorldbook = asObject(fallback.worldbook);
+    const proactive = asObject(source.proactive);
+    const fallbackProactive = asObject(fallback.proactive);
     return {
         ...source,
         hostContextTurns: Object.hasOwn(source, 'hostContextTurns')
@@ -141,7 +143,13 @@ function backfillSharedSettings(current, legacy) {
             timeWindow: Object.hasOwn(worldbook, 'timeWindow') ? worldbook.timeWindow : fallbackWorldbook.timeWindow,
             light: Object.hasOwn(worldbook, 'light') ? worldbook.light : fallbackWorldbook.light,
             depth: Object.hasOwn(worldbook, 'depth') ? worldbook.depth : fallbackWorldbook.depth,
+
             keywords: Object.hasOwn(worldbook, 'keywords') ? worldbook.keywords : fallbackWorldbook.keywords,
+        },
+        proactive: {
+            ...proactive,
+            enabled: Object.hasOwn(proactive, 'enabled') ? proactive.enabled : fallbackProactive.enabled,
+            everyTurns: Object.hasOwn(proactive, 'everyTurns') ? proactive.everyTurns : fallbackProactive.everyTurns,
         },
     };
 }
@@ -157,19 +165,15 @@ function migrateSettings(state, scopeId) {
             legacy,
         ));
     }
+    clearLegacyScopeProactiveSettings(state);
     return sharedResources[STORAGE_KEY];
 }
 
-function resetScopeProactiveProgress(state) {
+function clearLegacyScopeProactiveSettings(state) {
     for (const scope of Object.values(asObject(state.scopes))) {
-        if (!scope || typeof scope !== 'object' || Array.isArray(scope)) continue;
-        if (!scope.settings || typeof scope.settings !== 'object' || Array.isArray(scope.settings)) scope.settings = {};
-        const current = asObject(scope.settings.proactive);
-        scope.settings.proactive = {
-            ...current,
-            count: 0,
-            nextKind: 'private',
-        };
+        const settings = scope?.settings;
+        if (!settings || typeof settings !== 'object' || Array.isArray(settings)) continue;
+        delete settings.proactive;
     }
 }
 
@@ -258,9 +262,7 @@ export function createQQV2GlobalRuntimeSettings(options = {}) {
                 const proactiveChanged = next.proactive.enabled !== current.proactive.enabled
                     || next.proactive.everyTurns !== current.proactive.everyTurns;
                 state.sharedResources[STORAGE_KEY] = next;
-                const resetScopeIds = proactiveChanged ? Object.keys(asObject(state.scopes)) : [];
-                if (proactiveChanged) resetScopeProactiveProgress(state);
-                return { settings: clone(next), proactiveChanged, resetScopeIds };
+                return { settings: clone(next), proactiveChanged };
             });
         },
         async clearPresetReferences(scopeId = '', presetId, settingKeys = []) {

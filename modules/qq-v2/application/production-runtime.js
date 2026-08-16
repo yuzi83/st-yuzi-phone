@@ -118,7 +118,7 @@ function defaultGlobalSettings() {
             depth: 999,
             keywords: [],
         },
-        proactive: { enabled: false, everyTurns: 5, count: 0, nextKind: 'private' },
+        proactive: { enabled: false, everyTurns: 5 },
     };
 }
 
@@ -143,7 +143,12 @@ function cloneGlobalSettings(settings) {
             ? Number(source.conversationHistoryLimit)
             : defaults.conversationHistoryLimit,
         worldbook: { ...defaults.worldbook, ...(source.worldbook || {}) },
-        proactive: { ...defaults.proactive, ...(source.proactive || {}) },
+        proactive: {
+            enabled: source.proactive?.enabled === true,
+            everyTurns: Number.isInteger(Number(source.proactive?.everyTurns)) && Number(source.proactive.everyTurns) > 0
+                ? Number(source.proactive.everyTurns)
+                : defaults.proactive.everyTurns,
+        },
     };
 }
 
@@ -233,14 +238,13 @@ function isEligibleStoryReply(message) {
         && message?.is_successful !== false;
 }
 
-function findRenderedStoryReply(facts) {
-    if (asText(facts?.generationType, 80).toLowerCase() !== 'normal') return null;
-    const messageId = asText(facts?.messageId, 180);
-    if (!messageId) return null;
-    const message = asArray(facts?.storyMessages).find((candidate) => (
-        asText(candidate?.messageId, 180) === messageId
-    ));
-    return isEligibleStoryReply(message) ? message : null;
+function countEligibleStoryAiFloors(messages) {
+    return asArray(messages).filter(isEligibleStoryReply).length;
+}
+
+function waitForStoryMessages(delayMs) {
+    if (delayMs <= 0) return Promise.resolve();
+    return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 async function resolveConversationFacts(repository, scopeId, conversation) {
@@ -401,7 +405,12 @@ export function createQQV2ProductionRuntime(options = {}) {
     });
     const actionService = options.actionService || createQQV2ActionService({ repository });
     const activationSnapshots = new Map();
-    const countedStoryReplyIds = new Map();
+    const proactiveAiFloorByScope = new Map();
+    const proactiveStoryTasks = new Map();
+    const configuredProactiveStorySettleDelayMs = Number(options.proactiveStorySettleDelayMs);
+    const proactiveStorySettleDelayMs = Number.isInteger(configuredProactiveStorySettleDelayMs)
+        && configuredProactiveStorySettleDelayMs >= 0
+        ? configuredProactiveStorySettleDelayMs : 2000;
     const objectUrlApi = resolveObjectUrlApi(options.objectUrlApi);
     const mediaRenderLeases = new Map();
     const stickerRenderLeases = new Map();
@@ -665,10 +674,7 @@ export function createQQV2ProductionRuntime(options = {}) {
                 ...asObject(shared.worldbook),
                 bookName: asText(saved?.settings?.worldbook?.bookName, 256),
             },
-            proactive: {
-                ...asObject(saved?.settings?.proactive),
-                ...asObject(shared.proactive),
-            },
+            proactive: asObject(shared.proactive),
         };
     };
 
@@ -677,9 +683,8 @@ export function createQQV2ProductionRuntime(options = {}) {
         const result = await globalRuntimeSettings.update(scopeId, patch, { scopeSession });
         assertOptionalCurrentScopeSession(scopeSession);
         if (result.proactiveChanged) {
-            for (const resetScopeId of result.resetScopeIds) {
-                proactiveService?.cancelScope?.({ scopeId: resetScopeId });
-            }
+            proactiveService?.cancelScope?.({ scopeId });
+            resetProactiveAiFloor(scopeId);
         }
         assertOptionalCurrentScopeSession(scopeSession);
         return result.settings;
@@ -938,9 +943,67 @@ export function createQQV2ProductionRuntime(options = {}) {
         },
     });
 
+
+    const countCurrentStoryAiFloors = () => countEligibleStoryAiFloors(
+        safeRead(() => host.readStoryMessages(), []),
+    );
+
+    const resetProactiveAiFloor = (scopeId) => {
+        const normalizedScopeId = asText(scopeId, 512);
+        if (!normalizedScopeId) return;
+        if (normalizedScopeId !== currentScopeId()) {
+            proactiveAiFloorByScope.delete(normalizedScopeId);
+            return;
+        }
+        proactiveAiFloorByScope.set(normalizedScopeId, countCurrentStoryAiFloors());
+    };
+
+    const scheduleProactiveAiFloorCheck = (facts) => {
+        const scopeId = asText(facts?.scope?.scopeId, 512);
+        const scopeSession = facts?.scopeSession;
+        if (!scopeId || scopeSession?.isReady?.() !== true) return Promise.resolve();
+        const previousTask = proactiveStoryTasks.get(scopeId) || Promise.resolve();
+        const task = previousTask.catch(() => {}).then(async () => {
+            if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
+            const previousAiFloor = proactiveAiFloorByScope.get(scopeId);
+            const currentAiFloor = countCurrentStoryAiFloors();
+            if (!Number.isInteger(previousAiFloor) || currentAiFloor <= previousAiFloor) {
+                proactiveAiFloorByScope.set(scopeId, currentAiFloor);
+                return;
+            }
+            await waitForStoryMessages(proactiveStorySettleDelayMs);
+            if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
+            const lastObservedAiFloor = proactiveAiFloorByScope.get(scopeId);
+            const settledAiFloor = countCurrentStoryAiFloors();
+            if (!Number.isInteger(lastObservedAiFloor) || settledAiFloor <= lastObservedAiFloor) {
+                proactiveAiFloorByScope.set(scopeId, settledAiFloor);
+                return;
+            }
+            const settings = await proactiveService.getState(scopeId, { scopeSession });
+            if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
+            const everyTurns = Number(settings?.everyTurns);
+            if (settings?.enabled !== true || !Number.isInteger(everyTurns) || everyTurns <= 0) {
+                proactiveAiFloorByScope.set(scopeId, settledAiFloor);
+                return;
+            }
+            if (Math.floor(settledAiFloor / everyTurns) === Math.floor(lastObservedAiFloor / everyTurns)) {
+                proactiveAiFloorByScope.set(scopeId, settledAiFloor);
+                return;
+            }
+            await proactiveService.enqueueProactiveCycle({ scopeId, scopeSession });
+            proactiveAiFloorByScope.set(scopeId, settledAiFloor);
+        });
+        proactiveStoryTasks.set(scopeId, task);
+        const clearTask = () => {
+            if (proactiveStoryTasks.get(scopeId) === task) proactiveStoryTasks.delete(scopeId);
+        };
+        task.then(clearTask, clearTask);
+        return task;
+    };
     const clearScopeRuntimeState = (scopeId) => {
         activationSnapshots.delete(scopeId);
-        countedStoryReplyIds.delete(scopeId);
+        proactiveAiFloorByScope.delete(scopeId);
+        proactiveStoryTasks.delete(scopeId);
         openedConversationByScope.delete(scopeId);
         revokeMediaRenderLeasesForScope(scopeId);
     };
@@ -997,30 +1060,11 @@ export function createQQV2ProductionRuntime(options = {}) {
         },
         async onScopeReady(scopeSession) {
             if (!scopeSession?.isReady?.()) return;
+            resetProactiveAiFloor(scopeSession.scopeId);
             await notifySubscribers(scopeSession.scopeId);
         },
         async onCharacterMessageRendered(facts) {
-            const scopeId = asText(facts.scope?.scopeId, 512);
-            const rendered = findRenderedStoryReply(facts);
-            if (!scopeId || !rendered || !facts.scopeSession?.isReady?.()) return;
-
-            const messageId = asText(facts.messageId, 180);
-            const seenIds = countedStoryReplyIds.get(scopeId) || new Set();
-            if (seenIds.has(messageId)) return;
-            seenIds.add(messageId);
-            countedStoryReplyIds.set(scopeId, seenIds);
-            try {
-                await proactiveService.recordSuccessfulStoryReply({
-                    scopeId,
-                    scopeSession: facts.scopeSession,
-                    message: rendered,
-                });
-            } catch (error) {
-                // A persistence failure must leave the event eligible for a later retry.
-                seenIds.delete(messageId);
-                if (seenIds.size === 0) countedStoryReplyIds.delete(scopeId);
-                throw error;
-            }
+            await scheduleProactiveAiFloorCheck(facts);
         },
         async onWorldInfoActivated(facts) {
             const scopeId = asText(facts.scope?.scopeId, 512);
@@ -1043,7 +1087,8 @@ export function createQQV2ProductionRuntime(options = {}) {
                 proactiveService.cancelScope?.({ scopeId });
             }
             activationSnapshots.clear();
-            countedStoryReplyIds.clear();
+            proactiveAiFloorByScope.clear();
+            proactiveStoryTasks.clear();
             openedConversationByScope.clear();
             inactiveProjectionScopeIds.clear();
             revokeAllMediaRenderLeases();

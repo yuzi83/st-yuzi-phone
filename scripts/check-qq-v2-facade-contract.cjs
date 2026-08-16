@@ -35,7 +35,7 @@ async function main() {
                     privateProactivePresetId: 'private-proactive',
                     groupReplyPresetId: 'group-reply',
                     groupProactivePresetId: 'group-proactive',
-                    proactive: { enabled: true, everyTurns: 3, count: 1, nextKind: 'group' },
+                    proactive: { enabled: true, everyTurns: 3 },
                 },
             };
         },
@@ -73,7 +73,7 @@ async function main() {
         },
         async getProactiveState(input) {
             calls.push(['getProactiveState', input]);
-            return { enabled: true, everyTurns: 3, count: 1, nextKind: 'group' };
+            return { enabled: true, everyTurns: 3 };
         },
         async updateGlobalSettings(input) {
             calls.push(['updateGlobalSettings', input]);
@@ -111,7 +111,7 @@ async function main() {
     });
     assert.equal(Object.hasOwn(bootstrap.globalSettings, 'groupReplyPresetId'), false);
     assert.equal(Object.hasOwn(bootstrap.globalSettings, 'groupProactivePresetId'), false);
-    assert.equal(bootstrap.globalSettings.proactive.nextKind, 'private');
+    assert.deepEqual(bootstrap.globalSettings.proactive, { enabled: true, everyTurns: 3 });
     assert.equal(JSON.stringify(bootstrap).includes('must-not-leak'), false);
 
     calls.length = 0;
@@ -158,7 +158,7 @@ async function main() {
     assert.deepEqual(await facade.query.proactiveState(), {
         ok: true,
         status: 'ready',
-        proactive: { enabled: true, everyTurns: 3, count: 1, nextKind: 'private' },
+        proactive: { enabled: true, everyTurns: 3 },
     });
     assert.deepEqual(calls, [['getProactiveState', { scopeId: 'scope-alpha' }]]);
 

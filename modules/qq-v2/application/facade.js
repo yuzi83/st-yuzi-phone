@@ -72,13 +72,10 @@ function cloneWorldbookSettings(settings) {
 
 function cloneProactiveSettings(settings) {
     const source = asObject(settings);
+    const everyTurns = Number(source.everyTurns);
     return Object.freeze({
         enabled: source.enabled === true,
-        everyTurns: Number.isInteger(Number(source.everyTurns)) && Number(source.everyTurns) > 0
-            ? Number(source.everyTurns)
-            : 5,
-        count: Math.max(0, Math.trunc(asNumber(source.count))),
-        nextKind: 'private',
+        everyTurns: Number.isInteger(everyTurns) && everyTurns > 0 ? everyTurns : 5,
     });
 }
 

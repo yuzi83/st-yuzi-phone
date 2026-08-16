@@ -44,7 +44,7 @@ async function createFixture({
         },
         proactiveService: {
             cancelScope() { events.push('private-proactive-cancelled'); },
-            async getState() { return { enabled: false, everyTurns: 5, count: 0, nextKind: 'private' }; },
+            async getState() { return { enabled: false, everyTurns: 5 }; },
         },
         projectionService: {
             async removeConversationProjection() {
