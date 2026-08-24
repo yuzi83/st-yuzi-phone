@@ -248,15 +248,19 @@ function getRequestHeaders(getContext) {
     }
 }
 
-function isOwnedStoredImagePath(value) {
-    if (typeof value !== 'string') return false;
-    const path = value.trim();
-    if (!path.startsWith(OWNED_IMAGE_PATH_PREFIX)) return false;
+function normalizeOwnedStoredImagePath(value) {
+    if (typeof value !== 'string') return '';
+    const rawPath = value.trim();
+    const path = rawPath.startsWith('/') ? rawPath.slice(1) : rawPath;
+    if (!path.startsWith(OWNED_IMAGE_PATH_PREFIX)) return '';
     const filename = path.slice(OWNED_IMAGE_PATH_PREFIX.length);
-    if (!filename || filename === '.' || filename === '..') return false;
-    if (filename.includes('/') || filename.includes('\\')) return false;
-    return !/[\u0000-\u001F\u007F]/u.test(filename);
+    if (!filename || filename === '.' || filename === '..') return '';
+    if (filename.includes('/') || filename.includes('\\')) return '';
+    if (/[\u0000-\u001F\u007F]/u.test(filename)) return '';
+    return path;
 }
+
+
 
 export function createImageFileBridge(options = {}) {
     const fetchImpl = options.fetchImpl || globalThis.fetch;
@@ -334,7 +338,8 @@ export function createImageFileBridge(options = {}) {
             payload = null;
         }
 
-        if (!payload || !isOwnedStoredImagePath(payload.path)) {
+        const storedPath = normalizeOwnedStoredImagePath(payload?.path);
+        if (!storedPath) {
             return {
                 ok: false,
                 status: 'invalid-response',
@@ -346,7 +351,6 @@ export function createImageFileBridge(options = {}) {
             };
         }
 
-        const storedPath = payload.path.trim();
         return {
             ok: true,
             status: 'stored',
@@ -356,12 +360,13 @@ export function createImageFileBridge(options = {}) {
     }
 
     async function deleteImage(input = {}) {
-        const path = typeof input.path === 'string' ? input.path.trim() : '';
-        if (!isOwnedStoredImagePath(path)) {
+        const rawPath = typeof input.path === 'string' ? input.path.trim() : '';
+        const path = normalizeOwnedStoredImagePath(rawPath);
+        if (!path) {
             return {
                 ok: false,
                 status: 'invalid-path',
-                path,
+                path: rawPath,
                 error: { code: 'invalid-image-path' },
             };
         }

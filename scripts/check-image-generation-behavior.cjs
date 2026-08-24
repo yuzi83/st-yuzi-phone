@@ -513,7 +513,7 @@ async function testImageFileBridgeUploadsDataUrl() {
                 status: 200,
                 async json() {
                     return {
-                        path: 'user/images/yuzi-phone-generated/example.png',
+                        path: '/user/images/yuzi-phone-generated/example.png',
                     };
                 },
             };
