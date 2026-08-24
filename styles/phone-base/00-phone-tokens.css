@@ -885,6 +885,11 @@
     --yuzi-qq-jump-radius: 50%;
     --yuzi-qq-private-stop-size: 40px;
     --yuzi-qq-private-stop-icon-size: 15px;
+    --yuzi-qq-image-action-size: 26px;
+    --yuzi-qq-image-action-blur: 4px;
+    --yuzi-qq-image-viewer-close-size: 28px;
+    --yuzi-qq-image-viewer-blur: 6px;
+    --yuzi-qq-image-viewer-max-height: 640px;
     --yuzi-qq-private-tool-hit-size: 32px;
     --yuzi-qq-message-selection-action-size: 36px;
     --yuzi-qq-message-selection-icon-size: 18px;

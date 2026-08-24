@@ -219,7 +219,7 @@ async function main() {
         'video messages must remain on the existing narrative-card path');
     assert.match(messageNode, /normalizeGeneratedImagePath\(message\.generatedImagePath\)/,
         'generated image rendering must consume the validated local user-image path');
-    assert.match(messageNode, /yuzi-qq-generated-image-description[\s\S]*message\.content/,
+    assert.match(messageNode, /yuzi-qq-generated-image-description[\s\S]*descriptionText/,
         'generated image cards must preserve and render the original narrative description');
     assert.match(messageNode, /isImageGenerationEnabled\(\)[\s\S]*!isMessageSelectionMode\(conversationId\)/,
         'the circular action must render only when the global switch is on and message selection is off');
@@ -227,6 +227,32 @@ async function main() {
         'image cards must expose a stable delegated generate action');
     assert.match(messageNode, /yuzi-qq-image-regenerate-button/,
         'persisted images must expose a compact regenerate action');
+
+    assert.match(messageNode, /yuzi-qq-generated-image-viewer-button/,
+        'a generated image must be an explicit viewer trigger');
+    assert.match(messageNode, /data-qq-view-image/,
+        'the viewer trigger must use QQ delegated click handling');
+    assert.match(messageNode, /const descriptionText =/,
+        'the image copy must be prepared once for the image alt and placeholder');
+    assert.match(messageNode, /body\.append\(media\);/,
+        'an image card must end with the media itself instead of a caption row');
+    assert.doesNotMatch(
+        messageNode,
+        /body\.append\(media,\s*description\)/u,
+        'a generated image must not keep a separate caption below the picture',
+    )
+    assert.match(
+        messageNode,
+        /yuzi-qq-generated-image-placeholder[\s\S]*yuzi-qq-generated-image-description[\s\S]*descriptionText/u,
+        'a pending image must show its narrative copy inside the centered placeholder',
+    )
+
+    assert.match(app, /const openGeneratedImageViewer =[\s\S]*showDialog\(/u,
+        'QQ must open generated images with its own dialog system');
+    assert.match(clickHandler, /target\.dataset\.qqViewImage/u,
+        'QQ delegated clicks must recognize the image viewer trigger');
+    assert.match(clickHandler, /openGeneratedImageViewer\(/u,
+        'the image viewer trigger must open the QQ image viewer');
 
     assert.match(clickHandler, /imageGenerationController\.generate\(\{/,
         'QQ delegated clicks must run through the executable image-task controller');
@@ -237,6 +263,30 @@ async function main() {
         'generated image cards need a stable positioning surface');
     assert.ok(cssRuleHas(css, '.yuzi-qq-generated-image', 'object-fit:\\s*contain'),
         'generated images must remain fully visible instead of being cropped');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-generated-image-card.has-image', 'padding:\\s*0'),
+        'a generated image card must remove bubble padding');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-generated-image-card.has-image', 'background:\\s*transparent'),
+        'a generated image card must look like the picture itself');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-generated-image-viewer-button', 'cursor:\\s*zoom-in'),
+        'a generated image must visibly support click-to-zoom');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer-image', 'object-fit:\\s*contain'),
+        'the QQ image viewer must show the whole picture');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer-close', 'backdrop-filter:\\s*blur'),
+        'the viewer close control must use a translucent glass treatment');
+    assert.ok(cssRuleHas(
+        css,
+        '.yuzi-qq-generated-image-placeholder .yuzi-qq-generated-image-description',
+        'text-align:\\s*center',
+    ), 'a pending image must center its narrative copy');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-generate-button', 'inline-size:\\s*var\\(--yuzi-qq-image-action-size\\)'),
+        'the generation action must be visibly smaller');
+    assert.ok(cssRuleHas(
+        css,
+        '.yuzi-qq-image-generate-button',
+        'background:\\s*color-mix\\(in srgb, var\\(--yuzi-qq-elevated\\) 18%, transparent\\)',
+    ), 'the generation action must use a translucent glass background');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-generate-button', 'backdrop-filter:\\s*blur'),
+        'the generation action must blur the image behind it');
     assert.ok(cssRuleHas(css, '.yuzi-qq-image-generate-button', 'border-radius:\\s*var\\(--yuzi-qq-radius-full\\)'),
         'the primary generation action must be circular');
     assert.match(css, /\.yuzi-qq-image-generate-button\.is-loading::after[\s\S]*animation:/,

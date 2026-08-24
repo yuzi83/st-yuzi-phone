@@ -303,6 +303,12 @@
     font-weight: var(--yuzi-qq-title-weight);
 }
 
+.yuzi-qq-avatar-button {
+    padding: 0;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
 .yuzi-qq-avatar img {
     inline-size: 100%;
     block-size: 100%;
@@ -1113,6 +1119,8 @@
 }
 
 .yuzi-qq-nav-icon {
+    display: block;
+    flex: 0 0 auto;
     inline-size: var(--yuzi-qq-nav-icon-size);
     block-size: var(--yuzi-qq-nav-icon-size);
     font-size: var(--yuzi-qq-nav-icon-size);
@@ -1437,6 +1445,13 @@
     min-block-size: var(--yuzi-qq-tool-bar-height);
     justify-content: space-between;
     gap: var(--yuzi-qq-square-radius);
+}
+
+.yuzi-qq-tool-icon {
+    display: block;
+    flex: 0 0 auto;
+    inline-size: 1em;
+    block-size: 1em;
 }
 
 .yuzi-qq-tool-button {
@@ -3418,17 +3433,17 @@
     inset-inline-end: var(--yuzi-qq-inline-gap);
     z-index: 2;
     display: inline-grid;
-    inline-size: var(--yuzi-qq-message-avatar-size);
-    block-size: var(--yuzi-qq-message-avatar-size);
+    inline-size: var(--yuzi-qq-image-action-size);
+    block-size: var(--yuzi-qq-image-action-size);
     padding: 0;
     border: var(--yuzi-qq-line-width) solid color-mix(in srgb, currentColor 20%, transparent);
     border-radius: var(--yuzi-qq-radius-full);
     place-items: center;
     color: var(--yuzi-qq-text);
-    background: color-mix(in srgb, var(--yuzi-qq-elevated) 88%, transparent);
-    box-shadow: var(--yuzi-qq-shadow);
+    background: color-mix(in srgb, var(--yuzi-qq-elevated) 18%, transparent);
+    box-shadow: none;
     cursor: pointer;
-    backdrop-filter: blur(var(--yuzi-qq-radius-8));
+    backdrop-filter: blur(var(--yuzi-qq-image-action-blur));
 }
 
 .yuzi-qq-image-generate-button:disabled {
@@ -3450,8 +3465,8 @@
 }
 
 .yuzi-qq-image-regenerate-button {
-    inline-size: calc(var(--yuzi-qq-message-avatar-size) - var(--yuzi-qq-status-inline-gap));
-    block-size: calc(var(--yuzi-qq-message-avatar-size) - var(--yuzi-qq-status-inline-gap));
+    inline-size: var(--yuzi-qq-image-action-size);
+    block-size: var(--yuzi-qq-image-action-size);
     font-size: var(--yuzi-qq-caption-size);
 }
 
@@ -3484,4 +3499,104 @@
     inline-size: 100%;
     block-size: 100%;
     object-fit: contain;
+}
+
+
+.yuzi-qq-generated-image-card.has-image {
+    inline-size: fit-content;
+    gap: 0;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.yuzi-qq-message.is-self .yuzi-qq-generated-image-card.has-image {
+    background: transparent;
+    box-shadow: none;
+}
+
+.yuzi-qq-generated-image-card.has-image .yuzi-qq-generated-image-media {
+    min-block-size: 0;
+    background: transparent;
+    border-radius: inherit;
+}
+
+.yuzi-qq-generated-image-viewer-button {
+    display: block;
+    inline-size: auto;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    color: inherit;
+    cursor: zoom-in;
+}
+
+.yuzi-qq-generated-image-card.has-image .yuzi-qq-generated-image {
+    inline-size: auto;
+    max-inline-size: 100%;
+}
+
+.yuzi-qq-generated-image-placeholder {
+    gap: var(--yuzi-qq-inline-gap);
+    padding: var(--yuzi-qq-bubble-padding-block) var(--yuzi-qq-bubble-padding-inline);
+}
+
+.yuzi-qq-generated-image-placeholder .yuzi-qq-generated-image-description {
+    display: block;
+    text-align: center;
+    -webkit-line-clamp: unset;
+}
+
+.yuzi-qq-image-view-dialog {
+    inline-size: min(100%, var(--yuzi-qq-dialog-width));
+    block-size: min(100%, var(--yuzi-qq-image-viewer-max-height));
+    padding: 0;
+    overflow: visible;
+    background: transparent;
+    box-shadow: none;
+}
+
+.yuzi-qq-image-view-dialog .yuzi-qq-dialog-body {
+    display: grid;
+    place-items: center;
+    block-size: 100%;
+    padding: 0;
+    overflow: visible;
+}
+
+.yuzi-qq-image-viewer {
+    position: relative;
+    display: grid;
+    inline-size: 100%;
+    block-size: 100%;
+    min-block-size: 0;
+    place-items: center;
+}
+
+.yuzi-qq-image-viewer-image {
+    display: block;
+    max-inline-size: 100%;
+    max-block-size: 100%;
+    object-fit: contain;
+    border-radius: var(--yuzi-qq-radius);
+}
+
+.yuzi-qq-image-viewer-close {
+    position: absolute;
+    inset-block-start: var(--yuzi-qq-inline-gap);
+    inset-inline-end: var(--yuzi-qq-inline-gap);
+    z-index: 2;
+    display: inline-grid;
+    inline-size: var(--yuzi-qq-image-viewer-close-size);
+    block-size: var(--yuzi-qq-image-viewer-close-size);
+    padding: 0;
+    border: var(--yuzi-qq-line-width) solid color-mix(in srgb, var(--yuzi-qq-elevated) 28%, transparent);
+    border-radius: var(--yuzi-qq-radius-full);
+    place-items: center;
+    color: var(--yuzi-qq-text);
+    background: color-mix(in srgb, var(--yuzi-qq-elevated) 24%, transparent);
+    cursor: pointer;
+    backdrop-filter: blur(var(--yuzi-qq-image-viewer-blur));
 }

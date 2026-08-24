@@ -220,6 +220,8 @@ function buildScopedFontOverrideCss(activeFont) {
         `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id]`,
         `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .yuzi-phone-shell`,
         `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-page`,
+        `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .yuzi-qq-app`,
+        `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .yuzi-qq-app *:not(svg):not(svg *):not(.fa):not(.fas):not(.far):not(.fal):not(.fab):not(.fa-solid):not(.fa-regular):not(.fa-brands):not(.monospace):not(.phone-monospace):not(code):not(pre):not(kbd):not(samp):not(input):not(textarea):not(select)`,
         `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-app-page`,
         `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-settings-page`,
         `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-home`,
@@ -234,7 +236,8 @@ function buildScopedFontOverrideCss(activeFont) {
         + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-app-label,\n`
         + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .yuzi-phone-status-time,\n`
         + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-settings-font-preview,\n`
-        + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-settings-font-preview * { font-family: ${cssFamily} !important; }`;
+        + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-settings-font-preview * { font-family: ${cssFamily} !important; }\n`
+        + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .yuzi-qq-app :where(button, input, textarea, select) { font-family: ${cssFamily} !important; }`;
 }
 
 function getStyleElement() {

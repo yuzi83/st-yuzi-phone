@@ -35,6 +35,11 @@ import {
 import { createRenderLeaseCoordinator } from './render-lease-coordinator.js';
 import { createViewSnapshotCache } from './view-snapshot-cache.js';
 import {
+    QQ_FIGMA_ROOT_ICON_MAP,
+    QQ_FIGMA_TOOL_ICON_MAP,
+    createQQFigmaIconElement,
+} from './figma-icons.js';
+import {
     downloadImageLibraryPack,
     pickImageLibraryPackFile,
 } from './image-library-pack-actions.js';
@@ -47,19 +52,19 @@ const TABS = Object.freeze([
 ]);
 
 const TAB_META = Object.freeze({
-    messages: Object.freeze({ icon: 'message' }),
-    contacts: Object.freeze({ icon: 'address-book' }),
-    assistant: Object.freeze({ icon: 'wand-magic-sparkles' }),
-    settings: Object.freeze({ icon: 'gear' }),
+    messages: Object.freeze({ icon: QQ_FIGMA_ROOT_ICON_MAP.messages }),
+    contacts: Object.freeze({ icon: QQ_FIGMA_ROOT_ICON_MAP.contacts }),
+    assistant: Object.freeze({ icon: QQ_FIGMA_ROOT_ICON_MAP.assistant }),
+    settings: Object.freeze({ icon: QQ_FIGMA_ROOT_ICON_MAP.settings }),
 });
 
 const TOOL_META = Object.freeze({
-    voice: { label: '语音', icon: 'microphone' },
-    image: { label: '图片', icon: 'image' },
-    video: { label: '视频', icon: 'camera' },
-    transfer: { label: '转账', icon: 'wallet' },
-    emoji: { label: '表情', icon: 'face-smile' },
-    plus: { label: '更多', icon: 'circle-plus' },
+    voice: { label: '语音', icon: 'microphone', figmaIcon: QQ_FIGMA_TOOL_ICON_MAP.voice },
+    image: { label: '图片', icon: 'image', figmaIcon: QQ_FIGMA_TOOL_ICON_MAP.image },
+    video: { label: '视频', icon: 'camera', figmaIcon: QQ_FIGMA_TOOL_ICON_MAP.video },
+    transfer: { label: '转账', icon: 'wallet', figmaIcon: QQ_FIGMA_TOOL_ICON_MAP.transfer },
+    emoji: { label: '表情', icon: 'face-smile', figmaIcon: QQ_FIGMA_TOOL_ICON_MAP.emoji },
+    plus: { label: '更多', icon: 'circle-plus', figmaIcon: QQ_FIGMA_TOOL_ICON_MAP.plus },
 });
 
 const EMPTY_PAGE = Object.freeze({ items: [], hasMore: false, nextBeforeSequence: null });
@@ -918,9 +923,14 @@ export function createQQApp({
         viewScrollState.restore(scrollSnapshot, { token: renderEpoch, isCurrent: isActive });
     };
 
-    const avatar = (person, className = 'yuzi-qq-avatar') => {
-        const element = createElement('span', className);
-        element.setAttribute('aria-hidden', 'true');
+    const avatar = (person, className = 'yuzi-qq-avatar', {
+        interactive = false,
+        attributes = {},
+    } = {}) => {
+        const element = interactive
+            ? createButton('', className, attributes)
+            : createElement('span', className);
+        if (!interactive) element.setAttribute('aria-hidden', 'true');
         element.textContent = initial(person?.formalName || person?.title);
         const avatarUrl = asText(person?.avatarUrl);
         if (avatarUrl) {
@@ -1248,7 +1258,7 @@ export function createQQApp({
             const item = createButton(label, `yuzi-qq-nav-item yuzi-qq-root-tab${tab === id ? ' is-active' : ''}`, {
                 'data-qq-tab': id,
             });
-            const icon = createIcon(TAB_META[id]?.icon || 'circle', 'yuzi-qq-nav-icon');
+            const icon = createQQFigmaIconElement(TAB_META[id]?.icon || 'message', document, 'yuzi-qq-nav-icon');
             const labelNode = createElement('span', 'yuzi-qq-nav-label');
             labelNode.textContent = label;
             item.replaceChildren(icon, labelNode);
@@ -1821,6 +1831,27 @@ export function createQQApp({
         return item;
     };
 
+    const openGeneratedImageViewer = (imagePath, altText = '') => {
+        if (!asText(imagePath) || !viewport) return;
+        const viewer = createElement('div', 'yuzi-qq-image-viewer');
+        const image = createElement('img', 'yuzi-qq-image-viewer-image');
+        image.src = asText(imagePath);
+        image.alt = asText(altText) || '生成图片';
+        const close = createButton('', 'yuzi-qq-image-viewer-close', { 'aria-label': '关闭图片查看' });
+        close.append(createIcon('xmark'));
+        close.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            clearOverlay();
+        });
+        viewer.append(image, close);
+        showDialog({
+            title: '',
+            content: viewer,
+            className: 'yuzi-qq-image-view-dialog',
+        });
+    };
+
     const messageNode = (message, conversation, allMessages, currentIdentity) => {
         const conversationId = conversation.conversationId;
         if (message.senderType === 'system' || message.type === 'system') {
@@ -1842,7 +1873,18 @@ export function createQQApp({
                 formalName: asText(message.senderName) || contactFormalName(conversation),
                 avatarAssetId: asText(message.senderAvatarAssetId) || conversation.avatarAssetId,
             };
-        const senderAvatar = avatar(sender, 'yuzi-qq-avatar yuzi-qq-message-avatar yuzi-qq-private-message-avatar');
+        const senderAvatar = avatar(
+            sender,
+            `yuzi-qq-avatar yuzi-qq-message-avatar yuzi-qq-private-message-avatar${own ? '' : ' yuzi-qq-avatar-button'}`,
+            {
+                interactive: !own,
+                attributes: own ? {} : {
+                    'aria-label': `打开${asText(sender.formalName) || '对方'}的用户资料`,
+                    title: '打开用户资料',
+                    'data-qq-profile': conversationId,
+                },
+            },
+        );
         const stack = createElement('div', 'yuzi-qq-message-stack yuzi-qq-private-message-stack');
         let body;
         if (message.type === 'voice') {
@@ -1861,20 +1903,35 @@ export function createQQApp({
         } else if (message.type === 'image') {
             const imagePath = normalizeGeneratedImagePath(message.generatedImagePath);
             const loading = imageGenerationController.isLoading(message.messageId);
+            const descriptionText = asText(message.content) || '图片消息';
             body = createElement(
                 'div',
                 `yuzi-qq-generated-image-card${imagePath ? ' has-image' : ' is-placeholder'}${loading ? ' is-loading' : ''}`,
             );
             const media = createElement('div', 'yuzi-qq-generated-image-media');
             if (imagePath) {
+                const viewerButton = createButton(
+                    '',
+                    'yuzi-qq-generated-image-viewer-button',
+                    {
+                        'aria-label': '点击放大查看图片',
+                        title: '点击放大查看',
+                        'data-qq-view-image': imagePath,
+                        'data-qq-view-image-alt': descriptionText,
+                    },
+                );
                 const image = createElement('img', 'yuzi-qq-generated-image');
                 image.src = imagePath;
-                image.alt = asText(message.content) || '生成图片';
+                image.alt = descriptionText;
                 image.loading = 'lazy';
-                media.append(image);
+                viewerButton.append(image);
+                media.append(viewerButton);
             } else {
                 const visual = createElement('span', 'yuzi-qq-generated-image-placeholder');
                 visual.append(createIcon('image'));
+                const description = createElement('span', 'yuzi-qq-generated-image-description');
+                description.textContent = descriptionText;
+                visual.append(description);
                 media.append(visual);
             }
             if (isImageGenerationEnabled() && !isMessageSelectionMode(conversationId)) {
@@ -1896,9 +1953,7 @@ export function createQQApp({
                 });
                 media.append(action);
             }
-            const description = createElement('span', 'yuzi-qq-generated-image-description');
-            description.textContent = asText(message.content) || '图片消息';
-            body.append(media, description);
+            body.append(media);
         } else if (message.type === 'video') {
             body = createElement('div', 'yuzi-qq-narrative-card is-video');
             const visual = createElement('span', 'yuzi-qq-narrative-visual');
@@ -1996,7 +2051,7 @@ export function createQQApp({
                 title: meta.label,
                 'data-qq-tool': type,
             });
-            button.append(createIcon(meta.icon, 'yuzi-qq-tool-icon'));
+            button.append(createQQFigmaIconElement(meta.figmaIcon || meta.icon, document, 'yuzi-qq-tool-icon'));
             if (!conversation.canSend || type === 'plus') button.disabled = !conversation.canSend || type === 'plus';
             toolBar.append(button);
         });
@@ -3488,6 +3543,13 @@ export function createQQApp({
     const handleClick = async (event) => {
         const target = event.target.closest('button');
         if (!target || !viewport?.contains(target)) return;
+        if (target.dataset.qqViewImage) {
+            if (isMessageSelectionMode(target.dataset.qqImageConversationId || page?.conversationId)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            openGeneratedImageViewer(target.dataset.qqViewImage, target.dataset.qqViewImageAlt);
+            return;
+        }
         if (target.dataset.qqGenerateImage) {
             event.preventDefault();
             event.stopPropagation();
