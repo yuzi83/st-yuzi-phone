@@ -1,4 +1,5 @@
 import { escapeHtml, escapeHtmlAttr } from '../../utils/dom-escape.js';
+import { showImageViewerDialog } from '../services/image-viewer-dialog.js';
 import { buildSettingsPageFrame, buildSettingsSectionHtml } from '../layout/primitives.js';
 
 function asArray(value) {
@@ -250,6 +251,26 @@ function buildMappingCardHtml(viewModel, mapping, index, total) {
     `;
 }
 
+function buildTestImagePreviewHtml(imagePath) {
+    const normalizedPath = normalizeGeneratedImagePath(imagePath);
+    if (!normalizedPath) return '';
+    return `
+        <button
+            id="phone-image-generation-test-preview-button"
+            type="button"
+            class="phone-image-generation-test-preview-button"
+            aria-label="点击放大查看测试生成图片"
+            title="点击放大查看"
+        >
+            <img
+                class="phone-image-generation-test-preview-image"
+                src="${escapeHtmlAttr(normalizedPath)}"
+                alt="测试生成图片"
+            >
+        </button>
+    `;
+}
+
 function getTestInput(viewModel = {}) {
     const testInput = viewModel?.testInput && typeof viewModel.testInput === 'object'
         ? viewModel.testInput
@@ -304,7 +325,7 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
                 <span id="phone-image-generation-test-status" class="phone-settings-desc">${escapeHtml(testInput.statusText)}</span>
             </div>
             <div id="phone-image-generation-test-preview" class="phone-settings-preview">
-                ${testInput.imagePath ? `<img class="phone-bg-thumb" src="${escapeHtmlAttr(testInput.imagePath)}" alt="测试生成图片">` : ''}
+                ${buildTestImagePreviewHtml(testInput.imagePath)}
             </div>
         `,
     });
@@ -544,9 +565,7 @@ function createImageGenerationPageSession(ctx) {
         if (status) status.textContent = state.testInput.statusText;
         const preview = ctx.container.querySelector('#phone-image-generation-test-preview');
         if (preview && imagePath !== undefined) {
-            preview.innerHTML = state.testInput.imagePath
-                ? `<img class="phone-bg-thumb" src="${escapeHtmlAttr(state.testInput.imagePath)}" alt="测试生成图片">`
-                : '';
+            preview.innerHTML = buildTestImagePreviewHtml(state.testInput.imagePath);
         }
     };
     const refreshPreview = async () => {
@@ -702,6 +721,20 @@ function createImageGenerationPageSession(ctx) {
         addListener(descriptionInput, 'input', () => { void refreshPreview(); });
         addListener(ctx.container.querySelector('#phone-image-generation-test-generate'), 'click', () => {
             void runTestGeneration();
+        });
+        const testPreview = ctx.container.querySelector('#phone-image-generation-test-preview');
+        addListener(testPreview, 'click', (event) => {
+            const previewButton = event.target?.closest?.('#phone-image-generation-test-preview-button');
+            if (!previewButton) return;
+            if (typeof testPreview?.contains === 'function' && !testPreview.contains(previewButton)) return;
+            const imagePath = normalizeGeneratedImagePath(state.testInput.imagePath);
+            if (!imagePath) return;
+            event.preventDefault?.();
+            showImageViewerDialog({
+                imagePath,
+                altText: '测试生成图片',
+                runtime: ctx.pageRuntime,
+            });
         });
         addListener(ctx.container.querySelector('#phone-image-generation-timeout'), 'change', () => {
             void saveConfig(readConfigFromDom(), { refreshPreviewAfter: false });

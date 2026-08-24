@@ -1,12 +1,94 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
 const ROOT = process.cwd();
 
+function read(relativePath) {
+    return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
+}
+
+function importSharedModule(relativePath) {
+    const href = pathToFileURL(path.join(ROOT, relativePath)).href;
+    return import(href);
+}
+
 function importModule(relativePath) {
     const href = pathToFileURL(path.join(ROOT, relativePath)).href;
     return import(`${href}?contract=${Date.now()}-${Math.random()}`);
+}
+
+class FakeLayerElement extends EventTarget {
+    constructor(tagName = 'div') {
+        super();
+        this.tagName = String(tagName).toUpperCase();
+        this.children = [];
+        this.parentNode = null;
+        this.attributes = new Map();
+        this.id = '';
+        this.textContent = '';
+        this.src = '';
+        this.alt = '';
+        const classes = new Set();
+        Object.defineProperty(this, 'className', {
+            get: () => [...classes].join(' '),
+            set: (value) => {
+                classes.clear();
+                String(value ?? '').split(/\s+/u).filter(Boolean).forEach(name => classes.add(name));
+            },
+        });
+        this.classList = {
+            add: (...names) => names.forEach(name => classes.add(String(name))),
+            contains: name => classes.has(String(name)),
+        };
+    }
+
+    appendChild(child) {
+        this.children.push(child);
+        child.parentNode = this;
+        return child;
+    }
+
+    removeChild(child) {
+        const index = this.children.indexOf(child);
+        if (index >= 0) this.children.splice(index, 1);
+        child.parentNode = null;
+        return child;
+    }
+
+    get firstChild() {
+        return this.children[0] ?? null;
+    }
+
+    setAttribute(name, value) {
+        const normalizedName = String(name);
+        const normalizedValue = String(value);
+        this.attributes.set(normalizedName, normalizedValue);
+        if (normalizedName === 'class') this.className = normalizedValue;
+        if (normalizedName === 'id') this.id = normalizedValue;
+    }
+
+    getAttribute(name) {
+        return this.attributes.get(String(name)) ?? null;
+    }
+
+    focus() {}
+}
+
+class FakeLayerDocument extends EventTarget {
+    createElement(tagName) {
+        return new FakeLayerElement(tagName);
+    }
+}
+
+function findLayerElement(root, predicate) {
+    if (predicate(root)) return root;
+    for (const child of root?.children || []) {
+        const found = findLayerElement(child, predicate);
+        if (found) return found;
+    }
+    return null;
 }
 
 class FakeElement extends EventTarget {
@@ -236,6 +318,103 @@ async function testSettingsHomeAndImageGenerationPageExposeConfirmedControls() {
     assert.match(pageHtml, /id="phone-image-generation-clear-mappings"/u);
 }
 
+async function testGeneratedTestImagePreviewKeepsTheWholeImageVisible() {
+    const { buildImageGenerationPageHtml } = await importModule(
+        'modules/settings-app/pages/image-generation.js',
+    );
+    const pageHtml = buildImageGenerationPageHtml({
+        testInput: {
+            imagePath: 'user/images/yuzi-phone-generated/test-preview.png',
+        },
+    });
+    const settingsCss = read('styles/phone-base/07-settings-modern.css');
+
+    assert.match(
+        pageHtml,
+        /id="phone-image-generation-test-preview-button"[^>]*aria-label="点击放大查看测试生成图片"/u,
+        '测试生成结果必须是可点击的大图查看入口',
+    );
+    assert.match(
+        pageHtml,
+        /class="phone-image-generation-test-preview-image"/u,
+        '测试生成结果必须使用专属预览样式',
+    );
+    assert.doesNotMatch(
+        pageHtml,
+        /phone-bg-thumb/u,
+        '测试生图不能复用会裁切图片的壁纸缩略图样式',
+    );
+    assert.match(
+        settingsCss,
+        /\.phone-image-generation-test-preview-image\s*\{[\s\S]*?object-fit:\s*contain\s*;/u,
+        '测试生图预览必须完整显示图片，不能裁切',
+    );
+}
+async function testTestImagePreviewOpensAContainedPhoneViewer() {
+    const pageSource = read('modules/settings-app/pages/image-generation.js');
+    const settingsCss = read('styles/phone-base/07-settings-modern.css');
+
+    assert.match(
+        pageSource,
+        /showImageViewerDialog/u,
+        '点击测试图片时必须进入小手机内的大图查看器',
+    );
+    assert.match(
+        settingsCss,
+        /\.phone-image-viewer-image\s*\{[\s\S]*?object-fit:\s*contain\s*;/u,
+        '大图查看器必须完整显示图片，不能裁切',
+    );
+
+    const previousDocument = global.document;
+    const previousRequestAnimationFrame = global.requestAnimationFrame;
+    const document = new FakeLayerDocument();
+    global.document = document;
+    global.requestAnimationFrame = callback => {
+        callback();
+        return 1;
+    };
+
+    let unregister = () => {};
+    try {
+        const [
+            { registerPhoneTemporaryLayerHost },
+            { showImageViewerDialog },
+        ] = await Promise.all([
+            importSharedModule('modules/phone-core/shell-temporary-layer-host.js'),
+            importModule('modules/settings-app/services/image-viewer-dialog.js'),
+        ]);
+        const host = new FakeLayerElement('div');
+        unregister = registerPhoneTemporaryLayerHost(host);
+
+        const close = showImageViewerDialog({
+            imagePath: 'user/images/yuzi-phone-generated/test-preview.png',
+            altText: '测试生成图片',
+        });
+        assert.equal(typeof close, 'function', '查看器必须提供关闭操作');
+        assert.equal(host.children.length, 1, '查看器必须挂在小手机临时层，不得铺到酒馆页面');
+
+        const overlay = host.firstChild;
+        assert.equal(overlay.classList.contains('phone-image-viewer-overlay'), true);
+        assert.equal(overlay.classList.contains('is-visible'), true);
+        const image = findLayerElement(
+            overlay,
+            element => element?.classList?.contains?.('phone-image-viewer-image'),
+        );
+        assert.ok(image, '查看器必须渲染图片');
+        assert.equal(image.src, 'user/images/yuzi-phone-generated/test-preview.png');
+        assert.equal(image.alt, '测试生成图片');
+
+        overlay.dispatchEvent(new Event('click'));
+        assert.equal(host.children.length, 0, '点击遮罩空白处必须关闭查看器');
+    } finally {
+        unregister();
+        if (previousDocument === undefined) delete global.document;
+        else global.document = previousDocument;
+        if (previousRequestAnimationFrame === undefined) delete global.requestAnimationFrame;
+        else global.requestAnimationFrame = previousRequestAnimationFrame;
+    }
+}
+
 async function testImageGenerationPageUsesInjectedServiceAndKeepsAsyncUpdatesLocal() {
     const { createImageGenerationPage } = await importModule(
         'modules/settings-app/pages/image-generation.js',
@@ -412,6 +591,8 @@ async function testSettingsRendererValidatesImageGenerationDependencies() {
 
 async function main() {
     await testSettingsHomeAndImageGenerationPageExposeConfirmedControls();
+    await testGeneratedTestImagePreviewKeepsTheWholeImageVisible();
+    await testTestImagePreviewOpensAContainedPhoneViewer();
     await testImageGenerationPageUsesInjectedServiceAndKeepsAsyncUpdatesLocal();
     await testImageGenerationPageIsRegisteredWithItsInjectedContext();
     await testSettingsRendererValidatesImageGenerationDependencies();

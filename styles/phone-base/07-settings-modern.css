@@ -1901,3 +1901,131 @@
     font-size: 22px;
     line-height: 24px;
 }
+
+
+/* --- Image Generation Test Preview --- */
+.phone-image-generation-test-preview-button {
+    display: block;
+    width: 100%;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--yuzi-settings-border, rgba(58, 55, 49, 0.08));
+    border-radius: var(--yuzi-phone-radius-md, 8px);
+    background: var(--yuzi-settings-surface-soft, rgba(245, 243, 239, 0.6));
+    cursor: zoom-in;
+}
+
+.phone-image-generation-test-preview-button:hover,
+.phone-image-generation-test-preview-button:focus-visible {
+    border-color: var(--yuzi-settings-border-accent, rgba(91, 122, 106, 0.2));
+    outline: none;
+}
+
+.phone-image-generation-test-preview-image {
+    display: block;
+    width: 100%;
+    max-height: 240px;
+    object-fit: contain;
+}
+
+
+/* --- Image Viewer --- */
+.phone-image-viewer-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    box-sizing: border-box;
+    background: color-mix(in srgb, var(--yuzi-settings-text-primary, #3A3731) 34%, transparent);
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    transition: opacity 160ms ease;
+}
+
+.phone-image-viewer-overlay.is-visible {
+    opacity: 1;
+}
+
+.phone-image-viewer-dialog {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: min(100%, 640px);
+    overflow: hidden;
+    color: var(--yuzi-settings-text-primary, #3A3731);
+    background: var(--yuzi-settings-surface-strong, rgba(245, 243, 239, 0.99));
+    border: 1px solid var(--yuzi-settings-border-strong, rgba(58, 55, 49, 0.12));
+    border-radius: 8px;
+    box-shadow: var(--yuzi-settings-shadow-strong, 0 8px 24px rgba(58, 55, 49, 0.08));
+    transform: scale(0.97);
+    transition: transform 160ms ease;
+}
+
+.phone-image-viewer-overlay.is-visible .phone-image-viewer-dialog {
+    transform: scale(1);
+}
+
+.phone-image-viewer-header {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--yuzi-settings-border, rgba(58, 55, 49, 0.08));
+    box-sizing: border-box;
+}
+
+.phone-image-viewer-title {
+    margin: 0;
+    color: var(--yuzi-settings-text-primary, #3A3731);
+    font-size: 16px;
+    line-height: 1.3;
+    font-weight: 700;
+}
+
+.phone-image-viewer-close {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--yuzi-settings-text-secondary, #7A7772);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.phone-image-viewer-close:hover,
+.phone-image-viewer-close:focus-visible {
+    background: var(--yuzi-settings-accent-soft, rgba(91, 122, 106, 0.1));
+    color: var(--yuzi-settings-accent, #5B7A6A);
+    outline: none;
+}
+
+.phone-image-viewer-stage {
+    display: grid;
+    flex: 1;
+    min-height: 0;
+    place-items: center;
+    padding: 12px;
+    overflow: auto;
+    background: var(--yuzi-settings-surface-soft, rgba(245, 243, 239, 0.6));
+}
+
+.phone-image-viewer-image {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 2px 12px rgba(58, 55, 49, 0.12);
+}
