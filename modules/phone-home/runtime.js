@@ -52,7 +52,7 @@ export function ensureHomeInteractionRuntime(container) {
             return;
         }
 
-        const observerRoot = document.querySelector('.phone-screen') || document.body;
+        const observerRoot = document.querySelector('.yuzi-phone-screen') || document.body;
         const observerHandle = runtime.observeDisconnection(container, () => {
             runtime.dispose();
         }, {

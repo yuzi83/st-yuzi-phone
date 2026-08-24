@@ -76,6 +76,19 @@ function buildGroupIdentity(candidates, friendReferences = []) {
     return `${groups}\n\n可用于新建群聊的已有好友：${friends}`;
 }
 
+function createProjectionSignature(candidate) {
+    return JSON.stringify({
+        title: candidate?.title || '',
+        personId: candidate?.personId || '',
+        memberIds: Array.isArray(candidate?.memberIds) ? candidate.memberIds : [],
+        ownerId: candidate?.ownerId || '',
+        adminIds: Array.isArray(candidate?.adminIds) ? candidate.adminIds : [],
+        reinviteOnly: candidate?.reinviteOnly === true,
+        peopleById: candidate?.peopleById || {},
+        messages: Array.isArray(candidate?.messages) ? candidate.messages : [],
+    });
+}
+
 /**
  * QQ 主动周期的应用服务。网络、协议和投影在后续执行切片中经公开 seam 注入。
  */
@@ -252,6 +265,9 @@ export function createQQV2ProactiveService(options = {}) {
                 members: (group.memberIds || []).map(labelFor),
                 ownerName: labelFor(group.ownerId),
                 adminNames: (group.adminIds || []).map(labelFor),
+                memberIds: [...(group.memberIds || [])],
+                ownerId: group.ownerId || '',
+                adminIds: [...(group.adminIds || [])],
                 reinviteOnly: mayReinvite,
                 peopleById: Object.fromEntries(memberPeople.filter(Boolean).map((person) => [person.personId, asText(person.formalName, 120)])),
                 messages,
@@ -303,6 +319,10 @@ export function createQQV2ProactiveService(options = {}) {
         }
         if (!current()) return { status: 'cancelled' };
         const { candidates, personReferences, friendReferences } = candidateData;
+        const projectionSignaturesBeforeCommit = new Map(candidates.map((candidate) => [
+            candidate.conversationId,
+            createProjectionSignature(candidate),
+        ]));
         const storyTime = asText(getStoryTime(), 128);
         const sections = buildSections({ kind, conversations: candidates });
         const stickerCatalog = buildQQV2StickerCatalog(stickers);
@@ -359,10 +379,59 @@ export function createQQV2ProactiveService(options = {}) {
             isCurrent: current,
         });
         if (!current()) return { status: 'cancelled' };
-        const conversationIds = [...new Set([
-            ...candidates.map((candidate) => candidate.conversationId),
-            ...(Array.isArray(actionResult?.createdConversationIds) ? actionResult.createdConversationIds : []),
-        ])];
+        const appliedActions = Array.isArray(actionResult?.applied) ? actionResult.applied : [];
+        const createdConversationIds = Array.isArray(actionResult?.createdConversationIds)
+            ? actionResult.createdConversationIds
+            : [];
+        if (createdConversationIds.length === 0
+            && appliedActions.every((action) => ['none', 'read'].includes(action?.type))) {
+            return { status: 'succeeded' };
+        }
+        const affectedConversationIds = new Set(createdConversationIds);
+        const appliedMessageIds = new Set(appliedActions
+            .filter((action) => ['message', 'transfer'].includes(action?.type))
+            .map((action) => asText(action?.messageId, 256))
+            .filter(Boolean));
+        if (appliedMessageIds.size > 0) {
+            const candidateConversationIds = [...new Set([
+                ...candidates.map((candidate) => candidate.conversationId),
+                ...createdConversationIds,
+            ])];
+            const listMessages = requireFunction(repository.listMessages, 'repository.listMessages');
+            await Promise.all(candidateConversationIds.map(async (conversationId) => {
+                const messages = await listMessages(scopeId, conversationId);
+                if (messages.some((message) => appliedMessageIds.has(asText(message?.messageId, 256)))) {
+                    affectedConversationIds.add(conversationId);
+                }
+            }));
+        }
+        const hasUnresolvedProjectionAction = appliedActions.some((action) => (
+            !['none', 'read', 'message', 'transfer', 'create-private', 'create-group'].includes(action?.type)
+        ));
+        if (hasUnresolvedProjectionAction) {
+            const nextCandidateData = await resolveCandidates(
+                scopeId,
+                kind,
+                runtimeSettings.conversationHistoryLimit,
+            );
+            if (!current()) return { status: 'cancelled' };
+            const projectionSignaturesAfterCommit = new Map(nextCandidateData.candidates.map((candidate) => [
+                candidate.conversationId,
+                createProjectionSignature(candidate),
+            ]));
+            const comparableConversationIds = new Set([
+                ...projectionSignaturesBeforeCommit.keys(),
+                ...projectionSignaturesAfterCommit.keys(),
+            ]);
+            comparableConversationIds.forEach((conversationId) => {
+                if (projectionSignaturesBeforeCommit.get(conversationId)
+                    !== projectionSignaturesAfterCommit.get(conversationId)) {
+                    affectedConversationIds.add(conversationId);
+                }
+            });
+        }
+        const conversationIds = [...affectedConversationIds];
+        if (conversationIds.length === 0) return { status: 'succeeded' };
         if (!current()) return { status: 'cancelled' };
         try {
             await syncWorldbook({

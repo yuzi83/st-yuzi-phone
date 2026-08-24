@@ -69,7 +69,7 @@ export function getIconForSheet(sheetName) {
 export function getTextIcon(letter, colorA, colorB) {
     const text = String(letter || '').trim().charAt(0) || 'A';
     return `
-        <div class="phone-dock-text-icon" style="--phone-dock-text-icon-start:${escapeHtmlAttr(colorA)};--phone-dock-text-icon-end:${escapeHtmlAttr(colorB)};">
+        <div class="phone-dock-text-icon" style="--yuzi-phone-dock-text-icon-start:${escapeHtmlAttr(colorA)};--yuzi-phone-dock-text-icon-end:${escapeHtmlAttr(colorB)};">
             <span class="phone-dock-text-icon-glyph-wrap">
                 <span class="phone-dock-text-icon-glyph">${escapeHtml(text)}</span>
             </span>

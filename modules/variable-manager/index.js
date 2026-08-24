@@ -370,7 +370,7 @@ export const VARIABLE_MANAGER_APP = {
  */
 export function getVariableManagerIcon() {
     return `
-        <div style="width:100%;height:100%;background:linear-gradient(135deg,#7C4DFF,#536DFE);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:600;color:#fff;border-radius:var(--phone-app-icon-radius,12px);box-sizing:border-box;">
+        <div style="width:100%;height:100%;background:linear-gradient(135deg,#7C4DFF,#536DFE);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:600;color:#fff;border-radius:var(--yuzi-phone-home-app-icon-radius,12px);box-sizing:border-box;">
             变
         </div>
     `;

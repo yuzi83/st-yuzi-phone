@@ -18,7 +18,7 @@
 }
 
 /* --- Phone Shell --- */
-.phone-shell {
+#yuzi-phone-standalone .yuzi-phone-shell {
     width: 100%;
     height: 100%;
     display: flex;
@@ -40,7 +40,7 @@
 }
 
 /* 保留选择器作为拖拽把手，并以灵动岛呈现。 */
-.phone-notch {
+#yuzi-phone-standalone .yuzi-phone-notch {
     position: absolute;
     top: calc(
         var(--yuzi-phone-frame-screen-inset, 8px) - var(--yuzi-phone-frame-border-width, 6px) +
@@ -55,7 +55,7 @@
     z-index: 3;
 }
 
-.phone-status-bar {
+#yuzi-phone-standalone .yuzi-phone-status-bar {
     position: absolute;
     top: calc(var(--yuzi-phone-frame-screen-inset, 8px) - var(--yuzi-phone-frame-border-width, 6px));
     right: calc(var(--yuzi-phone-frame-screen-inset, 8px) - var(--yuzi-phone-frame-border-width, 6px));
@@ -77,32 +77,32 @@
     white-space: nowrap;
 }
 
-.phone-status-time {
+#yuzi-phone-standalone .yuzi-phone-status-time {
     font-family: var(--yuzi-phone-font-family);
     font-variant-numeric: tabular-nums;
 }
 
-.phone-status-icons {
+#yuzi-phone-standalone .yuzi-phone-status-icons {
     display: flex;
     align-items: center;
     gap: var(--yuzi-phone-status-level-gap, 7px);
 }
 
-.phone-status-icons > span {
+#yuzi-phone-standalone .yuzi-phone-status-icons > span {
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
-.phone-status-icons :is(svg, img) {
+#yuzi-phone-standalone .yuzi-phone-status-icons :is(svg, img) {
     display: block;
 }
 
-.phone-status-icons img {
+#yuzi-phone-standalone .yuzi-phone-status-icons img {
     filter: var(--yuzi-phone-status-icon-filter);
 }
 
-.phone-screen {
+#yuzi-phone-standalone .yuzi-phone-screen {
     flex: 1;
     position: relative;
     overflow: hidden;
@@ -112,22 +112,22 @@
     container-type: inline-size;
 }
 
-.phone-shell[data-phone-home-indicator-layout="docked"] .phone-screen {
+#yuzi-phone-standalone .yuzi-phone-shell[data-yuzi-phone-home-indicator-layout="docked"] .yuzi-phone-screen {
     margin-bottom: var(--yuzi-phone-home-indicator-hit-height);
 }
 
-.phone-temporary-layer-host {
+#yuzi-phone-standalone .yuzi-phone-temporary-layer-host {
     position: absolute;
     inset: 0;
     z-index: var(--yuzi-phone-shell-temporary-layer-z-index);
     pointer-events: none;
 }
 
-.phone-temporary-layer-host > * {
+#yuzi-phone-standalone .yuzi-phone-temporary-layer-host > * {
     pointer-events: auto;
 }
 
-.phone-home-indicator {
+#yuzi-phone-standalone .yuzi-phone-home-indicator {
     position: absolute;
     right: 50%;
     bottom: var(--yuzi-phone-home-indicator-bottom);
@@ -143,22 +143,22 @@
     transform: translateX(50%);
 }
 
-.phone-home-indicator > span {
+#yuzi-phone-standalone .yuzi-phone-home-indicator > span {
     width: var(--yuzi-phone-home-indicator-width);
     height: var(--yuzi-phone-home-indicator-height);
     border-radius: var(--yuzi-phone-radius-pill);
     background: var(--yuzi-phone-home-indicator-color);
 }
 
-.phone-home-indicator:active > span {
+#yuzi-phone-standalone .yuzi-phone-home-indicator:active > span {
     opacity: var(--yuzi-phone-home-indicator-press-opacity);
 }
 
-.phone-home-indicator[hidden] {
+#yuzi-phone-standalone .yuzi-phone-home-indicator[hidden] {
     display: none;
 }
 
-.phone-shell[data-phone-home-indicator-layout="docked"] .phone-home-indicator {
+#yuzi-phone-standalone .yuzi-phone-shell[data-yuzi-phone-home-indicator-layout="docked"] .yuzi-phone-home-indicator {
     right: 0;
     bottom: 0;
     left: 0;
@@ -195,20 +195,20 @@
 }
 
 /* Shared shell bridge for the paired Figma 02 QQ light and dark skins. */
-.phone-shell {
+#yuzi-phone-standalone .yuzi-phone-shell {
     color-scheme: var(--yuzi-phone-native-control-color-scheme);
 }
 
-.phone-status-bar {
+#yuzi-phone-standalone .yuzi-phone-status-bar {
     color: var(--yuzi-phone-system-foreground);
 }
 
-.phone-shell:has(.phone-screen > .phone-page:not(.phone-page-exit):not(.phone-page-exit-back) > .phone-home[data-home-app-label-color-mode="white"]) .phone-status-bar {
+#yuzi-phone-standalone .yuzi-phone-shell:has(.yuzi-phone-screen > .phone-page:not(.phone-page-exit):not(.phone-page-exit-back) > .phone-home[data-home-app-label-color-mode="white"]) .yuzi-phone-status-bar {
     --yuzi-phone-status-icon-filter: none;
     color: var(--yuzi-phone-home-app-label-color-on-dark);
 }
 
-.phone-shell:has(.phone-screen > .phone-page:not(.phone-page-exit):not(.phone-page-exit-back) > .phone-home[data-home-app-label-color-mode="black"]) .phone-status-bar {
+#yuzi-phone-standalone .yuzi-phone-shell:has(.yuzi-phone-screen > .phone-page:not(.phone-page-exit):not(.phone-page-exit-back) > .phone-home[data-home-app-label-color-mode="black"]) .yuzi-phone-status-bar {
     --yuzi-phone-status-icon-filter: brightness(0);
     color: var(--yuzi-phone-home-app-label-color-on-light);
 }
@@ -220,22 +220,22 @@
     min-block-size: 0;
 }
 
-.phone-shell :is(input, select, textarea) {
+#yuzi-phone-standalone .yuzi-phone-shell :is(input, select, textarea) {
     color: var(--yuzi-phone-form-text);
     background-color: var(--yuzi-phone-form-surface);
     border-color: var(--yuzi-phone-form-border);
 }
 
-.phone-shell :is(input, select, textarea)::placeholder {
+#yuzi-phone-standalone .yuzi-phone-shell :is(input, select, textarea)::placeholder {
     color: var(--yuzi-phone-form-placeholder);
 }
 
-.phone-shell :is(input, select, textarea):focus-visible {
+#yuzi-phone-standalone .yuzi-phone-shell :is(input, select, textarea):focus-visible {
     outline: var(--yuzi-phone-form-focus-ring-width) solid var(--yuzi-phone-form-focus-ring);
     outline-offset: var(--yuzi-phone-form-focus-ring-offset);
 }
 
-.phone-shell :is(input, select, textarea):disabled {
+#yuzi-phone-standalone .yuzi-phone-shell :is(input, select, textarea):disabled {
     color: var(--yuzi-phone-form-disabled-text);
     background-color: var(--yuzi-phone-form-disabled-surface);
     border-color: var(--yuzi-phone-form-border);
@@ -243,7 +243,7 @@
 }
 
 /* SillyTavern themes may force native controls with !important; keep that override at the shell boundary. */
-.phone-shell .yuzi-qq-app :is(
+#yuzi-phone-standalone .yuzi-phone-shell .yuzi-qq-app :is(
     input:not([type]),
     input[type="text"],
     input[type="number"],
@@ -262,18 +262,18 @@
     color-scheme: var(--yuzi-phone-native-control-color-scheme);
 }
 
-.phone-shell .yuzi-qq-app :is(input, textarea)::placeholder {
+#yuzi-phone-standalone .yuzi-phone-shell .yuzi-qq-app :is(input, textarea)::placeholder {
     color: var(--yuzi-phone-form-placeholder) !important;
     -webkit-text-fill-color: var(--yuzi-phone-form-placeholder) !important;
 }
 
-.phone-shell .yuzi-qq-app select option {
+#yuzi-phone-standalone .yuzi-phone-shell .yuzi-qq-app select option {
     color: var(--yuzi-phone-form-text) !important;
     -webkit-text-fill-color: var(--yuzi-phone-form-text) !important;
     background-color: var(--yuzi-phone-form-surface) !important;
 }
 
-.phone-shell .yuzi-qq-app :is(input, textarea, select):disabled {
+#yuzi-phone-standalone .yuzi-phone-shell .yuzi-qq-app :is(input, textarea, select):disabled {
     color: var(--yuzi-phone-form-disabled-text) !important;
     -webkit-text-fill-color: var(--yuzi-phone-form-disabled-text) !important;
     background-color: var(--yuzi-phone-form-disabled-surface) !important;

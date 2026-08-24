@@ -668,6 +668,7 @@
 .yuzi-qq-composer-input {
     min-block-size: var(--yuzi-qq-composer-input-min-height);
     max-block-size: var(--yuzi-qq-composer-input-max-height);
+    max-height: var(--yuzi-qq-composer-input-max-height);
     line-height: var(--yuzi-qq-composer-line-height);
     overflow-y: auto;
 }
@@ -1421,7 +1422,7 @@
 .yuzi-qq-composer-input {
     min-block-size: var(--yuzi-qq-composer-input-height);
     padding-inline: var(--yuzi-qq-search-padding-inline);
-    padding-block: var(--yuzi-qq-square-radius);
+    padding-block: var(--yuzi-qq-composer-input-padding-block);
     border: none;
     border-radius: var(--yuzi-qq-search-radius);
     color: var(--yuzi-qq-text);
@@ -3352,6 +3353,118 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     white-space: normal;
+}
+
+.yuzi-qq-generated-image-card {
+    position: relative;
+    display: grid;
+    inline-size: var(--yuzi-qq-chat-bubble-content-max-width);
+    max-inline-size: 100%;
+    gap: var(--yuzi-qq-private-card-copy-gap);
+    padding: var(--yuzi-qq-bubble-padding-block) var(--yuzi-qq-bubble-padding-inline);
+    overflow: hidden;
+    border-radius: var(--yuzi-qq-bubble-radius);
+    color: var(--yuzi-qq-text);
+    background: var(--yuzi-qq-bubble-other);
+    box-shadow: var(--yuzi-qq-shadow);
+}
+
+.yuzi-qq-message.is-self .yuzi-qq-generated-image-card {
+    color: var(--yuzi-qq-elevated);
+    background: var(--yuzi-qq-bubble-self);
+}
+
+.yuzi-qq-generated-image-media {
+    position: relative;
+    display: grid;
+    min-block-size: calc(var(--yuzi-qq-private-card-icon-size) * 3);
+    overflow: hidden;
+    place-items: center;
+    border-radius: var(--yuzi-qq-radius-8);
+    background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.yuzi-qq-generated-image {
+    display: block;
+    inline-size: 100%;
+    max-block-size: var(--yuzi-qq-dialog-width);
+    object-fit: contain;
+}
+
+.yuzi-qq-generated-image-placeholder {
+    display: grid;
+    min-block-size: calc(var(--yuzi-qq-private-card-icon-size) * 3);
+    place-items: center;
+    color: currentColor;
+    opacity: 0.52;
+    font-size: calc(var(--yuzi-qq-private-card-icon-font-size) * 1.35);
+}
+
+.yuzi-qq-generated-image-description {
+    display: -webkit-box;
+    overflow: hidden;
+    color: inherit;
+    opacity: 0.78;
+    font-size: var(--yuzi-qq-caption-size);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+}
+
+.yuzi-qq-image-generate-button {
+    position: absolute;
+    inset-block-start: var(--yuzi-qq-inline-gap);
+    inset-inline-end: var(--yuzi-qq-inline-gap);
+    z-index: 2;
+    display: inline-grid;
+    inline-size: var(--yuzi-qq-message-avatar-size);
+    block-size: var(--yuzi-qq-message-avatar-size);
+    padding: 0;
+    border: var(--yuzi-qq-line-width) solid color-mix(in srgb, currentColor 20%, transparent);
+    border-radius: var(--yuzi-qq-radius-full);
+    place-items: center;
+    color: var(--yuzi-qq-text);
+    background: color-mix(in srgb, var(--yuzi-qq-elevated) 88%, transparent);
+    box-shadow: var(--yuzi-qq-shadow);
+    cursor: pointer;
+    backdrop-filter: blur(var(--yuzi-qq-radius-8));
+}
+
+.yuzi-qq-image-generate-button:disabled {
+    cursor: wait;
+}
+
+.yuzi-qq-image-generate-button.is-loading > * {
+    visibility: hidden;
+}
+
+.yuzi-qq-image-generate-button.is-loading::after {
+    inline-size: var(--yuzi-qq-private-stop-icon-size);
+    block-size: var(--yuzi-qq-private-stop-icon-size);
+    border: var(--yuzi-qq-focus-ring-width) solid color-mix(in srgb, currentColor 24%, transparent);
+    border-block-start-color: currentColor;
+    border-radius: var(--yuzi-qq-radius-full);
+    animation: yuzi-qq-image-generation-spin calc(var(--yuzi-phone-home-app-enter-duration) * 2.5) linear infinite;
+    content: '';
+}
+
+.yuzi-qq-image-regenerate-button {
+    inline-size: calc(var(--yuzi-qq-message-avatar-size) - var(--yuzi-qq-status-inline-gap));
+    block-size: calc(var(--yuzi-qq-message-avatar-size) - var(--yuzi-qq-status-inline-gap));
+    font-size: var(--yuzi-qq-caption-size);
+}
+
+@keyframes yuzi-qq-image-generation-spin {
+    to {
+        transform: rotate(1turn);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .yuzi-qq-image-generate-button.is-loading::after {
+        animation: none;
+    }
 }
 
 .yuzi-qq-transfer-note,

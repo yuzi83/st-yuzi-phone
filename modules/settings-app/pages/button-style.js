@@ -22,7 +22,7 @@ function buildToggleCoverPreviewHtml(shape, coverDataUrl, sizePx = 40) {
     return `
         <div class="phone-toggle-preview-shell">
             <div class="phone-toggle-preview-button ${shapeClass} ${stateClass}"
-                style="${coverStyle}--phone-toggle-preview-size:${escapeHtmlAttr(safeSize)}px;"
+                style="${coverStyle}--yuzi-phone-toggle-preview-size:${escapeHtmlAttr(safeSize)}px;"
                 role="img"
                 aria-label="${safeCover ? '按钮封面预览' : '毛玻璃按钮预览'}">
                 <span class="phone-toggle-preview-icon">${PHONE_ICONS.phone || ''}</span>

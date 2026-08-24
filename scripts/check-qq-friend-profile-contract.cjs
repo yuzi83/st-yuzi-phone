@@ -36,7 +36,7 @@ async function main() {
     const runtime = createQQV2ProductionRuntime({
         host: { readScope: () => ({ scopeId, chatId: 'friend-profile', chatFile: 'friend-profile', hostType: 'character', hostId: 'test' }), readUserIdentity: () => ({ name: 'Traveler', avatar: '' }), readStoryTime: () => '2042-05-20 09:30', readStoryMessages: () => [], readRawContext: () => ({}) },
         stateStore, repository: createQQV2Repository({ stateStore }), cryptoApi: webcrypto, backend: { async generate() {}, async loadModels() { return []; } },
-        worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} }, worldbookContextGateway: { async runDryRun() { return []; } },
+        worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} },
     });
     await runtime.initialize(); const facade = runtime.getFacade();
     const alice = await facade.intent.createPrivateConversation({ name: 'Alice' });

@@ -13,8 +13,8 @@
 */
 
 /* flex 链上所有节点都需要 min-height:0 才能让子元素正确收缩 */
-#yuzi-phone-standalone .phone-shell,
-#yuzi-phone-standalone .phone-screen,
+#yuzi-phone-standalone .yuzi-phone-shell,
+#yuzi-phone-standalone .yuzi-phone-screen,
 #yuzi-phone-standalone .phone-page,
 #yuzi-phone-standalone .phone-app-page,
 #yuzi-phone-standalone .phone-home {
@@ -23,7 +23,7 @@
 
 /* phone-home 仍由高特异性 min-height 补丁兜底 */
 
-#yuzi-phone-standalone .phone-screen {
+#yuzi-phone-standalone .yuzi-phone-screen {
     touch-action: pan-y;
     min-height: 0;
 }

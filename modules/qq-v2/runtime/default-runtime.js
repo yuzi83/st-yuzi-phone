@@ -1,18 +1,40 @@
 import { createQQV2HostAdapter } from '../host/adapter.js';
 import { createQQV2ProductionRuntime } from '../application/production-runtime.js';
 import { createMemoryQQV2StateStore } from '../storage/state-store.js';
+import { Logger } from '../../error-handler.js';
+import { sharedPhoneImageGenerationRuntime } from '../../image-generation/runtime.js';
 
 const IDLE_STATUS = Object.freeze({
     phase: 'idle',
     scopeId: '',
-    worldbookScopeId: '',
     epoch: 0,
 });
+
+export function createQQV2DefaultProductionRuntime(options = {}) {
+    const imageGenerationRuntime = options.imageGenerationRuntime
+        || sharedPhoneImageGenerationRuntime;
+    const createProductionRuntime = typeof options.createProductionRuntime === 'function'
+        ? options.createProductionRuntime
+        : createQQV2ProductionRuntime;
+    return createProductionRuntime({
+        host: options.host,
+        logger: options.logger,
+        ...(options.stateStore ? { stateStore: options.stateStore } : {}),
+        imageGenerationService: imageGenerationRuntime,
+        composeCharacterImagePrompt: input => (
+            imageGenerationRuntime.composeCharacterImagePrompt(input)
+        ),
+    });
+}
 
 /**
  * QQ v2 的默认运行入口。工厂同时是可注入的公开 seam，生产入口只使用其默认依赖。
  */
 export function createQQV2RuntimeEntry(options = {}) {
+    const logger = options.logger || Logger.withScope({
+        scope: 'qq-v2/runtime',
+        feature: 'qq-v2',
+    });
     const createHostAdapter = typeof options.createHostAdapter === 'function'
         ? options.createHostAdapter
         : () => createQQV2HostAdapter();
@@ -24,7 +46,11 @@ export function createQQV2RuntimeEntry(options = {}) {
             const stateStore = typeof window === 'undefined' && !globalThis.indexedDB
                 ? createMemoryQQV2StateStore()
                 : undefined;
-            return createQQV2ProductionRuntime({ host, ...(stateStore ? { stateStore } : {}) });
+            return createQQV2DefaultProductionRuntime({
+                host,
+                logger,
+                ...(stateStore ? { stateStore } : {}),
+            });
         };
     let runtime = null;
     let hostError = null;
@@ -73,9 +99,9 @@ export function createQQV2RuntimeEntry(options = {}) {
                 ? invokeRuntime(() => runtime.handleCharacterMessageRendered(...args))
                 : Promise.resolve(null);
         },
-        handleWorldInfoActivated(...args) {
+        handleMessageReceived(...args) {
             return runtime
-                ? invokeRuntime(() => runtime.handleWorldInfoActivated(...args))
+                ? invokeRuntime(() => runtime.handleMessageReceived(...args))
                 : Promise.resolve(null);
         },
         getStatus() {
@@ -85,12 +111,8 @@ export function createQQV2RuntimeEntry(options = {}) {
                 ...status,
                 phase: 'unavailable',
                 scopeId: '',
-                worldbookScopeId: '',
                 errorCode: 'host_unavailable',
             });
-        },
-        getWorldInfoLifecycle() {
-            return runtime?.getWorldInfoLifecycle?.() || null;
         },
         getFacade() {
             return runtime?.getFacade?.() || null;
@@ -111,8 +133,7 @@ export const handleQQV2ChatChanged = (...args) => defaultRuntimeEntry.handleChat
 export const handleQQV2ChatDeleted = (...args) => defaultRuntimeEntry.handleChatDeleted(...args);
 export const handleQQV2GroupChatDeleted = (...args) => defaultRuntimeEntry.handleGroupChatDeleted(...args);
 export const handleQQV2CharacterMessageRendered = (...args) => defaultRuntimeEntry.handleCharacterMessageRendered(...args);
-export const handleQQV2WorldInfoActivated = (...args) => defaultRuntimeEntry.handleWorldInfoActivated(...args);
+export const handleQQV2MessageReceived = (...args) => defaultRuntimeEntry.handleMessageReceived(...args);
 export const getQQV2RuntimeStatus = () => defaultRuntimeEntry.getStatus();
-export const getQQV2WorldInfoLifecycle = () => defaultRuntimeEntry.getWorldInfoLifecycle();
 export const getQQV2Facade = () => defaultRuntimeEntry.getFacade();
 export const destroyQQV2Runtime = () => defaultRuntimeEntry.destroy();

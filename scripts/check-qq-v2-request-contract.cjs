@@ -1151,6 +1151,44 @@ async function testProactiveWorkCanBeObservedAndCancelled() {
     assert.equal(service.getQueueState().active, null);
 }
 
+async function testProactiveFailureIsReportedThroughTheObserver() {
+    const { createQQV2RequestService } = await importModule('modules/qq-v2/request/service.js');
+    const fixture = createRepositoryFixture();
+    const observed = [];
+    const failure = Object.assign(new Error('proactive backend unavailable'), {
+        code: 'backend_unavailable',
+    });
+    const service = createQQV2RequestService({
+        repository: fixture.repository,
+        apiPresetResolver: async () => ({ endpoint: 'https://example.test/v1', apiKey: 'secret', model: 'model-a' }),
+        promptPresetResolver: async () => ({ messages: [] }),
+        buildManualRequest: async () => [{ role: 'user', content: 'manual' }],
+        backend: { async generate() { return { content: '<qq><message /></qq>' }; } },
+        parseResponse: () => [],
+        validateActions: (actions) => actions,
+        onProactiveError(error, context) {
+            observed.push({ error, context });
+        },
+    });
+
+    const scheduled = service.enqueueProactive({
+        scopeId: fixture.scopeId,
+        execute: async () => {
+            throw failure;
+        },
+    });
+    await service.waitForIdle();
+
+    assert.equal(observed.length, 1, '主动请求异常不得再被静默吞掉');
+    assert.strictEqual(observed[0].error, failure);
+    assert.deepEqual(observed[0].context, {
+        scopeId: fixture.scopeId,
+        requestId: scheduled.requestId,
+        stage: 'execute',
+    });
+    assert.equal(service.getQueueState().active, null);
+}
+
 async function testManualMessagesResetTheOneSecondCoalescingWindow() {
     const { createQQV2RequestService } = await importModule('modules/qq-v2/request/service.js');
     const fixture = createRepositoryFixture();
@@ -1272,6 +1310,7 @@ async function main() {
     await testManualMessagePreemptsAnActiveProactiveRequest();
     await testProactiveRequestSkipsWhenManualWorkExists();
     await testProactiveWorkCanBeObservedAndCancelled();
+    await testProactiveFailureIsReportedThroughTheObserver();
     await testManualMessagesResetTheOneSecondCoalescingWindow();
     await testManualRequestCanCommitThroughTheProductionActionSeam();
     console.log('[qq-v2-request-contract] passed');

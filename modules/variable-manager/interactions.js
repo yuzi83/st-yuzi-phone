@@ -12,6 +12,7 @@ import { buildEditCardHtml, buildAddVariableDialogHtml, buildConfirmDialogHtml }
 const logger = Logger.withScope ? Logger.withScope({ scope: 'variable-manager/interactions' }) : Logger;
 const LONG_PRESS_MS = 500;
 const SELECTABLE_DELETE_SELECTOR = '.vm-card[data-delete-path], .vm-group-header[data-delete-path], .vm-object-title[data-delete-path]';
+const COLLAPSIBLE_TRIGGER_SELECTOR = '.vm-group-header, .vm-object-title';
 
 function createRuntimeAdapter(runtime) {
     const cleanups = new Set();
@@ -197,9 +198,9 @@ function handlePageClick(event, page, deps, runtime) {
 
     if (target.closest('.vm-edit-actions') || target.closest('.vm-card-checkbox')) return;
 
-    const header = target.closest('.vm-group-header');
-    if (header instanceof HTMLElement) {
-        toggleGroupCollapse(header);
+    const collapseTrigger = target.closest(COLLAPSIBLE_TRIGGER_SELECTOR);
+    if (collapseTrigger instanceof HTMLElement) {
+        toggleVariableSectionCollapse(collapseTrigger);
         return;
     }
 
@@ -303,15 +304,27 @@ function handleDialogClick(event, overlay, page, deps, runtime) {
     }
 }
 
-function toggleGroupCollapse(header) {
-    const group = header.closest('.vm-group');
-    if (!group) return;
+function toggleVariableSectionCollapse(trigger) {
+    if (!(trigger instanceof HTMLElement)) return false;
 
-    const chevron = header.querySelector('.vm-group-chevron');
-    const isCollapsed = group.classList.toggle('vm-group-collapsed');
-    if (chevron) {
-        chevron.textContent = isCollapsed ? '▶' : '▼';
+    let containerSelector = '';
+    let collapsedClass = '';
+
+    if (trigger.classList.contains('vm-group-header')) {
+        containerSelector = '.vm-group';
+        collapsedClass = 'vm-group-collapsed';
+    } else if (trigger.classList.contains('vm-object-title')) {
+        containerSelector = '.vm-tree-node[data-node-kind="object"]';
+        collapsedClass = 'vm-object-collapsed';
+    } else {
+        return false;
     }
+
+    const section = trigger.closest(containerSelector);
+    if (!(section instanceof HTMLElement)) return false;
+
+    section.classList.toggle(collapsedClass);
+    return true;
 }
 
 function enterEditMode(card, page, deps) {

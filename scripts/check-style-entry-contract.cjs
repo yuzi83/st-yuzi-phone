@@ -144,8 +144,8 @@ function main() {
 
     const homeOverlayBlock = getCssRuleBlock(contents.home, '.phone-home-overlay');
     const contentPresetRootBlock = getCssRuleBlock(contents.contentPresets, '.phone-content-preset-root');
-    const phoneShellBlock = getCssRuleBlock(contents.shell, '.phone-shell');
-    const dynamicIslandBlock = getCssRuleBlock(contents.shell, '.phone-notch');
+    const phoneShellBlock = getCssRuleBlock(contents.shell, '#yuzi-phone-standalone .yuzi-phone-shell');
+    const dynamicIslandBlock = getCssRuleBlock(contents.shell, '#yuzi-phone-standalone .yuzi-phone-notch');
     const baseNavBlock = getCssRuleBlock(contents.navCore, '.phone-nav-bar');
     const settingsNavBlock = getCssRuleBlock(contents.settingsModern, '.phone-settings-page .phone-nav-bar');
     const genericNavBlock = getCssRuleBlock(contents.genericTemplate, '.phone-generic-root.phone-generic-template-scope .phone-generic-slot-nav');
@@ -177,6 +177,11 @@ function main() {
         && has(contents.tokens, '--yuzi-phone-nav-inline-action-padding-inline: clamp(4px, 2cqi, 8px);'));
     check(results, 'shell', 'phone screen exposes the shared inline-size container', has(contents.shell, 'container-name: yuzi-phone-screen;')
         && has(contents.shell, 'container-type: inline-size;'));
+    check(results, 'shell', 'core shell selectors are rooted and Yuzi namespaced',
+        has(contents.shell, '#yuzi-phone-standalone .yuzi-phone-shell')
+        && has(contents.shell, '#yuzi-phone-standalone .yuzi-phone-screen')
+        && has(contents.shell, '#yuzi-phone-standalone .yuzi-phone-home-indicator')
+        && !/(^|[,{]\s*)\.phone-(?:shell|screen|home-indicator|notch|status-bar|status-time|status-icons|temporary-layer-host)\b/m.test(contents.shell));
     check(results, 'shell', 'dynamic island keeps the new UI dimensions', has(dynamicIslandBlock, 'width: var(--yuzi-phone-dynamic-island-width, 78px);')
         && has(dynamicIslandBlock, 'height: var(--yuzi-phone-dynamic-island-height, 24px);'));
     check(results, 'navCore', 'base app nav owns the shared three-slot geometry below the status-safe area', has(baseNavBlock, 'var(--yuzi-phone-nav-side-slot-width)')

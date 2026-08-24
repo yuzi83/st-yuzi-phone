@@ -4,13 +4,13 @@ import {
     onGroupChatDeleted,
     onCharacterLoaded,
     onAppReady,
+    onMessageReceived,
     onUserMessageRendered,
     onCharacterMessageRendered,
     onMessageUpdated,
     onMessageDeleted,
     onGenerationEnded,
     onGenerationAfterCommands,
-    onWorldInfoActivated,
 } from '../integration/event-bridge.js';
 import { resolveCurrentHostIdentity } from '../integration/chat-identity.js';
 import { createHostChatDeletedFact } from '../qq-v2/host/lifecycle.js';
@@ -41,8 +41,7 @@ export async function registerPhoneEventListeners(options = {}) {
         onQQV2ChatChanged,
         onQQV2ChatDeleted,
         onQQV2GroupChatDeleted,
-        onQQV2CharacterMessageRendered,
-        onQQV2WorldInfoActivated,
+        onQQV2MessageReceived,
         resolveQQV2HostIdentity = resolveCurrentHostIdentity,
     } = options;
 
@@ -87,14 +86,13 @@ export async function registerPhoneEventListeners(options = {}) {
             Logger.debug('用户消息渲染完成:', messageId);
         });
 
-        await onCharacterMessageRendered((messageId, generationType) => {
-            Logger.debug('角色消息渲染完成:', messageId, generationType);
-            dispatchQQV2Event(onQQV2CharacterMessageRendered, '正文角色消息', messageId, generationType);
+        await onMessageReceived((messageId, generationType) => {
+            Logger.debug('角色消息已写入正文:', messageId, generationType);
+            dispatchQQV2Event(onQQV2MessageReceived, '正文角色消息写入', messageId, generationType);
         });
 
-        await onWorldInfoActivated((...args) => {
-            Logger.debug('正文世界书条目已激活');
-            dispatchQQV2Event(onQQV2WorldInfoActivated, '正文世界书激活', ...args);
+        await onCharacterMessageRendered((messageId, generationType) => {
+            Logger.debug('角色消息渲染完成:', messageId, generationType);
         });
 
         await onMessageUpdated((messageId) => {

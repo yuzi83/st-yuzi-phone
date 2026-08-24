@@ -310,6 +310,8 @@ function cloneMessage(message) {
         transfer: cloneTransfer(source.transfer),
         stickerId: asText(source.stickerId, 256),
         assetId: asText(source.assetId, 256),
+        generatedImagePath: asText(source.generatedImagePath, 2048),
+        generatedAt: Math.max(0, Math.trunc(asNumber(source.generatedAt))),
         selectedForInjection: source.selectedForInjection === true,
     });
 }
@@ -1421,6 +1423,42 @@ export function createQQV2Facade(options = {}) {
                         result: Object.freeze({
                             deleted: result.deleted === true,
                             mode: asText(result.mode, 64),
+                        }),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async generateMessageImage(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.getConversation !== 'function') return unavailable('getConversation');
+                if (typeof runtime.generateMessageImage !== 'function') return unavailable('generateMessageImage');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    const conversationId = asText(input.conversationId, 256);
+                    const messageId = asText(input.messageId, 256);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    if (!conversationId) {
+                        return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
+                    }
+                    if (!messageId) {
+                        return Object.freeze({ ok: false, status: 'invalid', reason: 'message-required' });
+                    }
+                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) {
+                        return conversationNotFound();
+                    }
+                    const result = asObject(await runtime.generateMessageImage({
+                        scopeId: context.scopeId,
+                        conversationId,
+                        messageId,
+                    }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        result: Object.freeze({
+                            message: cloneMessage(result.message),
+                            previousImagePath: asText(result.previousImagePath, 2048),
                         }),
                     });
                 } catch (error) {

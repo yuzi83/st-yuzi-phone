@@ -85,42 +85,42 @@ function main() {
         assertDeclaration(dark, token, darkValue, `${token} must map to the QQ dark skin`);
     }
 
-    assert.match(shell, /\.phone-status-bar\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-system-foreground\);/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-status-bar\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-system-foreground\);/,
         'the unique shell status bar must consume the QQ skin foreground role');
-    assert.match(shell, /\.phone-status-icons img\s*\{[\s\S]*?filter:\s*var\(--yuzi-phone-status-icon-filter\);/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-status-icons img\s*\{[\s\S]*?filter:\s*var\(--yuzi-phone-status-icon-filter\);/,
         'the shell status icons must consume the same black-or-white appearance role');
-    assert.match(shell, /\.phone-shell:has\(\.phone-screen > \.phone-page:not\(\.phone-page-exit\):not\(\.phone-page-exit-back\) > \.phone-home\[data-home-app-label-color-mode="white"\]\) \.phone-status-bar\s*\{[\s\S]*?--yuzi-phone-status-icon-filter:\s*none;[\s\S]*?color:\s*var\(--yuzi-phone-home-app-label-color-on-dark\);/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-shell:has\(\.yuzi-phone-screen > \.phone-page:not\(\.phone-page-exit\):not\(\.phone-page-exit-back\) > \.phone-home\[data-home-app-label-color-mode="white"\]\) \.yuzi-phone-status-bar\s*\{[\s\S]*?--yuzi-phone-status-icon-filter:\s*none;[\s\S]*?color:\s*var\(--yuzi-phone-home-app-label-color-on-dark\);/,
         'the active home status bar must use the configured white App-label foreground and icon treatment');
-    assert.match(shell, /\.phone-shell:has\(\.phone-screen > \.phone-page:not\(\.phone-page-exit\):not\(\.phone-page-exit-back\) > \.phone-home\[data-home-app-label-color-mode="black"\]\) \.phone-status-bar\s*\{[\s\S]*?--yuzi-phone-status-icon-filter:\s*brightness\(0\);[\s\S]*?color:\s*var\(--yuzi-phone-home-app-label-color-on-light\);/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-shell:has\(\.yuzi-phone-screen > \.phone-page:not\(\.phone-page-exit\):not\(\.phone-page-exit-back\) > \.phone-home\[data-home-app-label-color-mode="black"\]\) \.yuzi-phone-status-bar\s*\{[\s\S]*?--yuzi-phone-status-icon-filter:\s*brightness\(0\);[\s\S]*?color:\s*var\(--yuzi-phone-home-app-label-color-on-light\);/,
         'the active home status bar must use the configured black App-label foreground and icon treatment');
-    assert.match(shell, /\.phone-home-indicator\s*>\s*span\s*\{[\s\S]*?background:\s*var\(--yuzi-phone-home-indicator-color\);/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-home-indicator\s*>\s*span\s*\{[\s\S]*?background:\s*var\(--yuzi-phone-home-indicator-color\);/,
         'the unique shell Home Indicator must consume its semantic foreground role');
     assert.match(shell, /\.phone-page\.yuzi-qq-app\s*\{[\s\S]*?inline-size:\s*100%;[\s\S]*?block-size:\s*100%;/,
         'the QQ route root must fill the resized phone page');
-    assert.match(shell, /\.phone-shell\s*:is\(input, select, textarea\)\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-text\);[\s\S]*?background-color:\s*var\(--yuzi-phone-form-surface\);[\s\S]*?border-color:\s*var\(--yuzi-phone-form-border\);/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-shell\s*:is\(input, select, textarea\)\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-text\);[\s\S]*?background-color:\s*var\(--yuzi-phone-form-surface\);[\s\S]*?border-color:\s*var\(--yuzi-phone-form-border\);/,
         'native phone form controls must consume readable semantic roles');
-    assert.match(shell, /\.phone-shell\s*:is\(input, select, textarea\)::placeholder\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-placeholder\);/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-shell\s*:is\(input, select, textarea\)::placeholder\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-placeholder\);/,
         'native phone form placeholders must remain readable in either QQ skin');
-    assert.match(shell, /\.phone-shell\s*:is\(input, select, textarea\):focus-visible\s*\{[\s\S]*?outline:\s*var\(--yuzi-phone-form-focus-ring-width\) solid var\(--yuzi-phone-form-focus-ring\);/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-shell\s*:is\(input, select, textarea\):focus-visible\s*\{[\s\S]*?outline:\s*var\(--yuzi-phone-form-focus-ring-width\) solid var\(--yuzi-phone-form-focus-ring\);/,
         'native phone form focus must use the semantic QQ-skin focus role');
-    assert.match(shell, /\.phone-shell\s*:is\(input, select, textarea\):disabled\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-disabled-text\);[\s\S]*?background-color:\s*var\(--yuzi-phone-form-disabled-surface\);/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-shell\s*:is\(input, select, textarea\):disabled\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-disabled-text\);[\s\S]*?background-color:\s*var\(--yuzi-phone-form-disabled-surface\);/,
         'native disabled form controls must remain readable in either QQ skin');
-    assert.match(shell, /\.phone-shell \.yuzi-qq-app :is\([\s\S]*?input\[type="text"\][\s\S]*?select[\s\S]*?\)\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-text\) !important;[\s\S]*?-webkit-text-fill-color:\s*var\(--yuzi-phone-form-text\) !important;[\s\S]*?background-color:\s*var\(--yuzi-phone-form-surface\) !important;[\s\S]*?border-color:\s*var\(--yuzi-phone-form-border\) !important;[\s\S]*?color-scheme:\s*var\(--yuzi-phone-native-control-color-scheme\);/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-shell \.yuzi-qq-app :is\([\s\S]*?input\[type="text"\][\s\S]*?select[\s\S]*?\)\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-text\) !important;[\s\S]*?-webkit-text-fill-color:\s*var\(--yuzi-phone-form-text\) !important;[\s\S]*?background-color:\s*var\(--yuzi-phone-form-surface\) !important;[\s\S]*?border-color:\s*var\(--yuzi-phone-form-border\) !important;[\s\S]*?color-scheme:\s*var\(--yuzi-phone-native-control-color-scheme\);/,
         'QQ text controls must defeat SillyTavern theme rules through shared form roles');
-    assert.match(shell, /\.phone-shell \.yuzi-qq-app :is\(input, textarea\)::placeholder\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-placeholder\) !important;[\s\S]*?-webkit-text-fill-color:\s*var\(--yuzi-phone-form-placeholder\) !important;/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-shell \.yuzi-qq-app :is\(input, textarea\)::placeholder\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-placeholder\) !important;[\s\S]*?-webkit-text-fill-color:\s*var\(--yuzi-phone-form-placeholder\) !important;/,
         'QQ placeholders must consume the shared readable placeholder role');
-    assert.match(shell, /\.phone-shell \.yuzi-qq-app select option\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-text\) !important;[\s\S]*?background-color:\s*var\(--yuzi-phone-form-surface\) !important;/,
+    assert.match(shell, /#yuzi-phone-standalone \.yuzi-phone-shell \.yuzi-qq-app select option\s*\{[\s\S]*?color:\s*var\(--yuzi-phone-form-text\) !important;[\s\S]*?background-color:\s*var\(--yuzi-phone-form-surface\) !important;/,
         'QQ native options must not inherit the SillyTavern page palette');
-    assert.doesNotMatch(shell, /\.phone-shell \.yuzi-qq-app[^\{]*input\[type="(?:checkbox|radio|range|file|hidden)"\]/,
+    assert.doesNotMatch(shell, /\.yuzi-phone-shell \.yuzi-qq-app[^\{]*input\[type="(?:checkbox|radio|range|file|hidden)"\]/,
         'QQ host-theme isolation must not repaint non-text input controls');
     assert.doesNotMatch(shell, /SmartTheme|--ui-color-/,
         'the phone shell must not consume SillyTavern theme variables directly');
 
-    assert.equal((shellHtml.match(/phone-status-bar/g) || []).length, 1,
+    assert.equal((shellHtml.match(/class="yuzi-phone-status-bar"/g) || []).length, 1,
         'the shell must render exactly one global status bar');
-    assert.equal((shellHtml.match(/phone-home-indicator/g) || []).length, 2,
-        'the shell must render exactly one Home Indicator control and its hook');
-    assert.doesNotMatch(qqApp, /phone-status-bar|phone-home-indicator/,
+    assert.equal((shellHtml.match(/class="yuzi-phone-home-indicator"/g) || []).length, 1,
+        'the shell must render exactly one Home Indicator control');
+    assert.doesNotMatch(qqApp, /(?:yuzi-)?phone-status-bar|(?:yuzi-)?phone-home-indicator/,
         'QQ must not duplicate the global status bar or Home Indicator');
 }
 

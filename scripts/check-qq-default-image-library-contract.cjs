@@ -166,7 +166,6 @@ async function testProductionRuntimeContinuesWhenInstallationFails() {
             async loadBook() { return { entries: {} }; },
             async saveBook() {},
         },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
 
     assert.deepEqual(await runtime.initialize(), scope);

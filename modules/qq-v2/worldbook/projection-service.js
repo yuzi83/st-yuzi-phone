@@ -2,6 +2,7 @@ import { formatQQV2MessageSemantic } from '../domain/message-semantics.js';
 import { qqV2WorldbookPlacement } from './placement.js';
 
 const MARKER_KEY = 'yuziPhoneQQV2';
+const COMMENT_PREFIX = 'YuziQQ｜';
 const SELF_ID = '__self__';
 
 function asText(value, maxLength = 0) {
@@ -38,8 +39,12 @@ function parseStoryTime(value) {
     const day = Number(match[3]);
     const hour = Number(match[4] || 0);
     const minute = Number(match[5] || 0);
+    const hasClock = match[4] !== undefined && match[5] !== undefined;
     const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
-    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    if (date.getUTCFullYear() !== year
+        || date.getUTCMonth() !== month - 1
+        || date.getUTCDate() !== day
+        || (hasClock && (date.getUTCHours() !== hour || date.getUTCMinutes() !== minute))) return null;
     return date;
 }
 
@@ -48,6 +53,15 @@ function dateLabel(value) {
     if (!date) return '未知故事时间';
     const two = (number) => String(number).padStart(2, '0');
     return `${date.getUTCFullYear()}-${two(date.getUTCMonth() + 1)}-${two(date.getUTCDate())}`;
+}
+
+function timeLabel(value) {
+    const text = asText(value, 128);
+    if (!/[ T]\d{2}:\d{2}$/.test(text)) return '';
+    const date = parseStoryTime(text);
+    if (!date) return '';
+    const two = (number) => String(number).padStart(2, '0');
+    return `${two(date.getUTCHours())}:${two(date.getUTCMinutes())}`;
 }
 
 function subtractStoryWindow(now, window) {
@@ -134,11 +148,18 @@ function markerFor(scopeId, conversationId) {
     return { version: 2, scopeId, conversationId };
 }
 
+function currentProjectionConversationId(entry) {
+    const comment = asText(entry?.comment);
+    const isCurrentTitle = comment.startsWith(`${COMMENT_PREFIX}私聊｜`)
+        || comment.startsWith(`${COMMENT_PREFIX}群聊｜`);
+    if (!isCurrentTitle) return '';
+    const separatorIndex = comment.lastIndexOf('｜');
+    return separatorIndex >= 0 ? asText(comment.slice(separatorIndex + 1)) : '';
+}
+
 function isOwnedEntry(entry, scopeId, conversationId = '') {
-    const marker = entry?.extensions?.[MARKER_KEY];
-    return marker?.version === 2
-        && marker.scopeId === scopeId
-        && (!conversationId || marker.conversationId === conversationId);
+    const entryConversationId = currentProjectionConversationId(entry);
+    return Boolean(entryConversationId && (!conversationId || entryConversationId === conversationId));
 }
 
 function ensureEntries(book) {
@@ -157,6 +178,16 @@ function ownedEntries(book, scopeId, conversationId = '') {
     return Object.entries(ensureEntries(book)).filter(([, entry]) => isOwnedEntry(entry, scopeId, conversationId));
 }
 
+function isCurrentProjectionEntry(entry, conversationId) {
+    return currentProjectionConversationId(entry) === conversationId;
+}
+
+function currentProjectionEntries(book, conversationId) {
+    return Object.entries(ensureEntries(book)).filter(([, entry]) => (
+        isCurrentProjectionEntry(entry, conversationId)
+    ));
+}
+
 function removeOwnedEntries(book, scopeId, conversationId = '') {
     const entries = ensureEntries(book);
     let removed = false;
@@ -170,10 +201,18 @@ function removeOwnedEntries(book, scopeId, conversationId = '') {
 
 function ownedEntriesForConversations(book, scopeId, conversationIds) {
     const ids = conversationIds instanceof Set ? conversationIds : new Set(conversationIds);
-    return Object.entries(ensureEntries(book)).filter(([, entry]) => {
-        const marker = entry?.extensions?.[MARKER_KEY];
-        return marker?.version === 2 && marker.scopeId === scopeId && ids.has(marker.conversationId);
-    });
+    return Object.entries(ensureEntries(book)).filter(([, entry]) => (
+        ids.has(currentProjectionConversationId(entry))
+    ));
+}
+
+function assertNoDuplicateProjectionEntries(entries) {
+    const seen = new Set();
+    for (const [, entry] of entries) {
+        const conversationId = currentProjectionConversationId(entry);
+        if (seen.has(conversationId)) throw duplicateProjectionError(conversationId);
+        seen.add(conversationId);
+    }
 }
 
 function removeEntriesForConversations(book, scopeId, conversationIds) {
@@ -202,10 +241,7 @@ function restoreConversationEntries(book, scopeId, conversationIds, snapshot) {
     removeEntriesForConversations(book, scopeId, ids);
     const entries = ensureEntries(book);
     for (const [key, entry] of snapshot) {
-        const marker = entries[key]?.extensions?.[MARKER_KEY];
-        const replaceable = marker?.version === 2
-            && marker.scopeId === scopeId
-            && ids.has(marker.conversationId);
+        const replaceable = ids.has(currentProjectionConversationId(entries[key]));
         if (entries[key] && !replaceable) {
             throw new Error(`QQ 世界书条目 ${key} 已被占用`);
         }
@@ -238,9 +274,10 @@ function resolveEntryName(data) {
 }
 
 function conversationTitle(data) {
+    const conversationId = data.conversation.conversationId;
     return data.conversation.kind === 'private'
-        ? `QQ｜私聊｜${resolveEntryName(data)}`
-        : `QQ｜群聊｜${resolveEntryName(data)}`;
+        ? `${COMMENT_PREFIX}私聊｜${resolveEntryName(data)}｜${conversationId}`
+        : `${COMMENT_PREFIX}群聊｜${resolveEntryName(data)}｜${conversationId}`;
 }
 
 function senderName(message, people, userName) {
@@ -258,7 +295,7 @@ function buildProjectionContent(data, userName, storyTime) {
     const messages = selectProjectionMessages(data, storyTime);
     if (!messages.length) return { content: '', hasMessages: false };
     let lastDate = '';
-    const lines = [...header, ''];
+    const lines = ['<yuzi>', ...header, ''];
     for (const message of messages) {
         const date = dateLabel(message.storyTime);
         if (date !== lastDate) {
@@ -267,13 +304,15 @@ function buildProjectionContent(data, userName, storyTime) {
         }
         const deletedQuote = data.conversation?.kind === 'group'
             && message.quoteMessageId
-            && !(data.messages || []).some((candidate) => candidate.messageId === message.quoteMessageId);
+             && !(data.messages || []).some((candidate) => candidate.messageId === message.quoteMessageId);
         const suffix = deletedQuote ? '（引用原消息已删除）' : '';
-        lines.push(`${senderName(message, people, userName)}：${formatQQV2MessageSemantic(message, {
+        const time = timeLabel(message.storyTime);
+        lines.push(`${time ? `[${time}] ` : ''}${senderName(message, people, userName)}：${formatQQV2MessageSemantic(message, {
             selfName: userName,
             resolvePersonName: (personId) => people.get(personId),
         })}${suffix}`);
     }
+    lines.push('</yuzi>');
     return { content: lines.join('\n'), hasMessages: true };
 }
 
@@ -297,14 +336,20 @@ function effectiveInjection(data) {
 
 function writeEntry(book, data, content, scopeId) {
     const entries = ensureEntries(book);
-    const owned = ownedEntries(book, scopeId, data.conversation.conversationId);
-    const [first] = owned;
-    for (const [key] of owned.slice(1)) delete entries[key];
+    const conversationId = data.conversation.conversationId;
+    const matches = currentProjectionEntries(book, conversationId);
+    if (matches.length > 1) {
+        throw duplicateProjectionError(conversationId);
+    }
     const preferredUid = data.conversation.injection.projection.entryUid;
-    const existing = first?.[1]
-        || (preferredUid !== null && entries[preferredUid] && isOwnedEntry(entries[preferredUid], scopeId, data.conversation.conversationId)
-            ? entries[preferredUid]
-            : null);
+    const preferred = preferredUid !== null && preferredUid !== undefined
+        ? matches.find(([key, entry]) => key === String(preferredUid) || entry?.uid === preferredUid)
+        : null;
+    const first = preferred || matches[0];
+    for (const [key] of matches) {
+        if (key !== first?.[0]) delete entries[key];
+    }
+    const existing = first?.[1] || null;
     const preferredEntry = preferredUid !== null ? entries[String(preferredUid)] : null;
     const uid = existing?.uid
         ?? (preferredUid !== null && !preferredEntry ? preferredUid : nextUid(entries));
@@ -342,6 +387,24 @@ function disabledError() {
     const error = new Error('请先开启 QQ 世界书总闸和当前会话注入');
     error.code = 'worldbook_injection_disabled';
     return error;
+}
+
+function duplicateProjectionError(conversationId) {
+    const error = new Error(`QQ 世界书会话 ${conversationId} 存在重复新版投影，请手工删除到只剩一条后重试`);
+    error.code = 'worldbook_projection_conflict';
+    return error;
+}
+
+function pendingResult(error) {
+    if (error?.code === 'worldbook_projection_conflict') {
+        return {
+            status: 'pending',
+            reason: 'projection-conflict',
+            code: error.code,
+            message: error.message,
+        };
+    }
+    return { status: 'pending' };
 }
 
 function inactiveScopeError() {
@@ -444,13 +507,15 @@ export function createQQV2WorldbookProjectionService(options = {}) {
         allowInactiveScope,
     );
 
-    const privateConversations = async (scopeId, scopeSession = null, allowInactiveScope = false) => {
+    const scopeConversations = async (scopeId, scopeSession = null, allowInactiveScope = false) => {
         const conversations = await runScoped(
             () => repository.listConversations(scopeId),
             scopeSession,
             allowInactiveScope,
         );
-        return conversations.filter((conversation) => conversation.kind === 'private');
+        return conversations.filter((conversation) => (
+            conversation.kind === 'private' || conversation.kind === 'group'
+        ));
     };
 
     const setPending = async (
@@ -500,10 +565,16 @@ export function createQQV2WorldbookProjectionService(options = {}) {
         const names = trackedBookNames(data);
         const snapshots = [];
         try {
+            const loadedBooks = [];
             for (const name of names) {
                 const book = await loadOptionalBook(name, scopeId, allowInactiveScope, scopeSession);
                 if (!book) continue;
-                const entries = ownedEntries(book, scopeId, conversationId).map(([key, entry]) => [key, clone(entry)]);
+                const matches = ownedEntries(book, scopeId, conversationId);
+                if (matches.length > 1) throw duplicateProjectionError(conversationId);
+                loadedBooks.push({ name, book, matches });
+            }
+            for (const { name, book, matches } of loadedBooks) {
+                const entries = matches.map(([key, entry]) => [key, clone(entry)]);
                 if (removeOwnedEntries(book, scopeId, conversationId)) {
                     snapshots.push({ name, entries });
                     await saveBook(name, book, scopeId, allowInactiveScope, scopeSession);
@@ -542,7 +613,7 @@ export function createQQV2WorldbookProjectionService(options = {}) {
                         } catch (pendingError) {
                             if (isInactiveScopeError(pendingError)) return { status: 'pending', reason: 'scope-inactive' };
                         }
-                        return { status: 'pending' };
+                        return pendingResult(error);
                     }
                 },
             };
@@ -553,7 +624,7 @@ export function createQQV2WorldbookProjectionService(options = {}) {
             } catch (pendingError) {
                 if (isInactiveScopeError(pendingError)) throw pendingError;
             }
-            return { status: 'pending' };
+            return pendingResult(error);
         }
     };
 
@@ -566,17 +637,24 @@ export function createQQV2WorldbookProjectionService(options = {}) {
         const names = trackedBookNames(data);
         try {
             const target = await loadBook(targetName, scopeId, false, scopeSession);
+            const staleBooks = [];
+            for (const name of names.filter((item) => item !== targetName)) {
+                const book = await loadOptionalBook(name, scopeId, false, scopeSession);
+                if (book) staleBooks.push({ name, book });
+            }
+            assertNoDuplicateProjectionEntries(ownedEntries(target, scopeId, conversationId));
+            for (const { book } of staleBooks) {
+                assertNoDuplicateProjectionEntries(ownedEntries(book, scopeId, conversationId));
+            }
             const projection = buildProjectionContent(data, asText(userName, 256), storyTime);
             let entry = null;
             if (projection.hasMessages) entry = writeEntry(target, data, projection.content, scopeId);
             else removeOwnedEntries(target, scopeId, conversationId);
             await saveBook(targetName, target, scopeId, false, scopeSession);
 
-            for (const name of names.filter((item) => item !== targetName)) {
-                const staleBook = await loadOptionalBook(name, scopeId, false, scopeSession);
-                if (!staleBook) continue;
-                if (removeOwnedEntries(staleBook, scopeId, conversationId)) {
-                    await saveBook(name, staleBook, scopeId, false, scopeSession);
+            for (const { name, book } of staleBooks) {
+                if (removeOwnedEntries(book, scopeId, conversationId)) {
+                    await saveBook(name, book, scopeId, false, scopeSession);
                 }
             }
             await runScoped(
@@ -597,12 +675,12 @@ export function createQQV2WorldbookProjectionService(options = {}) {
             } catch (pendingError) {
                 if (isInactiveScopeError(pendingError)) throw pendingError;
             }
-            return { status: 'pending' };
+            return pendingResult(error);
         }
     };
 
     const reconcileScope = async ({ scopeId, scopeSession = null, userName = '', storyTime = '' } = {}) => {
-        const conversations = await privateConversations(scopeId, scopeSession);
+        const conversations = await scopeConversations(scopeId, scopeSession);
         const results = [];
         for (const conversation of conversations) {
             assertScopeSessionCurrent(scopeSession);
@@ -612,7 +690,7 @@ export function createQQV2WorldbookProjectionService(options = {}) {
     };
 
     const removeScopeProjections = async ({ scopeId, allowInactiveScope = true, scopeSession = null } = {}) => {
-        const conversations = await privateConversations(scopeId, scopeSession, allowInactiveScope);
+        const conversations = await scopeConversations(scopeId, scopeSession, allowInactiveScope);
         const conversationIds = new Set(conversations.map((conversation) => conversation.conversationId));
         const dataList = [];
         for (const conversation of conversations) {
@@ -626,11 +704,16 @@ export function createQQV2WorldbookProjectionService(options = {}) {
         const names = uniqueNames([settings.bookName, ...dataList.flatMap(trackedBookNames)]);
         const snapshots = [];
         try {
+            const loadedBooks = [];
             for (const name of names) {
                 const book = await loadOptionalBook(name, scopeId, allowInactiveScope, scopeSession);
                 if (!book) continue;
                 const entries = ownedEntriesForConversations(book, scopeId, conversationIds)
                     .map(([key, entry]) => [key, clone(entry)]);
+                assertNoDuplicateProjectionEntries(entries);
+                loadedBooks.push({ name, book, entries });
+            }
+            for (const { name, book, entries } of loadedBooks) {
                 if (removeEntriesForConversations(book, scopeId, conversationIds)) {
                     snapshots.push({ name, entries });
                     await saveBook(name, book, scopeId, allowInactiveScope, scopeSession);
@@ -684,7 +767,7 @@ export function createQQV2WorldbookProjectionService(options = {}) {
                                 if (isInactiveScopeError(pendingError)) return { status: 'pending', reason: 'scope-inactive' };
                             }
                         }
-                        return { status: 'pending' };
+                        return pendingResult(error);
                     }
                 },
             };
@@ -697,14 +780,14 @@ export function createQQV2WorldbookProjectionService(options = {}) {
                     if (isInactiveScopeError(pendingError)) throw pendingError;
                 }
             }
-            return { status: 'pending' };
+            return pendingResult(error);
         }
     };
 
     const migrateTarget = async ({ scopeId, scopeSession = null, current, next, userName, storyTime }) => {
         const oldName = asText(current.bookName, 256);
         const newName = asText(next.bookName, 256);
-        const conversations = await privateConversations(scopeId, scopeSession);
+        const conversations = await scopeConversations(scopeId, scopeSession);
         const conversationIds = new Set(conversations.map((conversation) => conversation.conversationId));
         const dataList = [];
         for (const conversation of conversations) {
@@ -716,6 +799,20 @@ export function createQQV2WorldbookProjectionService(options = {}) {
             .map(([key, entry]) => [key, clone(entry)]);
         const newSnapshot = ownedEntriesForConversations(newBook, scopeId, conversationIds)
             .map(([key, entry]) => [key, clone(entry)]);
+        try {
+            assertNoDuplicateProjectionEntries(oldSnapshot);
+            assertNoDuplicateProjectionEntries(newSnapshot);
+        } catch (error) {
+            for (const conversation of conversations) {
+                await setPending(
+                    scopeId,
+                    conversation.conversationId,
+                    [oldName, newName],
+                    scopeSession,
+                );
+            }
+            return pendingResult(error);
+        }
         const previousProjections = new Map(dataList.map((data) => [
             data.conversation.conversationId,
             clone(data.conversation.injection.projection),
@@ -920,7 +1017,7 @@ export function createQQV2WorldbookProjectionService(options = {}) {
             return removeProjection(scopeId, conversationId, data, { scopeSession });
         },
         async retryPending({ scopeId, scopeSession = null, userName = '', storyTime = '' } = {}) {
-            const conversations = await privateConversations(scopeId, scopeSession);
+            const conversations = await scopeConversations(scopeId, scopeSession);
             const results = [];
             for (const conversation of conversations) {
                 assertScopeSessionCurrent(scopeSession);

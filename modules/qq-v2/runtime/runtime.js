@@ -13,25 +13,6 @@ function cloneStoryMessages(messages) {
     return Object.freeze(messages.map(message => ({ ...message })));
 }
 
-function asEntries(value) {
-    if (Array.isArray(value)) return value;
-    if (value instanceof Map || value instanceof Set) return Array.from(value.values());
-    if (Array.isArray(value?.allActivatedEntries)) return value.allActivatedEntries;
-    if (value?.allActivatedEntries instanceof Map || value?.allActivatedEntries instanceof Set) {
-        return Array.from(value.allActivatedEntries.values());
-    }
-    return [];
-}
-
-function cloneWorldbookLifecycle(value) {
-    if (!value) return null;
-    return Object.freeze({
-        scope: cloneScope(value.scope),
-        scopeSession: value.scopeSession,
-        entries: Object.freeze(value.entries.map(entry => ({ ...entry }))),
-    });
-}
-
 /**
  * v2 生命周期壳：后续领域服务只通过它取得当前作用域，避免旧作用域结果落入新聊天。
  */
@@ -56,25 +37,19 @@ export function createQQV2Runtime(options = {}) {
     const onCharacterMessageRendered = typeof options.onCharacterMessageRendered === 'function'
         ? options.onCharacterMessageRendered
         : () => {};
-    const onWorldInfoActivated = typeof options.onWorldInfoActivated === 'function'
-        ? options.onWorldInfoActivated
+    const onMessageReceived = typeof options.onMessageReceived === 'function'
+        ? options.onMessageReceived
         : () => {};
-
-    let worldbookLifecycle = null;
-
     const coordinator = createQQV2ScopeCoordinator({
         readScope: () => host.readScope(),
         async onTransition({ previous, current }) {
-            worldbookLifecycle = null;
             await onScopeChanged(cloneScope(current.scope), current.generation, current, previous);
         },
         onReady: onScopeReady,
         async onUnavailable(details) {
-            worldbookLifecycle = null;
             await onUnavailable(details);
         },
         onDestroy(details) {
-            worldbookLifecycle = null;
             return onDestroy(details);
         },
     });
@@ -116,25 +91,24 @@ export function createQQV2Runtime(options = {}) {
             await onCharacterMessageRendered(facts);
             return facts;
         },
-        async handleWorldInfoActivated(entries) {
+        async handleMessageReceived(messageId, generationType) {
             const scopeSession = captureReadyScopeSession();
             if (!scopeSession) return null;
-            worldbookLifecycle = Object.freeze({
+            const facts = Object.freeze({
                 scope: cloneScope(scopeSession.scope),
                 scopeSession,
-                entries: Object.freeze(asEntries(entries)
-                    .filter(entry => entry && typeof entry === 'object' && !Array.isArray(entry))
-                    .map(entry => ({ ...entry }))),
+                messageId: asText(messageId, 180),
+                generationType: asText(generationType, 80),
+                storyTime: typeof host.readStoryTime === 'function' ? asText(host.readStoryTime(), 512) : '',
+                storyMessages: cloneStoryMessages(
+                    typeof host.readStoryMessages === 'function' ? host.readStoryMessages() : [],
+                ),
             });
-            const facts = cloneWorldbookLifecycle(worldbookLifecycle);
-            await onWorldInfoActivated(facts);
+            await onMessageReceived(facts);
             return facts;
         },
         getActiveScope() {
             return cloneScope(coordinator.getCurrentSession()?.scope);
-        },
-        getWorldInfoLifecycle() {
-            return cloneWorldbookLifecycle(worldbookLifecycle);
         },
         captureScopeSession(expectedScopeId) {
             return coordinator.capture(expectedScopeId);
@@ -147,7 +121,6 @@ export function createQQV2Runtime(options = {}) {
             return Object.freeze({
                 phase: status.phase,
                 scopeId: status.scopeId,
-                worldbookScopeId: worldbookLifecycle?.scope?.scopeId || '',
                 epoch: status.generation,
             });
         },

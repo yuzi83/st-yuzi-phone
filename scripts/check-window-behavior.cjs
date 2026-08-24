@@ -86,11 +86,11 @@ class FakePhoneElement {
     }
 
     querySelector(selector) {
-        if (selector === '.phone-shell') {
+        if (selector === '.yuzi-phone-shell') {
             return {
                 querySelector: (innerSelector) => {
-                    if (innerSelector === '.phone-notch') return this.notch;
-                    if (innerSelector === '.phone-status-bar') return this.statusBar;
+                    if (innerSelector === '.yuzi-phone-notch') return this.notch;
+                    if (innerSelector === '.yuzi-phone-status-bar') return this.statusBar;
                     return null;
                 },
             };

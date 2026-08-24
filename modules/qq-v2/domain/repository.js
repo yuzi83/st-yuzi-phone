@@ -107,6 +107,10 @@ function emptyScope(scopeId) {
         groups: {},
         messages: {},
         assets: {},
+        proactiveProgress: {
+            counter: 0,
+            lastStoryMessageKey: '',
+        },
         settings: {
             activeApiPresetId: '',
             privateReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateReply,
@@ -243,6 +247,14 @@ function ensureScopeQQV2State(scope) {
     const needsSettingsMigration = scope.settingsVersion !== SCOPE_SETTINGS_VERSION;
 
     ensureScopeWorldbookState(scope);
+    const proactiveProgress = scope.proactiveProgress && typeof scope.proactiveProgress === 'object'
+        ? scope.proactiveProgress
+        : {};
+    const proactiveCounter = Number(proactiveProgress.counter);
+    scope.proactiveProgress = {
+        counter: Number.isInteger(proactiveCounter) && proactiveCounter >= 0 ? proactiveCounter : 0,
+        lastStoryMessageKey: asText(proactiveProgress.lastStoryMessageKey, 512),
+    };
     const usesLegacyZeroDefaults = needsSettingsMigration
         && Number(scope.settings.hostContextTurns) === 0
         && Number(scope.settings.conversationHistoryLimit) === 0;
@@ -268,6 +280,14 @@ function ensureScopeQQV2State(scope) {
     Object.values(scope.conversations || {}).forEach((conversation) => {
         ensureConversationInjection(conversation);
         if (needsSettingsMigration) conversation.injection.enabled = true;
+    });
+    if (!scope.messages || typeof scope.messages !== 'object') scope.messages = {};
+    Object.values(scope.messages).forEach((message) => {
+        message.generatedImagePath = asText(message.generatedImagePath, 2048);
+        const generatedAt = Number(message.generatedAt);
+        message.generatedAt = Number.isFinite(generatedAt) && generatedAt > 0
+            ? Math.trunc(generatedAt)
+            : 0;
     });
     scope.settingsVersion = SCOPE_SETTINGS_VERSION;
 }
@@ -586,6 +606,10 @@ function appendOneMessage(scope, conversation, input, options = {}) {
         transfer: input?.transfer ? copy(input.transfer) : null,
         stickerId: asText(input?.stickerId, 256),
         assetId: asText(input?.assetId, 256),
+        generatedImagePath: asText(input?.generatedImagePath, 2048),
+        generatedAt: Number.isFinite(Number(input?.generatedAt)) && Number(input.generatedAt) > 0
+            ? Math.trunc(Number(input.generatedAt))
+            : 0,
         selectedForInjection: input?.selectedForInjection === true,
     };
     scope.messages[message.messageId] = message;
@@ -629,6 +653,16 @@ function assetStillReferenced(scope, assetId) {
         || Object.values(scope.messages).some((message) => (
             message.assetId === id || message.senderAvatarAssetId === id
         ));
+}
+
+function generatedImageStillReferenced(state, path) {
+    const normalizedPath = asText(path, 2048);
+    if (!normalizedPath) return false;
+    return Object.values(state.scopes || {}).some((scope) => (
+        Object.values(scope?.messages || {}).some((message) => (
+            asText(message.generatedImagePath, 2048) === normalizedPath
+        ))
+    ));
 }
 
 function removeAssetIfUnreferenced(scope, assetId) {
@@ -831,6 +865,30 @@ export function createQQV2Repository(options = {}) {
             const state = await stateStore.read();
             return state.scopes[scopeId] ? copyScope(state, getScope(state, scopeId, false)) : null;
         },
+        async getProactiveProgress(scopeId) {
+            const state = await stateStore.read();
+            const scope = getScope(state, scopeId, false);
+            return copy(scope.proactiveProgress);
+        },
+        async updateProactiveProgress(scopeId, patch = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
+                const scope = getScope(state, scopeId, false);
+                const current = scope.proactiveProgress;
+                const next = { ...current };
+                if (Object.hasOwn(patch, 'counter')) {
+                    const counter = Number(patch.counter);
+                    if (!Number.isInteger(counter) || counter < 0) {
+                        throw new QQV2DomainError('QQ 主动消息计数必须是非负整数', 'proactive_counter_invalid');
+                    }
+                    next.counter = counter;
+                }
+                if (Object.hasOwn(patch, 'lastStoryMessageKey')) {
+                    next.lastStoryMessageKey = asText(patch.lastStoryMessageKey, 512);
+                }
+                scope.proactiveProgress = next;
+                return copy(next);
+            });
+        },
         async listHostMetadata() {
             const state = await stateStore.read();
             return Object.values(state.scopes || {})
@@ -841,9 +899,22 @@ export function createQQV2Repository(options = {}) {
         async deleteScope(scopeId) {
             const normalizedScopeId = requireText(scopeId, 'QQ scope ID', 512);
             return stateStore.transact((state) => {
-                if (!state.scopes?.[normalizedScopeId]) return false;
+                const scope = state.scopes?.[normalizedScopeId];
+                if (!scope) {
+                    return {
+                        deleted: false,
+                        releasedGeneratedImagePaths: [],
+                    };
+                }
+                const generatedImagePaths = [...new Set(Object.values(scope.messages || {})
+                    .map((message) => asText(message.generatedImagePath, 2048))
+                    .filter(Boolean))];
                 delete state.scopes[normalizedScopeId];
-                return true;
+                return {
+                    deleted: true,
+                    releasedGeneratedImagePaths: generatedImagePaths
+                        .filter((path) => !generatedImageStillReferenced(state, path)),
+                };
             });
         },
         async markScopeHostDeletionPending(scopeId, pending = true) {
@@ -1334,6 +1405,35 @@ export function createQQV2Repository(options = {}) {
                 return inputs.map((input) => appendOneMessage(scope, conversation, input));
             });
         },
+        async replaceGeneratedMessageImage(scopeId, conversationId, messageId, image = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
+                const scope = getScope(state, scopeId, false);
+                const conversation = getConversation(scope, conversationId);
+                const normalizedMessageId = requireText(messageId, 'QQ 消息 ID', 256);
+                const message = scope.messages[normalizedMessageId];
+                if (!message || message.conversationId !== conversation.conversationId) {
+                    throw new QQV2DomainError('QQ 消息不存在', 'message_not_found');
+                }
+                if (message.type !== 'image') {
+                    throw new QQV2DomainError('只有图片消息可以保存生成图片', 'message_type_invalid');
+                }
+                const generatedAt = Number(image.generatedAt);
+                if (!Number.isFinite(generatedAt) || generatedAt <= 0) {
+                    throw new QQV2DomainError('生成图片时间无效', 'generated_image_time_invalid');
+                }
+                const previousImagePath = asText(message.generatedImagePath, 2048);
+                message.generatedImagePath = requireText(image.path, '生成图片路径', 2048);
+                message.generatedAt = Math.trunc(generatedAt);
+                return {
+                    message: messageWithQuote(scope, message),
+                    previousImagePath,
+                    releasedGeneratedImagePaths: previousImagePath
+                        && !generatedImageStillReferenced(state, previousImagePath)
+                        ? [previousImagePath]
+                        : [],
+                };
+            });
+        },
         async deleteMessages(scopeId, conversationId, messageIds, operationOptions = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
@@ -1348,6 +1448,9 @@ export function createQQV2Repository(options = {}) {
                     message.assetId,
                     message.senderAvatarAssetId,
                 ]));
+                const generatedImagePaths = [...new Set(deletedMessages
+                    .map((message) => asText(message.generatedImagePath, 2048))
+                    .filter(Boolean))];
                 deletedMessageIds.forEach((messageId) => {
                     delete scope.messages[messageId];
                 });
@@ -1356,7 +1459,11 @@ export function createQQV2Repository(options = {}) {
                 }
                 updateConversationAfterMessageRemoval(scope, conversation);
                 releasedAssetIds.forEach((assetId) => removeAssetIfUnreferenced(scope, assetId));
-                return { deletedMessageIds };
+                return {
+                    deletedMessageIds,
+                    releasedGeneratedImagePaths: generatedImagePaths
+                        .filter((path) => !generatedImageStillReferenced(state, path)),
+                };
             });
         },
         async saveScopeAsset(scopeId, input = {}, operationOptions = {}) {
@@ -1518,6 +1625,9 @@ export function createQQV2Repository(options = {}) {
                     conversation.backgroundAssetId,
                     ...deletedMessages.flatMap((message) => [message.assetId, message.senderAvatarAssetId]),
                 ]);
+                const generatedImagePaths = [...new Set(deletedMessages
+                    .map((message) => asText(message.generatedImagePath, 2048))
+                    .filter(Boolean))];
                 deletedMessages.forEach((message) => delete scope.messages[message.messageId]);
                 Object.values(scope.assets).filter((asset) => asset.conversationId === conversationId).forEach((asset) => delete scope.assets[asset.assetId]);
                 if (retainPrivateContact) {
@@ -1543,7 +1653,12 @@ export function createQQV2Repository(options = {}) {
                     });
                 }
                 releasedAssetIds.forEach((assetId) => removeAssetIfUnreferenced(scope, assetId));
-                return { deletedConversationId: conversationId, mode };
+                return {
+                    deletedConversationId: conversationId,
+                    mode,
+                    releasedGeneratedImagePaths: generatedImagePaths
+                        .filter((path) => !generatedImageStillReferenced(state, path)),
+                };
             });
         },
         async applyAIActions(scopeId, actions, options = {}) {

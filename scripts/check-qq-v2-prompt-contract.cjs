@@ -104,7 +104,7 @@ async function testStickerCatalogUsesShortReferencesAndRemovesImageCode() {
     }]);
 }
 
-async function testPromptHelpersKeepSuccessfulStoryTurnsAndEscapeProactiveSections() {
+async function testPromptHelpersKeepSuccessfulStoryRepliesAndEscapeProactiveSections() {
     const {
         buildQQV2StoryContext,
         buildQQV2ProactiveSections,
@@ -117,8 +117,10 @@ async function testPromptHelpersKeepSuccessfulStoryTurnsAndEscapeProactiveSectio
         { role: 'user', content: '第二句' },
         { role: 'assistant', content: '第二段回复' },
         { role: 'assistant', content: '失败回复', isSuccessful: false },
-    ], 1);
-    assert.equal(storyContext, '用户：第二句\n角色：第二段回复');
+        { role: 'user', content: '第三句' },
+        { role: 'assistant', content: '第三段回复' },
+    ], 2);
+    assert.equal(storyContext, '角色：第二段回复\n\n角色：第三段回复');
 
     const sections = buildQQV2ProactiveSections({
         kind: 'private',
@@ -152,79 +154,11 @@ async function testPromptHelpersKeepSuccessfulStoryTurnsAndEscapeProactiveSectio
     );
 }
 
-async function testDualWorldbookLayerDeduplicatesAndExcludesQQProjection() {
-    const { resolveQQV2WorldbookContext } = await importModule('modules/qq-v2/prompt/worldbook-context.js');
-    const dryRunCalls = [];
-    const result = await resolveQQV2WorldbookContext({
-        activationSnapshot: [
-            { bookName: '主书', uid: 1, content: '剧情条目', depth: 4, role: 'system' },
-            { bookName: '主书', uid: 9, content: 'QQ 投影', qqMarker: 'qq-v2' },
-        ],
-        people: ['林知夏', '林知夏'],
-        visibleHistory: ['你好'],
-        runDryRun: async (request) => {
-            dryRunCalls.push(request);
-            return [
-                { bookName: '主书', uid: 1, content: '重复剧情条目', depth: 4, role: 'system' },
-                { bookName: '人物书', uid: 2, content: '人物条目', depth: 7, role: 'character' },
-                { bookName: '人物书', uid: 3, content: '其他 QQ 投影', marker: { qq: true } },
-            ];
-        },
-    });
-    assert.equal(dryRunCalls.length, 1);
-    assert.deepEqual(dryRunCalls[0], { layer: 'person', people: ['林知夏'], history: ['你好'] });
-    assert.deepEqual(result.entries.map((entry) => [entry.bookName, entry.uid, entry.content]), [
-        ['主书', 1, '剧情条目'],
-        ['人物书', 2, '人物条目'],
-    ]);
-    assert.match(result.text, /剧情条目/);
-    assert.match(result.text, /人物条目/);
-}
-
-async function testWorldbookFallsBackToStoryDryRunOnlyWithoutSnapshot() {
-    const { resolveQQV2WorldbookContext } = await importModule('modules/qq-v2/prompt/worldbook-context.js');
-    const calls = [];
-    const result = await resolveQQV2WorldbookContext({
-        people: ['夏树'],
-        visibleHistory: ['在吗'],
-        runDryRun: async (request) => {
-            calls.push(request);
-            return request.layer === 'story'
-                ? [{ bookName: '剧情书', uid: 3, content: '剧情扫描结果' }]
-                : [{ bookName: '人物书', uid: 4, content: '人物扫描结果' }];
-        },
-    });
-
-    assert.deepEqual(calls, [
-        { layer: 'story', people: ['夏树'], history: ['在吗'] },
-        { layer: 'person', people: ['夏树'], history: ['在吗'] },
-    ]);
-    assert.deepEqual(result.entries.map((entry) => [entry.bookName, entry.uid, entry.source]), [
-        ['剧情书', 3, 'story-dry-run'],
-        ['人物书', 4, 'person-dry-run'],
-    ]);
-}
-
-async function testWorldbookAcceptsNativeTavernActivatedEntryShape() {
-    const { resolveQQV2WorldbookContext } = await importModule('modules/qq-v2/prompt/worldbook-context.js');
-    const result = await resolveQQV2WorldbookContext({
-        activationSnapshot: [{ world: '角色书', uid: 12, content: '酒馆原生激活条目', depth: 5, role: 0 }],
-        runDryRun: async () => [],
-    });
-
-    assert.deepEqual(result.entries.map((entry) => [entry.bookName, entry.uid, entry.content, entry.role]), [
-        ['角色书', 12, '酒馆原生激活条目', 'system'],
-    ]);
-}
-
 async function main() {
     await testPlaceholdersHaveOneStableMeaningAndKeepUnknownText();
     await testManualHistoryHasOneCurrentUserMessageAndProactiveDoesNotAppendRoles();
     await testStickerCatalogUsesShortReferencesAndRemovesImageCode();
-    await testPromptHelpersKeepSuccessfulStoryTurnsAndEscapeProactiveSections();
-    await testDualWorldbookLayerDeduplicatesAndExcludesQQProjection();
-    await testWorldbookFallsBackToStoryDryRunOnlyWithoutSnapshot();
-    await testWorldbookAcceptsNativeTavernActivatedEntryShape();
+    await testPromptHelpersKeepSuccessfulStoryRepliesAndEscapeProactiveSections();
     console.log('[qq-v2-prompt-contract] passed');
 }
 

@@ -312,6 +312,7 @@ function renderObjectNodeHtml(node, deleteMode, selectedPaths) {
                         <div class="vm-checkbox ${isSelected ? 'vm-checkbox-checked' : ''}"></div>
                     </div>
                 ` : ''}
+                <span class="vm-object-chevron" aria-hidden="true">▼</span>
                 <span class="vm-object-name">${escapeHtml(node.key)}</span>
                 <span class="vm-object-meta">${escapeHtml(metaText)}</span>
             </div>
@@ -366,7 +367,7 @@ export function renderGroupsHtml(groups, options = {}) {
             <div class="vm-group" data-group-path="${escapeHtmlAttr(group.groupPath)}">
                 <div class="vm-group-header ${deleteMode ? 'vm-group-header-delete-mode' : ''} ${groupSelected ? 'vm-delete-selected' : ''}" ${deleteAttrs}>
                     ${groupCheckboxHtml}
-                    <span class="vm-group-chevron">▼</span>
+                    <span class="vm-group-chevron" aria-hidden="true">▼</span>
                     <span class="vm-group-name">${escapeHtml(group.groupName)}</span>
                     <span class="vm-group-count">${group.leafCount}</span>
                 </div>

@@ -235,7 +235,8 @@
     -webkit-user-select: none;
 }
 
-.vm-group-chevron {
+.vm-group-chevron,
+.vm-object-chevron {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -315,7 +316,9 @@
     border: 1px solid color-mix(in srgb, var(--vm-border-strong) 55%, transparent);
     box-shadow: var(--vm-shadow-soft);
     color: var(--vm-text-secondary);
-    cursor: default;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .vm-object-name {
@@ -346,6 +349,22 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    transition: max-height 0.24s ease, opacity 0.18s ease;
+}
+
+.vm-object-collapsed {
+    gap: 0;
+}
+
+.vm-object-collapsed > .vm-object-children {
+    max-height: 0 !important;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.vm-object-collapsed > .vm-object-title .vm-object-chevron {
+    transform: rotate(-90deg);
 }
 
 .vm-object-empty {

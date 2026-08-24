@@ -32,6 +32,7 @@ async function createFixture() {
     const chatFilesByHost = new Map();
     const unresolvedHostIds = new Set();
     let projectionStatus = 'removed';
+    const deletedGeneratedImagePaths = [];
     const repository = Object.freeze({
         ...baseRepository,
         async deleteScope(scopeId) {
@@ -74,12 +75,50 @@ async function createFixture() {
         worldbookGateway: {
             async getCurrentCharacterBookNames() { return { primary: null, additional: [] }; },
         },
-        worldbookContextGateway: { async runDryRun() { return []; } },
+        imageGenerationService: {
+            async deleteStoredImage({ path: generatedImagePath }) {
+                deletedGeneratedImagePaths.push(generatedImagePath);
+                events.push(['generated-image.delete', generatedImagePath]);
+                return { ok: true, status: 'deleted' };
+            },
+        },
         backend: { async generate() {}, async loadModels() { return []; } },
         cryptoApi: webcrypto,
     });
     await runtime.initialize();
-    await runtime.createPrivateConversation({ scopeId: current.value.scopeId, name: 'Alice' });
+    const sourceConversation = await runtime.createPrivateConversation({
+        scopeId: current.value.scopeId,
+        name: 'Alice',
+    });
+    const [sourceUniqueImage, sourceSharedImage] = await repository.appendMessages(
+        current.value.scopeId,
+        sourceConversation.conversation.conversationId,
+        [{
+            senderId: '__self__',
+            senderType: 'self',
+            type: 'image',
+            content: '源聊天独占图片',
+        }, {
+            senderId: '__self__',
+            senderType: 'self',
+            type: 'image',
+            content: '跨聊天共享图片',
+        }],
+    );
+    const uniqueGeneratedImagePath = 'user/images/yuzi-phone-generated/source-only.png';
+    const sharedGeneratedImagePath = 'user/images/yuzi-phone-generated/shared-across-scopes.png';
+    await repository.replaceGeneratedMessageImage(
+        current.value.scopeId,
+        sourceConversation.conversation.conversationId,
+        sourceUniqueImage.messageId,
+        { path: uniqueGeneratedImagePath, generatedAt: 1 },
+    );
+    await repository.replaceGeneratedMessageImage(
+        current.value.scopeId,
+        sourceConversation.conversation.conversationId,
+        sourceSharedImage.messageId,
+        { path: sharedGeneratedImagePath, generatedAt: 2 },
+    );
     const image = await repository.saveImageLibraryAsset(current.value.scopeId, {
         library: 'avatar',
         blob: new Blob(['global avatar'], { type: 'image/png' }),
@@ -101,6 +140,26 @@ async function createFixture() {
     });
     current.value = scope('bob.png', 'chat-b');
     await runtime.handleChatChanged();
+    const targetConversation = await runtime.createPrivateConversation({
+        scopeId: current.value.scopeId,
+        name: 'Bob',
+    });
+    const [targetSharedImage] = await repository.appendMessages(
+        current.value.scopeId,
+        targetConversation.conversation.conversationId,
+        [{
+            senderId: '__self__',
+            senderType: 'self',
+            type: 'image',
+            content: '仍然引用共享图片',
+        }],
+    );
+    await repository.replaceGeneratedMessageImage(
+        current.value.scopeId,
+        targetConversation.conversation.conversationId,
+        targetSharedImage.messageId,
+        { path: sharedGeneratedImagePath, generatedAt: 3 },
+    );
     events.length = 0;
 
     return {
@@ -111,6 +170,9 @@ async function createFixture() {
         chatFileQueries,
         chatFilesByHost,
         unresolvedHostIds,
+        deletedGeneratedImagePaths,
+        uniqueGeneratedImagePath,
+        sharedGeneratedImagePath,
         image,
         sticker,
         apiPreset,
@@ -128,7 +190,9 @@ async function testHostDeletionRemovesProjectionBeforeScopeAndKeepsGlobalImages(
     assert.deepEqual(fixture.events, [
         ['projection.remove', fixture.sourceScopeId],
         ['scope.delete', fixture.sourceScopeId],
+        ['generated-image.delete', fixture.uniqueGeneratedImagePath],
     ]);
+    assert.deepEqual(fixture.deletedGeneratedImagePaths, [fixture.uniqueGeneratedImagePath]);
     assert.equal(await fixture.repository.getScope(fixture.sourceScopeId), null);
     assert.equal((await fixture.repository.listImageLibraryAssets(fixture.targetScopeId, 'avatar'))[0].assetId, fixture.image.assetId);
     const resources = await fixture.runtime.listSharedResources();

@@ -93,11 +93,6 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
             },
             async saveBook() {},
         },
-        worldbookContextGateway: {
-            async runDryRun() {
-                return [];
-            },
-        },
     });
 
     assert.deepEqual(await runtime.initialize(), host.readScope());
@@ -249,159 +244,7 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
     assert.equal((await runtime.getSnapshot()).phase, 'destroyed');
 }
 
-async function testProductionWorldbookScanUsesScenarioSpecificHistoryWindows() {
-    const {
-        createMemoryQQV2StateStore,
-    } = await importModule('modules/qq-v2/storage/state-store.js');
-    const {
-        createQQV2Repository,
-    } = await importModule('modules/qq-v2/domain/repository.js');
-    const {
-        createQQV2ProductionRuntime,
-    } = await importModule('modules/qq-v2/application/production-runtime.js');
-    const scopeId = 'st:character:alice:chat-worldbook-scan-windows';
-    const stateStore = createMemoryQQV2StateStore();
-    const repository = createQQV2Repository({ stateStore });
-    let storyMessages = [];
-    const scanCalls = [];
-    const runtime = createQQV2ProductionRuntime({
-        host: {
-            readScope() {
-                return {
-                    scopeId,
-                    chatId: 'chat-worldbook-scan-windows',
-                    chatFile: 'chat-worldbook-scan-windows',
-                    hostType: 'character',
-                    hostId: 'alice',
-                };
-            },
-            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
-            readStoryTime() { return '2042-05-20 09:30'; },
-            readStoryMessages() { return storyMessages; },
-            readRawContext() { return { getRequestHeaders: () => ({}) }; },
-        },
-        stateStore,
-        repository,
-        cryptoApi: webcrypto,
-        backend: {
-            async generate() { return { content: '<qq><ignored /></qq>' }; },
-            async loadModels() { return []; },
-        },
-        actionService: {
-            async execute() { return { applied: [], createdConversationIds: [] }; },
-        },
-        projectionService: {
-            async reconcileScope() { return []; },
-            async retryPending() {},
-            async syncConversation() { return { status: 'empty' }; },
-        },
-        worldbookGateway: {
-            async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; },
-        },
-        worldbookContextGateway: {
-            async runDryRun(input) {
-                scanCalls.push(input);
-                return [];
-            },
-        },
-    });
-
-    await runtime.initialize();
-    const alice = await runtime.createPrivateConversation({ scopeId, name: 'Alice' });
-    const bob = await runtime.createPrivateConversation({ scopeId, name: 'Bob' });
-    await repository.appendMessages(scopeId, alice.conversation.conversationId, Array.from({ length: 11 }, (_, index) => ({
-        proactiveStorySettleDelayMs: 0,
-        senderId: alice.person.personId,
-        senderType: 'person',
-        type: 'text',
-        content: `alice-${index + 1}`,
-        storyTime: '2042-05-20 09:20',
-    })));
-    await repository.appendMessages(scopeId, bob.conversation.conversationId, Array.from({ length: 5 }, (_, index) => ({
-        senderId: bob.person.personId,
-        senderType: 'person',
-        type: 'text',
-        content: `bob-${index + 1}`,
-        storyTime: '2042-05-20 09:20',
-    })));
-    await runtime.handleWorldInfoActivated([]);
-    const apiPreset = await runtime.saveApiPreset({ preset: {
-        name: 'Worldbook scan API',
-        endpoint: 'https://api.example.test/v1',
-        apiKey: 'worldbook-scan-secret',
-        model: 'worldbook-scan-model',
-    } });
-    await runtime.updateGlobalSettings({
-        scopeId,
-        settings: {
-            activeApiPresetId: apiPreset.id,
-            conversationHistoryLimit: 4,
-        },
-    });
-
-    await runtime.sendManual({
-        scopeId,
-        conversationId: alice.conversation.conversationId,
-        message: { type: 'text', content: 'manual-current' },
-    });
-    await waitUntil(() => scanCalls.length === 1, 'the private reply worldbook scan');
-    assert.deepEqual({
-        layer: scanCalls[0].layer,
-        people: scanCalls[0].people,
-        history: scanCalls[0].history,
-    }, {
-        layer: 'person',
-        people: ['Alice'],
-        history: [
-            'alice-3',
-            'alice-4',
-            'alice-5',
-            'alice-6',
-            'alice-7',
-            'alice-8',
-            'alice-9',
-            'alice-10',
-            'alice-11',
-            'manual-current',
-        ],
-    });
-    assert.equal(scanCalls[0].scopeId, scopeId);
-    assert.equal(scanCalls[0].scopeSession.scopeId, scopeId);
-    assert.equal(scanCalls[0].scopeSession.isReady(), true);
-
-    await runtime.configureProactive({ scopeId, settings: { enabled: true, everyTurns: 1 } });
-    storyMessages = [{
-        messageId: 'story-1',
-        role: 'assistant',
-        content: 'Story reply that starts the proactive cycle',
-        isHidden: false,
-        isSystem: false,
-    }];
-    await runtime.handleCharacterMessageRendered('story-1', 'normal');
-    await waitUntil(() => scanCalls.length === 2, 'the private proactive worldbook scan');
-    assert.deepEqual({
-        layer: scanCalls[1].layer,
-        people: scanCalls[1].people,
-
-        history: scanCalls[1].history,
-    }, {
-        layer: 'person',
-        people: ['Alice', 'Bob'],
-        history: [
-            'alice-10',
-            'alice-11',
-            'manual-current',
-            'bob-3',
-            'bob-4',
-            'bob-5',
-        ],
-    });
-    assert.equal(scanCalls[1].scopeId, scopeId);
-    assert.strictEqual(scanCalls[1].scopeSession, scanCalls[0].scopeSession);
-    runtime.destroy();
-}
-
-async function testProductionRuntimeSchedulesProactiveFromAiFloors() {
+async function testProductionRuntimeCountsNewStoryRepliesPersistently() {
     const {
         createMemoryQQV2StateStore,
     } = await importModule('modules/qq-v2/storage/state-store.js');
@@ -440,9 +283,10 @@ async function testProductionRuntimeSchedulesProactiveFromAiFloors() {
             return { getRequestHeaders: async () => ({}) };
         },
     };
-    const runtime = createQQV2ProductionRuntime({
+    const stateStore = createMemoryQQV2StateStore();
+    const createRuntime = () => createQQV2ProductionRuntime({
         host,
-        stateStore: createMemoryQQV2StateStore(),
+        stateStore,
         requestService: {
             handleScopeChanged() {},
             getConversationState() { return {}; },
@@ -455,7 +299,7 @@ async function testProductionRuntimeSchedulesProactiveFromAiFloors() {
         proactiveService: {
             cancelScope() {},
             async getState() {
-                return { enabled: true, everyTurns: 5 };
+                return { enabled: true, everyTurns: 2 };
             },
             async enqueueProactiveCycle(input) {
                 scheduled.push(input);
@@ -465,6 +309,7 @@ async function testProductionRuntimeSchedulesProactiveFromAiFloors() {
         proactiveStorySettleDelayMs: 0,
     });
 
+    let runtime = createRuntime();
     await runtime.initialize();
     storyMessages = [...storyMessages, {
         messageId: 9,
@@ -473,18 +318,14 @@ async function testProductionRuntimeSchedulesProactiveFromAiFloors() {
         isHidden: false,
         isSystem: false,
     }];
-    await runtime.handleCharacterMessageRendered(9, 'regenerate');
-    await runtime.handleCharacterMessageRendered(9, 'normal');
+    await runtime.handleMessageReceived(9, 'normal');
+    await runtime.handleMessageReceived(9, 'normal');
 
-    assert.equal(scheduled.length, 1, '已有九层的聊天新增第十层时必须触发一次');
-    assert.deepEqual({
-        scopeId: scheduled[0].scopeId,
-    }, {
-        scopeId: 'st:character:alice:chat-events',
-    });
-    assert.equal(scheduled[0].scopeSession.scopeId, 'st:character:alice:chat-events');
-    assert.equal(scheduled[0].scopeSession.isReady(), true);
+    assert.equal(scheduled.length, 0, '第一次新正文回复只应把持久计数从 0 推进到 1，重复事件不得重复计数');
+    runtime.destroy();
 
+    runtime = createRuntime();
+    await runtime.initialize();
     storyMessages = [...storyMessages, {
         messageId: 10,
         role: 'assistant',
@@ -492,10 +333,230 @@ async function testProductionRuntimeSchedulesProactiveFromAiFloors() {
         isHidden: false,
         isSystem: false,
     }];
-    await runtime.handleCharacterMessageRendered(10, 'regenerate');
-    assert.equal(scheduled.length, 1, '不是整除楼层时不应触发第二次');
+    await runtime.handleMessageReceived(10, 'normal');
+
+    assert.equal(scheduled.length, 1, '运行时重建后第二次新正文回复必须沿用持久计数并触发');
+    assert.deepEqual({
+        scopeId: scheduled[0].scopeId,
+    }, {
+        scopeId: 'st:character:alice:chat-events',
+    });
+    assert.equal(scheduled[0].scopeSession.scopeId, 'st:character:alice:chat-events');
+    assert.equal(scheduled[0].scopeSession.isReady(), true);
     runtime.destroy();
 }
+
+async function testProductionRuntimeUsesReceivedTurnInsteadOfAbsoluteStoryFloor() {
+    const {
+        createMemoryQQV2StateStore,
+    } = await importModule('modules/qq-v2/storage/state-store.js');
+    const {
+        createQQV2ProductionRuntime,
+    } = await importModule('modules/qq-v2/application/production-runtime.js');
+
+    const scopeId = 'st:character:alice:chat-floor-18';
+    let storyMessages = Array.from({ length: 17 }, (_, index) => ({
+        messageId: index,
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `已有正文楼层 ${index + 1}`,
+        isHidden: false,
+        isSystem: false,
+    }));
+    const scheduled = [];
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return {
+                    scopeId,
+                    chatId: 'chat-floor-18',
+                    chatFile: 'chat-floor-18',
+                    hostType: 'character',
+                    hostId: 'alice',
+                };
+            },
+            readUserIdentity() { return { name: '旅行者', avatar: '' }; },
+            readStoryTime() { return '2042-05-20 09:30'; },
+            readStoryMessages() { return storyMessages; },
+            readRawContext() { return {}; },
+        },
+        stateStore: createMemoryQQV2StateStore(),
+        requestService: {
+            cancelScope() {},
+            getConversationState() { return {}; },
+            cancelConversation() {},
+        },
+        proactiveService: {
+            cancelScope() {},
+            async getState() { return { enabled: true, everyTurns: 1 }; },
+            async enqueueProactiveCycle(input) {
+                scheduled.push(input);
+                return { triggered: true, queued: true };
+            },
+        },
+        projectionService: { async retryPending() {}, async syncConversation() {} },
+    });
+
+    await runtime.initialize();
+    storyMessages = [...storyMessages, {
+        messageId: 17,
+        role: 'assistant',
+        content: '第 18 楼正文 AI 回复',
+        isHidden: false,
+        isSystem: false,
+    }];
+    await runtime.handleCharacterMessageRendered(17, 'normal');
+    assert.equal(scheduled.length, 0, '仅完成渲染不得推进 QQ 主动回复轮次');
+    await runtime.handleMessageReceived(17, 'normal');
+
+    assert.equal(scheduled.length, 1, '设置 1 轮时，第 18 楼的新正文 AI 回复必须触发一次，且不受绝对楼层影响');
+    assert.equal(scheduled[0].scopeId, scopeId);
+    runtime.destroy();
+}
+
+async function testProductionRuntimeIgnoresIneligibleAndDuplicateReceivedMessages() {
+    const {
+        createMemoryQQV2StateStore,
+    } = await importModule('modules/qq-v2/storage/state-store.js');
+    const {
+        createQQV2ProductionRuntime,
+    } = await importModule('modules/qq-v2/application/production-runtime.js');
+
+    const scopeId = 'st:character:alice:chat-message-filter';
+    let storyMessages = [];
+    const scheduled = [];
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return {
+                    scopeId,
+                    chatId: 'chat-message-filter',
+                    chatFile: 'chat-message-filter',
+                    hostType: 'character',
+                    hostId: 'alice',
+                };
+            },
+            readUserIdentity() { return { name: '旅行者', avatar: '' }; },
+            readStoryTime() { return ''; },
+            readStoryMessages() { return storyMessages; },
+            readRawContext() { return {}; },
+        },
+        stateStore: createMemoryQQV2StateStore(),
+        requestService: {
+            cancelScope() {},
+            getConversationState() { return {}; },
+            cancelConversation() {},
+        },
+        proactiveService: {
+            cancelScope() {},
+            async getState() { return { enabled: true, everyTurns: 2 }; },
+            async enqueueProactiveCycle(input) {
+                scheduled.push(input);
+                return { triggered: true, queued: true };
+            },
+        },
+        projectionService: { async retryPending() {}, async syncConversation() {} },
+    });
+
+    await runtime.initialize();
+    const appendAndReceive = async (message) => {
+        storyMessages = [...storyMessages, message];
+        await runtime.handleMessageReceived(message.messageId, 'normal');
+    };
+    await appendAndReceive({ messageId: 0, role: 'user', content: '用户消息' });
+    await appendAndReceive({ messageId: 1, role: 'assistant', content: '系统消息', isSystem: true });
+    await appendAndReceive({ messageId: 2, role: 'assistant', content: '隐藏消息', isHidden: true });
+    await appendAndReceive({ messageId: 3, role: 'assistant', content: '失败消息', isSuccessful: false });
+    await runtime.handleMessageReceived(404, 'normal');
+    await appendAndReceive({ messageId: 4, role: 'assistant', content: '第一条有效消息' });
+    await runtime.handleMessageReceived(4, 'normal');
+
+    assert.equal(scheduled.length, 0, '无效消息、找不到的消息和重复事件都不得推进主动轮次');
+
+    await appendAndReceive({ messageId: 5, role: 'assistant', content: '第二条有效消息' });
+    assert.equal(scheduled.length, 1, '只有第二条有效正文 AI 消息才应达到 2 轮并触发');
+    runtime.destroy();
+}
+
+async function testProductionRuntimeRetriesDueTurnAfterRequestQueueBecomesIdle() {
+    const {
+        createMemoryQQV2StateStore,
+    } = await importModule('modules/qq-v2/storage/state-store.js');
+    const {
+        createQQV2Repository,
+    } = await importModule('modules/qq-v2/domain/repository.js');
+    const {
+        createQQV2ProductionRuntime,
+    } = await importModule('modules/qq-v2/application/production-runtime.js');
+
+    const scopeId = 'st:character:alice:chat-proactive-retry';
+    const queueBecameIdle = deferred();
+    let storyMessages = [];
+    let enqueueAttempts = 0;
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return {
+                    scopeId,
+                    chatId: 'chat-proactive-retry',
+                    chatFile: 'chat-proactive-retry',
+                    hostType: 'character',
+                    hostId: 'alice',
+                };
+            },
+            readUserIdentity() { return { name: '旅行者', avatar: '' }; },
+            readStoryTime() { return ''; },
+            readStoryMessages() { return storyMessages; },
+            readRawContext() { return {}; },
+        },
+        stateStore,
+        repository,
+        requestService: {
+            cancelScope() {},
+            getConversationState() { return {}; },
+            cancelConversation() {},
+            async waitForIdle() {
+                await queueBecameIdle.promise;
+            },
+        },
+        proactiveService: {
+            cancelScope() {},
+            async getState() { return { enabled: true, everyTurns: 1 }; },
+            async enqueueProactiveCycle() {
+                enqueueAttempts += 1;
+                return enqueueAttempts === 1
+                    ? { triggered: true, queued: false, skipped: 'proactive-pending' }
+                    : { triggered: true, queued: true };
+            },
+        },
+        projectionService: { async retryPending() {}, async syncConversation() {} },
+    });
+
+    await runtime.initialize();
+    storyMessages = [{
+        messageId: 0,
+        role: 'assistant',
+        content: '达到主动回复轮次，但请求队列暂时繁忙',
+        isHidden: false,
+        isSystem: false,
+    }];
+    await runtime.handleMessageReceived(0, 'normal');
+
+    assert.equal(enqueueAttempts, 1);
+    assert.equal((await repository.getProactiveProgress(scopeId)).counter, 1, '未真正入队时不得消费主动轮次');
+
+    queueBecameIdle.resolve();
+    await waitUntil(() => enqueueAttempts === 2, 'the due proactive turn to retry after the request queue becomes idle');
+    await waitUntil(
+        async () => (await repository.getProactiveProgress(scopeId)).counter === 0,
+        'the persisted proactive turn to be consumed only after retry is queued',
+    );
+
+    assert.equal(enqueueAttempts, 2, '队列空闲后应自动补跑一次，不需要新的正文消息');
+    runtime.destroy();
+}
+
 async function testScopeTransitionCancelsPreviousScopeBeforeSlowInitialization() {
     const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
     const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
@@ -541,7 +602,6 @@ async function testScopeTransitionCancelsPreviousScopeBeforeSlowInitialization()
                 return { primary: '', additional: [] };
             },
         },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
 
@@ -585,17 +645,18 @@ async function testAbaStaleStorySessionCannotScheduleAsReenteredScope() {
                     staleRequestStarted.resolve();
                     await releaseStaleRequest.promise;
                 }
-                if (input.scopeSession.isReady()) queued.push(input);
+                const isReady = input.scopeSession.isReady();
+                if (isReady) queued.push(input);
+                return { triggered: true, queued: isReady };
             },
         },
         proactiveStorySettleDelayMs: 0,
         projectionService: { async retryPending() {}, async syncConversation() {} },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     storyMessages = [{ messageId: 0, role: 'assistant', content: 'reply', isHidden: false, isSystem: false }];
 
-    const staleEvent = runtime.handleCharacterMessageRendered(0, 'regenerate');
+    const staleEvent = runtime.handleMessageReceived(0, 'regenerate');
     await staleRequestStarted.promise;
     const staleSession = received[0].scopeSession;
 
@@ -606,7 +667,9 @@ async function testAbaStaleStorySessionCannotScheduleAsReenteredScope() {
 
     releaseStaleRequest.resolve();
     await staleEvent;
-    assert.equal(queued.length, 0);
+    assert.equal(queued.length, 1, '重新进入作用域后允许新 session 恢复已持久化的到期轮次');
+    assert.notEqual(queued[0].scopeSession, staleSession);
+    assert.equal(queued[0].scopeSession.isReady(), true);
     assert.equal(staleSession.scopeId, scopeA);
     assert.equal(staleSession.isCurrent(), false);
     assert.equal(staleSession.isReady(), false);
@@ -618,9 +681,9 @@ async function testAbaStaleStorySessionCannotScheduleAsReenteredScope() {
         isHidden: false,
         isSystem: false,
     }];
-    await runtime.handleCharacterMessageRendered(1, 'regenerate');
-    assert.equal(received.length, 2);
-    assert.equal(queued.length, 1);
+    await runtime.handleMessageReceived(1, 'regenerate');
+    assert.equal(received.length, 3);
+    assert.equal(queued.length, 2);
     assert.strictEqual(queued[0], received[1]);
     assert.equal(received[1].scopeId, scopeA);
     assert.equal(received[1].scopeSession.scopeId, scopeA);
@@ -686,11 +749,6 @@ async function testProductionRuntimeKeepsWorldbookProjectionBeforeConversationDe
                     throw new Error('worldbook is temporarily unavailable');
                 }
                 books.set(name, copy(book));
-            },
-        },
-        worldbookContextGateway: {
-            async runDryRun() {
-                return [];
             },
         },
     });
@@ -851,7 +909,6 @@ async function testProductionRuntimeCancelsLateSaveAndCleansOldScopeThroughCurre
         repository,
         cryptoApi: webcrypto,
         backend: { async generate() {}, async loadModels() { return []; } },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
 
     await runtime.initialize();
@@ -957,7 +1014,6 @@ async function testDefaultRuntimeEntryExposesTheProductionFacade() {
             cryptoApi: webcrypto,
             backend: { async generate() {}, async loadModels() { return []; } },
             worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} },
-            worldbookContextGateway: { async runDryRun() { return []; } },
         }),
     });
 
@@ -1010,7 +1066,6 @@ async function testProductionFacadeOwnsApiPresetLifecycleAcrossScopes() {
             },
         },
         worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
 
     await runtime.initialize();
@@ -1090,7 +1145,6 @@ async function testProductionRuntimeWorksWithoutWebCryptoAndKeepsKeysOutOfExport
         cryptoApi: {},
         backend: { async generate() {}, async loadModels() { return []; } },
         worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
 
     await runtime.initialize();
@@ -1154,7 +1208,6 @@ async function testProductionFacadeListsOnlyExistingWorldbooks() {
             async loadBook() { return { entries: {} }; },
             async saveBook() {},
         },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
 
     await runtime.initialize();
@@ -1226,7 +1279,6 @@ async function testProductionRuntimeInitializesDefaultWorldbookOncePerScope() {
             async loadBook() { return { entries: {} }; },
             async saveBook() {},
         },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
 
     await runtime.initialize();
@@ -1308,7 +1360,6 @@ async function testProductionRuntimeQueriesDoNotCreateOrThrowForAnUnseenScope() 
         cryptoApi: webcrypto,
         backend: { async generate() {}, async loadModels() { return []; } },
         worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
 
@@ -1365,7 +1416,6 @@ async function testListWorldbooksWithoutReadyScopeDoesNotCreateScopeOrReachGatew
                 return ['must-not-be-read'];
             },
         },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
 
     const result = await runtime.listWorldbooks({ scopeId });
@@ -1412,7 +1462,6 @@ async function testProductionFacadeBridgesPrivateProfilesMediaAndUnreadState() {
         cryptoApi: webcrypto,
         backend: { async generate() {}, async loadModels() { return []; } },
         worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     const privateOne = await runtime.createPrivateConversation({ scopeId, name: 'Alice' });
@@ -1541,7 +1590,7 @@ async function testProductionRuntimeTracksUnreadOnlyForClosedConversations() {
         },
         backend: { async generate() { return { content: '<qq><ignored /></qq>' }; }, async loadModels() { return []; } },
         worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} },
-        worldbookContextGateway: { async runDryRun() { return []; } },
+        worldbookContextResolver: { async resolve() { return ''; } },
     });
     await runtime.initialize();
     const apiPreset = await runtime.saveApiPreset({ preset: {
@@ -1628,7 +1677,6 @@ async function testOpenConversationDoesNotRestoreStaleOpenStateOrNotify() {
         proactiveService: { cancelScope() {}, async getState() { return { enabled: false, everyTurns: 5 }; } },
         projectionService: { async retryPending() {}, async syncConversation() {} },
         worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     const privateChat = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
@@ -1709,7 +1757,6 @@ async function testCloseConversationDoesNotClearReopenedStateAfterScopeAba() {
         proactiveService: { cancelScope() {}, async getState() { return { enabled: false, everyTurns: 5 }; } },
         projectionService: { async retryPending() {}, async syncConversation() {} },
         worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     const privateChat = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
@@ -1790,7 +1837,6 @@ async function testDeleteMessagesKeepsTheCallerProjectionSnapshot() {
                 projectionCalls.push(input);
             },
         },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     const privateChat = await runtime.createPrivateConversation({ scopeId, name: 'Alice' });
@@ -1872,7 +1918,6 @@ async function testDeleteMessagesStopsBeforeNotifyingWhenWorldbookSessionBecomes
             },
         },
         worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     const privateChat = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
@@ -1960,7 +2005,6 @@ async function testDeleteMessagesStopsWhenCapturedScopeSessionBecomesStaleDuring
         },
         projectionService: { async retryPending() {}, async syncConversation() {} },
         worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     const privateChat = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
@@ -2059,7 +2103,6 @@ async function testDeleteConversationStopsBeforeLocalDeleteWhenCapturedScopeSess
             },
         },
         worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     const privateChat = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
@@ -2142,7 +2185,6 @@ async function testDeleteConversationStopsAfterCommittedDeleteWhenScopeBecomesSt
             async removeConversationProjection() { return { status: 'removed' }; },
         },
         worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     const deletedConversation = await runtime.createPrivateConversation({ scopeId: scopeA, name: 'Alice' });
@@ -2242,7 +2284,6 @@ async function testProductionFacadeOwnsRevocableMediaRenderLeases() {
             async setConversationInjection() { return { status: 'synced' }; },
             async removeConversationProjection() { return { status: 'removed' }; },
         },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     const facade = runtime.getFacade();
@@ -2439,7 +2480,6 @@ async function testSharedWorldbookConversationSyncIsSerial() {
             },
             async saveBook(_name, value) { book = copy(value); },
         },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
 
     await runtime.initialize();
@@ -2519,7 +2559,6 @@ async function testPendingOldScopeCleanupBlocksNewScopeReconcile() {
             },
         },
         worldbookGateway: { async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; } },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
 
     await runtime.initialize();
@@ -2568,9 +2607,15 @@ async function testBatchInjectionReportsPendingWorldbookSyncAsFailure() {
         backend: { async generate() {}, async loadModels() { return []; } },
         projectionService: {
             async reconcileScope() { return []; },
-            async setMessagesSelected() { return { status: 'pending' }; },
+            async setMessagesSelected() {
+                return {
+                    status: 'pending',
+                    reason: 'projection-conflict',
+                    code: 'worldbook_projection_conflict',
+                    message: 'QQ 世界书存在重复新版投影，请手工删除到只剩一条后重试',
+                };
+            },
         },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     const privateChat = await runtime.createPrivateConversation({ scopeId, name: 'Alice' });
@@ -2583,9 +2628,222 @@ async function testBatchInjectionReportsPendingWorldbookSyncAsFailure() {
         ok: false,
         status: 'failed',
         error: {
-            code: 'worldbook_sync_pending',
-            message: 'QQ 世界书同步失败，请稍后重试',
+            code: 'worldbook_projection_conflict',
+            message: 'QQ 世界书存在重复新版投影，请手工删除到只剩一条后重试',
         },
+    });
+
+    runtime.destroy();
+}
+
+async function testProactiveWorldbookPendingIsReportedWithoutRollingBackCommittedActions() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeId = 'st:character:alice:chat-proactive-worldbook-pending';
+    const conflictMessage = 'QQ 世界书存在重复新版投影，请手工删除到只剩一条后重试';
+    const warnings = [];
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    let storyMessages = [];
+    let proactiveResult = null;
+    let proactiveConversationId = '';
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return {
+                    scopeId,
+                    chatId: 'chat-proactive-worldbook-pending',
+                    chatFile: 'chat-proactive-worldbook-pending',
+                    hostType: 'character',
+                    hostId: 'alice',
+                };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return '2042-05-20 09:30'; },
+            readStoryMessages() { return storyMessages; },
+            readRawContext() { return {}; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        logger: {
+            warn(entry) { warnings.push(entry); },
+        },
+        requestService: {
+            handleScopeChanged() {},
+            getConversationState() { return {}; },
+            cancelConversation() {},
+            cancelScope() {},
+            async enqueueProactive(input) {
+                proactiveResult = await input.execute({
+                    scopeId: input.scopeId,
+                    signal: new AbortController().signal,
+                    isCurrent: () => true,
+                });
+                return { queued: true };
+            },
+            cancelProactive() { return 0; },
+        },
+        resources: {
+            async getApiPresetForRequest(presetId) { return { presetId }; },
+            async getPromptPreset(presetId) { return { presetId }; },
+            async listStickers() { return []; },
+        },
+        backend: {
+            async generate() {
+                return { content: '<qq><message conversation="P1">主动消息已提交</message></qq>' };
+            },
+            async loadModels() { return []; },
+        },
+        actionService: {
+            async execute({ scopeId: actionScopeId, storyTime, scopeSession }) {
+                const conversation = await repository.getConversation(actionScopeId, proactiveConversationId);
+                const [message] = await repository.appendMessages(actionScopeId, proactiveConversationId, [{
+                    senderId: conversation.personId,
+                    senderType: 'person',
+                    type: 'text',
+                    content: '主动消息已提交',
+                    storyTime,
+                }], { scopeSession });
+                return {
+                    applied: [{ type: 'message', messageId: message.messageId }],
+                    createdConversationIds: [],
+                };
+            },
+        },
+        projectionService: {
+            async reconcileScope() { return []; },
+            async syncConversation() {
+                return {
+                    status: 'pending',
+                    reason: 'projection-conflict',
+                    code: 'worldbook_projection_conflict',
+                    message: conflictMessage,
+                };
+            },
+        },
+        worldbookGateway: {
+            async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; },
+        },
+        worldbookContextResolver: {
+            async resolve() { return ''; },
+        },
+        proactiveStorySettleDelayMs: 0,
+    });
+
+    await runtime.initialize();
+    const privateChat = await runtime.createPrivateConversation({ scopeId, name: 'Alice' });
+    proactiveConversationId = privateChat.conversation.conversationId;
+    await runtime.updateGlobalSettings({
+        scopeId,
+        settings: {
+            activeApiPresetId: 'api-1',
+            proactive: { enabled: true, everyTurns: 1 },
+        },
+    });
+    storyMessages = [{
+        messageId: 'story-1',
+        role: 'assistant',
+        content: '正文回复',
+        isHidden: false,
+        isSystem: false,
+    }];
+
+    await runtime.handleMessageReceived('story-1', 'normal');
+
+    assert.deepEqual(proactiveResult, { status: 'succeeded' });
+    assert.equal(
+        (await repository.listMessages(scopeId, privateChat.conversation.conversationId))
+            .some((message) => message.content === '主动消息已提交'),
+        true,
+        '世界书投影 pending 不得回滚已经提交的主动 QQ 消息',
+    );
+    assert.deepEqual(warnings
+        .filter((entry) => entry?.action === 'worldbook.projection.pending')
+        .map((entry) => ({
+        action: entry.action,
+        errorCode: entry.errorCode,
+        message: entry.message,
+        scopeId: entry.context?.scopeId,
+        conversationId: entry.context?.conversationId,
+        })), [{
+        action: 'worldbook.projection.pending',
+        errorCode: 'worldbook_projection_conflict',
+        message: conflictMessage,
+        scopeId,
+        conversationId: privateChat.conversation.conversationId,
+    }]);
+
+    runtime.destroy();
+}
+
+async function testRetryPendingWorldbookIncludesGroupConversations() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeId = 'st:character:alice:chat-group-worldbook-retry';
+    const syncCalls = [];
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return {
+                    scopeId,
+                    chatId: 'chat-group-worldbook-retry',
+                    chatFile: 'chat-group-worldbook-retry',
+                    hostType: 'character',
+                    hostId: 'alice',
+                };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return '2042-05-20 09:30'; },
+            readStoryMessages() { return []; },
+            readRawContext() { return {}; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        backend: { async generate() {}, async loadModels() { return []; } },
+        projectionService: {
+            async reconcileScope() { return []; },
+            async syncConversation(input) {
+                syncCalls.push(input.conversationId);
+                await repository.setConversationProjection(
+                    input.scopeId,
+                    input.conversationId,
+                    { pending: false },
+                    { scopeSession: input.scopeSession },
+                );
+                return { status: 'synced' };
+            },
+        },
+        worldbookGateway: {
+            async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; },
+        },
+    });
+
+    await runtime.initialize();
+    const alice = await runtime.createPrivateConversation({ scopeId, name: 'Alice' });
+    const bob = await runtime.createPrivateConversation({ scopeId, name: 'Bob' });
+    const group = await repository.createGroupConversation(scopeId, {
+        name: '测试群',
+        memberIds: [alice.person.personId, bob.person.personId],
+    });
+    const groupConversationId = group.conversation.conversationId;
+    await repository.setConversationProjection(scopeId, groupConversationId, { pending: true });
+
+    const result = await runtime.retryPendingWorldbook({
+        scopeId,
+        userName: 'Traveler',
+        storyTime: '2042-05-20 09:30',
+    });
+
+    assert.deepEqual(syncCalls, [groupConversationId]);
+    assert.deepEqual(result, {
+        syncedConversationIds: [groupConversationId],
+        pendingConversationIds: [],
     });
 
     runtime.destroy();
@@ -2593,8 +2851,10 @@ async function testBatchInjectionReportsPendingWorldbookSyncAsFailure() {
 
 async function main() {
     await testProductionRuntimeOwnsTheCurrentScopeAndFacade();
-    await testProductionWorldbookScanUsesScenarioSpecificHistoryWindows();
-    await testProductionRuntimeSchedulesProactiveFromAiFloors();
+    await testProductionRuntimeCountsNewStoryRepliesPersistently();
+    await testProductionRuntimeUsesReceivedTurnInsteadOfAbsoluteStoryFloor();
+    await testProductionRuntimeIgnoresIneligibleAndDuplicateReceivedMessages();
+    await testProductionRuntimeRetriesDueTurnAfterRequestQueueBecomesIdle();
     await testScopeTransitionCancelsPreviousScopeBeforeSlowInitialization();
     await testAbaStaleStorySessionCannotScheduleAsReenteredScope();
     await testProductionRuntimeKeepsWorldbookProjectionBeforeConversationDeletion();
@@ -2620,6 +2880,8 @@ async function main() {
     await testSharedWorldbookConversationSyncIsSerial();
     await testPendingOldScopeCleanupBlocksNewScopeReconcile();
     await testBatchInjectionReportsPendingWorldbookSyncAsFailure();
+    await testProactiveWorldbookPendingIsReportedWithoutRollingBackCommittedActions();
+    await testRetryPendingWorldbookIncludesGroupConversations();
 }
 
 main().catch((error) => {

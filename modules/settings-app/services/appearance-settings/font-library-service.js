@@ -218,7 +218,7 @@ function buildScopedFontOverrideCss(activeFont) {
     const cssFamily = activeFont?.cssFamily ? String(activeFont.cssFamily) : getBuiltinFontById(DEFAULT_FONT_ID).family;
     const selector = [
         `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id]`,
-        `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-shell`,
+        `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .yuzi-phone-shell`,
         `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-page`,
         `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-app-page`,
         `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-settings-page`,
@@ -232,7 +232,7 @@ function buildScopedFontOverrideCss(activeFont) {
     return `${selector} { font-family: ${cssFamily} !important; }\n`
         + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-dock-text-icon,\n`
         + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-app-label,\n`
-        + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-status-time,\n`
+        + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .yuzi-phone-status-time,\n`
         + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-settings-font-preview,\n`
         + `#${FONT_CONTAINER_ID}[data-yuzi-phone-font-id] .phone-settings-font-preview * { font-family: ${cssFamily} !important; }`;
 }

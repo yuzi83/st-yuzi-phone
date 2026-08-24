@@ -476,6 +476,28 @@ export interface AppearanceResourcePoolOperationResult {
     message?: string;
 }
 
+export type WorldbookReadingSelection = Record<string, Record<string, false>>;
+export type WorldbookReadingBlockedKeywords = string[];
+
+export interface ImageGenerationColumnRef {
+    columnIndex: number;
+    headerSnapshot: string;
+}
+
+export interface ImageGenerationRoleMapping {
+    mappingId: string;
+    sheetKey: string;
+    tableNameSnapshot: string;
+    nameColumn: ImageGenerationColumnRef | null;
+    promptColumns: ImageGenerationColumnRef[];
+}
+
+export interface ImageGenerationSettings {
+    enabled: boolean;
+    timeoutMs: number;
+    roleMappings: ImageGenerationRoleMapping[];
+}
+
 export interface PhoneSettings {
     enabled: boolean;
     phoneToggleX: number | null;
@@ -500,13 +522,16 @@ export interface PhoneSettings {
     phoneToggleStyleSize: number;
     phoneToggleStyleShape: 'circle' | 'rounded';
     phoneToggleCoverImage: string | null;
+    worldbookReadingSelection: WorldbookReadingSelection;
+    worldbookReadingBlockedKeywords: WorldbookReadingBlockedKeywords;
+    imageGeneration: ImageGenerationSettings;
 }
 
 /**
  * 设置验证规则
  */
 export interface ValidationRule {
-    type: 'number' | 'string' | 'boolean' | 'object';
+    type: 'number' | 'string' | 'boolean' | 'object' | 'array';
     min?: number;
     max?: number;
     maxLength?: number;
@@ -699,6 +724,8 @@ export type SettingsPageMode =
     | 'api_presets'
     | 'beautify'
     | 'button_style'
+    | 'worldbook_reading'
+    | 'image_generation'
     | 'ai_instruction_presets';
 
 export interface SettingsAppState {
@@ -709,6 +736,7 @@ export interface SettingsAppState {
     beautifyScrollTop: number;
     buttonStyleScrollTop: number;
     aiInstructionPresetsScrollTop: number;
+    imageGenerationScrollTop: number;
 }
 
 export type SettingsToastHandler = (host: unknown, message: string, isError?: boolean) => void;
@@ -752,6 +780,8 @@ export interface SettingsPageRendererScrollDeps {
     rerenderApiPresetsKeepScroll: () => void;
     rerenderBeautifyKeepScroll: () => void;
     rerenderAiInstructionPresetsKeepScroll: () => void;
+    rerenderWorldbookReadingKeepScroll: () => void;
+    rerenderImageGenerationKeepScroll: () => void;
 }
 
 export interface SettingsPageRendererFeedbackDeps {
@@ -882,6 +912,81 @@ export interface SettingsContentPresetWorkshopService {
     clearAllActive: () => Promise<any>;
 }
 
+export interface SettingsWorldbookReadingCatalogEntry {
+    ref: { bookName: string; uid: string };
+    sourceRole: 'primary' | 'additional';
+    enabled: boolean;
+    selected: boolean;
+    value: Record<string, any>;
+}
+
+export interface SettingsWorldbookReadingCatalog {
+    load: (request?: Record<string, any>) => Promise<{
+        books: readonly { name: string; sourceRole: 'primary' | 'additional' }[];
+        entries: readonly SettingsWorldbookReadingCatalogEntry[];
+        issues: readonly any[];
+        blockedKeywords: readonly string[];
+    }>;
+    setSelected: (
+        refs: readonly { bookName: string; uid: string }[],
+        selected: boolean,
+        request?: Record<string, any>,
+    ) => Promise<void>;
+    setBlockedKeywords: (
+        keywords: readonly string[],
+        request?: Record<string, any>,
+    ) => Promise<void>;
+    subscribe: (listener: () => void) => Promise<() => void>;
+}
+
+export interface SettingsImageGenerationTableHeader {
+    columnIndex: number;
+    rawName: string;
+    displayName: string;
+}
+
+export interface SettingsImageGenerationTable {
+    sheetKey: string;
+    tableName: string;
+    status: string;
+    headers: readonly SettingsImageGenerationTableHeader[];
+    rowCount?: number;
+}
+
+export interface SettingsImageGenerationViewModel {
+    config: ImageGenerationSettings;
+    tables: readonly SettingsImageGenerationTable[];
+    resolvedMappings?: readonly any[];
+    testInput?: {
+        names?: string;
+        description?: string;
+        finalPrompt?: string;
+        imagePath?: string;
+        statusText?: string;
+        generating?: boolean;
+    };
+}
+
+export interface SettingsImageGenerationService {
+    loadViewModel: (request?: {
+        config?: ImageGenerationSettings;
+        testInput?: { names?: string; description?: string };
+    }) => Promise<SettingsImageGenerationViewModel>;
+    saveConfig: (config: ImageGenerationSettings) => Promise<{
+        ok?: boolean;
+        status?: string;
+        config: ImageGenerationSettings;
+        tables?: readonly SettingsImageGenerationTable[];
+    }>;
+    testGenerate: (request: {
+        names?: string;
+        explicitNames?: string;
+        description?: string;
+        prompt?: string;
+        timeoutMs?: number;
+    }) => Promise<Record<string, any>>;
+}
+
 export interface SettingsPageRendererGroupedDeps {
     common?: SettingsPageRendererCommonDeps;
     navigation?: SettingsPageRendererNavigationDeps;
@@ -891,6 +996,8 @@ export interface SettingsPageRendererGroupedDeps {
     qqV2Presets?: SettingsQQV2PresetService;
     buttonStyle?: SettingsButtonStylePageRendererDeps;
     contentPresetWorkshop?: SettingsContentPresetWorkshopService;
+    worldbookReading?: SettingsWorldbookReadingCatalog;
+    imageGeneration?: SettingsImageGenerationService;
 }
 
 export interface SettingsPageInstance {
@@ -913,6 +1020,8 @@ export interface SettingsPageRenderers {
     renderButtonStylePage(): void;
     renderBeautifyTemplatePage(): void;
     renderAiInstructionPresetsPage(): void;
+    renderWorldbookReadingPage(): void;
+    renderImageGenerationPage(): void;
 }
 
 /**

@@ -29,8 +29,11 @@ async function main() {
     const projection = read('modules/qq-v2/worldbook/projection-service.js');
     const resources = read('modules/qq-v2/resources/service.js');
 
-    assert.ok((runtime.match(/formatQQV2MessageSemantic\(/g) || []).length >= 4,
-        'manual history, worldbook activation and proactive context must share typed semantics');
+    assert.match(runtime,
+        /function formatWorldbookHistory\([\s\S]*formatQQV2MessageSemantic\(message/,
+        'worldbook activation must use the canonical typed-message semantics');
+    assert.ok((runtime.match(/formatWorldbookHistory\(/g) || []).length >= 3,
+        'manual and proactive worldbook activation must share one typed-history boundary');
     assert.match(materializer, /type="\$\{escapeXml\(qqV2MessageType\(message\)\)\}"[\s\S]*formatQQV2MessageSemantic\(message/,
         'proactive prompt sections must expose both the message type and readable semantics');
     assert.match(projection, /senderName\(message[\s\S]*formatQQV2MessageSemantic\(message/,

@@ -205,7 +205,11 @@ sequenceDiagram
 
 当前消费者是 Settings、Generic Table 列表与详情、Theater、Variable Manager、Fusion、Table Update Review 审核 App、Content Presets 和 QQ 二级页/聊天页。每个消费者保留自己的路由 action 和页面生命周期，但不能复制标题栏 DOM、字符箭头或可见“返回”文字。
 
-[`01-shell-system.css`](../styles/phone-base/01-shell-system.css) 把 `.phone-screen` 声明为 `yuzi-phone-screen` inline-size container。共享标题栏使用 `cqi`，页面操作区需要窄屏重排时使用 `@container yuzi-phone-screen`；浏览器 viewport 的 `@media (max-width: ...)` 不能用于判断小手机标题栏是否变窄。
+[`01-shell-system.css`](../styles/phone-base/01-shell-system.css) 把 `.yuzi-phone-screen` 声明为 `yuzi-phone-screen` inline-size container。共享标题栏使用 `cqi`，页面操作区需要窄屏重排时使用 `@container yuzi-phone-screen`；浏览器 viewport 的 `@media (max-width: ...)` 不能用于判断小手机标题栏是否变窄。
+
+Shell DOM、CSS 选择器与自定义变量必须使用 Yuzi 独占命名空间：屏幕和 Home Indicator 的公开 class 固定为 `.yuzi-phone-screen`、`.yuzi-phone-home-indicator`，不得暴露 `.phone-screen`、`.phone-home-indicator` 等容易被其他手机扩展全局命中的通用 shell class；新增自定义变量必须使用 `--yuzi-phone-*`。隔离依赖命名空间而不是加载顺序或 `!important` 覆盖。
+
+QQ composer 的 textarea 自动增高属于高频输入路径。input 事件只更新草稿并通过 `requestAnimationFrame` 合并高度工作，同一 textarea 每帧最多测量一次，且仅在目标高度变化时写入 style。Shell 的 `MutationObserver` 不得因 composer textarea 的 style 高度变化刷新 Home Indicator；它只处理页面切换、底栏显隐、主题或其他确实改变 shell 底部结构的 mutation，避免“写高度 → 强制布局 → observer 全量扫描”的每字符放大链。
 
 ## 4. SillyTavern 集成层
 
@@ -233,17 +237,25 @@ sequenceDiagram
 | --- | --- | --- |
 | `SillyTavern.getContext()` | [`getFreshSillyTavernContext()`](../modules/integration/context-bridge.js) | 每次取得当前宿主 context。SillyTavern 切换聊天时会替换会话级引用，因此作用域、角色绑定、请求头和世界书读写都必须在每次操作开始时重新读取，不能长期持有旧 context。 |
 | `getWorldbookNames()` | [`getWorldbookNames()`](../modules/integration/tavern-helper-bridge.js) | 列出可选择的世界书名称，用于设置下拉框。返回值必须归一化为字符串数组；API 缺失或失败时由桥接层决定 strict 失败或空数组降级。 |
-| `getCharWorldbookNames('current')` | [`getCurrentCharacterWorldbooks()`](../modules/integration/tavern-helper-bridge.js) | 读取当前角色卡绑定的主世界书与附加世界书。当前 SillyTavern 宿主聊天没有手动目标 `bookName` 时，QQ 优先解析主世界书，再取第一个附加世界书；手动选择只覆盖当前宿主聊天，不能变成扩展级全局目标，也不能按角色名或 UI 文案猜绑定关系。 |
+| `getCharWorldbookNames('current')` | [`getCurrentCharacterWorldbooks()`](../modules/integration/tavern-helper-bridge.js) | 读取当前角色卡绑定的主世界书与附加世界书。它同时是 QQ 投影默认目标解析和“读取世界书”候选书目录的事实源；前者只取主书或首个附加书作为写入目标，后者读取主书和全部附加书。不能按角色名或 UI 文案猜绑定关系。 |
+| `getWorldbook(name)` | [`st-catalog-adapter.js`](../modules/worldbook-reading/st-catalog-adapter.js) | 按书名读取 TavernHelper 形态的世界书条目，仅用于 `{{世界书内容}}` 的候选目录和扫描。这条读链使用 strict + silent：失败向上抛给 Resolver 降级为空字符串，但不向控制台写 warning。 |
 | `context.loadWorldInfo(name)` | [`st-gateway.js`](../modules/qq-v2/worldbook/st-gateway.js) 的 `loadBook()` | 按名称读取完整世界书对象，并复用 SillyTavern 自己的 world-info cache。主动投影和清理非当前聊天投影都走同一入口，不直接请求 `/api/worldinfo/get`。 |
-| `context.saveWorldInfo(name, data, true)` | [`st-gateway.js`](../modules/qq-v2/worldbook/st-gateway.js) 的 `saveBook()` | 立即保存完整世界书对象；第三个参数 `true` 表示绕过 debounce，Promise settlement 是本次写入完成边界。调用后不要继续修改传入对象，因为 SillyTavern 会把同一对象放入 cache。 |
+| `context.saveWorldInfo(name, data, true)` | [`st-gateway.js`](../modules/qq-v2/worldbook/st-gateway.js) 的 `saveBook()` | 立即保存完整世界书对象；第三个参数 `true` 表示绕过 debounce，Promise settlement 是本次写入完成边界。调用后不要继续修改传入对象，因为 SillyTavern 会把同一对象放入 cache。QQ 投影保留这条原始 SillyTavern 整书读写链，不改用会规范化并重建整书的 TavernHelper 条目 CRUD。 |
 | `context.getRequestHeaders()` + `POST /api/characters/chats` | [`listCharacterChatFiles()`](../modules/qq-v2/host/adapter.js) | 查询指定角色头像 `avatar_url` 下仍存在的聊天文件。请求体使用 `{ avatar_url, simple: true }`；成功响应为 `{ file_name, file_id }[]`，比较前统一去掉 `.jsonl`。它用于跨角色同名聊天的删除消歧，不用于普通聊天列表 UI。 |
 | `CHAT_CHANGED` | [`event-registry.js`](../modules/bootstrap/event-registry.js) → QQ runtime | 表示当前宿主聊天已改变。QQ 必须重新读取 fresh context，并执行“只有当前 scope 可以保留世界书投影”的收敛流程。 |
 | `CHAT_DELETED` | [`event-registry.js`](../modules/bootstrap/event-registry.js) → [`production-runtime.js`](../modules/qq-v2/application/production-runtime.js) | SillyTavern 只提供被删聊天文件名，不提供可靠角色身份；删除后的当前角色也可能已经改变。必须结合已持久化 host metadata 定位，重名时再用 `/api/characters/chats` 查证，禁止把当前 `hostId` 当成删除事实。 |
+| `WORLDINFO_UPDATED` | [`st-catalog-adapter.js`](../modules/worldbook-reading/st-catalog-adapter.js) → [`worldbook-reading.js`](../modules/settings-app/pages/worldbook-reading.js) | 世界书条目变更时只使当前“读取世界书”页重新拉取目录；页面 dispose 时必须解除订阅，不保留旧 DOM 闭包。 |
 
 世界书写入规则：
 
 - 活跃 scope 的普通写入在 `loadWorldInfo()` 与 `saveWorldInfo()` 前后都检查 scope，防止异步等待结束后把旧聊天结果写进新聊天。
-- 只有清理已知旧投影时可以显式 `allowInactiveScope`；仍然必须按世界书名称读取，并只删除带有本项目所有权 marker 的条目。
+- QQ 新版投影的条目名称固定为 `YuziQQ｜私聊｜人物真名｜<完整 conversationId>` 或 `YuziQQ｜群聊｜群名｜<完整 conversationId>`。名称中的完整 `conversationId` 是主身份；仓储记录的 `entryUid` 只用于快速定位，`extensions.yuziPhoneQQV2` marker 只用于辅助校验。
+- 外部 TavernHelper 写入可能在规范化、重建整本世界书时丢失 entry 的未知 `extensions`。因此 marker 缺失不表示投影不存在；QQ 仍按新版名称中的完整 `conversationId` 找回并原地更新同一 UID，避免把完整会话再次创建为第二条投影。
+- 新版投影的完整正文必须以独立首行 `<yuzi>` 开始、以独立末行 `</yuzi>` 结束。正文保留会话说明并按故事日期分段；每条具有合法故事时分的消息以 `[HH:mm]` 开头。只有日期或故事时间未知、无效时不得伪造 `[00:00]`，应保留对应日期或未知故事时间分段，并输出不带时分前缀的消息正文。
+- 已存在的新版投影不执行额外迁移；下一次正常同步时必须按完整 `conversationId` 找回原条目、保持原 UID，并将正文刷新为当前格式。
+- `QQ｜私聊｜...` 与 `QQ｜群聊｜...` 旧格式条目不属于新版投影生命周期。QQ 不扫描提醒，也不改名、更新、禁用或删除这些遗留条目，即使它们仍带旧 marker；旧条目也不补写 `<yuzi>` 标签或消息时分。
+- 只有清理已知新版投影时可以显式 `allowInactiveScope`；仍然必须按世界书名称读取，并按完整 `conversationId` 精确匹配 `YuziQQ｜` 保留命名空间，不能按人物名、群名、正文前缀或当前聊天猜测条目归属。
+- 同一本书中匹配到多条相同 `conversationId` 的新版条目时，投影写入 fail closed：不更新、不删除、不禁用、不任选一条，也不创建第三条；会话保持 pending，等待用户手工清理到只剩一条。
 - 世界书读取失败、保存失败、聊天列表查询失败或删除身份仍有歧义时一律 fail closed：保留世界书条目和本地 scope，等待下一次生命周期重试，不猜删、不把失败伪装成成功。
 - 宿主 API 调用只能存在于 integration、host adapter 或 worldbook gateway。UI、Facade 和领域仓储不得直接访问 `SillyTavern`、`TavernHelper`、`fetch('/api/...')` 或 world-info cache。
 
@@ -363,7 +375,8 @@ sequenceDiagram
 - [`state-store.js`](../modules/qq-v2/storage/state-store.js) 保存 v2 领域状态；会话、消息、资源与世界书投影不写回表格。
 - [`action-service.js`](../modules/qq-v2/protocol/action-service.js) 解析并原子校验 AI 动作批次，[`projection-service.js`](../modules/qq-v2/worldbook/projection-service.js) 管理真实世界书条目投影与恢复。
 - [`conversation-swipe.js`](../modules/qq-v2/ui/conversation-swipe.js) 独立管理消息页会话行的横向拖动、开合吸附和滑动后点击抑制；拖动偏移通过 `--yuzi-qq-swipe-offset` 交给 CSS，删除确认与领域删除仍由 [`app.js`](../modules/qq-v2/ui/app.js) 和 Facade 负责。
-- 世界书条目通过 `extensions.qqV2 = { version, scopeId, conversationId }` 标记所有权。清理只能按 marker 精确删除，禁止按标题、角色名、内容前缀或当前聊天猜测条目归属。
+- 世界书投影以 `YuziQQ｜私聊｜人物真名｜<完整 conversationId>` / `YuziQQ｜群聊｜群名｜<完整 conversationId>` 作为稳定公开身份。`conversationId` 决定归属，Repository 保存的 `entryUid` 提供快速定位，`extensions.yuziPhoneQQV2 = { version, scopeId, conversationId }` 只作为辅助 marker；人物或群聊改名时在原 UID 更新 comment。外部 TavernHelper 整书重写即使丢失未知 `extensions`，也不会使 QQ 创建第二条投影。
+- 旧 `QQ｜...` 条目不进入新版投影的识别、提示或清理范围。新版投影在关闭总闸、关闭单会话注入、硬删除 QQ 会话或删除宿主聊天时，仍按当前及历史受管目标书执行正常清理；同一目标书出现多个相同 `conversationId` 的新版条目时保持 pending 并 fail closed，由用户手工处理。
 - QQ 采用“当前聊天唯一投影”模型：每次 scope change 都从仓储列出全部 host metadata，清理所有非当前 scope 的投影；不能只记忆并清理上一个 scope，因为 runtime 重启、跳跃切换和删除事件都可能留下更早的投影。
 - `CHAT_CHANGED` 与 `CHAT_DELETED` 在 production runtime 的宿主生命周期队列中串行执行。事件桥可以不阻塞 SillyTavern，但 QQ 内部不能让切换、重建投影和删除 scope 并发交叉。
 - 删除酒馆聊天时先解析目标 scope，再取消该 scope 的请求和主动消息，随后删除世界书投影；只有投影明确返回 `removed` 后才能删除 IndexedDB scope。投影失败则把 scope 标为 pending，保留完整元数据供后续重试。
@@ -375,7 +388,34 @@ sequenceDiagram
 - QQ 主设置中的 API 与各类指令预设选择、主动消息总开关与触发间隔、宿主上下文条数与 QQ 会话历史条数，以及世界书注入总闸、时间跨度、全局灯色、全局深度和全局关键词，统一属于扩展级全局运行设置；切换或删除 SillyTavern 聊天不得重置这些字段。
 - 世界书注入目标 `bookName` 仍按当前 SillyTavern 宿主聊天保存。当前宿主聊天没有手动目标时，按当前角色卡绑定解析主世界书或首个附加世界书；手动选择具体世界书只覆盖当前宿主聊天，切换到其他宿主聊天后读取该聊天自己的目标或重新执行默认解析。该边界不得改变“当前聊天唯一投影”、切换聊天时清理非当前投影、删除聊天时清理对应 QQ 投影的现有生命周期。
 - QQ 单会话详情中的世界书注入开关、灯色与深度覆盖、关键词等设置继续按 QQ 会话独立保存；全局值只提供默认与跟随来源，不能覆盖已有的会话级选择。
-- 主动消息由 `production-runtime.js` 在正文稳定后读取当前聊天可见、成功的 AI 楼层；新增楼层跨过“每隔多少轮”的整数倍时入队一次，所以切换聊天后仍按该聊天自身的总 AI 楼层节奏运行。它只保留运行时楼层基线，不在任何宿主聊天 scope 或 IndexedDB 写入旧的计数或轮换进度。删除聊天只删除该 scope 的会话、消息、媒体引用、宿主聊天级目标 `bookName` 和世界书投影状态，无需删除主动消息进度。
+- 主动消息由 `production-runtime.js` 在正文稳定后读取当前聊天可见、成功的 AI 楼层；新增楼层跨过“每隔多少轮”的整数倍时入队一次，所以切换聊天后仍按该聊天自身的总 AI 楼层节奏运行。它只保留运行时楼层基线，不在任何宿主聊天 scope 或 IndexedDB 写入旧的计数或轮换进度。删除聊天只删除该 scope 的会话、消息、媒体引用、宿主聊天级目标 `bookName` 和世界书投影状态，无需删除主动消息进度。主动动作批次只有在新增、删除或修改可投影 QQ 事实时才同步对应会话；`none`、纯已读或空动作不触发世界书保存。
+
+#### 5.3.1 QQ 世界书上下文读取
+
+QQ 的“世界书注入”与 `{{世界书内容}}` 读取是两条独立链路：前者由 [`projection-service.js`](../modules/qq-v2/worldbook/projection-service.js) 把 QQ 事实投影到真实世界书；后者由 [`context-resolver.js`](../modules/worldbook-reading/context-resolver.js) 为手动回复和主动消息构造一次性上下文。关闭或删除投影不得关闭读取栏，读取栏的选择也不得改写会话投影设置。
+
+```mermaid
+flowchart LR
+  A[最近两条有效正文] --> D[统一扫描文本]
+  B[QQ 人物真实名字] --> D
+  C[每会话最近 3 条未删除可读语义] --> D
+  E[当前角色主书 + 全部附加书] --> F[读取栏选中的未禁用候选]
+  D --> G[蓝灯/绿灯扫描与递归去重]
+  F --> G
+  G --> H[EJS + MVU 渲染]
+  H --> I[shujuku SQL/模板解释]
+  I --> J["{{世界书内容}}"]
+```
+
+运行规则：
+
+- [`WorldbookContextResolver.resolve(request)`](../modules/worldbook-reading/context-resolver.js) 是扫描与渲染的唯一边界。它取最近两条非系统、非隐藏、非旁白且成功的正文消息；手动请求仅读当前会话，主动请求读本周期的全部相关会话，每个会话各自截取最近 3 条未删除消息。
+- [`production-runtime.js`](../modules/qq-v2/application/production-runtime.js) 在交给 Resolver 前统一调用 `formatQQV2MessageSemantic()`，因此语音、图片、视频、表情、转账和关系系统消息与提示词历史使用同一套可读语义。
+- [`WorldbookReadingCatalog`](../modules/worldbook-reading/catalog.js) 只装载当前角色主书和全部附加书。未禁用条目默认全选，设置只稀疏保存 `{ 书名: { UID: false } }`；禁用或未选条目不进入候选集。
+- 常驻/蓝灯条目全部激活；选择/绿灯条目支持 TavernHelper 的 `keys`/`filters` 与 `and_any`/`not_all`/`not_any`/`and_all`，并兼容 snake_case、大小写和整词匹配字段。递归最多 10 轮，按书名 + UID 去重；QQ 聊天投影只要带旧 v2 marker 或使用新版 `YuziQQ｜` 保留命名空间就必须排除，外部重写丢失 marker 后也不得读回自身投影。
+- 这条链路有意不执行 SillyTavern 的 token 预算、概率、包含组竞争与权重、delay/cooldown、角色/标签过滤或 generation trigger。
+- [`st-runtime-adapter.js`](../modules/worldbook-reading/st-runtime-adapter.js) 逐次发现可选 `EjsTemplate` / `Mvu` / `AutoCardUpdaterAPI`，并读取最新 `qrf_plot` / `qrf_plot_tasks`。每次请求会立即捕获当时可用的 `querySql` / `exportTableAsJson` 函数与 receiver，不在执行中重读可能被插件热重载改写的全局方法。EJS 的 `@@activate`/`@@dont_activate`/`@@if`/`@@preprocessing` 在激活前生效，激活后仍逐条渲染正文；所有条目随后合并，只调用一次 [`shujuku-template-renderer.js`](../modules/worldbook-reading/shujuku-template-renderer.js)，因此 `$v` 与 random/calc/max/min store 在同一 `{{世界书内容}}` 内共享请求级作用域。该白名单解释器不使用 `eval` / `new Function`，并处理 random、calc/max/min、db/sql、`$v`、cell 和嵌套条件。
+- 世界书目录或条目整体读取失败时，Resolver 静默返回空字符串，QQ 生成继续；单个可选插件或模板能力不可用时，只在对应渲染边界保留原文或跳过依赖它的条件，不恢复旧快照或完整酒馆预设。
 
 维护规则：
 
@@ -550,7 +590,7 @@ CSS 层读取这些 data attributes 和 CSS 变量，见 [`styles/05-phone-gener
 
 #### 6.3.3 AI 指令预设
 
-[`ai-instruction-presets.js`](../modules/settings-app/pages/ai-instruction-presets.js:1) 只负责维护 QQ 可复用的 AI 指令预设。QQ 的 API 预设、会话运行设置和世界书投影状态均由 QQ v2 runtime 与 Facade 管理，设置 App 不再保存旧世界书选择，也不再提供“API 与世界书”工作台。
+[`ai-instruction-presets.js`](../modules/settings-app/pages/ai-instruction-presets.js:1) 只负责维护 QQ 可复用的 AI 指令预设。QQ 的 API 预设、会话运行设置和世界书投影状态均由 QQ v2 runtime 与 Facade 管理。设置 App 不恢复旧“API 与世界书”工作台；新 [`worldbook-reading.js`](../modules/settings-app/pages/worldbook-reading.js) 只管理 `{{世界书内容}}` 的候选条目，不管理 QQ 投影目标和注入开关。
 
 #### 6.3.4 Page runtime 稳定代理
 
@@ -571,11 +611,11 @@ CSS 层读取这些 data attributes 和 CSS 变量，见 [`styles/05-phone-gener
 
 [`createSettingsPageRenderers()`](../modules/settings-app/page-renderers.js:120) 先通过 [`validateSettingsRendererDeps()`](../modules/settings-app/page-renderers.js:21) 校验依赖，再构造 services 与 page contexts。页面分为三组：
 
-- Personalization：[`createPersonalizationPageRenderers()`](../modules/settings-app/page-renderers/personalization-renderers.js:16)，包含 home、appearance、button style。
+- Personalization：[`createPersonalizationPageRenderers()`](../modules/settings-app/page-renderers/personalization-renderers.js:16)，包含 home、appearance、button style 和 worldbook reading。
 - Preset：[`createPresetPageRenderers()`](../modules/settings-app/page-renderers/preset-renderers.js:11)，包含 API 预设、AI 指令预设。
 - Editor：[`createEditorPageRenderers()`](../modules/settings-app/page-renderers/editor-renderers.js:17)，包含 beautify。
 
-[`createSettingsPageContexts()`](../modules/settings-app/page-renderers/page-context-builders.js:153) 是页面上下文聚合入口。各子 context 只暴露页面需要的 service 子集，例如 [`buildApiPresetsPageContextFromServices()`](../modules/settings-app/page-renderers/page-context-builders.js:137) 与 [`buildAiInstructionPresetsPageContextFromServices()`](../modules/settings-app/page-renderers/page-context-builders.js:128) 都只暴露 QQ v2 预设服务。旧数据库配置和世界书工作台没有对应 context。
+[`createSettingsPageContexts()`](../modules/settings-app/page-renderers/page-context-builders.js:153) 是页面上下文聚合入口。各子 context 只暴露页面需要的 service 子集，例如 [`buildApiPresetsPageContextFromServices()`](../modules/settings-app/page-renderers/page-context-builders.js:137) 与 [`buildAiInstructionPresetsPageContextFromServices()`](../modules/settings-app/page-renderers/page-context-builders.js:128) 只暴露 QQ v2 预设服务，worldbook reading context 则只暴露 [`WorldbookReadingCatalog`](../modules/worldbook-reading/catalog.js)。旧数据库配置和“API 与世界书”工作台仍没有对应 context。
 
 维护规则：
 
@@ -583,6 +623,7 @@ CSS 层读取这些 data attributes 和 CSS 变量，见 [`styles/05-phone-gener
 - 页面内部事件要通过 [`pageRuntime.addEventListener()`](../modules/settings-app/page-runtime.js:100) 或 [`pageRuntime.registerCleanup()`](../modules/settings-app/page-runtime.js:115) 注册。
 - 页面 renderer 不直接 import 顶层 phone-core service；应通过 [`page-context-builders.js`](../modules/settings-app/page-renderers/page-context-builders.js:1) 注入所需能力。
 - 兼容型页面可以保留旧函数式 renderer 出口，但新增页面应优先提供页面对象生命周期。
+- “读取世界书”搜索只局部替换条目与状态区，不替换正在输入的搜索框；每次条目 DOM 替换前必须释放旧 checkbox listener。页面 lifecycle epoch 与 load generation 必须分开，刷新不得使建立中的 `WORLDINFO_UPDATED` 订阅失效。
 - 扩展设置面板由 [`createPhoneSettingsPanel()`](../modules/settings-panel.js:37) 创建前清理旧 listener，卸载时通过 [`destroyPhoneSettingsPanel()`](../modules/settings-panel.js:31) 移除面板与事件绑定，避免重复初始化后旧闭包继续响应。
 - 设置持久化 flush 只承诺清理本扩展的 debounce/maxWait/pending ctx 并触发宿主 [`saveSettingsDebounced()`](../modules/settings/persistence.js:51)；当前文档和日志不得写成“同步落盘”或“立即持久化”。该计时器边界由 [`scripts/check-settings-flush-timer-behavior.cjs`](../scripts/check-settings-flush-timer-behavior.cjs) 守护。
 
@@ -1074,7 +1115,7 @@ sequenceDiagram
 
 - 顶层对象字段会成为一级分组。
 - 顶层非对象值进入 `__misc__` 分组，显示名为“其他”。
-- 嵌套对象继续递归展开，叶子节点成为卡片。
+- 嵌套对象继续递归生成对象节点，叶子节点成为卡片；非空对象节点默认展开，并可独立折叠或展开任意深度的直属子树。
 - 空对象会作为可展示对象卡片保留。
 - 数组与对象显示时通过 [`formatDisplayValue()`](../modules/variable-manager/flat-view.js:191) JSON 化。
 - 用户输入通过 [`parseInputValue()`](../modules/variable-manager/flat-view.js:205) 解析 `null`、布尔值、数字、JSON 数组和 JSON 对象。
@@ -1098,13 +1139,14 @@ sequenceDiagram
 
 - 返回：`data-vm-action="nav-back"` 调用路由返回。
 - 刷新：`data-vm-action="refresh"` 调用 `refreshView()`。
+- 点击一级分组标题或任意非空对象标题：复用 [`toggleVariableSectionCollapse()`](../modules/variable-manager/interactions.js) 切换当前节点的展开状态；折叠状态只属于当前 DOM 渲染周期，不写入变量数据。
 - 点击变量卡片：进入编辑态。
 - 编辑保存：[`handleSaveEdit()`](../modules/variable-manager/interactions.js:366) 解析输入并弹出确认框。
 - 新增变量：[`showAddVariableDialog()`](../modules/variable-manager/interactions.js:665) 打开弹窗，确认后调用 [`addFloorVariable()`](../modules/variable-manager/variable-api.js:403)。
 - 长按删除：[`bindLongPressDelete()`](../modules/variable-manager/interactions.js:421) 在 500ms 后进入删除态。
 - 删除确认：[`doDeleteVariables()`](../modules/variable-manager/interactions.js:636) 逐个调用 [`deleteFloorVariable()`](../modules/variable-manager/variable-api.js:360)。
 
-删除态选择器由 [`SELECTABLE_DELETE_SELECTOR`](../modules/variable-manager/interactions.js:14) 定义，支持变量卡片、一级分组标题和二级分组标题。删除目标会经 [`normalizeDeleteTargets()`](../modules/variable-manager/interactions.js:563) 按 path 去重，并优先保留父路径，避免同一分支重复删除。
+删除态选择器由 [`SELECTABLE_DELETE_SELECTOR`](../modules/variable-manager/interactions.js:14) 定义，支持变量卡片、一级分组标题和任意深度的对象标题。删除模式优先于折叠交互，对象标题在删除模式中只负责选择删除目标。删除目标会经 [`normalizeDeleteTargets()`](../modules/variable-manager/interactions.js:563) 按 path 去重，并优先保留父路径，避免同一分支重复删除。
 
 维护规则：
 
@@ -1122,6 +1164,7 @@ Variable Manager 样式集中在 [`styles/12-variable-manager.css`](../styles/12
 - `.vm-page` 定义底栏高度变量 `--vm-bottom-bar-height`。
 - [`syncBottomBarInset()`](../modules/variable-manager/index.js:313) 根据 `.vm-footer` 与 `.vm-delete-bar` 实测高度更新底部留白。
 - `.vm-body.phone-app-body` 使用 `padding-bottom` 和 `scroll-padding-bottom` 避免底栏遮挡内容。
+- `.vm-group-collapsed` 与 `.vm-object-collapsed` 分别控制一级分组和递归对象节点的视图折叠，箭头跟随对应折叠 class 表达当前状态。
 - `.vm-dialog-overlay` 和 `.vm-toast` 都在 `.vm-page` 内呈现。
 
 当前能力边界：

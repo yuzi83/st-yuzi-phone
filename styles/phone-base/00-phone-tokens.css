@@ -697,6 +697,7 @@
     --yuzi-qq-composer-input-max-lines: 4;
     --yuzi-qq-composer-input-max-height: calc(160px * var(--yuzi-qq-readable-text-scale));
     --yuzi-qq-composer-line-height: var(--yuzi-qq-body-line-height);
+    --yuzi-qq-composer-input-padding-block: 9px;
     --yuzi-qq-tool-size: 40px;
     --yuzi-qq-tool-icon-size: 24px;
     --yuzi-qq-tool-gap: 8px;

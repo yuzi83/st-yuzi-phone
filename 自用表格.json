@@ -1,0 +1,786 @@
+{
+  "mate": {
+    "type": "chatSheets",
+    "version": 1,
+    "fusionMeta": {
+      "generatedBy": "yuzi-phone-fusion",
+      "generatedAt": "2026-08-12T10:48:14.096Z",
+      "sources": [
+        {
+          "origin": "A",
+          "sourceId": "builtin-theater",
+          "name": "内置小剧场+纪要表",
+          "sheetCount": 5,
+          "sheets": [
+            {
+              "key": "sheet_square_posts",
+              "outputSheetKey": "sheet_square_posts",
+              "name": "广场表"
+            },
+            {
+              "key": "sheet_forum_threads",
+              "outputSheetKey": "sheet_forum_threads",
+              "name": "论坛表"
+            },
+            {
+              "key": "sheet_livestream_rooms",
+              "outputSheetKey": "sheet_livestream_rooms",
+              "name": "直播表"
+            },
+            {
+              "key": "sheet_small_calendar",
+              "outputSheetKey": "sheet_small_calendar",
+              "name": "小日历表"
+            },
+            {
+              "key": "sheet_npc_diary_entries",
+              "outputSheetKey": "sheet_npc_diary_entries",
+              "name": "小日记表"
+            }
+          ]
+        },
+        {
+          "origin": "B",
+          "sourceId": "database-current:current-database",
+          "name": "当前数据库表格",
+          "sheetCount": 5,
+          "sheets": [
+            {
+              "key": "sheet_summary",
+              "outputSheetKey": "sheet_summary",
+              "name": "纪要表"
+            },
+            {
+              "key": "sheet_global_data",
+              "outputSheetKey": "sheet_global_data",
+              "name": "全局数据表"
+            },
+            {
+              "key": "sheet_protagonist",
+              "outputSheetKey": "sheet_protagonist",
+              "name": "主角信息"
+            },
+            {
+              "key": "sheet_important_npc",
+              "outputSheetKey": "sheet_important_npc",
+              "name": "重要角色表"
+            },
+            {
+              "key": "sheet_OptionsNew",
+              "outputSheetKey": "sheet_OptionsNew",
+              "name": "选项表"
+            }
+          ]
+        }
+      ]
+    },
+    "updateConfigUiSentinel": -1
+  },
+  "sheet_square_posts": {
+    "uid": "sheet_square_posts",
+    "name": "广场表",
+    "sourceData": {
+      "note": "记录主角周围重要 NPC 的朋友圈动态流。一行一条公开生活动态分享；不是路人投稿、论坛帖、新闻公告、剧情复述、剧情总结、人物内心话复述、人物正文行动总结，也不是围观评价主角行动。是现实世界的朋友圈，完美扮演正文人物去思考在现实世界发朋友圈应该是什么样子的。\n\n# 字段规则\n- 帖子ID唯一且稳定。\n- 发帖账号名写主角周围重要 NPC 的角色名、昵称或小号名。\n- 账号标签写账号气质，不写前端说明。\n- 帖子标题可空；有标题也要短、生活化。\n- 帖子正文像本人会发的动态，保留完整文本，不用分号压缩。\n- 话题/附加信息可用英文分号分隔短项。\n- 图片描述：有图时填写图片里能看见的具体内容；无图或不展示图片时一律写 `none`。\n- 视频描述：有视频时填写视频里能看见的具体内容；无视频或不展示视频时一律写 `none`。\n- 评论串：一共5-10条评论，使用英文分号 `;` 分隔，单条格式固定为 `网友名：内容`。不要用中文分号、顿号或换行代替，也不要写“几楼”。评论的网友也最好是重要npc。而不是网友。\n- 互动数据和时间要可信。\n\n# 内容方向\n- 发帖主体只允许是主角周围重要 NPC、当前互动圈角色或这些角色合理使用的昵称/账号；普通路人，主角不发主贴，只能出现在评论区里。\n- 优先写重要 NPC 自己的生活中的点点滴滴。从重要npc视角出发进行扮演，会发什么帖子？表达什么情绪？知道或者不知道什么事情？完全扮演发帖npc。\n- 主角可被提到，但只能在发帖重要 NPC 合理知道、适合公开发布、且不是复述正文或替主线总结时出现。\n- 每条动态要有具体生活细节、照片感或视频感；不要空泛夸赞、全员围观、全知爆料。\n- 重要 NPC 各自有自己的生活，不要让所有帖子都围着主角转，也不要让路人替主角做剧情旁白。\n- 必须建立在“已存在社交网络但信息尚未完全流动”的状态下，即动态内容为当前时间点附近已发生或正在发生的公开生活片段，而非事件总结或剧情回放。禁止将未来事件或未发生内容写入动态。\n- 生成的动态必须分布均衡，避免集中在单一NPC或单一事件上，应覆盖不同角色的日常状态，例如学习/工作状态、情绪表达、生活琐事或即时感受，但所有内容必须符合“公开动态”性质，不得包含私密日记式内心独白。\n- 内容必须体现“生活流分散感”，即不同NPC之间不存在强制关联或共同事件中心，允许各自独立生活轨迹并行存在，以增强社交网络真实感。\n- 每条动态必须对应不同重要 NPC，避免同一角色重复刷屏；若当前重要 NPC 不足 5 人，则允许减少生成数量，不得补充路人账号或无关角色凑数。\n- 所有重要 NPC 发布的动态必须经过“网络抽象人格”过滤：依然是自己的真实生活，也依旧符合所属性格，但在网络上可以适当加入抽象表达。\n- 优先捕捉重要 NPC 生活中的“破防瞬间”：被打脸、被放鸽子、外卖被偷、游戏连跪、表白被拒、被迫加班、买到烂货。这些瞬间最容易触发他们的抽象人格。\n\n\n# 评论信息分层规则\n评论区角色必须遵循“信息可达性分层”，不同角色拥有不同信息权限，禁止默认全知。并且只允许评论的人为重要npc周围的人，而不是网友，路人角色。\n\n1.当事层（核心参与者）\n- 发帖NPC本人\n- 事件直接参与者、现场人员、直接互动对象，可基于完整事件细节评论或回应\n\n2.间接信息层（有限知情者）\n- 通过朋友圈、转述、现场擦肩、公开信息获知的人\n   只能基于已公开或片面信息评论\n   可以误解、猜测、吃瓜，但不能掌握事件全貌\n   允许“听说/好像/看起来”的不确定表达\n\n3.外围围观层（仅看内容者）\n- 未参与事件、未现场接触、未获得可信转述的人\n   只能基于帖子文字、图片、视频表层信息评论\n   严禁知道事件全过程、内幕或未公开信息\n   必须体现信息缺失（误读、断章取义、表面解读）\n\n# 评论禁止规则强化\n- 禁止评论者补全事件全过程\n- 禁止评论者知道未公开剧情或隐私\n- 禁止评论者拥有“上帝视角”\n- 禁止评论者通过结果反推完整过程\n- 禁止跨空间、跨时间获取未传播信息\n- 禁止将未发生事件当作既定事实讨论\n\n# 信息传播延迟机制\n- 并非所有评论者在同一时间看到动态\n- 评论可分为“早期评论 / 中期评论 / 后期补充评论”\n- 早期评论：基于标题或极少内容误解\n- 中期评论：基于完整帖子内容\n- 后期评论：基于二次传播或他人评论后的理解\n允许不同时间段出现理解差异与信息偏差，但不得出现未传播信息的直接知情\n\n# 评论信息来源约束\n所有评论必须仅来源于：\n- 帖子正文内容\n- 图片/视频可见信息\n- 评论者自身合理已知的公开信息\n任何超出上述范围的信息均视为违规。\n\n# 评论真实性与风格补充\n- 允许误解、吃瓜、调侃、断章取义、情绪化表达\n- 不同信息层级应体现不同理解偏差\n- 评论风格必须符合“抽象网络人格”，但仍受信息边界约束\n- 不同角色评论语气必须有明显差异，避免同质化\n\n# 信息边界\n发帖重要 NPC 只能写自己看见、经历、听说或愿意公开的内容。禁止知道私密对话、内心活动、封闭场景细节、主角真实动机；不确定的信息要保留不确定感。\n\n# 留存\n广场保持约 3-5 条当前动态。达到 5 条后若需新增，默认先删除最老主贴；不要让广场固定成永久列表。",
+      "initNode": "初始化时可插入 3-5 条当前公开动态，形成主角周围 NPC 的生活流朋友圈氛围。内容应分散到不同 NPC 和不同生活面向。",
+      "deleteNode": "主贴达到 5 条后新增时，优先从最老主贴开始删。",
+      "updateNode": "一般情况下，不更新发过的帖子，等待攒满五条主贴就从最老的删除。",
+      "insertNode": "当主角周围 NPC 出现新的公开生活片段、个人表达、照片感内容、视频感内容、世界侧影或轻社交互动时新增。每轮通常新增 1-2 条。优先补足“重要NPC 各自生活”的动态；只有发帖 NPC 合理知道且适合公开。\n\n若新增前已有 5 条主贴，先按时间从最老主贴开始删除旧帖；新增后仍保持 3-5 条，不要让旧动态长期占满广场。\n\n【时间感增强补丁】\n新增动态应体现轻微时间差或状态差异，例如：\n- 刚发生 / 刚拍摄 / 刚发布\n- 稍早 / 今日中 / 今日晚间\n- 不同NPC的发布时间错位感\n但不得人为制造剧情时间线冲突，也不得编造未发生事件。",
+      "ddl": "CREATE TABLE square_posts ( -- 广场表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  post_id TEXT NOT NULL UNIQUE, -- 帖子ID\n  author_name TEXT NOT NULL, -- 发帖账号名\n  author_tag TEXT NOT NULL, -- 账号标签\n  post_title TEXT, -- 帖子标题\n  post_body TEXT NOT NULL, -- 帖子正文\n  topic_meta TEXT, -- 话题/附加信息\n  image_desc TEXT NOT NULL CHECK(TRIM(image_desc) <> ''), -- 图片描述\n  video_desc TEXT NOT NULL CHECK(TRIM(video_desc) <> ''), -- 视频描述\n  comment_thread TEXT, -- 评论串\n  interaction_text TEXT NOT NULL CHECK(TRIM(interaction_text) <> ''), -- 互动数据\n  time_text TEXT NOT NULL -- 时间文本\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "帖子ID",
+        "发帖账号名",
+        "账号标签",
+        "帖子标题",
+        "帖子正文",
+        "话题/附加信息",
+        "图片描述",
+        "视频描述",
+        "评论串",
+        "互动数据",
+        "时间文本"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": -1,
+      "updateFrequency": -1,
+      "batchSize": -1,
+      "skipFloors": -1,
+      "groupId": 9
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "广场表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "广场表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "sqlInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99982
+      },
+      "injectIntoWorldbook": false
+    },
+    "orderNo": 0
+  },
+  "sheet_forum_threads": {
+    "uid": "sheet_forum_threads",
+    "name": "论坛表",
+    "sourceData": {
+      "note": "记录论坛/贴吧/小红书/虎扑/豆瓣/微博里的主题帖主楼。一行一条主贴；可以符合贴吧孙笑川吧，抗压背锅吧，钓鱼吧，放生吧，二次元吧，原神吧，反原神吧，核弹避难所吧，弱智吧，戒色吧，小红书，虎扑，豆瓣，微博，等发帖风格，网友疯狂输出自己情绪，为了乐子不择手段，骂战，阴阳怪气，引战，开盒，cpdd，性压抑等等网络热梗不断。\n\n# 字段规则\n- 分区/版面名写社区版面。\n- 发帖账号名为自己的网络化网名，要有网感。\n- 帖子标题必须成立，短而有钩子。\n- 帖子正文完整保留，不分号压缩。\n- 附加信息：用英文分号 `;` 分隔短标签，可为空但建议填写 3-6 个。\n- 评论串：5到8条评论，每一条10-20字左右，使用英文分号 `;` 分隔。单条格式固定为 `网名：内容`。评论前缀必须网络化昵称。\n\n# 帖子正文方向 - 核心约束\n你只能生成“网友在网络公共空间可能看到的帖子”，绝对禁止任何形式的以听到、闻到、偶遇、看到、跟踪、偷拍、目击、偷听、蹲守或直播的方式在主贴或评论发布主角或 NPC 和剧情当前场景相关动向。禁止使用“今天在XX看到”“路过听见”“邻居说”“我朋友亲眼看见”等基于物理观察的视角。即便使用匿名投稿，其内容也只能是投稿者自身的合理困扰或公开信息，不得包含对主角非公开行动的第一手观察。\n\n合法素材只能来自以下已进入公共讨论的“网络燃料”：\n1. 采用内部知识库中与当前时间、地区相符的当地或全国公共话题。线上公开事件：发布的新闻、官方公告、社交平台流传的截图/切片/录音（可以存在争议、断章取义、造谣，但素材本身是“网上都在传”的东西）。\n2. 匿名树洞式情绪宣泄：纯粹的情感吐槽、CPDD发疯、社会现象嘴臭，不指向任何具体可辨认的线下个体。\n3. 网络内部冲突：挂人、互喷、开盒威胁、梗的增殖，这些冲突的原帖或截图本身已存在于网上。\n4. 间接公共反应：对近期某个广泛热议的话题（可能是主角无意中引发的公共争议）发表极端看法，但不描述争议的线下发生过程，只输出情绪。\n5. NPC合理视角：重要NPC可匿名发帖，但只能写其本人合理会公开的困扰、求助、试探或吐槽（例如“老板今天又发疯，想辞职”），不能包含只有全知视角才知道的幕后信息。\n6. 内部知识库素材仍不足时，才根据当前正文已经确立的周边地区与时间背景，编撰天气、通勤、物价、餐饮、商店活动、公共设施、学校职场、兴趣、普通社区问题。\n\n帖文必须拥有网络社群的极端风格：抽象嘴臭、人身攻击、开盒威胁；发疯文学、精致土味、CPDD焦虑。语言混乱但情感充沛，通篇弥漫高强度冲浪的网感。发帖不打规范标点，用空格、感叹号、问号、连续句号或颜文字 emoji 断句。严禁使用任何书面语、正式语、礼貌用语。\n\n\n# 评论方向\n你的评论完全融入现代互联网，是真实网络对线的碎片化输出。评论短促、有力、具有高度传染性。语言同样混合抽象嘴臭与集美语体等，撕裂感要强。评论可以完全脱离主贴内容，纯粹为了发泄情绪或展示性压抑状态，同样禁止正规语言与标点，使用空格、emoji、混乱断句，保持真实的“评论区疯人院”质感。严格信息边界：评论者只能是刷到这条帖子的网友，只能看到主贴公开的标题和正文，以及已有的其他评论。剩下的全部都不知道。所有帖子评论不可以有类似重复的内容。匿名网友只能根据主贴和前序评论回应，不得获得、确认或猜中匿名楼主身份与幕后真相。\n\n# 留存\n论坛保持约 3-5 条。达到 5 条后若需新增，默认先删除最老贴子；不要让论坛固定成永久列表。",
+      "initNode": "初始化时可插入3-5条当前论坛贴。",
+      "deleteNode": "主贴达到5条后新增时，优先从最老主贴开始删",
+      "updateNode": "一般情况下，不更新发过的帖子，等待攒满五条主贴就从最老的删除。",
+      "insertNode": "出现新的公共讨论点或重要NPC匿名求助时新增。每轮通常1-2条。论坛网友默认不认识正文人物；禁止新增正文人物每时每刻做什么，都在能知道的帖子。\n\n若新增前已有5条主贴，先从最老贴子开始删除旧帖。新增后仍保持3-5条。",
+      "ddl": "CREATE TABLE forum_threads ( -- 论坛表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  board_name TEXT NOT NULL, -- 分区/版面名\n  author_name TEXT NOT NULL, -- 发帖账号名\n  author_tag TEXT NOT NULL, -- 账号标签\n  thread_title TEXT NOT NULL UNIQUE, -- 帖子标题\n  thread_body TEXT NOT NULL, -- 帖子正文\n  meta_text TEXT, -- 附加信息\n  comment_thread TEXT, -- 评论串\n  interaction_text TEXT NOT NULL CHECK(TRIM(interaction_text) <> ''), -- 热度/回应数据\n  time_text TEXT NOT NULL -- 时间文本\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "分区/版面名",
+        "发帖账号名",
+        "账号标签",
+        "帖子标题",
+        "帖子正文",
+        "附加信息",
+        "评论串",
+        "热度/回应数据",
+        "时间文本"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": -1,
+      "updateFrequency": -1,
+      "batchSize": -1,
+      "skipFloors": -1,
+      "groupId": 9
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "论坛表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "论坛表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "sqlInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99982
+      },
+      "injectIntoWorldbook": false
+    },
+    "orderNo": 1
+  },
+  "sheet_livestream_rooms": {
+    "uid": "sheet_livestream_rooms",
+    "name": "直播表",
+    "sourceData": {
+      "note": "直播表记录“当前正文片段被包装成实时直播剧”的主舞台信息。一行代表一个正在被围观的直播剧舞台，观众视角类似在看一场实时上演的戏，弹幕不只在评戏，更在讨论演员本人、撕番位、刷超话、扒私料，仿佛同时开着直播和微博超话在激情对线。\n\n\n# 列定义\n- 列0: 直播间名 - 当前实时直播剧舞台的标题区名称。按当前剧情生成短名\n- 列1: 领衔阵容 - 当前正文参与主要对手戏的角色 / 演员阵容。写法要有舞台感。\n- 列2: 阵容标签 - 概括这组演员 / 角色的看点。可加入粉圈惯用说法，突出演员本人的话题性。\n- 列3: 直播标题 - 当前直播推送标题，要有网感和钩子\n- 列4: 剧情舞台概述 - 概括当前正文正在上演的剧情片段、情绪张力和观众围观点，保留完整但不宜过长。制造演员话题。\n- 列5: 对手戏看点 - 写演员 / 角色之间的表演关系和火花。可以粉圈热议角度。\n- 列6: 粉丝团挂牌 - 当前这一行弹幕的前缀标签，由 AI 自拟，必须短、好笑、有阵营感。写粉丝团名，不写完整句子；不得照搬固定候选词。2-5个粉丝挂牌。剧情推进后优先更新现有粉丝团挂牌；出现新角色、新 CP、新名场面或新对家时可更新粉丝挂牌。\n- 列7: 剧情弹幕串 - 每一个粉丝团挂牌都必须严格生成 3 到 6 条弹幕。专门吐槽、震惊、复盘、发疯、阴阳怪气或吃瓜当前剧情进展。必须有具体剧情内容，欢迎缺德、反串和带节奏。使用英文分号 ; 分隔。单条格式固定为 粉丝团挂牌：弹幕内容。每一个粉丝团挂牌严禁只输出1、2条。\n- 列8: 推角弹幕串 - 每一个粉丝团挂牌都必须严格生成 3 到 6 条弹幕。给主推角色说话，但欢迎用拉踩别家演员、阴阳怪气、疯魔玩梗、造谣式吹捧、反串虐粉的方式护主。禁止平淡夸奖。使用英文分号 ; 分隔。单条格式固定为 粉丝团挂牌：弹幕内容。每一个粉丝团挂牌严禁只输出1、2条。\n- 列9: 对线弹幕串 - 每一个粉丝团挂牌都必须严格生成 3 到 6 条弹幕。和其他人互喷、拉踩、阴阳怪气、抢功、反串、破防。可以嘴臭，像真实的粉圈骂战。使用英文分号 ; 分隔。单条格式固定为 粉丝团挂牌：弹幕内容。每一个粉丝团挂牌严禁只输出1、2条。\n- 列10: 观看/互动数据 - 聚合文本，如“在线1.3w;弹幕24.6w;名场面剪辑8.7w;粉丝团对线1.2k;超话签到4.3w”。数据要有直播感但可信，不要每次爆表。可灵活加入超话相关数据。\n- 列11: 时间文本 - 直接展示文本或开播时长。\n\n\n\n\n# 弹幕写法\n1. 单条弹幕建议 8 到 36 个中文字符，可以尖锐、缺德、好笑、饭圈化，但要像真实弹幕，不要像正式影评，剧情总结，无脑夸奖。\n2. 粉丝团挂牌必须极短、有阵营感、好笑或恶毒，直接使用粉圈黑话。允许 AI 根据当前角色、剧情名场面、CP、黑称、梗自拟粉丝团挂牌，如“艾门永存”“主角事业粉”“雨夜伞党”“嘴硬研究所”“青梅保护协会”“反恋爱脑联盟”。\n3. 剧情弹幕必须评论当前剧情：发生了什么、哪里反转、哪里尴尬、哪里好笑、哪里像大型事故现场、谁被下了面子、谁活该。要带节奏。\n4. 推角弹幕必须带极强的粉籍立场，但绝不要“妹妹好温柔”“哥哥好帅”这种温吞夸奖。要用发疯、拉踩、反串、造谣式澄清、装路人被发现的方式护主。\n5. 对线弹幕就照这个标准互骂、互扒皮、互甩黑料。要像失控的粉圈大战。\n6. 禁止整格只输出1条弹幕冒充多条的偷懒行为。禁止整格“啊啊啊;哈哈哈;好甜;支持;演得真好”这种低密度废话；也禁止“本轮剧情表现出复杂关系推进”这种论文腔。必须带情绪和攻击性。\n7. 不要用中文分号、顿号或换行冒充分隔。\n8. 弹幕评论的是当前正文被包装成的实时直播剧：剧情怎么走、角色怎么演、对手戏有没有张力、谁被谁压戏、谁家粉丝破防。\n\n\n# 数量与留存\n1. 通常只维护 1 行直播剧主舞台信息，代表当前正在展示的实时片场。\n2. 每轮优先更新已有行，不频繁新增。\n3. 例如，如果有3个粉丝团挂牌。剧情弹幕串、推角弹幕串、对线弹幕串每一个弹幕串都要有9-18条。因为3*3=9。3*6=18。所以不要每一个弹幕串的每一个粉丝团挂牌只输出1、2条。",
+      "initNode": "初始化时插入 1 条实时直播剧主舞台信息。默认把当前正文开场或最近剧情包装成片场飙戏现场。剧情弹幕串、推角弹幕串、对线弹幕串中的每一个粉丝牌必须生成3-6条弹幕。",
+      "deleteNode": "默认不删除唯一主舞台。",
+      "updateNode": "每轮正文推进后，优先更新当前这 1 行：更新时必须围绕最新正文内容和角色对手戏。",
+      "insertNode": "通常不需要频繁新增。主表应保持 1 行为主，避免直播间列表膨胀。",
+      "ddl": "CREATE TABLE livestream_rooms ( -- 直播表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  room_name TEXT NOT NULL UNIQUE, -- 直播间名\n  cast_lineup TEXT NOT NULL, -- 领衔阵容\n  cast_tag TEXT NOT NULL, -- 阵容标签\n  stream_title TEXT NOT NULL, -- 直播标题\n  stage_summary TEXT NOT NULL, -- 剧情舞台概述\n  chemistry_focus TEXT NOT NULL, -- 对手戏看点\n  fandom_badge TEXT, -- 粉丝团挂牌\n  plot_barrage TEXT, -- 剧情弹幕串\n  stan_barrage TEXT, -- 推角弹幕串\n  clash_barrage TEXT, -- 对线弹幕串\n  interaction_text TEXT NOT NULL CHECK(TRIM(interaction_text) <> ''), -- 观看/互动数据\n  time_text TEXT NOT NULL -- 时间文本\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "直播间名",
+        "领衔阵容",
+        "阵容标签",
+        "直播标题",
+        "剧情舞台概述",
+        "对手戏看点",
+        "粉丝团挂牌",
+        "剧情弹幕串",
+        "推角弹幕串",
+        "对线弹幕串",
+        "观看/互动数据",
+        "时间文本"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": -1,
+      "updateFrequency": -1,
+      "batchSize": -1,
+      "skipFloors": -1,
+      "groupId": 9
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "直播表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "直播表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "sqlInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99982
+      },
+      "injectIntoWorldbook": false
+    },
+    "orderNo": 2
+  },
+  "sheet_small_calendar": {
+    "uid": "sheet_small_calendar",
+    "name": "小日历表",
+    "sourceData": {
+      "note": "固定维护7天日历窗口：今天、明天、后天、3天后、4天后、5天后、6天后。今天日期必须取自全局数据表第 1 行“当前时间”的日期部分（YYYY-MM-DD）。无法读取该值时，禁止改用现实日期、系统日期或自行推断日期；其他6天围绕今天连续向后推算。\n\n# 字段规则\n- 日期：必须使用 YYYY-MM-DD 格式。今天行必须与全局数据表当前时间的日期部分完全一致。其余日期必须围绕今天连续排列。不得跳日、重复、缺失或越界。跨月、跨年时必须按真实历法连续计算。\n- 星期几、月份几天：前端派生，ai不填写。\n- 节日：节庆、纪念日、校历/职场/城镇/宗教/世界观节日；没有可留空，不要为了填满而每天硬造节日。\n- 大事件：每天必须填入一个具体的、有明确名称的公共事件或可见变化，不能使用任何表示“一切照旧”的抽象短语。严格禁止出现“常态教学”“照常上课”“正常上班”“秩序正常”“普通通勤”“日常运转”“新周开始”等直接表示无事的词汇。当天若校历/职场/城镇无已知安排，必须根据天气、环境、社会动态、设施状况等合理生成一个影响公众的触发点（如突发检修、临时检查、意外天气影响、社区活动调整、交通变动等），使其成为当天独有的背景。7天内的大事件不得雷同，不得用不同措辞描述同一类无事状态。一切都为了让正文人物对平平淡淡的日子时有事情可做，帮助其推进剧情，增加互动感趣味性。\n- 状态：只能逐字填写完整字面值 `上班/上学` 或 `放假`；禁止填 `上学`、`上班`、`放学`、近义词、简称、拆分词或自造状态。\n- 天气：只能逐字填写 晴、阴、多云、小雨、大雨、雷雨、小雪、大雪、雾、风、沙尘、极端天气，可以实时根据世界观当地环境用数据库填写天气。\n- 与今天的关系：只能逐字填写 今天、明天、后天、3天后、4天后、5天后、6天后；固定7行中这7个关系应各出现一次，不应重复，不应缺失。\n- 内容：约 200 字，只介绍当天公共触发点的背景、含义、公共安排、参与方式、环境变化和可见影响；禁止写主角计划、NPC计划、私人行程、约会安排、秘密事件、角色心理或剧情推进。\n\n# 填表责任\n本表用于维护世界时间窗口和界面可信度。输出前必须检查日期连续性、枚举取值、7个关系是否完整、内容是否越过公共日程边界。不要为了显得丰富而编造角色私人行程；宁可少写，也不要错写。\n\n# 日期与越界规则\n1. 日期必须围绕“今天”连续排列。例如今天是 2026-05-16，则 6天后应为 2026-05-22。\n2. 不允许出现超出实际月份天数或不符合当前历法的越界日期。若今天处在月末，必须跨到下个月。\n3. 今天不应该是更新一次日历表格就变一天；必须以全局数据表当前时间为锚点保持一致。\n\n# 内容方向\n每天都必须有可被感知的世界变化或公共触发点，决不允许出现没有事件的日子。常态运转本身不是事件，只有制度、环境、公共活动、天气影响、资源安排或世界观状态发生可见变化时才构成大事件。日历只提供世界层面的公共日程，不提供主角行程表。可以写群体性参与方式，不能写具体角色如何参与。事件必须贴合世界观、季节、地点、组织和生活圈；7天内必须呈现多样性，避免同类公共事件重复出现。节日、大事件、天气、状态和内容要互相支撑，不得出现逻辑冲突（例如雷雨天写露天活动正常举行且无人受影响）。当某天确实缺乏天然事件时，必须主动从天气变化、设施状况、外部通知、社会动态等角度创造一个微小但合理的公共触发点，使每一天都具有独一无二的叙事背景。一切都为了让正文人物对平平淡淡的日子时有事情可做，帮助其推进剧情，增加互动感趣味性。例如：烟火祭，校园祭等。\n\n# 更新规则\n1. 本表必须保持7行。少于7行时补齐缺失关系；多于7行时删除多余、重复或已离开窗口的行。\n2. 禁止为了刷新内容整表删除后重建。今天只推进1天时，删除离开窗口的旧日期，插入新进入窗口的新日期，其余日期保留节日、大事件、状态、天气和内容，只更新与今天的关系。\n3. 若今天发生大跨度变化，直接UPDATE现有7行为新窗口；不要删除7行再重建。与今天的关系虽然不再由数据库 UNIQUE 强制，但仍必须在7行中保持完整且不重复。\n4. 只允许删除多余、重复、越界、坏数据或离开窗口的单行。生成 SQL 时禁止写任何注释或解释性文字，禁止使用 -- 注释、/* */ 注释；SQL 语句中只能包含可执行语句。",
+      "initNode": "初始化时插入且只插入7行。先读取全局数据表当前时间的日期作为今天，再生成连续7天窗口。7行关系必须各出现一次、不重复、不缺失；日期连续。",
+      "deleteNode": "禁止整表删除。只允许删除离开7天窗口的旧日期、多余行、重复关系行、日期越界行或明显错误行。常规跨一天最多删除离窗旧日，再插入新入窗日期。删除后必须补回7行，不允许让小日历表长期少于7行；补回后7个关系仍应完整且不重复。",
+      "updateNode": "当全局数据表当前时间的日期、世界阶段、节庆安排、公共事件、天气影响或生活节奏出现可见变化时更新。今天行日期必须始终等于全局当前时间的日期。仍留在新窗口内的旧日期尽量保留原节日、大事件、状态、天气和内容，只更新必要字段；新进入窗口的日期才生成新内容。",
+      "insertNode": "仅在少于7行、缺少某个关系值，或日期推进导致新日期进入7天窗口时新增。常规跨一天只插入新进入窗口的那一天；不得为了刷新内容插入第8行。",
+      "ddl": "CREATE TABLE small_calendar_days ( -- 小日历表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  date_text TEXT NOT NULL UNIQUE CHECK(TRIM(date_text) <> '' AND date_text GLOB '*-*-*'), -- 日期\n  weekday_text TEXT, -- 星期几\n  festival_text TEXT, -- 节日\n  major_event TEXT NOT NULL CHECK(TRIM(major_event) <> ''), -- 大事件\n  day_status TEXT NOT NULL CHECK(day_status IN ('上班/上学', '放假')), -- 状态\n  weather_text TEXT NOT NULL CHECK(weather_text IN ('晴', '阴', '多云', '小雨', '大雨', '雷雨', '小雪', '大雪', '雾', '风', '沙尘', '极端天气')), -- 天气\n  today_relation TEXT NOT NULL CHECK(today_relation IN ('今天', '明天', '后天', '3天后', '4天后', '5天后', '6天后')), -- 与今天的关系\n  day_content TEXT NOT NULL CHECK(TRIM(day_content) <> ''), -- 内容\n  month_days INTEGER CHECK(month_days IS NULL OR (month_days >= 28 AND month_days <= 31)) -- 月份几天\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "日期",
+        "星期几",
+        "节日",
+        "大事件",
+        "状态",
+        "天气",
+        "与今天的关系",
+        "内容",
+        "月份几天"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": -1,
+      "updateFrequency": -1,
+      "batchSize": -1,
+      "skipFloors": -1,
+      "groupId": -1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "小日历表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "小日历表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "sqlInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99982
+      }
+    },
+    "orderNo": 3
+  },
+  "sheet_npc_diary_entries": {
+    "uid": "sheet_npc_diary_entries",
+    "name": "小日记表",
+    "sourceData": {
+      "note": "记录当前日期下重要 NPC 写下的私人日记。一行一篇日记。每行对应一个角色在一个记录日期下的一篇独立日记。小日记表用于展示角色在特定日期内产生的内心记录，不承担长期历史归档功能。同一角色在同一日期下最多存在一篇日记。不同日期之间的日记彼此独立。即使角色连续多天关注同一事件、同一人物、同一执念或同一烦恼，每一天的日记仍应视为新的独立记录，仅反映该角色在对应日期下的心理状态。\n\n# 字段规则\n- 日期：写日记的日期，等于全局数据表的当前时间的（YYYY-MM-DD）日期部分。全局数据表当前时间变化跨天，小日记日期就变化跨天\n- 角色：写下日记的重要 NPC 名称。只能选择当前剧情中已成立、与主角或当前事件存在足够关联的重要 NPC；不要使用路人、旁白、作者、系统、读者、剧情概括等不具备独立视角的群体。\n- 内容：约 200 字，写成该角色当天私下写给自己的日记。第一人称视角，必须贴合人物性格、关系距离、知识边界、处境、口吻和自我欺骗方式；不得全知，不得替剧情总结，不得知道角色没有渠道知道的秘密。\n\n# 内容方向\n- 日记应从角色本人视角出发，围绕当天的重要事件、对主角的观察与揣测、内心矛盾、后续期待或担忧，以及不愿明说的潜意识暗流展开。\n- 可以出现细节化的生活感、语气停顿、嘴硬、逃避、试探、自我安慰或自我否认；不要写成剧情梗概、人物小传、旁白总结或作者解析。\n- 可以在正文中少量插入由 `~~` 包裹的内容，表示角色不愿承认、试图压下去的念头、欲望、嫉妒、恐惧或冲动。这类内容应体现角色的隐秘面，让日记更有反转感或趣味，但不要每篇机械使用。\n- 结尾可包含 `PS:` 与 `PPS:` 两段，用来写角色表面日记之外的隐秘想法。PS/PPS 是日记的精华，必须写出人物最私密、不愿面对的念头，可以与正文自我陈述形成幽默或讽刺的反差。即使是严肃角色，也允许在这里流露出幼稚、慌张、吐槽、自我解嘲或过分脑补等鲜活的另一面，让读者感到“原来他/她还会这样想”。杜绝平淡的附加说明或流水账补充。\n- 日记可以提到主角，但只能基于该角色在当天合理看到、听到、经历、猜测或误解的信息。禁止知道主角内心、跨空间知情、跨时间知情、未传播完成的信息、推理式全知补全、通过结果反推全过程、通过后果还原未知细节、未出现场景却掌握现场情况、远程同步剧情认知。\n- 每篇日记应体现不同角色的关注点和表达习惯，不要所有角色都用同一种抒情腔或同一种恋爱脑口吻。鼓励在贴合核心性格的前提下，展现放松、自嘲、偏激、中二等隐藏人格切面，突显“私人日记”的真实感和鲜活度。\n- 由于全局数据表当前时间不变就要一直更新npc的日记，所以日记内容要求连贯但也必须保持200字左右。\n\n# 数量与留存\n- 小日记表最多保留 5 行。\n- 只有当全局数据表当前时间的日期部分发生跨天、跨月或跨年，才生成新日记。\n- 日期不变时，也就是一直维持一天的情况下。日记内容可以更新，但也必须只能是当天的内容，并且维持200字左右\n- 日期变化时，也就是跨天时，删除全部日记行，重新插入日记行，根据npc重要程度重新写日记。\n- 若重要 NPC 超过 5 个，只选择当天最重要、最有情绪波动、与主角或当前事件关联最强的最多 5 个角色。\n- 若当前没有足够重要 NPC 或没有足够事件支撑，可以少于 5 行；不要为了凑满 5 行生成路人、无关角色或空泛日记。",
+      "initNode": "初始化时，读取全局数据表当前时间的日期，可为当前重要 NPC 插入 1 到 5 篇“当天的到目前为止日记”（日期为当前日期）。优先选择当前剧情中最重要、最有情绪波动、与主角或当天事件关联最强的角色。若当前缺乏重要 NPC 或缺乏可写事件，不必硬填满 5 行。",
+      "deleteNode": "全局数据表当前时间字段进行跨天后，删除当前所有日记行。全局数据表当前时间没有进行跨天时，删除和目前正文关系关联度最弱的npc日记，给其他npc留出位置",
+      "updateNode": "全局数据表当前时间字段日期中没有变化，当天还没结束，就可以更新当前所属npc的日记。但必须维持200字左右加内容要求。但要求日记内容与更新前连贯，内容要求一样。",
+      "insertNode": "仅当全局数据表当前时间的日期部分发生变化，跨天，或表为空时插入新行。\n每次插入 1 到 5 行。角色必须是当前重要 NPC，按当天重要性、情绪波动、与主角或当前事件的关联强度选择；重要 NPC 超过 5 个时只选最多 5 个。每个角色当天最多一篇日记。内容约 200 字，必须贴合角色本人视角、知识边界和口吻，不得全知、不 OOC、不写成剧情总结。当前时间的日期部分不变时，正文如果有新的关联度强的角色也可以插入其当天日记、",
+      "ddl": "CREATE TABLE npc_diary_entries ( -- 小日记表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  diary_date TEXT NOT NULL CHECK(TRIM(diary_date) <> '' AND diary_date GLOB '*-*-*'), -- 日期\n  character_name TEXT NOT NULL CHECK(TRIM(character_name) <> ''), -- 角色\n  diary_content TEXT NOT NULL CHECK(TRIM(diary_content) <> '') -- 内容\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "日期",
+        "角色",
+        "内容"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": -1,
+      "updateFrequency": -1,
+      "batchSize": -1,
+      "skipFloors": -1,
+      "groupId": -1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "小日记表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "小日记表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "sqlInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99982
+      },
+      "injectIntoWorldbook": false
+    },
+    "orderNo": 4
+  },
+  "sheet_summary": {
+    "uid": "sheet_summary",
+    "name": "纪要表",
+    "sourceData": {
+      "note": "轮次日志。每轮交互结束后立刻插入一条新记录。\n\n- 列定义\n * 列1: 编码索引 code_index（AM0001起递增，全表唯一）\n * 列2: 时间跨度 time_span\n * 列3：与今天的关系 today_relation（前端派生字段，AI 不填写）\n * 列4: 概览 summary（40-60字）\n * 列5: 纪要 chronicle_text（300-500字）\n * 列6: 重要对话 key_dialogue（可NULL）\n\n- 强制约束\n * 编码索引格式 AMXXXX，从0001开始递增，不跳号。\n * 时间跨度格式为 \"YYYY-MM-DD HH:MM ~ YYYY-MM-DD HH:MM\"，覆盖本轮事件的实际时间范围。\n * 概览作用是概括本轮纪要内容，简单交代起因经过结果，40-60字。\n\n- 纪要规范：\n * 以第三方视角中立客观记录正文发生的一切，移除所有修辞。不滥用环境描写、不加评论、不抒情、不升华。\n * 用词直白生活化，避免正式措辞（如“达成协议”“确立计划”）。\n * 结尾必须开放，在事件自然流动中结束，不得归纳状态或做出封闭式收束。\n     违例：故事仍然在继续 / 新的篇章开启 / 二人关系迈入新阶段 / 未来等待着他们。\n * 多轮交互整合为一条记录。\n * 禁止内容：极端情绪（崩溃、狂喜、绝望等）、夸张、比喻、升华、情绪总结、支配欲、欲望、总结性收尾。\n * 字数不少于300字。\n\n- 重要对话仅摘录直接推动剧情转折、揭示关键信息、改变人物关系/决策或构成承诺/誓言/约定的原文台词，标明说话人。通常3句，最多5句。",
+      "initNode": "故事初始化时，插入一条新记录用于记录剧情。",
+      "deleteNode": "禁止。",
+      "updateNode": "禁止。",
+      "insertNode": "每轮交互结束后插入一条新记录。\n\n【强制约束】\n“与今天的关系”由前端派生注入，AI 插入时不得填写 today_relation。\ncode_index、time_span、summary、chronicle_text 均 NOT NULL，不可写 NULL 或空串。\ncode_index 从已存在的最大 AM 码递增（AM0001 → AM0002 → ...），不可跳号。\ntime_span 格式：本轮起始时间 ~ 本轮结束时间。\n\nSQL示例：INSERT INTO chronicle (row_id, code_index, time_span, summary, chronicle_text, key_dialogue) VALUES ((SELECT COALESCE(MAX(row_id), 0) + 1 FROM chronicle), 'AM0036', '2026-02-04 08:00 ~ 2026-02-04 08:30', '一句话概括', '本轮纪要内容...', NULL);",
+      "ddl": "CREATE TABLE chronicle ( -- 纪要表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  code_index TEXT UNIQUE, -- 编码索引\n  time_span TEXT, -- 时间跨度\n  today_relation TEXT, -- 与今天的关系\n  summary TEXT, -- 概览\n  chronicle_text TEXT NOT NULL CHECK(length(chronicle_text) >= 200 AND length(chronicle_text) <= 520), -- 纪要\n  key_dialogue TEXT -- 重要对话\n);\n"
+    },
+    "content": [
+      [
+        "row_id",
+        "编码索引",
+        "时间跨度",
+        "与今天的关系",
+        "概览",
+        "纪要",
+        "重要对话"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": -1,
+      "updateFrequency": -1,
+      "batchSize": -1,
+      "skipFloors": -1,
+      "groupId": -1
+    },
+    "exportConfig": {
+      "enabled": true,
+      "splitByRow": true,
+      "entryName": "纪要",
+      "entryType": "keyword",
+      "keywords": "编码索引",
+      "preventRecursion": true,
+      "injectionTemplate": "<记忆回溯>\n$1\n</记忆回溯>",
+      "extraIndexEnabled": true,
+      "extraIndexEntryName": "纪要索引",
+      "extraIndexColumns": [
+        "编码索引",
+        "与今天的关系",
+        "概览"
+      ],
+      "extraIndexColumnModes": {
+        "编码索引": "both",
+        "与今天的关系": "both",
+        "概览": "index_only"
+      },
+      "extraIndexInjectionTemplate": "<已发生的事件概览>\n$1\n</已发生的事件概览>",
+      "sqlInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 999,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 1000,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 9999,
+        "order": 99987
+      },
+      "fixedIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 9999,
+        "order": 99988
+      }
+    },
+    "orderNo": 5
+  },
+  "sheet_global_data": {
+    "uid": "sheet_global_data",
+    "name": "全局数据表",
+    "sourceData": {
+      "note": "记录当前时间、地点信息。此表有且仅有一行。\n\n- 列定义\n * 当前时间 / 上轮场景时间：YYYY-MM-DD HH:MM\n * 经过的时间：{数值}{单位}，如\"3小时20分\"\"2天\"\n * 当前位置：写具体空间，外出写地点名\n\n- 时间规则\n * cur_time = prev_scene_time + elapsed_time\n * 初始化时prev_scene_time为NULL，cur_time直接填初始时间。\n * 每轮推进时：将上一轮cur_time写入prev_scene_time → 填写elapsed_time → 计算新cur_time。",
+      "initNode": "故事初始化时插入唯一条目。",
+      "deleteNode": "禁止。",
+      "updateNode": "每轮推进时更新时间字段；地点状态变动时同步更新。\n\nSQL示例：\nUPDATE global_state SET prev_scene_time='2026-04-07 14:00', elapsed_time='2小时', cur_time='2026-04-07 16:00', current_location='别墅后巷' WHERE row_id=1;",
+      "insertNode": "禁止。",
+      "ddl": "CREATE TABLE global_state ( -- 全局状态表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  cur_time TEXT, -- 当前时间\n  prev_scene_time TEXT, -- 上轮场景时间\n  elapsed_time TEXT, -- 经过的时间\n  current_location TEXT -- 当前位置\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "当前时间",
+        "上轮场景时间",
+        "经过的时间",
+        "当前位置"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": -1,
+      "updateFrequency": -1,
+      "batchSize": -1,
+      "skipFloors": -1,
+      "groupId": -1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "全局数据表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "全局数据表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "sqlInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99981
+      },
+      "fixedIndexPlacement": {
+        "position": "before_character_definition",
+        "depth": 2,
+        "order": 99982
+      }
+    },
+    "orderNo": 6
+  },
+  "sheet_protagonist": {
+    "uid": "sheet_protagonist",
+    "name": "主角信息",
+    "sourceData": {
+      "note": "记录主角核心信息。此表有且仅有一行。\n\n- 列说明\n * 性别\n * 外貌特征：≤60字\n * 身份：≤40字，逗号分隔\n * 近况：一句话身体/情绪状态。正常时填\"一切如常\"，异常时写具体感受\n    √ 左膝擦伤，有点烦躁\n    √ 抑制剂快到时间了，后颈发热\n * 基础属性：\"健康=数值；力量=数值；敏捷=数值；理智=数值；观察=数值；魅力=数值\"，范围10-90\n * 特有属性：\"属性名=数值；\"格式，可NULL，通常为主角的特殊技能或者其他",
+      "initNode": "故事初始化时插入主角条目。",
+      "deleteNode": "禁止。",
+      "updateNode": "字段变化时更新。\n\nSQL示例: \nUPDATE protagonist_info SET current_condition='左膝擦伤，有点烦躁', base_attributes='健康=60；力量=78；敏捷=80；理智=44；观察=62；魅力=58' WHERE row_id=1;",
+      "insertNode": "禁止。",
+      "ddl": "CREATE TABLE protagonist_info ( -- 主角信息表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  name TEXT NOT NULL, -- 姓名\n  gender_desc TEXT NOT NULL, -- 性别\n  age INTEGER NOT NULL, -- 年龄\n  appearance TEXT NOT NULL, -- 外貌特征\n  identity_text TEXT NOT NULL, -- 身份\n  current_condition TEXT NOT NULL, -- 近况\n  base_attributes TEXT NOT NULL, -- 基础属性\n  special_attributes TEXT -- 特有属性\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "姓名",
+        "性别",
+        "年龄",
+        "外貌特征",
+        "身份",
+        "近况",
+        "基础属性",
+        "特有属性"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": -1,
+      "updateFrequency": -1,
+      "batchSize": -1,
+      "skipFloors": -1,
+      "groupId": -1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "主角信息",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "主角信息-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "sqlInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 99990
+      },
+      "fixedIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 99991
+      }
+    },
+    "orderNo": 7
+  },
+  "sheet_important_npc": {
+    "uid": "sheet_important_npc",
+    "name": "重要角色表",
+    "sourceData": {
+      "note": "记录所有NPC（不包括主角）的档案与动态状态。\n\n- 列说明\n * 角色类型：恋爱对象 / 家人 / 配角 等等\n * 一句话介绍：≤30字，仅客观事实，禁止性格标签\n    √ 集团唯一继承人，国民顶流偶像\n    × 温柔善良的国民偶像\n * 外貌特征：≤40字\n * 穿着打扮：≤40字，仅外在可见的服饰/饰品/妆容，禁止写气质气场\n    √ 纯白真丝衬衫\n    × 散发高贵气场\n * 基础属性：\"健康=数值；力量=数值；敏捷=数值；理智=数值；观察=数值；魅力=数值\"，范围10-90\n * 特有属性：\"属性名=数值；\"，可NULL，通常为角色的特殊技能或者其他\n * 在场状态：在场 / 离场\n * 人际关系：格式\"角色名:关系标签\"，多角色用分号分隔，同角色多标签用逗号\n    √ 爱丽丝:同学; 木下:未婚妻关系\n    × 和爱丽丝关系不好（缺角色名前缀）",
+      "initNode": "为已登场角色各插入一条。",
+      "deleteNode": "禁止。",
+      "updateNode": "各项状态变化时更新。",
+      "insertNode": "新角色登场时新增。",
+      "ddl": "CREATE TABLE important_characters ( -- 重要角色表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  name TEXT UNIQUE, -- 姓名\n  role_type TEXT, -- 角色类型\n  gender TEXT, -- 性别\n  age TEXT, -- 年龄\n  brief_intro TEXT, -- 一句话介绍\n  appearance TEXT, -- 外貌特征\n  outfit_text TEXT, -- 穿着打扮\n  base_attributes TEXT, -- 基础属性\n  special_attributes TEXT, -- 特有属性\n  location_name TEXT, -- 所在地点\n  presence_status TEXT, -- 在场状态\n  relation_text TEXT  -- 人际关系\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "姓名",
+        "角色类型",
+        "性别",
+        "年龄",
+        "一句话介绍",
+        "外貌特征",
+        "穿着打扮",
+        "基础属性",
+        "特有属性",
+        "所在地点",
+        "在场状态",
+        "人际关系"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": -1,
+      "updateFrequency": -1,
+      "batchSize": -1,
+      "skipFloors": -1,
+      "groupId": -1
+    },
+    "exportConfig": {
+      "enabled": true,
+      "splitByRow": true,
+      "entryName": "重要角色表",
+      "entryType": "keyword",
+      "keywords": "姓名",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": true,
+      "extraIndexEntryName": "重要角色表-索引",
+      "extraIndexColumns": [
+        "姓名",
+        "一句话介绍"
+      ],
+      "extraIndexColumnModes": {
+        "姓名": "both",
+        "一句话介绍": "index_only"
+      },
+      "extraIndexInjectionTemplate": "以下为已经登场过的角色：\n<已登场角色>\n$1\n</已登场角色>",
+      "sqlInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 10000,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 10000,
+        "order": 8000
+      },
+      "fixedEntryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 10000,
+        "order": 99983
+      },
+      "fixedIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 10000,
+        "order": 99984
+      }
+    },
+    "orderNo": 8
+  },
+  "sheet_OptionsNew": {
+    "uid": "sheet_OptionsNew",
+    "name": "选项表",
+    "sourceData": {
+      "note": "记录每轮主角可以进行的动作选项。此表有且仅有一行。\n\n- 列说明\n * 选项一 – 以第三人称去描述主角的行动，语言，偏向策略或推进剧情，猜测主角下一步可能会干什么，最合理的选择。\n * 选项二 – 以第三人称描述主角可采取的中立行动，不偏向任何立场。\n * 选项三 – 以第三人称描述主角可采取的善意行动，体现帮助、保护或安抚。\n * 选项四 - 以第三人称描述一下，根据当前剧情，去写一个有意思的和剧情不相干的身边突发事件，偏向可以带出新剧情，新互动方面的。例如主角一行人散步，就可以写有鬼屋活动（可以增加主角和其余人好感度的活动），从而可以让主角一行人带出新剧情。可以适当去看‘小日历表中当天的内容表’\n * 选项五 - 一段当前剧情的天气，风景，周边景色的具体描述，单纯的废话，用来代替‘继续’的\n\n\n- 选项要求\n * 所有的选项不一定都是正面的，但都是根据当前user人设，char人设，最合理的推进剧情的方向，仅提供简练的客观动作或对话方向，不使用微表情、心理活动或环境描写，也不需要写出选项会造成的结果",
+      "initNode": "游戏初始化时，生成五个初始选项。",
+      "deleteNode": "禁止删除。",
+      "updateNode": "每轮交互后必须更新此表，根据当前剧情生成新的五个选项覆盖原有内容。",
+      "insertNode": "禁止操作。",
+      "ddl": "CREATE TABLE options ( -- 选项表\n  row_id INTEGER PRIMARY KEY, -- 行号\n  option_1 TEXT, -- 选项一\n  option_2 TEXT, -- 选项二\n  option_3 TEXT, -- 选项三\n  option_4 TEXT, -- 选项四\n  option_5 TEXT -- 选项五\n);"
+    },
+    "content": [
+      [
+        "row_id",
+        "选项一",
+        "选项二",
+        "选项三",
+        "选项四",
+        "选项五"
+      ]
+    ],
+    "updateConfig": {
+      "uiSentinel": -1,
+      "contextDepth": -1,
+      "updateFrequency": -1,
+      "batchSize": -1,
+      "skipFloors": -1
+    },
+    "exportConfig": {
+      "enabled": false,
+      "splitByRow": false,
+      "entryName": "选项表",
+      "entryType": "constant",
+      "keywords": "",
+      "preventRecursion": true,
+      "injectionTemplate": "",
+      "extraIndexEnabled": false,
+      "extraIndexEntryName": "选项表-索引",
+      "extraIndexColumns": [],
+      "extraIndexColumnModes": {},
+      "extraIndexInjectionTemplate": "",
+      "sqlInjectionTemplate": "",
+      "entryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10000
+      },
+      "extraIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 10010
+      },
+      "fixedEntryPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 99990
+      },
+      "fixedIndexPlacement": {
+        "position": "at_depth_as_system",
+        "depth": 2,
+        "order": 99991
+      },
+      "injectIntoWorldbook": false
+    },
+    "orderNo": 9
+  }
+}

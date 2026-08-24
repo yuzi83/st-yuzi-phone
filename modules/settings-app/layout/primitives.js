@@ -27,6 +27,20 @@ export const SETTINGS_ENTRY_META = {
         tone: 'is-button',
         badge: '交互',
     },
+    worldbook_reading: {
+        glyph: '书',
+        title: '读取世界书',
+        description: '管理 QQ 提示词允许读取的角色世界书条目',
+        tone: 'is-worldbook',
+        badge: '上下文',
+    },
+    image_generation: {
+        glyph: '绘',
+        title: '生图设置',
+        description: '配置智慧姬、角色资料映射与测试生成',
+        tone: 'is-image-generation',
+        badge: '图片',
+    },
     api_presets: {
         glyph: 'API',
         title: 'API 预设',

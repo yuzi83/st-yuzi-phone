@@ -63,7 +63,6 @@ async function createFixture({
                 return restoreProjection();
             },
         },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     return { facade: runtime.getFacade(), repository, events, runtime, scopeId };

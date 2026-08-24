@@ -243,7 +243,7 @@
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    background: linear-gradient(135deg, var(--phone-dock-text-icon-start), var(--phone-dock-text-icon-end));
+    background: linear-gradient(135deg, var(--yuzi-phone-dock-text-icon-start), var(--yuzi-phone-dock-text-icon-end));
     color: var(--yuzi-phone-color-white);
 }
 

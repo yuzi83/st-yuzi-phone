@@ -67,14 +67,6 @@ function isSuccessfulStoryReply(message) {
         && message?.is_successful !== false;
 }
 
-function isStoryUserMessage(message) {
-    return message?.role === 'user'
-        && message?.isSystem !== true
-        && message?.is_system !== true
-        && message?.isHidden !== true
-        && message?.is_hidden !== true;
-}
-
 function escapeXml(value) {
     return asText(value)
         .replaceAll('&', '&amp;')
@@ -137,28 +129,16 @@ export function buildProactiveQQV2Request({ preset, variables = {} } = {}) {
 }
 
 /**
- * 读取最近 N 个完成的正文回合。0 表示完整正文；失败、系统和隐藏消息永不进入。
+ * 读取最近 N 条成功完成的正文 AI 回复。0 表示全部正文 AI 回复；用户消息不进入。
  */
 export function buildQQV2StoryContext(messages, turns = 0) {
-    const completedTurns = [];
-    let pendingUser = null;
-    for (const message of Array.isArray(messages) ? messages : []) {
-        if (isStoryUserMessage(message)) {
-            pendingUser = message;
-            continue;
-        }
-        if (!isSuccessfulStoryReply(message)) continue;
-        completedTurns.push({ user: pendingUser, assistant: message });
-        pendingUser = null;
-    }
+    const history = Array.isArray(messages) ? messages : [];
     const limit = positiveInteger(turns);
-    const selectedTurns = limit ? completedTurns.slice(-limit) : completedTurns;
-    const text = selectedTurns.map((turn) => {
-        const parts = [];
-        if (turn.user) parts.push(`用户：${asText(turn.user.content)}`);
-        parts.push(`角色：${asText(turn.assistant.content)}`);
-        return parts.join('\n');
-    }).join('\n\n');
+    const replies = history.filter(isSuccessfulStoryReply);
+    const selectedReplies = limit ? replies.slice(-limit) : replies;
+    const text = selectedReplies
+        .map((message) => `角色：${asText(message?.content)}`)
+        .join('\n\n');
     return text || '无';
 }
 

@@ -125,7 +125,6 @@ async function main() {
         cryptoApi: webcrypto,
         backend: { async generate() { return { content: '' }; }, async loadModels() { return []; } },
         worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
     const saved = await runtime.updateGlobalSettings({

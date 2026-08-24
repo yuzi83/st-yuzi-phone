@@ -17,6 +17,40 @@ export const APPEARANCE_FONT_LIBRARY_DEFAULTS = Object.freeze({
     userFonts: Object.freeze([]),
 });
 
+export const WORLDBOOK_READING_BLOCKED_KEYWORDS_DEFAULTS = Object.freeze([
+    '规则',
+    '思维链',
+    'cot',
+    '变量',
+    '状态',
+    'Status',
+    'Rule',
+    'rule',
+    '检定',
+    '判断',
+    '叙事',
+    '文风',
+    'InitVar',
+    '格式',
+]);
+
+export const IMAGE_GENERATION_LIMITS = Object.freeze({
+    timeoutMs: Object.freeze({ min: 10_000, max: 1_800_000 }),
+    roleMappings: 32,
+    promptColumns: 64,
+    mappingIdLength: 96,
+    sheetKeyLength: 160,
+    tableNameLength: 160,
+    headerLength: 160,
+    columnIndex: 4095,
+});
+
+export const IMAGE_GENERATION_DEFAULTS = Object.freeze({
+    enabled: false,
+    timeoutMs: 300_000,
+    roleMappings: Object.freeze([]),
+});
+
 const APPEARANCE_RESOURCE_IMAGE_MIME_TYPES = new Set([
     'image/png',
     'image/jpeg',
@@ -106,6 +140,13 @@ export const defaultSettings = {
         userFonts: [],
     },
     phoneReadableTextScalePercent: 100,
+    worldbookReadingSelection: {},
+    worldbookReadingBlockedKeywords: [...WORLDBOOK_READING_BLOCKED_KEYWORDS_DEFAULTS],
+    imageGeneration: {
+        enabled: IMAGE_GENERATION_DEFAULTS.enabled,
+        timeoutMs: IMAGE_GENERATION_DEFAULTS.timeoutMs,
+        roleMappings: [],
+    },
 };
 
 export const REMOVED_SETTING_KEYS = new Set([
@@ -143,6 +184,9 @@ const validationRules = {
     appearanceResourcePool: { type: 'object' },
     appearanceFontLibrary: { type: 'object' },
     phoneReadableTextScalePercent: { min: 80, max: 160, type: 'number' },
+    worldbookReadingSelection: { type: 'object' },
+    worldbookReadingBlockedKeywords: { type: 'array' },
+    imageGeneration: { type: 'object' },
 };
 
 export function cloneSettingsValue(value) {
@@ -161,6 +205,141 @@ function isPlainObject(value) {
 function normalizeString(value, fallback = '') {
     if (value === null || value === undefined) return fallback;
     return String(value).trim();
+}
+
+function isSafeRecordKey(value) {
+    return value !== '__proto__' && value !== 'constructor' && value !== 'prototype';
+}
+
+function normalizeImageGenerationBoolean(value, fallback) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    const normalized = normalizeString(value).toLowerCase();
+    if (normalized === 'true' || normalized === '1') return true;
+    if (normalized === 'false' || normalized === '0' || normalized === '') return false;
+    return fallback;
+}
+
+function normalizeImageGenerationText(value, maxLength) {
+    return normalizeString(value).slice(0, maxLength);
+}
+
+function normalizeImageGenerationColumn(raw, { allowUnselected = false } = {}) {
+    const source = isPlainObject(raw) ? raw : {};
+    const numericIndex = Number(source.columnIndex);
+    const columnIndex = Number.isInteger(numericIndex)
+        && numericIndex >= 0
+        && numericIndex <= IMAGE_GENERATION_LIMITS.columnIndex
+        ? numericIndex
+        : -1;
+    if (columnIndex < 0 && !allowUnselected) return null;
+    return {
+        columnIndex,
+        headerSnapshot: normalizeImageGenerationText(
+            source.headerSnapshot,
+            IMAGE_GENERATION_LIMITS.headerLength,
+        ),
+    };
+}
+
+function normalizeImageGenerationPromptColumns(raw) {
+    if (!Array.isArray(raw)) return [];
+    const normalized = [];
+    const usedColumnIndexes = new Set();
+
+    for (const item of raw) {
+        if (normalized.length >= IMAGE_GENERATION_LIMITS.promptColumns) break;
+        const column = normalizeImageGenerationColumn(item);
+        if (!column || usedColumnIndexes.has(column.columnIndex)) continue;
+        usedColumnIndexes.add(column.columnIndex);
+        normalized.push(column);
+    }
+
+    return normalized;
+}
+
+function normalizeImageGenerationRoleMappings(raw) {
+    if (!Array.isArray(raw)) return [];
+    const normalized = [];
+    const usedMappingIds = new Set();
+
+    for (const item of raw) {
+        if (normalized.length >= IMAGE_GENERATION_LIMITS.roleMappings) break;
+        if (!isPlainObject(item)) continue;
+        const mappingId = normalizeImageGenerationText(
+            item.mappingId,
+            IMAGE_GENERATION_LIMITS.mappingIdLength,
+        );
+        if (!mappingId || usedMappingIds.has(mappingId)) continue;
+        usedMappingIds.add(mappingId);
+        normalized.push({
+            mappingId,
+            sheetKey: normalizeImageGenerationText(
+                item.sheetKey,
+                IMAGE_GENERATION_LIMITS.sheetKeyLength,
+            ),
+            tableNameSnapshot: normalizeImageGenerationText(
+                item.tableNameSnapshot,
+                IMAGE_GENERATION_LIMITS.tableNameLength,
+            ),
+            nameColumn: normalizeImageGenerationColumn(
+                item.nameColumn,
+                { allowUnselected: true },
+            ),
+            promptColumns: normalizeImageGenerationPromptColumns(item.promptColumns),
+        });
+    }
+
+    return normalized;
+}
+
+export function normalizeImageGenerationSettings(raw) {
+    const source = isPlainObject(raw) ? raw : {};
+    const timeout = Number(source.timeoutMs);
+    const timeoutMs = Number.isFinite(timeout)
+        ? Math.max(
+            IMAGE_GENERATION_LIMITS.timeoutMs.min,
+            Math.min(IMAGE_GENERATION_LIMITS.timeoutMs.max, Math.round(timeout)),
+        )
+        : IMAGE_GENERATION_DEFAULTS.timeoutMs;
+
+    return {
+        enabled: normalizeImageGenerationBoolean(source.enabled, IMAGE_GENERATION_DEFAULTS.enabled),
+        timeoutMs,
+        roleMappings: normalizeImageGenerationRoleMappings(source.roleMappings),
+    };
+}
+
+export function normalizeWorldbookReadingSelectionSettings(raw) {
+    if (!isPlainObject(raw)) return {};
+    const normalized = {};
+
+    Object.entries(raw).forEach(([rawBookName, rawEntries]) => {
+        const bookName = normalizeString(rawBookName);
+        if (!bookName || !isSafeRecordKey(bookName) || !isPlainObject(rawEntries)) return;
+        const entries = {};
+
+        Object.entries(rawEntries).forEach(([rawUid, selected]) => {
+            const uid = normalizeString(rawUid);
+            if (!uid || !isSafeRecordKey(uid) || selected !== false) return;
+            entries[uid] = false;
+        });
+
+        if (Object.keys(entries).length > 0) {
+            normalized[bookName] = entries;
+        }
+    });
+
+    return normalized;
+}
+
+export function normalizeWorldbookReadingBlockedKeywordsSettings(raw) {
+    const source = Array.isArray(raw)
+        ? raw
+        : WORLDBOOK_READING_BLOCKED_KEYWORDS_DEFAULTS;
+    return [...new Set(source
+        .map((keyword) => normalizeString(keyword))
+        .filter(Boolean))];
 }
 
 export function normalizeAppIconOriginsSettings(raw) {
@@ -451,6 +630,9 @@ export function validateSetting(key, value) {
         if (rule.nullable) {
             return { valid: true, value: null };
         }
+        if (key === 'imageGeneration') {
+            return createSettingsValidationResult(key, normalizeImageGenerationSettings(value));
+        }
         return { valid: true, value: defaultSettings[key] };
     }
 
@@ -489,6 +671,9 @@ export function validateSetting(key, value) {
         case 'boolean':
             return { valid: true, value: Boolean(value) };
 
+        case 'array':
+            return { valid: true, value: normalizeWorldbookReadingBlockedKeywordsSettings(value) };
+
         case 'object': {
             if (!isPlainObject(value)) {
                 return {
@@ -507,6 +692,12 @@ export function validateSetting(key, value) {
             if (key === 'appIconOrigins') {
                 return createSettingsValidationResult(key, normalizeAppIconOriginsSettings(value));
             }
+            if (key === 'worldbookReadingSelection') {
+                return createSettingsValidationResult(key, normalizeWorldbookReadingSelectionSettings(value));
+            }
+            if (key === 'imageGeneration') {
+                return createSettingsValidationResult(key, normalizeImageGenerationSettings(value));
+            }
 
             return { valid: true, value: cloneSettingsValue(value) };
         }
@@ -517,7 +708,10 @@ export function validateSetting(key, value) {
 }
 
 export function validateSettings(settings) {
-    const validated = { ...defaultSettings };
+    const validated = {
+        ...defaultSettings,
+        imageGeneration: normalizeImageGenerationSettings(defaultSettings.imageGeneration),
+    };
 
     if (!settings || typeof settings !== 'object') {
         return validated;
@@ -548,6 +742,11 @@ export function validateSettings(settings) {
 
     validated.appearanceResourcePool = normalizeAppearanceResourcePoolSettings(settings.appearanceResourcePool);
     validated.appearanceFontLibrary = normalizeAppearanceFontLibrarySettings(settings.appearanceFontLibrary);
+    validated.worldbookReadingSelection = normalizeWorldbookReadingSelectionSettings(settings.worldbookReadingSelection);
+    validated.worldbookReadingBlockedKeywords = normalizeWorldbookReadingBlockedKeywordsSettings(
+        settings.worldbookReadingBlockedKeywords,
+    );
+    validated.imageGeneration = normalizeImageGenerationSettings(settings.imageGeneration);
 
     return validated;
 }

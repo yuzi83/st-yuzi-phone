@@ -15,11 +15,11 @@ export function __test__setDeps(overrides = {}) {
 export function initPhoneShellDrag() {
     const phoneEl = document.getElementById('yuzi-phone-standalone');
     if (!phoneEl) return;
-    const shell = phoneEl.querySelector('.phone-shell');
+    const shell = phoneEl.querySelector('.yuzi-phone-shell');
     if (!shell) return;
 
-    const notch = shell.querySelector('.phone-notch');
-    const statusBar = shell.querySelector('.phone-status-bar');
+    const notch = shell.querySelector('.yuzi-phone-notch');
+    const statusBar = shell.querySelector('.yuzi-phone-status-bar');
     const dragHandles = [notch, statusBar].filter((el) => el instanceof HTMLElement);
     if (dragHandles.length === 0) return;
 

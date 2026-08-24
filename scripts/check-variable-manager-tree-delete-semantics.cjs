@@ -48,6 +48,7 @@ function assertOrdered(source, tokens, message) {
 async function main() {
     const { flattenToGroups, renderGroupsHtml } = await import(toModuleUrl('modules/variable-manager/flat-view.js'));
     const interactionsSource = read('modules/variable-manager/interactions.js');
+    const styleSource = read('styles/12-variable-manager.css');
 
     const data = {
         user: {
@@ -119,6 +120,7 @@ async function main() {
     });
 
     assertIncludes(html, 'class="vm-object-title', '树状渲染必须输出对象标题节点');
+    assertIncludes(html, 'class="vm-object-chevron"', '非空对象节点必须输出折叠箭头');
     assertIncludes(html, 'data-delete-path="user.战技"', '删除态必须暴露战技对象路径');
     assertIncludes(html, 'data-delete-path="user.战技.微型苍拳"', '删除态必须暴露微型苍拳对象路径');
     assertIncludes(html, 'data-delete-kind="object"', '对象节点必须暴露 object 删除语义');
@@ -129,20 +131,32 @@ async function main() {
     assertIncludes(html, 'style="--vm-node-indent: 12px;"', '树状渲染必须输出缩进变量而不是继续并排拼接路径 badge');
 
     assertIncludes(interactionsSource, "const SELECTABLE_DELETE_SELECTOR = '.vm-card[data-delete-path], .vm-group-header[data-delete-path], .vm-object-title[data-delete-path]'", '删除选择器必须显式区分对象标题');
+    assertIncludes(interactionsSource, "const COLLAPSIBLE_TRIGGER_SELECTOR = '.vm-group-header, .vm-object-title'", '分组与对象标题必须复用同一折叠触发器选择器');
+    assertIncludes(interactionsSource, 'function toggleVariableSectionCollapse(trigger)', '交互层必须提供共享折叠逻辑');
+    assertIncludes(interactionsSource, "collapsedClass = 'vm-object-collapsed';", '对象节点必须拥有独立折叠状态');
     assertIncludes(interactionsSource, 'function getDeleteTarget(element)', '交互层必须读取结构化删除目标');
     assertIncludes(interactionsSource, 'function collectSelectedDeleteTargets(page)', '交互层必须收集结构化删除目标');
     assertIncludes(interactionsSource, 'function normalizeDeleteTargets(targets)', '交互层必须对删除目标做父子去重');
     assertIncludes(interactionsSource, 'return `确认删除${getDeleteTargetKindLabel(target.kind)}「${target.label}」？`;', '单目标确认标题必须暴露删除类型与名称');
+    assertOrdered(interactionsSource, [
+        "if (page.classList.contains('vm-delete-mode')) {",
+        'const collapseTrigger = target.closest(COLLAPSIBLE_TRIGGER_SELECTOR);',
+        'toggleVariableSectionCollapse(collapseTrigger);',
+    ], '删除态点击必须优先于普通折叠交互');
     assertOrdered(interactionsSource, [
         'uniqueTargets.sort((a, b) => a.path.split(\'.\').length - b.path.split(\'.\').length || a.path.length - b.path.length);',
         'return uniqueTargets.filter((target, index) => {',
         'return !uniqueTargets.slice(0, index).some((parent) => target.path === parent.path || target.path.startsWith(`${parent.path}.`));',
     ], '删除目标父子去重必须先按路径层级排序再过滤子项');
 
+    assertIncludes(styleSource, '.vm-object-collapsed > .vm-object-children', '对象折叠态必须隐藏直属子节点容器');
+    assertIncludes(styleSource, '.vm-object-collapsed > .vm-object-title .vm-object-chevron', '对象折叠态必须旋转对象箭头');
+
     console.log('[variable-manager-tree-delete-semantics-check] 检查通过');
     console.log('- OK | user -> 战技 -> 微型苍拳 树状层级完整保留');
     console.log('- OK | user -> 生得术式 保持对象标题 + 叶子字段结构');
     console.log('- OK | 空对象与数组字段在树状视图中仍可见');
+    console.log('- OK | 任意非空对象节点复用分组折叠交互与展开状态语义');
     console.log('- OK | 删除态输出 group/object/leaf 结构化元数据');
     console.log('- OK | 删除目标父子去重与确认标题契约已覆盖');
 }

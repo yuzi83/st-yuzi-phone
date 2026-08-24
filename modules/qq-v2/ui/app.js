@@ -2,6 +2,7 @@ import { pickImageFiles } from '../../settings-app/services/media-upload.js';
 import { createPhoneNavIconElement } from '../../phone-core/navigation-ui.js';
 import { isScrollContainerNearBottom } from '../../phone-core/stable-scroll-anchor.js';
 import { createPhoneViewScrollState } from '../../phone-core/view-scroll-state.js';
+import { getPhoneSettings } from '../../settings.js';
 import { createEmojiPanelTemporaryLayerController } from './emoji-panel.js';
 import { createStickerUploadDialog } from './sticker-upload-dialog.js';
 import {
@@ -9,6 +10,7 @@ import {
     resolveConversationSwipe,
 } from './conversation-swipe.js';
 import {
+    createComposerAutoHeightController,
     normalizeComposerSubmission,
     shouldSubmitComposerKey,
 } from './composer.js';
@@ -375,6 +377,120 @@ function mergeMessagePage(previous = EMPTY_PAGE, next = EMPTY_PAGE, { prepend = 
     });
 }
 
+function replaceMessageInPage(page = EMPTY_PAGE, replacement = {}) {
+    const messageId = asText(replacement?.messageId);
+    if (!messageId) return page;
+    let replaced = false;
+    const items = asArray(page?.items).map((message) => {
+        if (asText(message?.messageId) !== messageId) return message;
+        replaced = true;
+        return replacement;
+    });
+    if (!replaced) return page;
+    return Object.freeze({
+        ...page,
+        items: Object.freeze(items),
+    });
+}
+
+const GENERATED_IMAGE_EXTENSIONS = new Set(['bmp', 'gif', 'jfif', 'jpeg', 'jpg', 'png', 'webp']);
+
+function normalizeGeneratedImagePath(value) {
+    const imagePath = asText(value);
+    if (!imagePath
+        || imagePath.length > 2048
+        || imagePath.startsWith('/')
+        || imagePath.includes('\\')
+        || /[%:?#\u0000-\u001f\u007f]/u.test(imagePath)) {
+        return '';
+    }
+    const segments = imagePath.split('/');
+    if (segments.length < 3
+        || segments[0] !== 'user'
+        || segments[1] !== 'images'
+        || segments.some((segment) => !segment || segment === '.' || segment === '..')) {
+        return '';
+    }
+    const extension = segments.at(-1).split('.').at(-1).toLowerCase();
+    return GENERATED_IMAGE_EXTENSIONS.has(extension) ? imagePath : '';
+}
+
+function createImageGenerationTaskController({
+    tasks = new Map(),
+    request,
+    readPage = () => EMPTY_PAGE,
+    writePage = () => {},
+    render = async () => {},
+    notifyFailure = () => {},
+    isConversationVisible = () => true,
+    reportError = () => {},
+} = {}) {
+    if (typeof request !== 'function') {
+        throw new TypeError('Image generation task controller needs a request function');
+    }
+
+    const renderCurrentMessages = async () => {
+        try {
+            await render({ refreshMessages: false });
+        } catch (error) {
+            reportError(error);
+        }
+    };
+
+    const generate = async ({ conversationId, messageId } = {}) => {
+        const normalizedConversationId = asText(conversationId);
+        const normalizedMessageId = asText(messageId);
+        if (!normalizedConversationId || !normalizedMessageId) {
+            return Object.freeze({ ok: false, status: 'invalid' });
+        }
+        if (tasks.has(normalizedMessageId)) {
+            return Object.freeze({ ok: false, status: 'busy' });
+        }
+
+        tasks.set(normalizedMessageId, Object.freeze({ conversationId: normalizedConversationId }));
+        let result = Object.freeze({ ok: false, status: 'failed' });
+        let failed = false;
+        try {
+            await renderCurrentMessages();
+            result = await request({
+                conversationId: normalizedConversationId,
+                messageId: normalizedMessageId,
+            });
+            const replacement = asObject(result?.result).message;
+            if (result?.ok !== true || asText(replacement?.messageId) !== normalizedMessageId) {
+                failed = true;
+            } else {
+                writePage(
+                    normalizedConversationId,
+                    replaceMessageInPage(readPage(normalizedConversationId), replacement),
+                );
+            }
+        } catch (error) {
+            failed = true;
+            result = Object.freeze({ ok: false, status: 'failed', error });
+        } finally {
+            tasks.delete(normalizedMessageId);
+            if (failed) {
+                try {
+                    notifyFailure();
+                } catch {
+                    // A notification cannot block per-message loading cleanup.
+                }
+            }
+            if (isConversationVisible(normalizedConversationId)) {
+                await renderCurrentMessages();
+            }
+        }
+        return result;
+    };
+
+    return Object.freeze({
+        generate,
+        isLoading: (messageId) => tasks.has(asText(messageId)),
+        clear: () => tasks.clear(),
+    });
+}
+
 function isNearMessageBottom({ scrollTop = 0, clientHeight = 0, scrollHeight = 0, threshold = 32 } = {}) {
     return Number(scrollHeight) - (Number(scrollTop) + Number(clientHeight)) <= Number(threshold);
 }
@@ -621,6 +737,9 @@ export const __test__ = Object.freeze({
     countGraphemes,
     chatTitle,
     mergeMessagePage,
+    replaceMessageInPage,
+    normalizeGeneratedImagePath,
+    createImageGenerationTaskController,
     needsTimeDivider,
     isNearMessageBottom,
     resolveConversationSwipe,
@@ -630,7 +749,13 @@ export const __test__ = Object.freeze({
     createSettingsSaveQueue,
 });
 
-export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = '' } = {}) {
+export function createQQApp({
+    facade,
+    shell = {},
+    onError = () => {},
+    scopeId = '',
+    getSettings = getPhoneSettings,
+} = {}) {
     if (!facade?.query || !facade?.intent) throw new TypeError('QQ App needs an injected Facade');
 
     let root = null;
@@ -647,6 +772,7 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
     let emojiOpen = false;
     let displayedViewKey = '';
     const drafts = new Map();
+    const composerAutoHeight = createComposerAutoHeightController();
     const messageSelection = createMessageSelection();
     let messageSelectionConversationId = '';
     const pages = new Map();
@@ -655,6 +781,7 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
     const renderLeaseSessions = new Map();
     const selectedImageAssetIds = new Set();
     const selectedStickerIds = new Set();
+    const imageGenerationTasks = new Map();
     let imageLibrarySelectionMode = false;
     const enqueueSettingsSave = createSettingsSaveQueue();
 
@@ -914,6 +1041,29 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
     const isMessageSelectionMode = (conversationId) => (
         messageSelectionConversationId === asText(conversationId)
     );
+
+    const isImageGenerationEnabled = () => {
+        try {
+            return asObject(typeof getSettings === 'function' ? getSettings() : {}).imageGeneration?.enabled === true;
+        } catch {
+            return false;
+        }
+    };
+
+    const imageGenerationController = createImageGenerationTaskController({
+        tasks: imageGenerationTasks,
+        request: ({ conversationId, messageId }) => facade.intent.generateMessageImage({ conversationId, messageId }),
+        readPage: (conversationId) => getMessageState(conversationId),
+        writePage: (conversationId, messagePage) => pages.set(conversationId, messagePage),
+        render: (options) => render(options),
+        notifyFailure: () => shell.showToast?.('图片生成失败', true),
+        isConversationVisible: (conversationId) => (
+            !disposed
+            && page?.type === 'chat'
+            && asText(page.conversationId) === conversationId
+        ),
+        reportError: report,
+    });
 
     const selectableMessages = (conversationId) => getMessageState(conversationId).items.filter((message) => (
         asText(message?.messageId)
@@ -1708,15 +1858,56 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             const original = createElement('span', 'yuzi-qq-voice-original');
             original.textContent = message.content;
             body.append(summary, original);
-        } else if (message.type === 'image' || message.type === 'video') {
-            body = createElement('div', `yuzi-qq-narrative-card is-${message.type}`);
+        } else if (message.type === 'image') {
+            const imagePath = normalizeGeneratedImagePath(message.generatedImagePath);
+            const loading = imageGenerationController.isLoading(message.messageId);
+            body = createElement(
+                'div',
+                `yuzi-qq-generated-image-card${imagePath ? ' has-image' : ' is-placeholder'}${loading ? ' is-loading' : ''}`,
+            );
+            const media = createElement('div', 'yuzi-qq-generated-image-media');
+            if (imagePath) {
+                const image = createElement('img', 'yuzi-qq-generated-image');
+                image.src = imagePath;
+                image.alt = asText(message.content) || '生成图片';
+                image.loading = 'lazy';
+                media.append(image);
+            } else {
+                const visual = createElement('span', 'yuzi-qq-generated-image-placeholder');
+                visual.append(createIcon('image'));
+                media.append(visual);
+            }
+            if (isImageGenerationEnabled() && !isMessageSelectionMode(conversationId)) {
+                const action = createButton(
+                    '',
+                    `yuzi-qq-image-generate-button${imagePath ? ' yuzi-qq-image-regenerate-button' : ''}${loading ? ' is-loading' : ''}`,
+                    {
+                        'aria-label': imagePath ? '重新生成图片' : '生成图片',
+                        'aria-busy': String(loading),
+                        title: imagePath ? '重新生成' : '生成图片',
+                        'data-qq-generate-image': message.messageId,
+                        'data-qq-image-conversation-id': conversationId,
+                    },
+                );
+                action.disabled = loading;
+                action.append(createIcon(imagePath ? 'rotate' : 'wand-magic-sparkles'));
+                ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'contextmenu'].forEach((eventName) => {
+                    action.addEventListener(eventName, (event) => event.stopPropagation());
+                });
+                media.append(action);
+            }
+            const description = createElement('span', 'yuzi-qq-generated-image-description');
+            description.textContent = asText(message.content) || '图片消息';
+            body.append(media, description);
+        } else if (message.type === 'video') {
+            body = createElement('div', 'yuzi-qq-narrative-card is-video');
             const visual = createElement('span', 'yuzi-qq-narrative-visual');
-            visual.append(createIcon(message.type === 'image' ? 'image' : 'video'));
+            visual.append(createIcon('video'));
             const copy = createElement('span', 'yuzi-qq-narrative-copy');
             const label = createElement('strong', 'yuzi-qq-narrative-label');
-            label.textContent = message.type === 'image' ? '图片' : '视频';
+            label.textContent = '视频';
             const description = createElement('span', 'yuzi-qq-narrative-description');
-            description.textContent = asText(message.content) || (message.type === 'image' ? '图片消息' : '视频消息');
+            description.textContent = asText(message.content) || '视频消息';
             copy.append(label, description);
             body.append(visual, copy);
         } else if (message.type === 'transfer') {
@@ -1818,8 +2009,7 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         input.setAttribute('aria-label', '消息输入框');
         input.addEventListener('input', () => {
             drafts.set(conversation.conversationId, input.value);
-            input.style.height = 'auto';
-            input.style.height = `${Math.min(input.scrollHeight, input.clientHeight * 4)}px`;
+            composerAutoHeight.schedule(input);
         });
         input.addEventListener('focus', () => closeEmojiPanel());
         input.addEventListener('keydown', (event) => {
@@ -1945,7 +2135,7 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         return panel;
     };
 
-    const renderChat = async (token) => {
+    const renderChat = async (token, { refreshMessages = true } = {}) => {
         const conversationId = page.conversationId;
         const selectionMode = isMessageSelectionMode(conversationId);
         const previousState = getMessageState(conversationId);
@@ -1957,7 +2147,7 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             getCurrentContext(),
             facade.query.currentProfile?.(),
             selectionMode ? facade.query.globalSettings?.() : Promise.resolve(null),
-            loadMessages(conversationId),
+            refreshMessages ? loadMessages(conversationId) : Promise.resolve(previousState),
         ]);
         const main = createElement('main', 'yuzi-qq-view yuzi-qq-chat-view yuzi-qq-private-chat-view');
         if (!conversation || !isActive(token)) return main;
@@ -2486,7 +2676,8 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
     };
 
     const renderPage = async (token) => {
-        if (page?.type === 'chat') return renderChat(token);
+        const refreshMessages = leaseSessionFor(token)?.refreshMessages !== false;
+        if (page?.type === 'chat') return renderChat(token, { refreshMessages });
         if (page?.type === 'conversation-settings') return renderConversationSettings(token);
         if (page?.type === 'profile') return renderProfile(token);
         if (page?.type === 'profile-edit') return renderProfileEditor(token);
@@ -2577,14 +2768,16 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
         return { scrollSnapshot: cached?.scrollSnapshot || null, deferred: false };
     };
 
-    const render = async ({ preserveEmoji = false } = {}) => {
+    const render = async ({ preserveEmoji = false, refreshMessages = true } = {}) => {
         const scrollSnapshot = viewScrollState.capture();
+        composerAutoHeight.cancel();
         const token = ++renderEpoch;
         const leaseSessions = {
             media: mediaRenderLeases.begin(),
             background: backgroundRenderLeases.begin(),
             avatars: avatarRenderLeases.begin(),
             stickers: stickerRenderLeases.begin(),
+            refreshMessages,
         };
         renderLeaseSessions.set(token, leaseSessions);
         clearOverlay();
@@ -2617,6 +2810,7 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             }
             viewport.replaceChildren(content);
             if (!page) viewport.append(makeNav());
+            composerAutoHeight.schedule(viewport.querySelector('.yuzi-qq-composer-input'));
             displayedViewKey = targetViewKey;
             await Promise.all([
                 leaseSessions.media.commit(),
@@ -3294,6 +3488,22 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
     const handleClick = async (event) => {
         const target = event.target.closest('button');
         if (!target || !viewport?.contains(target)) return;
+        if (target.dataset.qqGenerateImage) {
+            event.preventDefault();
+            event.stopPropagation();
+            const messageId = asText(target.dataset.qqGenerateImage);
+            const conversationId = asText(target.dataset.qqImageConversationId || page?.conversationId);
+            if (
+                !messageId
+                || !conversationId
+                || !isImageGenerationEnabled()
+                || isMessageSelectionMode(conversationId)
+                || imageGenerationController.isLoading(messageId)
+            ) return;
+
+            await imageGenerationController.generate({ conversationId, messageId });
+            return;
+        }
         const targetConversationId = target.closest('[data-qq-conversation-id]')?.dataset.qqConversationId || '';
         const actionConversationId = target.dataset.qqDeleteConversation || '';
         if (shouldCloseConversationSwipe(openSwipeConversationId, targetConversationId, actionConversationId)) {
@@ -3498,6 +3708,7 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             drafts.clear();
             messageSelection.clearAll();
             messageSelectionConversationId = '';
+            imageGenerationController.clear();
             pages.clear();
             conversationSnapshots.clear();
             viewSnapshotCache.clear();
@@ -3508,9 +3719,11 @@ export function createQQApp({ facade, shell = {}, onError = () => {}, scopeId = 
             closeOpenedChat();
             disposed = true;
             renderEpoch += 1;
+            composerAutoHeight.dispose();
             closeTransientUi();
             messageSelection.clearAll();
             messageSelectionConversationId = '';
+            imageGenerationController.clear();
             viewSnapshotCache.clear();
             conversationSnapshots.clear();
             displayedViewKey = '';

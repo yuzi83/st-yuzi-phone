@@ -38,7 +38,7 @@ function showDefaultQQRouteToast(message, isError = true) {
     toast.dataset.qqRouteToast = '1';
     toast.setAttribute('role', isError ? 'alert' : 'status');
     toast.textContent = message;
-    (container.querySelector('.phone-shell') || container).append(toast);
+    (container.querySelector('.yuzi-phone-shell') || container).append(toast);
     phoneRuntime.setTimeout(() => toast.classList.add('phone-toast-show'), 10);
     phoneRuntime.setTimeout(() => {
         toast.classList.remove('phone-toast-show');
@@ -272,11 +272,16 @@ async function loadRouteRenderer(route, renderToken, deps = {}, opts = {}) {
     }
 
     if (route === 'settings') {
-        const { renderSettings } = await import('../settings-app/render.js');
+        const renderSettings = typeof deps.renderSettings === 'function'
+            ? deps.renderSettings
+            : (await import('../settings-app/render.js')).renderSettings;
         return {
             routeType: 'settings',
             render(page) {
-                renderSettings(page);
+                const dispose = renderSettings(page);
+                if (typeof dispose === 'function') {
+                    registerRoutePageCleanup(page, dispose);
+                }
             },
         };
     }
@@ -363,7 +368,7 @@ function removeStaleRoutePages(screen, retainedPages = []) {
 }
 
 function createRouteRenderContext(route, opts = {}, state = getPhoneCoreState()) {
-    const screen = document.querySelector('.phone-screen');
+    const screen = document.querySelector('.yuzi-phone-screen');
     if (!(screen instanceof HTMLElement)) {
         logger.debug({
             action: 'context.skip',

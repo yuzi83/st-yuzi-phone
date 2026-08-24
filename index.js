@@ -63,11 +63,10 @@ import { getCurrentRoute } from './modules/phone-core/routing.js';
 import { requestCurrentPhoneRouteRender, requestHomePhoneRouteRender } from './modules/phone-core/route-runtime.js';
 import {
     destroyQQV2Runtime,
-    handleQQV2CharacterMessageRendered,
     handleQQV2ChatChanged,
     handleQQV2ChatDeleted,
     handleQQV2GroupChatDeleted,
-    handleQQV2WorldInfoActivated,
+    handleQQV2MessageReceived,
     initializeQQV2Runtime,
 } from './modules/qq-v2/runtime/default-runtime.js';
 
@@ -407,8 +406,7 @@ async function registerEventListeners() {
         onQQV2ChatChanged: handleQQV2ChatChangedAndRefreshRoute,
         onQQV2ChatDeleted: handleQQV2ChatDeleted,
         onQQV2GroupChatDeleted: handleQQV2GroupChatDeleted,
-        onQQV2CharacterMessageRendered: handleQQV2CharacterMessageRendered,
-        onQQV2WorldInfoActivated: handleQQV2WorldInfoActivated,
+        onQQV2MessageReceived: handleQQV2MessageReceived,
     });
 }
 

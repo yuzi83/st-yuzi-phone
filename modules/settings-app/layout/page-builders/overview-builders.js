@@ -12,6 +12,8 @@ export function buildSettingsHomePageHtml({
         'appearance',
         ...(contentPresetFullPageRuntimeEnabled ? ['beautify'] : []),
         'button_style',
+        'worldbook_reading',
+        'image_generation',
         'api_presets',
         'ai_instruction_presets',
     ];

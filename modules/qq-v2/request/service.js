@@ -165,6 +165,9 @@ export function createQQV2RequestService(options = {}) {
     const runtimeSettingsResolver = typeof options.runtimeSettingsResolver === 'function'
         ? options.runtimeSettingsResolver
         : async (_scopeId, scope) => scope?.settings || {};
+    const onProactiveError = typeof options.onProactiveError === 'function'
+        ? options.onProactiveError
+        : async () => {};
     const queued = new Map();
     const states = new Map();
     const modelStates = new Map();
@@ -436,7 +439,17 @@ export function createQQV2RequestService(options = {}) {
                 await executeManual(entry);
             }
         } catch (error) {
-            if (entry.kind !== 'proactive' && !entry.controller.signal.aborted) {
+            if (entry.kind === 'proactive' && !entry.controller.signal.aborted) {
+                try {
+                    await onProactiveError(error, Object.freeze({
+                        scopeId: entry.scopeId,
+                        requestId: entry.requestId,
+                        stage: 'execute',
+                    }));
+                } catch {
+                    // Diagnostic observers cannot change request arbitration.
+                }
+            } else if (entry.kind !== 'proactive' && !entry.controller.signal.aborted) {
                 const messages = await repository.listMessages(entry.scopeId, entry.conversationId).catch(() => []);
                 const conversation = await repository.getConversation(entry.scopeId, entry.conversationId).catch(() => null);
                 const handledSequence = Number(conversation?.lastHandledUserSequence) || 0;

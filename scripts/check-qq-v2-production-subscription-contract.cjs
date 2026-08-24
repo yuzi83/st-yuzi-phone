@@ -18,7 +18,6 @@ async function main() {
         stateStore: createMemoryQQV2StateStore(),
         cryptoApi: webcrypto,
         backend: { async generate() {}, async loadModels() { return []; } },
-        worldbookContextGateway: { async runDryRun() { return []; } },
     });
     await runtime.initialize();
 

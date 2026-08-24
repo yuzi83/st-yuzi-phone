@@ -236,7 +236,6 @@ async function testRuntimeLifecycleDoesNotRetainOldScope() {
 
     assert.equal(runtime.getStatus().phase, 'idle');
     assert.equal(await runtime.handleCharacterMessageRendered('before-init', 'normal'), null);
-    assert.equal(await runtime.handleWorldInfoActivated([]), null);
     assert.equal(readScopeCalls, 0);
 
     await runtime.initialize();
@@ -244,7 +243,6 @@ async function testRuntimeLifecycleDoesNotRetainOldScope() {
     assert.deepEqual(runtime.getStatus(), {
         phase: 'ready',
         scopeId: 'st:character:character-a:chat-a.jsonl',
-        worldbookScopeId: '',
         epoch: firstSession.generation,
     });
     assert.equal(firstSession.isReady(), true);
@@ -278,10 +276,6 @@ async function testRuntimeLifecycleDoesNotRetainOldScope() {
     assert.equal(runtime.getActiveScope().chatId, 'chat-a-renamed');
     assert.equal(runtime.getStatus().epoch, sameScopeSession.generation);
 
-    const worldbookFacts = await runtime.handleWorldInfoActivated([{ uid: 1, content: 'scope-a' }]);
-    assert.equal(worldbookFacts.scopeSession, sameScopeSession);
-    assert.equal(runtime.getWorldInfoLifecycle().scopeSession, sameScopeSession);
-
     current = context({
         chatId: 'chat-b',
         chatFile: 'chat-b.jsonl',
@@ -305,7 +299,6 @@ async function testRuntimeLifecycleDoesNotRetainOldScope() {
     assert.equal(sameScopeSession.isCurrent(), false);
     assert.equal(groupSession.isReady(), true);
     assert.deepEqual(readySessions, [firstSession, sameScopeSession, groupSession]);
-    assert.equal(runtime.getWorldInfoLifecycle(), null);
     assert.equal(runtime.getStatus().epoch, groupSession.generation);
 
     runtime.destroy();
@@ -313,11 +306,9 @@ async function testRuntimeLifecycleDoesNotRetainOldScope() {
     assert.equal(groupSession.signal.aborted, true);
     assert.equal(groupSession.isCurrent(), false);
     assert.equal(runtime.getActiveScope(), null);
-    assert.equal(runtime.getWorldInfoLifecycle(), null);
     assert.deepEqual(runtime.getStatus(), {
         phase: 'destroyed',
         scopeId: '',
-        worldbookScopeId: '',
         epoch: groupSession.generation,
     });
     assert.equal(destroyCalls, 1);
@@ -349,7 +340,7 @@ async function testRuntimeEntryDeliversCurrentHostLifecycleFacts() {
     const scopeChanges = [];
     const scopeSessions = [];
     const characterEvents = [];
-    const worldbookEvents = [];
+    const receivedEvents = [];
     const entry = createQQV2RuntimeEntry({
         createHostAdapter: () => host,
         createRuntime: (options) => createQQV2Runtime({
@@ -359,7 +350,7 @@ async function testRuntimeEntryDeliversCurrentHostLifecycleFacts() {
                 scopeSessions.push(scopeSession);
             },
             onCharacterMessageRendered: (facts) => characterEvents.push(facts),
-            onWorldInfoActivated: (facts) => worldbookEvents.push(facts.entries.map((entry) => entry.uid)),
+            onMessageReceived: (facts) => receivedEvents.push(facts),
         }),
     });
 
@@ -387,15 +378,10 @@ async function testRuntimeEntryDeliversCurrentHostLifecycleFacts() {
     assert.equal(characterEvents[0], characterFacts);
     assert.equal(readScopeCalls, 2, '正文事件不应刷新 host scope');
 
-    const worldbookFacts = await entry.handleWorldInfoActivated({
-        allActivatedEntries: [{ uid: 7, content: '当前正文世界书' }],
-    });
-    assert.equal(worldbookFacts.scopeSession, sameScopeSession);
-    assert.deepEqual(worldbookFacts.entries, [{ uid: 7, content: '当前正文世界书' }]);
-    assert.deepEqual(worldbookEvents, [[7]]);
-    assert.deepEqual(entry.getWorldInfoLifecycle().entries, [{ uid: 7, content: '当前正文世界书' }]);
-    assert.equal(entry.getWorldInfoLifecycle().scopeSession, sameScopeSession);
-    assert.equal(readScopeCalls, 2, '世界书事件不应刷新 host scope');
+    const receivedFacts = await entry.handleMessageReceived('message-2', 'normal');
+    assert.equal(receivedFacts.scopeSession, sameScopeSession);
+    assert.equal(receivedEvents[0], receivedFacts);
+    assert.equal(characterEvents.length, 1, 'MESSAGE_RECEIVED 不得伪装成 CHARACTER_MESSAGE_RENDERED');
 
     current = context({
         chatId: 'chat-b',
@@ -414,7 +400,6 @@ async function testRuntimeEntryDeliversCurrentHostLifecycleFacts() {
     assert.equal(sameScopeSession.signal.aborted, true);
     assert.equal(groupSession.scopeId, 'st:group:group-b:chat-b.jsonl');
     assert.equal(entry.getStatus().epoch, groupSession.generation);
-    assert.equal(entry.getWorldInfoLifecycle(), null);
     assert.deepEqual(scopeChanges, [
         'st:character:character-a:chat-a.jsonl',
         'st:character:character-a:chat-a.jsonl',
@@ -441,24 +426,21 @@ async function testBootstrapAndExtensionWireQQV2Events() {
         const { registerPhoneEventListeners } = await importModule('modules/bootstrap/event-registry.js');
         await registerPhoneEventListeners({
             onQQV2ChatChanged: (chatId) => calls.push(['chat', chatId]),
-            onQQV2CharacterMessageRendered: (messageId, generationType) => calls.push([
-                'character',
+            onQQV2MessageReceived: (messageId, generationType) => calls.push([
+                'received',
                 messageId,
                 generationType,
             ]),
-            onQQV2WorldInfoActivated: (entries) => calls.push(['worldbook', entries]),
         });
 
-        const entries = [{ uid: 7, content: '正文激活条目' }];
         eventSource.emit('chat_id_changed', 'chat-v2');
+        eventSource.emit('message_received', 'message-v2', 'normal');
         eventSource.emit('character_message_rendered', 'message-v2', 'normal');
-        eventSource.emit('world_info_activated', entries);
         await waitForAsyncEvents();
 
         assert.deepEqual(calls, [
             ['chat', 'chat-v2'],
-            ['character', 'message-v2', 'normal'],
-            ['worldbook', entries],
+            ['received', 'message-v2', 'normal'],
         ]);
 
         const indexSource = fs.readFileSync(path.join(ROOT, 'index.js'), 'utf8');
@@ -473,8 +455,7 @@ async function testBootstrapAndExtensionWireQQV2Events() {
         assert.match(indexSource, /if \(route !== 'qq' && !route\.startsWith\('qq:'\)\) return scope;/);
         assert.match(indexSource, /await requestCurrentPhoneRouteRender\(\{ reason: 'qq-chat-changed' \}\);/);
         assert.match(indexSource, /onQQV2ChatChanged: handleQQV2ChatChangedAndRefreshRoute/);
-        assert.match(indexSource, /onQQV2CharacterMessageRendered: handleQQV2CharacterMessageRendered/);
-        assert.match(indexSource, /onQQV2WorldInfoActivated: handleQQV2WorldInfoActivated/);
+        assert.match(indexSource, /onQQV2MessageReceived: handleQQV2MessageReceived/);
         assert.doesNotMatch(runtimeSource, /modules\/qq\//);
     } finally {
         if (originalWindow === undefined) delete global.window;
@@ -500,7 +481,6 @@ async function testDefaultRuntimeExposesAndRecoversFromHostUnavailability() {
         assert.deepEqual(runtime.getQQV2RuntimeStatus(), {
             phase: 'unavailable',
             scopeId: '',
-            worldbookScopeId: '',
             epoch: 1,
             errorCode: 'host_unavailable',
         });

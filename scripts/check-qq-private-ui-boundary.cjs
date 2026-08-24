@@ -13,7 +13,7 @@ async function main() {
             readScope: () => ({ scopeId, chatId: 'private-ui-boundary', chatFile: 'private-ui-boundary', hostType: 'character', hostId: 'test' }),
             readUserIdentity: () => ({ name: 'User', avatar: '' }), readStoryTime: () => '2042-05-20 09:30', readStoryMessages: () => [], readRawContext: () => ({}),
         }, stateStore, repository, cryptoApi: webcrypto, backend: { async generate() {}, async loadModels() { return []; } },
-        worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} }, worldbookContextGateway: { async runDryRun() { return []; } },
+        worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} },
     });
     await runtime.initialize();
     const friend = await runtime.createPrivateConversation({ scopeId, name: 'Alice' });

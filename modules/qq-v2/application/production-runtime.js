@@ -7,8 +7,6 @@ import { parseQQV2Response, validateQQV2ActionBatch } from '../protocol/xml.js';
 import { createQQV2ProactiveService } from '../proactive/service.js';
 import { buildManualQQV2Request, buildQQV2StoryContext } from '../prompt/materializer.js';
 import { buildQQV2StickerCatalog } from '../prompt/sticker-catalog.js';
-import { createQQV2SillyTavernWorldbookContextGateway } from '../prompt/st-worldbook-context.js';
-import { resolveQQV2WorldbookContext } from '../prompt/worldbook-context.js';
 import { createQQV2RequestService } from '../request/service.js';
 import { createSillyTavernQQV2Backend } from '../request/backend-proxy.js';
 import { createQQImageLibraryPackService } from '../resources/image-library-pack.js';
@@ -24,10 +22,11 @@ import { createQQV2WorldbookProjectionService } from '../worldbook/projection-se
 import { formatQQV2MessageSemantic } from '../domain/message-semantics.js';
 import { createHostChatDeletedFact, resolveDeletedQQV2Scope } from '../host/lifecycle.js';
 import { observeFinalPromptForViewer } from '../../integration/final-prompt-viewer-bridge.js';
+import { createWorldbookContextResolver } from '../../worldbook-reading/context-resolver.js';
+import { sillyTavernWorldbookReadingCatalog } from '../../worldbook-reading/st-catalog-adapter.js';
+import { sillyTavernWorldbookReadingRuntimes } from '../../worldbook-reading/st-runtime-adapter.js';
 
 const SELF_ID = '__self__';
-const PRIVATE_REPLY_WORLDBOOK_HISTORY_LIMIT = 10;
-const PRIVATE_PROACTIVE_WORLDBOOK_HISTORY_LIMIT = 3;
 const BUILT_IN_PROMPT_PRESET_BY_SETTING = Object.freeze({
     privateReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateReply,
     privateProactivePresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateProactive,
@@ -98,6 +97,12 @@ function privateOnlyError() {
 function conversationDeletingError() {
     const error = new Error('QQ conversation is being deleted');
     error.code = 'conversation_deleting';
+    return error;
+}
+
+function imageGenerationError(message, code = 'image_generation_failed') {
+    const error = new Error(message);
+    error.code = code;
     return error;
 }
 
@@ -179,24 +184,23 @@ function formatPromptHistoryMessage(message, reference, people) {
     })}`;
 }
 
-function candidatePersonName(candidate, personId) {
-    if (personId === SELF_ID) return '用户';
-    if (candidate?.peopleById instanceof Map) return candidate.peopleById.get(personId);
-    return candidate?.peopleById?.[personId]
-        || (candidate?.personId === personId ? candidate.title : '');
+function formatWorldbookHistory(messages, peopleById) {
+    const resolvePersonName = (personId) => {
+        const person = peopleById instanceof Map
+            ? peopleById.get(personId)
+            : asObject(peopleById)[personId];
+        return typeof person === 'string' ? person : person?.formalName;
+    };
+    return asArray(messages).map((message) => ({
+        ...message,
+        content: formatQQV2MessageSemantic(message, { resolvePersonName }),
+    }));
 }
 
 function truncateConversationHistory(messages, limit) {
     const normalizedLimit = Number(limit);
     if (!Number.isInteger(normalizedLimit) || normalizedLimit <= 0) return [...messages];
     return messages.slice(-normalizedLimit);
-}
-
-function latestVisibleMessages(messages, limit) {
-    return truncateConversationHistory(
-        asArray(messages).filter((message) => message && message.deleted !== true && message.isDeleted !== true),
-        limit,
-    );
 }
 
 function currentContext(host, scope) {
@@ -240,11 +244,6 @@ function isEligibleStoryReply(message) {
 
 function countEligibleStoryAiFloors(messages) {
     return asArray(messages).filter(isEligibleStoryReply).length;
-}
-
-function waitForStoryMessages(delayMs) {
-    if (delayMs <= 0) return Promise.resolve();
-    return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 async function resolveConversationFacts(repository, scopeId, conversation) {
@@ -356,11 +355,17 @@ export function createQQV2ProductionRuntime(options = {}) {
         getContext: () => host.readRawContext?.(),
         captureScopeSession,
     });
-    const worldbookContextGateway = options.worldbookContextGateway
-        || createQQV2SillyTavernWorldbookContextGateway({
-            getContext: () => host.readRawContext?.(),
-            captureScopeSession,
+    const worldbookContextResolver = options.worldbookContextResolver
+        || createWorldbookContextResolver({
+            catalog: options.worldbookReadingCatalog || sillyTavernWorldbookReadingCatalog,
+            templateRuntime: options.templateRuntime
+                ?? sillyTavernWorldbookReadingRuntimes.templateRuntime,
+            mvuRuntime: options.mvuRuntime
+                ?? sillyTavernWorldbookReadingRuntimes.mvuRuntime,
+            shujukuRuntime: options.shujukuRuntime
+                ?? sillyTavernWorldbookReadingRuntimes.shujukuRuntime,
         });
+    const resolveWorldbookContent = (request) => worldbookContextResolver.resolve(request);
     const resolveWorldbookSettings = async (scopeId, { scopeSession = null } = {}) => {
         assertOptionalCurrentScopeSession(scopeSession);
         const [local, shared] = await Promise.all([
@@ -404,13 +409,8 @@ export function createQQV2ProductionRuntime(options = {}) {
         worldbookSettings,
     });
     const actionService = options.actionService || createQQV2ActionService({ repository });
-    const activationSnapshots = new Map();
-    const proactiveAiFloorByScope = new Map();
     const proactiveStoryTasks = new Map();
-    const configuredProactiveStorySettleDelayMs = Number(options.proactiveStorySettleDelayMs);
-    const proactiveStorySettleDelayMs = Number.isInteger(configuredProactiveStorySettleDelayMs)
-        && configuredProactiveStorySettleDelayMs >= 0
-        ? configuredProactiveStorySettleDelayMs : 2000;
+    const proactiveRetryTasks = new Map();
     const objectUrlApi = resolveObjectUrlApi(options.objectUrlApi);
     const mediaRenderLeases = new Map();
     const stickerRenderLeases = new Map();
@@ -501,9 +501,27 @@ export function createQQV2ProductionRuntime(options = {}) {
     const requireWorldbookMutationResult = (result) => {
         if (result?.reason === 'scope-inactive') throw scopeInactiveError();
         if (result?.status !== 'pending') return result;
-        const error = new Error('QQ 世界书同步失败，请稍后重试');
-        error.code = 'worldbook_sync_pending';
+        const error = new Error(asText(result?.message, 1000) || 'QQ 世界书同步失败，请稍后重试');
+        error.code = asText(result?.code, 128) || 'worldbook_sync_pending';
         throw error;
+    };
+
+    const reportWorldbookProjectionPending = (result, { scopeId, conversationId }) => {
+        if (result?.status !== 'pending') return;
+        try {
+            options.logger?.warn?.({
+                action: 'worldbook.projection.pending',
+                message: asText(result?.message, 1000) || 'QQ 世界书同步失败，请稍后重试',
+                errorCode: asText(result?.code, 128) || 'worldbook_sync_pending',
+                context: {
+                    scopeId: asText(scopeId, 512),
+                    conversationId: asText(conversationId, 256),
+                    reason: asText(result?.reason, 128),
+                },
+            });
+        } catch {
+            // Projection diagnostics cannot undo an already committed QQ mutation.
+        }
     };
 
     const conversationKey = (scopeId, conversationId) => `${asText(scopeId, 512)}\u0000${asText(conversationId, 256)}`;
@@ -684,7 +702,6 @@ export function createQQV2ProductionRuntime(options = {}) {
         assertOptionalCurrentScopeSession(scopeSession);
         if (result.proactiveChanged) {
             proactiveService?.cancelScope?.({ scopeId });
-            resetProactiveAiFloor(scopeId);
         }
         assertOptionalCurrentScopeSession(scopeSession);
         return result.settings;
@@ -718,6 +735,34 @@ export function createQQV2ProductionRuntime(options = {}) {
 
     const getStoryTime = () => asText(safeRead(() => host.readStoryTime(), ''), 128);
     const getUserName = () => asText(safeRead(() => host.readUserIdentity()?.name, ''), 256);
+    const composeCharacterImagePrompt = typeof options.composeCharacterImagePrompt === 'function'
+        ? options.composeCharacterImagePrompt
+        : typeof options.promptComposer?.composeCharacterImagePrompt === 'function'
+            ? options.promptComposer.composeCharacterImagePrompt.bind(options.promptComposer)
+            : null;
+    const imageGenerationService = options.imageGenerationService;
+    const now = typeof options.now === 'function' ? options.now : Date.now;
+    const getPersonaName = async (input) => {
+        if (typeof options.getPersonaName !== 'function') return getUserName();
+        return asText(await options.getPersonaName(input), 256) || getUserName();
+    };
+    const deleteStoredImage = async (path) => {
+        const normalizedPath = asText(path, 2048);
+        if (!normalizedPath || typeof imageGenerationService?.deleteStoredImage !== 'function') return;
+        try {
+            await imageGenerationService.deleteStoredImage({ path: normalizedPath });
+        } catch (error) {
+            options.logger?.warn?.('[QQ v2] 清理生成图片失败', {
+                path: normalizedPath,
+                error,
+            });
+        }
+    };
+    const deleteStoredImages = async (paths) => {
+        for (const path of [...new Set(asArray(paths).map((item) => asText(item, 2048)).filter(Boolean))]) {
+            await deleteStoredImage(path);
+        }
+    };
     const listStickers = () => resources.listStickers();
 
     const resolvePromptContext = async ({ scopeId, scopeSession, conversation, history, scope, runtimeSettings = null }) => {
@@ -726,22 +771,17 @@ export function createQQV2ProductionRuntime(options = {}) {
         const visibleHistory = truncateConversationHistory(history, settings.conversationHistoryLimit);
         const { personReferences, referenceByPersonId } = createPersonReferences(facts.people);
         const { messageReferences, visibleMessageRefs } = createMessageReferences(visibleHistory);
-        const worldbookContext = await resolveQQV2WorldbookContext({
-            activationSnapshot: activationSnapshots.get(scopeId),
-            people: facts.people.map((person) => person.formalName),
-            visibleHistory: latestVisibleMessages(
-                history,
-                PRIVATE_REPLY_WORLDBOOK_HISTORY_LIMIT,
-            ).map((message) => formatQQV2MessageSemantic(message, {
-                resolvePersonName: (personId) => facts.peopleById.get(personId)?.formalName,
-            })),
-            runDryRun: (dryRunInput) => worldbookContextGateway.runDryRun({
-                ...dryRunInput,
-                scopeId,
-                scopeSession,
-            }),
-        });
         const storyMessages = safeRead(() => host.readStoryMessages(), []);
+        const people = facts.people.map((person) => person.formalName);
+        const worldbookContent = await resolveWorldbookContent({
+            scopeId,
+            scopeSession,
+            hostMessages: storyMessages,
+            people,
+            conversations: [{
+                messages: formatWorldbookHistory(history, facts.peopleById),
+            }],
+        });
         const stickers = await listStickers();
         const stickerCatalog = buildQQV2StickerCatalog(stickers);
         const variables = {
@@ -759,7 +799,7 @@ export function createQQV2ProductionRuntime(options = {}) {
                 )).join('\n') || '无'
                 : '无',
             storyContext: buildQQV2StoryContext(storyMessages, settings.hostContextTurns),
-            worldbookContent: worldbookContext.text,
+            worldbookContent,
             storyTime: getStoryTime(),
             availableStickers: stickerCatalog.text,
         };
@@ -790,20 +830,25 @@ export function createQQV2ProductionRuntime(options = {}) {
             const conversations = await Promise.all(uniqueIds.map((conversationId) => repository.getConversation(scopeId, conversationId)));
             const results = [];
             for (const conversation of conversations) {
-                if (conversation?.kind !== 'private') continue;
-                results.push(await projectionService.syncConversation({
+                if (!['private', 'group'].includes(conversation?.kind)) continue;
+                const result = await projectionService.syncConversation({
                     scopeId,
                     scopeSession: currentSession,
                     conversationId: conversation.conversationId,
                     storyTime,
                     userName,
-                }));
+                });
+                results.push(result);
+                reportWorldbookProjectionPending(result, {
+                    scopeId,
+                    conversationId: conversation.conversationId,
+                });
             }
             return results;
         }, { scopeSession });
     };
 
-    const retryPendingPrivateConversations = async ({
+    const retryPendingConversations = async ({
         scopeId,
         scopeSession,
         storyTime = getStoryTime(),
@@ -811,7 +856,10 @@ export function createQQV2ProductionRuntime(options = {}) {
     }) => {
         const conversations = await repository.listConversations(scopeId);
         const conversationIds = conversations
-            .filter((conversation) => conversation.kind === 'private' && conversation.injection?.projection?.pending)
+            .filter((conversation) => (
+                ['private', 'group'].includes(conversation.kind)
+                && conversation.injection?.projection?.pending
+            ))
             .map((conversation) => conversation.conversationId);
         await syncConversations({ scopeId, scopeSession, conversationIds, storyTime, userName });
         return conversationIds;
@@ -848,6 +896,15 @@ export function createQQV2ProductionRuntime(options = {}) {
         repository,
         backend,
         captureScopeSession,
+        onProactiveError(error, context) {
+            options.logger?.warn?.({
+                action: 'proactive.request.failed',
+                message: 'QQ 主动回复请求执行失败',
+                errorCode: asText(error?.code, 128) || 'request_failed',
+                error,
+                context,
+            });
+        },
         runtimeSettingsResolver: resolveRuntimeSettings,
         apiPresetResolver: (presetId) => resources.getApiPresetForRequest(presetId),
         promptPresetResolver: (presetId) => resources.getPromptPreset(presetId),
@@ -912,28 +969,27 @@ export function createQQV2ProductionRuntime(options = {}) {
                 candidate.title,
                 ...asArray(candidate.members).map((member) => String(member).replace(/^N\d+：/, '')),
             ]).filter(Boolean))];
-            const visibleHistory = candidates.flatMap((candidate) => latestVisibleMessages(
-                candidate.messages,
-                PRIVATE_PROACTIVE_WORLDBOOK_HISTORY_LIMIT,
-            ).map((message) => formatQQV2MessageSemantic(message, {
-                resolvePersonName: (personId) => candidatePersonName(candidate, personId),
-            })));
-            const worldbookContext = await resolveQQV2WorldbookContext({
-                activationSnapshot: activationSnapshots.get(scopeId),
+            const worldbookConversations = await Promise.all(candidates.map(async (candidate) => {
+                const messages = await repository.listMessages(scopeId, candidate.conversationId);
+                return {
+                    ...candidate,
+                    messages: formatWorldbookHistory(messages, candidate.peopleById),
+                };
+            }));
+            const storyMessages = safeRead(() => host.readStoryMessages(), []);
+            const worldbookContent = await resolveWorldbookContent({
+                scopeId,
+                scopeSession,
+                hostMessages: storyMessages,
                 people,
-                visibleHistory,
-                runDryRun: (dryRunInput) => worldbookContextGateway.runDryRun({
-                    ...dryRunInput,
-                    scopeId,
-                    scopeSession,
-                }),
+                conversations: worldbookConversations,
             });
             return {
                 storyContext: buildQQV2StoryContext(
-                    safeRead(() => host.readStoryMessages(), []),
+                    storyMessages,
                     runtimeSettings.hostContextTurns,
                 ),
-                worldbookContent: worldbookContext.text,
+                worldbookContent,
                 storyTime,
             };
         },
@@ -944,55 +1000,9 @@ export function createQQV2ProductionRuntime(options = {}) {
     });
 
 
-    const countCurrentStoryAiFloors = () => countEligibleStoryAiFloors(
-        safeRead(() => host.readStoryMessages(), []),
-    );
-
-    const resetProactiveAiFloor = (scopeId) => {
-        const normalizedScopeId = asText(scopeId, 512);
-        if (!normalizedScopeId) return;
-        if (normalizedScopeId !== currentScopeId()) {
-            proactiveAiFloorByScope.delete(normalizedScopeId);
-            return;
-        }
-        proactiveAiFloorByScope.set(normalizedScopeId, countCurrentStoryAiFloors());
-    };
-
-    const scheduleProactiveAiFloorCheck = (facts) => {
-        const scopeId = asText(facts?.scope?.scopeId, 512);
-        const scopeSession = facts?.scopeSession;
-        if (!scopeId || scopeSession?.isReady?.() !== true) return Promise.resolve();
+    const runProactiveStoryTask = (scopeId, operation) => {
         const previousTask = proactiveStoryTasks.get(scopeId) || Promise.resolve();
-        const task = previousTask.catch(() => {}).then(async () => {
-            if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
-            const previousAiFloor = proactiveAiFloorByScope.get(scopeId);
-            const currentAiFloor = countCurrentStoryAiFloors();
-            if (!Number.isInteger(previousAiFloor) || currentAiFloor <= previousAiFloor) {
-                proactiveAiFloorByScope.set(scopeId, currentAiFloor);
-                return;
-            }
-            await waitForStoryMessages(proactiveStorySettleDelayMs);
-            if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
-            const lastObservedAiFloor = proactiveAiFloorByScope.get(scopeId);
-            const settledAiFloor = countCurrentStoryAiFloors();
-            if (!Number.isInteger(lastObservedAiFloor) || settledAiFloor <= lastObservedAiFloor) {
-                proactiveAiFloorByScope.set(scopeId, settledAiFloor);
-                return;
-            }
-            const settings = await proactiveService.getState(scopeId, { scopeSession });
-            if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
-            const everyTurns = Number(settings?.everyTurns);
-            if (settings?.enabled !== true || !Number.isInteger(everyTurns) || everyTurns <= 0) {
-                proactiveAiFloorByScope.set(scopeId, settledAiFloor);
-                return;
-            }
-            if (Math.floor(settledAiFloor / everyTurns) === Math.floor(lastObservedAiFloor / everyTurns)) {
-                proactiveAiFloorByScope.set(scopeId, settledAiFloor);
-                return;
-            }
-            await proactiveService.enqueueProactiveCycle({ scopeId, scopeSession });
-            proactiveAiFloorByScope.set(scopeId, settledAiFloor);
-        });
+        const task = previousTask.catch(() => {}).then(operation);
         proactiveStoryTasks.set(scopeId, task);
         const clearTask = () => {
             if (proactiveStoryTasks.get(scopeId) === task) proactiveStoryTasks.delete(scopeId);
@@ -1000,10 +1010,138 @@ export function createQQV2ProductionRuntime(options = {}) {
         task.then(clearTask, clearTask);
         return task;
     };
+
+    const schedulePendingProactiveRetry = (scopeId) => {
+        if (proactiveRetryTasks.has(scopeId) || typeof requestService.waitForIdle !== 'function') return;
+        const retryToken = {};
+        const retryTask = Promise.resolve().then(async () => {
+            await requestService.waitForIdle();
+            if (proactiveRetryTasks.get(scopeId)?.token !== retryToken) return;
+            proactiveRetryTasks.delete(scopeId);
+            const scopeSession = captureScopeSession(scopeId);
+            if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
+            await runProactiveStoryTask(scopeId, () => enqueuePersistedDueProactive(
+                scopeId,
+                scopeSession,
+                { retryWhenBusy: false },
+            ));
+        }).catch((error) => {
+            if (proactiveRetryTasks.get(scopeId)?.token === retryToken) {
+                proactiveRetryTasks.delete(scopeId);
+            }
+            options.logger?.warn?.({
+                action: 'proactive.retry.failed',
+                message: 'QQ 主动回复等待请求队列空闲后补跑失败',
+                error,
+                context: { scopeId },
+            });
+        });
+        proactiveRetryTasks.set(scopeId, { token: retryToken, task: retryTask });
+    };
+
+    async function enqueuePersistedDueProactive(scopeId, scopeSession, { retryWhenBusy = true } = {}) {
+        if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
+        const [progress, settings] = await Promise.all([
+            repository.getProactiveProgress(scopeId),
+            proactiveService.getState(scopeId, { scopeSession }),
+        ]);
+        if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
+        const everyTurns = Number(settings?.everyTurns);
+        const counter = Number.isInteger(Number(progress?.counter))
+            ? Math.max(0, Number(progress.counter))
+            : 0;
+        if (settings?.enabled !== true
+            || !Number.isInteger(everyTurns)
+            || everyTurns <= 0
+            || counter < everyTurns) {
+            return;
+        }
+
+        const enqueueResult = await proactiveService.enqueueProactiveCycle({ scopeId, scopeSession });
+        if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
+        options.logger?.debug?.({
+            action: 'proactive.enqueue.result',
+            message: enqueueResult?.queued === true ? 'QQ 主动回复已进入请求队列' : 'QQ 主动回复暂未进入请求队列',
+            context: {
+                scopeId,
+                counter,
+                everyTurns,
+                queued: enqueueResult?.queued === true,
+                skipped: asText(enqueueResult?.skipped, 80),
+            },
+        });
+        if (enqueueResult?.queued !== true) {
+            if (retryWhenBusy
+                && ['manual-pending', 'proactive-pending'].includes(asText(enqueueResult?.skipped, 80))) {
+                schedulePendingProactiveRetry(scopeId);
+            }
+            return;
+        }
+
+        const remainingCounter = Math.max(0, counter - everyTurns);
+        await repository.updateProactiveProgress(scopeId, {
+            counter: remainingCounter,
+        }, { scopeSession });
+        if (remainingCounter >= everyTurns) schedulePendingProactiveRetry(scopeId);
+    }
+
+    const scheduleProactiveStoryReply = (facts) => {
+        const scopeId = asText(facts?.scope?.scopeId, 512);
+        const scopeSession = facts?.scopeSession;
+        if (!scopeId || scopeSession?.isReady?.() !== true) return Promise.resolve();
+        const storyMessages = asArray(facts?.storyMessages);
+        const messageId = asText(facts?.messageId, 180);
+        const receivedMessage = storyMessages.find((message) => (
+            asText(message?.messageId, 180) === messageId
+        ));
+        if (!isEligibleStoryReply(receivedMessage)) return Promise.resolve();
+        const storyMessageKey = [
+            messageId,
+            storyMessages.length,
+            countEligibleStoryAiFloors(storyMessages),
+        ].join(':');
+        return runProactiveStoryTask(scopeId, async () => {
+            if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
+            const progress = await repository.getProactiveProgress(scopeId);
+            if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
+            if (asText(progress?.lastStoryMessageKey, 512) === storyMessageKey) return;
+            const settings = await proactiveService.getState(scopeId, { scopeSession });
+            if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
+            const everyTurns = Number(settings?.everyTurns);
+            if (settings?.enabled !== true || !Number.isInteger(everyTurns) || everyTurns <= 0) {
+                await repository.updateProactiveProgress(scopeId, {
+                    lastStoryMessageKey: storyMessageKey,
+                }, { scopeSession });
+                return;
+            }
+            const currentCounter = Number.isInteger(Number(progress?.counter))
+                ? Math.max(0, Number(progress.counter))
+                : 0;
+            const nextCounter = currentCounter + 1;
+            await repository.updateProactiveProgress(scopeId, {
+                counter: nextCounter,
+                lastStoryMessageKey: storyMessageKey,
+            }, { scopeSession });
+            options.logger?.debug?.({
+                action: 'proactive.counter.advanced',
+                message: 'QQ 主动回复轮次已推进',
+                context: {
+                    scopeId,
+                    messageId,
+                    counter: nextCounter,
+                    everyTurns,
+                    due: nextCounter >= everyTurns,
+                },
+            });
+            if (!scopeSessionIsCurrent(scopeSession) || scopeSession?.isReady?.() !== true) return;
+            if (nextCounter >= everyTurns) {
+                await enqueuePersistedDueProactive(scopeId, scopeSession);
+            }
+        });
+    };
     const clearScopeRuntimeState = (scopeId) => {
-        activationSnapshots.delete(scopeId);
-        proactiveAiFloorByScope.delete(scopeId);
         proactiveStoryTasks.delete(scopeId);
+        proactiveRetryTasks.delete(scopeId);
         openedConversationByScope.delete(scopeId);
         revokeMediaRenderLeasesForScope(scopeId);
     };
@@ -1011,8 +1149,9 @@ export function createQQV2ProductionRuntime(options = {}) {
     const finalizeHostScopeDeletion = async (scopeId) => {
         const projection = await runWorldbookMutation(() => removeInactiveScopeProjections(scopeId));
         if (projection?.status !== 'removed') return { status: 'pending', scopeId };
-        await repository.deleteScope(scopeId);
+        const deletion = await repository.deleteScope(scopeId);
         clearScopeRuntimeState(scopeId);
+        await deleteStoredImages(deletion?.releasedGeneratedImagePaths);
         return { status: 'deleted', scopeId };
     };
 
@@ -1060,17 +1199,14 @@ export function createQQV2ProductionRuntime(options = {}) {
         },
         async onScopeReady(scopeSession) {
             if (!scopeSession?.isReady?.()) return;
-            resetProactiveAiFloor(scopeSession.scopeId);
             await notifySubscribers(scopeSession.scopeId);
+            await runProactiveStoryTask(scopeSession.scopeId, () => enqueuePersistedDueProactive(
+                scopeSession.scopeId,
+                scopeSession,
+            ));
         },
-        async onCharacterMessageRendered(facts) {
-            await scheduleProactiveAiFloorCheck(facts);
-        },
-        async onWorldInfoActivated(facts) {
-            const scopeId = asText(facts.scope?.scopeId, 512);
-            if (scopeId && facts.scopeSession?.isReady?.()) {
-                activationSnapshots.set(scopeId, asArray(facts.entries).map((entry) => ({ ...entry })));
-            }
+        async onMessageReceived(facts) {
+            await scheduleProactiveStoryReply(facts);
         },
         onUnavailable({ previous } = {}) {
             const scopeId = asText(previous?.scopeId, 512);
@@ -1086,9 +1222,8 @@ export function createQQV2ProductionRuntime(options = {}) {
                 requestService.cancelScope?.({ scopeId, reason: 'destroyed' });
                 proactiveService.cancelScope?.({ scopeId });
             }
-            activationSnapshots.clear();
-            proactiveAiFloorByScope.clear();
             proactiveStoryTasks.clear();
+            proactiveRetryTasks.clear();
             openedConversationByScope.clear();
             inactiveProjectionScopeIds.clear();
             revokeAllMediaRenderLeases();
@@ -1177,14 +1312,13 @@ export function createQQV2ProductionRuntime(options = {}) {
         handleChatDeleted: (chatFile) => runHostMutation(() => deleteHostScope('character', chatFile)),
         handleGroupChatDeleted: (chatId) => runHostMutation(() => deleteHostScope('group', chatId)),
         handleCharacterMessageRendered: (...args) => lifecycle.handleCharacterMessageRendered(...args),
-        handleWorldInfoActivated: (...args) => lifecycle.handleWorldInfoActivated(...args),
+        handleMessageReceived: (...args) => lifecycle.handleMessageReceived(...args),
         subscribe(listener) {
             if (typeof listener !== 'function') return () => {};
             subscribers.add(listener);
             return () => subscribers.delete(listener);
         },
         getStatus: () => lifecycle.getStatus(),
-        getWorldInfoLifecycle: () => lifecycle.getWorldInfoLifecycle(),
         async getSnapshot() {
             const status = lifecycle.getStatus();
             if (status.phase === 'destroyed') {
@@ -1710,9 +1844,12 @@ export function createQQV2ProductionRuntime(options = {}) {
             const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
             const before = await repository.listConversations(normalizedScopeId);
             const pendingIds = before
-                .filter((conversation) => conversation.kind === 'private' && conversation.injection?.projection?.pending)
+                .filter((conversation) => (
+                    ['private', 'group'].includes(conversation.kind)
+                    && conversation.injection?.projection?.pending
+                ))
                 .map((conversation) => conversation.conversationId);
-            await retryPendingPrivateConversations({
+            await retryPendingConversations({
                 scopeId: normalizedScopeId,
                 scopeSession,
                 userName: asText(userName, 256),
@@ -1759,6 +1896,89 @@ export function createQQV2ProductionRuntime(options = {}) {
             await notifySubscribers(scopeId);
             return result;
         },
+        async generateMessageImage({ scopeId, conversationId, messageId }) {
+            if (!composeCharacterImagePrompt) {
+                throw imageGenerationError('QQ 人物提示词服务不可用', 'image_prompt_composer_unavailable');
+            }
+            if (typeof imageGenerationService?.generateAndStore !== 'function') {
+                throw imageGenerationError('智慧姬生图服务不可用', 'image_generation_unavailable');
+            }
+            const scopeSession = captureReadyScopeSession(scopeId);
+            const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
+            const normalizedConversationId = asText(conversationId, 256);
+            const normalizedMessageId = asText(messageId, 256);
+            assertConversationWritable(normalizedScopeId, normalizedConversationId);
+            const conversation = await getPrivateConversation(normalizedScopeId, normalizedConversationId);
+            if (!conversation) throw imageGenerationError('QQ 会话不存在', 'conversation_not_found');
+            const messages = await repository.listMessages(normalizedScopeId, normalizedConversationId);
+            const message = messages.find((item) => item.messageId === normalizedMessageId);
+            if (!message) throw imageGenerationError('QQ 消息不存在', 'message_not_found');
+            if (message.type !== 'image') {
+                throw imageGenerationError('只有图片消息可以生成图片', 'message_type_invalid');
+            }
+            const senderName = message.senderId === SELF_ID
+                ? await getPersonaName({
+                    scopeId: normalizedScopeId,
+                    conversationId: normalizedConversationId,
+                    messageId: normalizedMessageId,
+                })
+                : asText((await repository.getPerson(normalizedScopeId, message.senderId))?.formalName, 256);
+            if (!senderName) throw imageGenerationError('无法确定图片消息发送者', 'image_sender_not_found');
+            assertReadyScopeSession(scopeSession);
+            const promptResult = await composeCharacterImagePrompt({
+                explicitNames: [senderName],
+                description: String(message.content ?? ''),
+                scanDescription: true,
+            });
+            const prompt = asText(
+                typeof promptResult === 'string' ? promptResult : promptResult?.prompt,
+            );
+            if (!prompt) throw imageGenerationError('最终生图提示词为空', 'image_prompt_empty');
+            assertReadyScopeSession(scopeSession);
+
+            let generatedPath = '';
+            let committed = false;
+            try {
+                const generated = asObject(await imageGenerationService.generateAndStore({
+                    prompt,
+                    width: null,
+                    height: null,
+                    folder: 'yuzi-phone-generated',
+                    filename: `qq-${normalizedMessageId}-${Math.trunc(Number(now()) || Date.now())}`,
+                }));
+                generatedPath = asText(generated.path, 2048);
+                if (generated.ok === false || !generatedPath) {
+                    throw imageGenerationError(
+                        asText(generated.error?.message || generated.message, 1000) || '图片生成失败',
+                        asText(generated.error?.code || generated.status, 128) || 'image_generation_failed',
+                    );
+                }
+                assertReadyScopeSession(scopeSession);
+                const generatedAtValue = Number(generated.generatedAt);
+                const result = await repository.replaceGeneratedMessageImage(
+                    normalizedScopeId,
+                    normalizedConversationId,
+                    normalizedMessageId,
+                    {
+                        path: generatedPath,
+                        generatedAt: Number.isFinite(generatedAtValue) && generatedAtValue > 0
+                            ? Math.trunc(generatedAtValue)
+                            : Math.trunc(Number(now()) || Date.now()),
+                    },
+                    { scopeSession },
+                );
+                committed = true;
+                await notifySubscribers(normalizedScopeId, {
+                    reason: 'message-image-generated',
+                    conversationId: normalizedConversationId,
+                });
+                await deleteStoredImages(result.releasedGeneratedImagePaths);
+                return result;
+            } catch (error) {
+                if (generatedPath && !committed) await deleteStoredImage(generatedPath);
+                throw error;
+            }
+        },
         async retryManual({ scopeId, conversationId }) {
             assertConversationWritable(scopeId, conversationId);
             const result = await requestService.retry({ scopeId, conversationId });
@@ -1800,6 +2020,7 @@ export function createQQV2ProductionRuntime(options = {}) {
                 { scopeSession },
             );
             await revokeMissingMediaRenderLeases(normalizedScopeId);
+            await deleteStoredImages(result.releasedGeneratedImagePaths);
             await requestService.reconcileConversation?.({ scopeId: normalizedScopeId, conversationId });
             await syncConversations({
                 scopeId: normalizedScopeId,
@@ -1868,6 +2089,7 @@ export function createQQV2ProductionRuntime(options = {}) {
                 }
                 assertReadyScopeSession(scopeSession);
                 await revokeMissingMediaRenderLeases(normalizedScopeId).catch(() => {});
+                await deleteStoredImages(deleted?.releasedGeneratedImagePaths);
                 assertReadyScopeSession(scopeSession);
                 try {
                     requestService.handleConversationDeleted?.({ scopeId: normalizedScopeId, conversationId });

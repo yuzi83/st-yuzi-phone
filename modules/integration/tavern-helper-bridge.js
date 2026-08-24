@@ -3,7 +3,11 @@ import { getSillyTavernContext } from './context-bridge.js';
 
 let tavernHelper = null;
 
-function initTavernHelper() {
+function warnUnlessSilent(options, ...args) {
+    if (options?.silent !== true) Logger.warn(...args);
+}
+
+function initTavernHelper(options = {}) {
     try {
         if (typeof window !== 'undefined' && window.TavernHelper) {
             tavernHelper = window.TavernHelper;
@@ -16,23 +20,23 @@ function initTavernHelper() {
             return true;
         }
 
-        Logger.warn('[玉子手机] TavernHelper API 不可用，部分功能将降级');
+        warnUnlessSilent(options, '[玉子手机] TavernHelper API 不可用，部分功能将降级');
         return false;
     } catch (error) {
-        Logger.warn('[玉子手机] 初始化 TavernHelper API 失败:', error);
+        warnUnlessSilent(options, '[玉子手机] 初始化 TavernHelper API 失败:', error);
         return false;
     }
 }
 
-export function getTavernHelper() {
+export function getTavernHelper(options = {}) {
     if (!tavernHelper) {
-        initTavernHelper();
+        initTavernHelper(options);
     }
     return tavernHelper;
 }
 
-function resolveHelperOrGlobalMethod(methodName) {
-    const helper = getTavernHelper();
+function resolveHelperOrGlobalMethod(methodName, options = {}) {
+    const helper = getTavernHelper(options);
     if (helper && typeof helper[methodName] === 'function') {
         return helper[methodName].bind(helper);
     }
@@ -139,9 +143,9 @@ export function getCharacterData(name = 'current', allowAvatar = false) {
 
 export async function getWorldbookNames(options = {}) {
     const strict = options.strict === true;
-    const method = resolveHelperOrGlobalMethod('getWorldbookNames');
+    const method = resolveHelperOrGlobalMethod('getWorldbookNames', options);
     if (!method) {
-        Logger.warn('[玉子手机] getWorldbookNames API 不可用');
+        warnUnlessSilent(options, '[玉子手机] getWorldbookNames API 不可用');
         if (strict) throw new Error('getWorldbookNames API unavailable');
         return [];
     }
@@ -150,7 +154,7 @@ export async function getWorldbookNames(options = {}) {
         const result = await Promise.resolve(method());
         return Array.isArray(result) ? result : [];
     } catch (error) {
-        Logger.warn('[玉子手机] 获取世界书列表失败:', error);
+        warnUnlessSilent(options, '[玉子手机] 获取世界书列表失败:', error);
         if (strict) throw error;
         return [];
     }
@@ -158,9 +162,9 @@ export async function getWorldbookNames(options = {}) {
 
 export async function getCurrentCharacterWorldbooks(options = {}) {
     const strict = options.strict === true;
-    const method = resolveHelperOrGlobalMethod('getCharWorldbookNames');
+    const method = resolveHelperOrGlobalMethod('getCharWorldbookNames', options);
     if (!method) {
-        Logger.warn('[玉子手机] getCharWorldbookNames API 不可用');
+        warnUnlessSilent(options, '[玉子手机] getCharWorldbookNames API 不可用');
         if (strict) throw new Error('getCharWorldbookNames API unavailable');
         return { primary: null, additional: [] };
     }
@@ -174,7 +178,7 @@ export async function getCurrentCharacterWorldbooks(options = {}) {
                 : [],
         };
     } catch (error) {
-        Logger.warn('[玉子手机] 获取角色绑定世界书失败:', error);
+        warnUnlessSilent(options, '[玉子手机] 获取角色绑定世界书失败:', error);
         if (strict) throw error;
         return { primary: null, additional: [] };
     }
@@ -187,9 +191,9 @@ export async function getWorldbook(worldbookName, options = {}) {
         return [];
     }
 
-    const method = resolveHelperOrGlobalMethod('getWorldbook');
+    const method = resolveHelperOrGlobalMethod('getWorldbook', options);
     if (!method) {
-        Logger.warn('[玉子手机] getWorldbook API 不可用');
+        warnUnlessSilent(options, '[玉子手机] getWorldbook API 不可用');
         if (strict) throw new Error('getWorldbook API unavailable');
         return [];
     }
@@ -198,7 +202,7 @@ export async function getWorldbook(worldbookName, options = {}) {
         const result = await Promise.resolve(method(safeWorldbookName));
         return Array.isArray(result) ? result : [];
     } catch (error) {
-        Logger.warn('[玉子手机] 获取世界书条目失败:', error);
+        warnUnlessSilent(options, '[玉子手机] 获取世界书条目失败:', error);
         if (strict) throw error;
         return [];
     }

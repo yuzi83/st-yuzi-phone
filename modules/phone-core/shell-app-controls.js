@@ -60,14 +60,29 @@ function getBottomBarBackground(bottomBar) {
     return backgroundColor === 'transparent' ? '' : backgroundColor;
 }
 
+function isComposerStyleMutation(mutation) {
+    if (mutation?.type !== 'attributes' || mutation.attributeName !== 'style') {
+        return false;
+    }
+
+    const target = mutation.target;
+    return String(target?.tagName || '').toLowerCase() === 'textarea'
+        || target?.classList?.contains?.('yuzi-qq-composer-input');
+}
+
+function shouldRefreshForMutations(mutations) {
+    const records = Array.from(mutations || []);
+    return records.length === 0 || records.some((mutation) => !isComposerStyleMutation(mutation));
+}
+
 export function bindPhoneShellAppControls(root, {
     getCurrentRoute = () => 'home',
     navigateTo = () => {},
 } = {}) {
-    const indicator = root?.querySelector?.('[data-phone-home-indicator]') || null;
-    const shell = root?.querySelector?.('.phone-shell') || null;
-    const screen = root?.querySelector?.('.phone-screen') || null;
-    const temporaryLayerHost = root?.querySelector?.('[data-phone-temporary-layer-host]') || null;
+    const indicator = root?.querySelector?.('[data-yuzi-phone-home-indicator]') || null;
+    const shell = root?.querySelector?.('.yuzi-phone-shell') || null;
+    const screen = root?.querySelector?.('.yuzi-phone-screen') || null;
+    const temporaryLayerHost = root?.querySelector?.('[data-yuzi-phone-temporary-layer-host]') || null;
     const unregisterTemporaryLayerHost = registerPhoneTemporaryLayerHost(temporaryLayerHost);
 
     const refresh = () => {
@@ -78,7 +93,7 @@ export function bindPhoneShellAppControls(root, {
         indicator.hidden = hidden;
         indicator.setAttribute?.('aria-hidden', String(hidden));
         indicator.tabIndex = hidden ? -1 : 0;
-        shell?.setAttribute?.('data-phone-home-indicator-layout', layout);
+        shell?.setAttribute?.('data-yuzi-phone-home-indicator-layout', layout);
 
         const background = bottomBar ? getBottomBarBackground(bottomBar) : '';
         if (background) {
@@ -98,7 +113,9 @@ export function bindPhoneShellAppControls(root, {
     const view = root?.ownerDocument?.defaultView || globalThis.window;
     const MutationObserverClass = view?.MutationObserver || globalThis.MutationObserver;
     const observer = screen && typeof MutationObserverClass === 'function'
-        ? new MutationObserverClass(refresh)
+        ? new MutationObserverClass((mutations) => {
+            if (shouldRefreshForMutations(mutations)) refresh();
+        })
         : null;
     observer?.observe?.(screen, {
         childList: true,

@@ -165,7 +165,7 @@ async function main() {
     assertDeclaration(rootTokens, '--yuzi-phone-app-nav-top-padding', 'var(--yuzi-phone-status-safe-height)');
     for (const [token, value] of Object.entries(expectedTokens)) assertDeclaration(rootTokens, token, value);
 
-    const phoneScreen = ruleBlock(shell, '.phone-screen');
+    const phoneScreen = ruleBlock(shell, '#yuzi-phone-standalone .yuzi-phone-screen');
     assert.match(phoneScreen, /container-name:\s*yuzi-phone-screen;/);
     assert.match(phoneScreen, /container-type:\s*inline-size;/);
     assert.match(navCss, /grid-template-columns:\s*var\(--yuzi-phone-nav-side-slot-width\)\s*minmax\(0, 1fr\)\s*var\(--yuzi-phone-nav-side-slot-width\);/);

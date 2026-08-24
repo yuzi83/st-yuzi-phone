@@ -10,11 +10,12 @@ function toModuleUrl(relativePath) {
 }
 
 class FakeElement {
-    constructor(classNames = [], ownerDocument = null) {
+    constructor(classNames = [], ownerDocument = null, tagName = 'div') {
         this.hidden = false;
         this.children = [];
         this.dataset = {};
         this.attributes = new Map();
+        this.attributeWrites = [];
         this.classList = {
             values: new Set(classNames),
             add: (...names) => names.forEach((name) => this.classList.values.add(name)),
@@ -33,6 +34,7 @@ class FakeElement {
         this.ownerDocument = ownerDocument;
         this.parentNode = null;
         this.parentElement = null;
+        this.tagName = String(tagName || 'div').toUpperCase();
         this.style = {
             values: new Map(),
             removeProperty: (name) => this.style.values.delete(name),
@@ -62,6 +64,7 @@ class FakeElement {
 
     setAttribute(name, value = '') {
         this.attributes.set(name, String(value));
+        this.attributeWrites.push({ name, value: String(value) });
     }
 
     matches(selector) {
@@ -109,8 +112,8 @@ class FakeMutationObserver {
         this.disconnected = true;
     }
 
-    trigger() {
-        this.callback([]);
+    trigger(records = []) {
+        this.callback(records);
     }
 }
 FakeMutationObserver.instances = [];
@@ -124,9 +127,33 @@ async function main() {
     const variableTemplates = await import(toModuleUrl('modules/variable-manager/templates.js'));
 
     const shellHtml = shellUi.buildPhoneShellHtml();
-    assert.equal((shellHtml.match(/phone-status-bar/g) || []).length, 1, '手机壳只渲染一套状态栏');
-    assert.match(shellHtml, /data-phone-home-indicator/, '手机壳提供全局 Home Indicator');
-    assert.match(shellHtml, /data-phone-temporary-layer-host/, '手机壳提供全局临时层宿主');
+    const shellClassTokens = Array.from(shellHtml.matchAll(/class="([^"]*)"/g))
+        .flatMap((match) => match[1].split(/\s+/).filter(Boolean));
+    const namespacedShellClasses = [
+        'yuzi-phone-shell',
+        'yuzi-phone-notch',
+        'yuzi-phone-status-bar',
+        'yuzi-phone-status-time',
+        'yuzi-phone-status-icons',
+        'yuzi-phone-screen',
+        'yuzi-phone-temporary-layer-host',
+        'yuzi-phone-home-indicator',
+    ];
+    const legacyShellClasses = namespacedShellClasses.map((className) => className.replace(/^yuzi-/, ''));
+    assert.deepEqual(
+        namespacedShellClasses.filter((className) => shellClassTokens.includes(className)),
+        namespacedShellClasses,
+        '手机壳核心 DOM class 全部使用 Yuzi 独占命名空间',
+    );
+    assert.deepEqual(
+        legacyShellClasses.filter((className) => shellClassTokens.includes(className)),
+        [],
+        '手机壳不再暴露可被其他扩展全局 CSS 命中的旧 class',
+    );
+    assert.equal(shellClassTokens.filter((className) => className === 'yuzi-phone-status-bar').length, 1, '手机壳只渲染一套状态栏');
+    assert.match(shellHtml, /data-yuzi-phone-home-indicator/, '手机壳提供 Yuzi 独占 Home Indicator 契约');
+    assert.match(shellHtml, /data-yuzi-phone-temporary-layer-host/, '手机壳提供 Yuzi 独占临时层宿主契约');
+    assert.doesNotMatch(shellHtml, /\bdata-phone-(?:home-indicator|temporary-layer-host)\b/, '手机壳不再暴露通用控制 data 属性');
 
     assert.match(listTemplates.buildGenericListBottomBarHtml(), /data-phone-bottom-bar/, '通用列表底栏声明共享底栏契约');
     assert.match(detailTemplates.buildGenericDetailPageHtml({
@@ -137,8 +164,9 @@ async function main() {
 
     const shellCss = fs.readFileSync(path.join(ROOT, 'styles/phone-base/01-shell-system.css'), 'utf8');
     const variableCss = fs.readFileSync(path.join(ROOT, 'styles/12-variable-manager.css'), 'utf8');
-    assert.match(shellCss, /data-phone-home-indicator-layout="docked"[^}]+\.phone-screen[^{]*\{[^}]*margin-bottom:/s, '停靠模式为 Home 区域缩短当前页面');
-    assert.match(shellCss, /data-phone-home-indicator-layout="docked"[^}]+\.phone-home-indicator[^{]*\{[^}]*background:/s, '停靠模式提供独立 Home 区域背景');
+    assert.match(shellCss, /#yuzi-phone-standalone\s+\.yuzi-phone-shell\[data-yuzi-phone-home-indicator-layout="docked"\]\s+\.yuzi-phone-screen\s*\{[^}]*margin-bottom:/s, '停靠模式在 Yuzi 根范围内缩短当前页面');
+    assert.match(shellCss, /#yuzi-phone-standalone\s+\.yuzi-phone-shell\[data-yuzi-phone-home-indicator-layout="docked"\]\s+\.yuzi-phone-home-indicator\s*\{[^}]*background:/s, '停靠模式在 Yuzi 根范围内提供独立 Home 区域背景');
+    assert.doesNotMatch(shellCss, /(^|[,{]\s*)\.phone-(?:shell|screen|home-indicator|notch|status-bar|status-time|status-icons|temporary-layer-host)\b/m, 'shell CSS 不再公开旧核心选择器');
     assert.match(variableCss, /\.vm-footer,\s*\.vm-delete-bar\s*\{[^}]*background:\s*var\(--vm-surface-strong\);/s,
         '变量管理器底栏使用可独立绘制的强表面，复制到 Home 区域后不得透出外壳底色');
 
@@ -157,12 +185,12 @@ async function main() {
     };
     const ownerDocument = { defaultView: fakeWindow };
     const root = new FakeElement([], ownerDocument);
-    const shell = root.appendChild(new FakeElement(['phone-shell'], ownerDocument));
-    const screen = shell.appendChild(new FakeElement(['phone-screen'], ownerDocument));
-    const temporaryLayerHost = shell.appendChild(new FakeElement([], ownerDocument));
-    temporaryLayerHost.setAttribute('data-phone-temporary-layer-host', '');
-    const indicator = shell.appendChild(new FakeElement(['phone-home-indicator'], ownerDocument));
-    indicator.setAttribute('data-phone-home-indicator', '');
+    const shell = root.appendChild(new FakeElement(['yuzi-phone-shell'], ownerDocument));
+    const screen = shell.appendChild(new FakeElement(['yuzi-phone-screen'], ownerDocument));
+    const temporaryLayerHost = shell.appendChild(new FakeElement(['yuzi-phone-temporary-layer-host'], ownerDocument));
+    temporaryLayerHost.setAttribute('data-yuzi-phone-temporary-layer-host', '');
+    const indicator = shell.appendChild(new FakeElement(['yuzi-phone-home-indicator'], ownerDocument));
+    indicator.setAttribute('data-yuzi-phone-home-indicator', '');
 
     let route = 'home';
     const navigations = [];
@@ -176,28 +204,82 @@ async function main() {
     route = 'qq';
     controller.refresh();
     assert.equal(indicator.hidden, false, '非主页显示 Home Indicator');
-    assert.equal(shell.getAttribute('data-phone-home-indicator-layout'), 'floating', '无底栏页面保留悬浮 Home Indicator');
+    assert.equal(shell.getAttribute('data-yuzi-phone-home-indicator-layout'), 'floating', '无底栏页面保留悬浮 Home Indicator');
 
     const pageWithBar = screen.appendChild(new FakeElement(['phone-page'], ownerDocument));
     const bottomBar = pageWithBar.appendChild(new FakeElement([], ownerDocument));
     bottomBar.setAttribute('data-phone-bottom-bar', '');
     bottomBar.computedStyle.backgroundColor = 'rgb(245, 245, 245)';
     FakeMutationObserver.instances.at(-1).trigger();
-    assert.equal(shell.getAttribute('data-phone-home-indicator-layout'), 'docked', '当前页存在可见底栏时 Home Indicator 自动停靠');
+    assert.equal(shell.getAttribute('data-yuzi-phone-home-indicator-layout'), 'docked', '当前页存在可见底栏时 Home Indicator 自动停靠');
     assert.equal(shell.style.values.get('--yuzi-phone-home-region-background'), 'rgb(245, 245, 245)', 'Home 区域自动继承当前底栏背景');
+
+    const observer = FakeMutationObserver.instances.at(-1);
+    const composerInput = pageWithBar.appendChild(new FakeElement(['yuzi-qq-composer-input'], ownerDocument, 'textarea'));
+    const shellWritesBeforeComposerResize = shell.attributeWrites.length;
+    observer.trigger([{
+        type: 'attributes',
+        attributeName: 'style',
+        target: composerInput,
+    }]);
+    assert.equal(
+        shell.attributeWrites.length,
+        shellWritesBeforeComposerResize,
+        'textarea/composer 的普通 style.height 变化不刷新 Home Indicator',
+    );
+
+    const assertMutationRefreshes = (record, message) => {
+        const writesBeforeMutation = shell.attributeWrites.length;
+        observer.trigger([record]);
+        assert.equal(shell.attributeWrites.length, writesBeforeMutation + 1, message);
+    };
+    assertMutationRefreshes({
+        type: 'childList',
+        target: screen,
+    }, '页面子树变化仍刷新 Home Indicator');
+    assertMutationRefreshes({
+        type: 'attributes',
+        attributeName: 'class',
+        target: pageWithBar,
+    }, '页面 class 变化仍刷新 Home Indicator');
+    assertMutationRefreshes({
+        type: 'attributes',
+        attributeName: 'hidden',
+        target: bottomBar,
+    }, '底栏 hidden 变化仍刷新 Home Indicator');
+    assertMutationRefreshes({
+        type: 'attributes',
+        attributeName: 'aria-hidden',
+        target: bottomBar,
+    }, '底栏 aria-hidden 变化仍刷新 Home Indicator');
+    assertMutationRefreshes({
+        type: 'attributes',
+        attributeName: 'data-phone-bottom-bar',
+        target: bottomBar,
+    }, '底栏契约属性变化仍刷新 Home Indicator');
+    assertMutationRefreshes({
+        type: 'attributes',
+        attributeName: 'style',
+        target: bottomBar,
+    }, '底栏可见性 style 变化仍刷新 Home Indicator');
+    assertMutationRefreshes({
+        type: 'attributes',
+        attributeName: 'data-yuzi-phone-theme',
+        target: root,
+    }, 'Yuzi 主题变化仍刷新 Home Indicator');
 
     bottomBar.computedStyle.pointerEvents = 'none';
     FakeMutationObserver.instances.at(-1).trigger();
-    assert.equal(shell.getAttribute('data-phone-home-indicator-layout'), 'floating', '隐藏底栏不触发停靠');
+    assert.equal(shell.getAttribute('data-yuzi-phone-home-indicator-layout'), 'floating', '隐藏底栏不触发停靠');
 
     bottomBar.computedStyle.pointerEvents = 'auto';
     const pageWithoutBar = screen.appendChild(new FakeElement(['phone-page'], ownerDocument));
     FakeMutationObserver.instances.at(-1).trigger();
-    assert.equal(shell.getAttribute('data-phone-home-indicator-layout'), 'floating', '只检测当前活动页面，不读取历史页面底栏');
+    assert.equal(shell.getAttribute('data-yuzi-phone-home-indicator-layout'), 'floating', '只检测当前活动页面，不读取历史页面底栏');
 
     screen.removeChild(pageWithoutBar);
     FakeMutationObserver.instances.at(-1).trigger();
-    assert.equal(shell.getAttribute('data-phone-home-indicator-layout'), 'docked', '返回带底栏页面后自动恢复停靠');
+    assert.equal(shell.getAttribute('data-yuzi-phone-home-indicator-layout'), 'docked', '返回带底栏页面后自动恢复停靠');
 
     indicator.dispatch('click');
     assert.deepEqual(navigations, ['home'], 'Home Indicator 只请求回到主页');

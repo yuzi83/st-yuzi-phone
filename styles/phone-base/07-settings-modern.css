@@ -1502,11 +1502,11 @@
 }
 
 .phone-toggle-preview-button {
-    --phone-toggle-preview-size: 40px;
-    width: calc(var(--phone-toggle-preview-size) * 2.1);
-    min-width: calc(var(--phone-toggle-preview-size) * 2.1);
-    height: var(--phone-toggle-preview-size);
-    min-height: var(--phone-toggle-preview-size);
+    --yuzi-phone-toggle-preview-size: 40px;
+    width: calc(var(--yuzi-phone-toggle-preview-size) * 2.1);
+    min-width: calc(var(--yuzi-phone-toggle-preview-size) * 2.1);
+    height: var(--yuzi-phone-toggle-preview-size);
+    min-height: var(--yuzi-phone-toggle-preview-size);
     padding: 0 14px;
     display: inline-flex;
     align-items: center;
@@ -1540,15 +1540,15 @@
 }
 
 .phone-toggle-preview-button.is-circle {
-    width: var(--phone-toggle-preview-size);
-    min-width: var(--phone-toggle-preview-size);
+    width: var(--yuzi-phone-toggle-preview-size);
+    min-width: var(--yuzi-phone-toggle-preview-size);
     padding: 0;
     border-radius: 999px;
 }
 
 .phone-toggle-preview-button.is-rounded {
-    width: calc(var(--phone-toggle-preview-size) * 2.1);
-    min-width: calc(var(--phone-toggle-preview-size) * 2.1);
+    width: calc(var(--yuzi-phone-toggle-preview-size) * 2.1);
+    min-width: calc(var(--yuzi-phone-toggle-preview-size) * 2.1);
 }
 
 .phone-toggle-preview-button.has-cover {

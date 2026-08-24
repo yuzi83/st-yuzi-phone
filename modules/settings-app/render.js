@@ -16,7 +16,7 @@
  *   - 调用约定不变：唯一外部 API 仍是 export function renderSettings(container)
  */
 
-import { getTableData } from '../phone-core/data-api.js';
+import { getTableData, getTableDataAsync } from '../phone-core/data-api.js';
 import { navigateBack } from '../phone-core/routing.js';
 import { bindPhoneScrollGuards } from '../phone-core/scroll-guards.js';
 import { getPhoneSettings, savePhoneSetting } from '../settings.js';
@@ -25,6 +25,13 @@ import { isContentPresetFullPageRuntimeEnabled } from '../content-presets/activa
 import { createScrollPreserver } from './ui/settings-scroll-binding.js';
 import { showToast } from './ui/toast.js';
 import { qqV2PresetSettingsService } from './services/qq-v2-preset-facade.js';
+import { sillyTavernWorldbookReadingCatalog } from '../worldbook-reading/st-catalog-adapter.js';
+import {
+    buildCharacterMappingModel,
+    composeCharacterImagePrompt,
+} from '../image-generation/character-mapping.js';
+import { sharedImageGenerationService } from '../image-generation/runtime.js';
+import { createImageGenerationSettingsService } from '../image-generation/settings-service.js';
 import {
     setupBgUpload,
     renderIconUploadList,
@@ -72,6 +79,15 @@ export const __test__settingsGate = Object.freeze({
     selectContentPresetWorkshop,
 });
 
+const imageGenerationSettingsService = createImageGenerationSettingsService({
+    tableReader: getTableDataAsync,
+    characterMapping: {
+        buildCharacterMappingModel,
+        composeCharacterImagePrompt,
+    },
+    imageGenerationService: sharedImageGenerationService,
+});
+
 /**
  * 渲染设置 App。
  * @param {HTMLElement} container
@@ -79,6 +95,7 @@ export const __test__settingsGate = Object.freeze({
 export function renderSettings(container) {
     /** @type {import('../../types').SettingsAppState} */
     const state = createSettingsAppState();
+    let disposed = false;
     const contentPresetWorkshop = selectContentPresetWorkshop(
         isContentPresetFullPageRuntimeEnabled(),
         () => createContentPresetWorkshopService({ getTableData }),
@@ -132,6 +149,7 @@ export function renderSettings(container) {
     };
 
     const render = () => {
+        if (disposed) return;
         state.mode = normalizeSettingsMode(state.mode, isContentPresetFullPageRuntimeEnabled());
         const nextMode = String(state.mode || 'home');
         const pageDefinition = pageRenderers?.pages && typeof pageRenderers.pages === 'object'
@@ -173,6 +191,8 @@ export function renderSettings(container) {
     const rerenderApiPresetsKeepScroll = createRerenderWithScroll('apiPresetsScrollTop', render);
     const rerenderBeautifyKeepScrollGlobal = createRerenderWithScroll('beautifyScrollTop', render);
     const rerenderAiInstructionPresetsKeepScroll = createRerenderWithScroll('aiInstructionPresetsScrollTop', render);
+    const rerenderWorldbookReadingKeepScroll = createRerenderWithScroll('worldbookReadingScrollTop', render);
+    const rerenderImageGenerationKeepScroll = createRerenderWithScroll('imageGenerationScrollTop', render);
 
     /** @type {import('../../types').SettingsPageRendererGroupedDeps} */
     const pageRendererDeps = {
@@ -195,6 +215,8 @@ export function renderSettings(container) {
             rerenderApiPresetsKeepScroll,
             rerenderBeautifyKeepScroll: rerenderBeautifyKeepScrollGlobal,
             rerenderAiInstructionPresetsKeepScroll,
+            rerenderImageGenerationKeepScroll,
+            rerenderWorldbookReadingKeepScroll,
         },
         feedback: {
             showToast,
@@ -238,10 +260,17 @@ export function renderSettings(container) {
         contentPresetWorkshop: {
             ...contentPresetWorkshop,
         },
+        worldbookReading: sillyTavernWorldbookReadingCatalog,
+        imageGeneration: imageGenerationSettingsService,
     };
 
     /** @type {import('../../types').SettingsPageRenderers} */
     const pageRenderers = createSettingsPageRenderers(pageRendererDeps);
 
     render();
+    return () => {
+        if (disposed) return;
+        disposed = true;
+        disposeCurrentPageSession();
+    };
 }

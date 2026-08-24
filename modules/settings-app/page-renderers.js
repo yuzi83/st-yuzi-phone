@@ -48,6 +48,8 @@ function validateSettingsRendererDeps(deps = {}) {
         'rerenderApiPresetsKeepScroll',
         'rerenderBeautifyKeepScroll',
         'rerenderAiInstructionPresetsKeepScroll',
+        'rerenderWorldbookReadingKeepScroll',
+        'rerenderImageGenerationKeepScroll',
     ]);
     assertFunctionDeps('appearance', deps.appearance, [
         'getLayoutValue',
@@ -108,6 +110,16 @@ function validateSettingsRendererDeps(deps = {}) {
         'setActive',
         'clearActive',
         'clearAllActive',
+    ]);
+    assertFunctionDeps('worldbookReading', deps.worldbookReading, [
+        'load',
+        'setSelected',
+        'subscribe',
+    ]);
+    assertFunctionDeps('imageGeneration', deps.imageGeneration, [
+        'loadViewModel',
+        'saveConfig',
+        'testGenerate',
     ]);
 }
 
