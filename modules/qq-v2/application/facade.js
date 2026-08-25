@@ -1,3 +1,5 @@
+import { normalizeQQV2TagName, normalizeQQV2TagNames } from '../domain/story-context-tags.js';
+
 function asText(value, maxLength = 1024) {
     return String(value ?? '').trim().slice(0, maxLength);
 }
@@ -43,6 +45,12 @@ function cloneGlobalSettings(settings) {
         conversationHistoryLimit: Number.isInteger(Number(source.conversationHistoryLimit))
             ? Number(source.conversationHistoryLimit)
             : 100,
+        hostContextExtractTag: Object.hasOwn(source, 'hostContextExtractTag')
+            ? (asText(source.hostContextExtractTag)
+                ? normalizeQQV2TagName(source.hostContextExtractTag) || 'content'
+                : '')
+            : 'content',
+        hostContextExcludeTags: Object.freeze(normalizeQQV2TagNames(source.hostContextExcludeTags)),
         worldbook: cloneWorldbookSettings(source.worldbook),
         proactive: cloneProactiveSettings(source.proactive),
     });
@@ -123,6 +131,7 @@ function cloneApiPreset(preset) {
         temperature: asNumber(source.temperature, 1),
         maxOutput: asNumber(source.maxOutput ?? source.maxTokens, 4096),
         hasApiKey: source.hasApiKey === true,
+        ...(source.readOnly === true ? { readOnly: true } : {}),
     });
 }
 

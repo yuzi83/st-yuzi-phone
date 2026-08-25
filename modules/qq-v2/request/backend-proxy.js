@@ -1,3 +1,5 @@
+import { normalizeQQV2OpenAIBaseUrl as normalizeApiEndpoint } from '../api-endpoint-policy.js';
+
 const LOCAL_GENERATE_PATH = '/api/backends/chat-completions/generate';
 const LOCAL_STATUS_PATH = '/api/backends/chat-completions/status';
 const OPENAI_SOURCE = 'openai';
@@ -31,28 +33,11 @@ function readTemperature(value, fallback = 1) {
  * user-friendly endpoint forms to the base URL it expects.
  */
 export function normalizeQQV2OpenAIBaseUrl(value) {
-    let url;
     try {
-        url = new URL(asText(value, 2048));
-    } catch {
-        throw new QQV2BackendError('QQ API endpoint is invalid', 'invalid_endpoint');
+        return normalizeApiEndpoint(asText(value, 2048));
+    } catch (error) {
+        throw new QQV2BackendError(error?.message || 'API 地址无效', 'invalid_endpoint', error);
     }
-    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-        throw new QQV2BackendError('QQ API endpoint is invalid', 'invalid_endpoint');
-    }
-
-    const loopback = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
-    if (url.protocol !== 'https:' && !loopback.has(url.hostname.toLowerCase())) {
-        throw new QQV2BackendError('QQ API endpoint must use HTTPS unless it is loopback', 'invalid_endpoint');
-    }
-
-    let pathname = url.pathname.replace(/\/+$/, '');
-    if (/\/(?:chat\/completions|models)$/i.test(pathname)) {
-        pathname = pathname.replace(/\/(?:chat\/completions|models)$/i, '');
-    }
-    if (!/\/v\d+$/i.test(pathname)) pathname = `${pathname}/v1`;
-    url.pathname = pathname.replace(/\/{2,}/g, '/');
-    return url.toString().replace(/\/$/, '');
 }
 
 function requireConnection(input) {

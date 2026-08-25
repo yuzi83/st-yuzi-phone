@@ -382,10 +382,14 @@ sequenceDiagram
 - 删除酒馆聊天时先解析目标 scope，再取消该 scope 的请求和主动消息，随后删除世界书投影；只有投影明确返回 `removed` 后才能删除 IndexedDB scope。投影失败则把 scope 标为 pending，保留完整元数据供后续重试。
 - 文件名唯一时可直接定位历史 scope；跨角色同名时查询每个候选角色的现存聊天，只有唯一一个候选确认“不再存在该文件”时才能删除。查询失败、零个候选消失或多个候选同时消失都属于 unresolved，绝不猜删。
 - 图片仓库、表情仓库、API / 指令预设库属于 shared resources，不随聊天 scope 删除。
+- 普通 QQ API 预设由 [`resources/service.js`](../modules/qq-v2/resources/service.js) 与 API key store 保存；聊天 scope 只引用稳定预设 ID。`qq-v2.database-current-api` 不属于持久化预设库，而是数据库插件可用时由 [`production-runtime.js`](../modules/qq-v2/application/production-runtime.js) 注入的运行时只读虚拟预设。
+- 数据库虚拟预设只允许请求路由调用数据库公开的 `window.AutoCardUpdaterAPI.callAI(messages)`；代理不得读取、复制或重组数据库的 URL、API key、model、temperature 等配置，也不得恢复已弃用的数据库 API 预设管理接口。数据库 API 缺失或返回空结果时必须 fail-closed，不得回退到普通 QQ API。
+- 普通预设仍经 SillyTavern 后端代理；虚拟预设经数据库受限代理。两条路径共用 QQ 请求服务、最终提示词观察和动作提交边界，API 预设管理页对虚拟预设只显示禁用项，QQ 运行时选择器可以选中并调用。
 - QQ 主设置“图片资料”的导入导出由 [`image-library-pack.js`](../modules/qq-v2/resources/image-library-pack.js) 统一封装，格式固定为 `yuzi-phone-qq-image-library-pack`、`schemaVersion: 1`。`libraries` 必须完整包含 `avatars`、`profileBackgrounds`、`chatBackgrounds` 与 `stickers` 四个数组；每张图片以 Data URL 写入 JSON，保留资源 ID，单资源上限为 8MB，只接受标准 `image/*` MIME。
 - 导入图片资料包会在一次 `stateStore.transact()` 中整体替换 `sharedResources.imageLibraryAssets` 与 `sharedResources['qq-v2.resources.stickers']`，不修改 `scopes`、人物、会话、消息、API 预设、AI 指令预设或其他共享资源。格式、数组、MIME、Base64、资源大小、资源 ID 或表情说明任一校验失败时不得开始写入。
 - 图片资料页面只能通过 `UI -> Facade -> Production Runtime -> State Store` 调用资源包能力。导入成功后 Production Runtime 撤销全部图片与表情 Blob URL 租约，再通知当前 QQ 视图刷新；页面层禁止直接读取或写入 IndexedDB。
-- QQ 主设置中的 API 与各类指令预设选择、主动消息总开关与触发间隔、宿主上下文条数与 QQ 会话历史条数，以及世界书注入总闸、时间跨度、全局灯色、全局深度和全局关键词，统一属于扩展级全局运行设置；切换或删除 SillyTavern 聊天不得重置这些字段。
+- QQ 主设置中的 API 与各类指令预设选择、主动消息总开关与触发间隔、宿主上下文条数与 QQ 会话历史条数，以及世界书注入总闸、时间跨度、全局灯色、全局深度和全局关键词，统一属于扩展级全局运行设置；切换或删除 SillyTavern 聊天不得重置这些字段。 新增的标签提取与标签排除同样属于扩展级全局运行设置：标签以不带尖括号的规范名称保存，默认提取标签为 `content`，排除标签支持多个名称；`{{正文上下文}}` 在唯一的 prompt materializer 入口中先提取配置标签，再删除排除标签块，未找到提取标签时保留原正文，并且不再添加“角色：”前缀。
+- `{{正文上下文}}` 只由当前宿主中成功完成的 AI 楼层正文构造，不包含用户输入、系统消息、隐藏推理或页面渲染文本；手动回复与主动消息共用同一标签处理函数，世界书读取链路不读取这两个设置。
 - 世界书注入目标 `bookName` 仍按当前 SillyTavern 宿主聊天保存。当前宿主聊天没有手动目标时，按当前角色卡绑定解析主世界书或首个附加世界书；手动选择具体世界书只覆盖当前宿主聊天，切换到其他宿主聊天后读取该聊天自己的目标或重新执行默认解析。该边界不得改变“当前聊天唯一投影”、切换聊天时清理非当前投影、删除聊天时清理对应 QQ 投影的现有生命周期。
 - QQ 单会话详情中的世界书注入开关、灯色与深度覆盖、关键词等设置继续按 QQ 会话独立保存；全局值只提供默认与跟随来源，不能覆盖已有的会话级选择。
 - 主动消息由 `production-runtime.js` 在正文稳定后读取当前聊天可见、成功的 AI 楼层；新增楼层跨过“每隔多少轮”的整数倍时入队一次，所以切换聊天后仍按该聊天自身的总 AI 楼层节奏运行。它只保留运行时楼层基线，不在任何宿主聊天 scope 或 IndexedDB 写入旧的计数或轮换进度。删除聊天只删除该 scope 的会话、消息、媒体引用、宿主聊天级目标 `bookName` 和世界书投影状态，无需删除主动消息进度。主动动作批次只有在新增、删除或修改可投影 QQ 事实时才同步对应会话；`none`、纯已读或空动作不触发世界书保存。
@@ -585,6 +589,9 @@ CSS 层读取这些 data attributes 和 CSS 变量，见 [`styles/05-phone-gener
 
 - 页面 mode：[`mode`](../modules/settings-app/state-machine.js:21)。
 - 各页面滚动位置：[`apiPresetsScrollTop`](../modules/settings-app/state-machine.js:4)、[`appearanceScrollTop`](../modules/settings-app/state-machine.js:5)、[`beautifyScrollTop`](../modules/settings-app/state-machine.js:6)、[`buttonStyleScrollTop`](../modules/settings-app/state-machine.js:7)、[`aiInstructionPresetsScrollTop`](../modules/settings-app/state-machine.js:8)。
+
+- QQ API 预设地址由 [`modules/qq-v2/api-endpoint-policy.js`](../modules/qq-v2/api-endpoint-policy.js) 统一规范化：HTTPS 地址可用；HTTP 仅允许回环地址或 RFC1918 私有 IPv4（`10/8`、`172.16/12`、`192.168/16`），保存边界与请求边界必须复用同一策略。地址仍按 OpenAI 兼容 base URL 处理，并自动收敛到 `/v1`。
+- API 预设页面收到 `readOnly: true` 的运行时虚拟预设时，只渲染禁用的“数据库当前 API（只读）”选项；编辑区及保存、删除、加载模型操作必须保持不可用。该虚拟预设不应写入 shared resource storage。QQ v2 的 `activeApiPresetId` 解析器仍须识别其稳定虚拟 ID，并把请求交给数据库受限代理。
 
 新增 state 字段时，必须先进入 [`createSettingsAppState()`](../modules/settings-app/state-machine.js:18)，再同步 context builder、页面 renderer 和类型声明。不要在某个页面局部临时塞匿名字段，否则下一次切页或滚动保留会找不到它。
 

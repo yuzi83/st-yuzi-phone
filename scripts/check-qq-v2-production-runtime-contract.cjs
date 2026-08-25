@@ -111,6 +111,8 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
             groupProactivePresetId: 'builtin-group-proactive',
             hostContextTurns: 3,
             conversationHistoryLimit: 100,
+            hostContextExtractTag: 'content',
+            hostContextExcludeTags: [],
             worldbook: {
                 enabled: false,
                 bookName: '',
@@ -140,6 +142,8 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
             privateProactivePresetId: 'builtin-private-proactive',
             hostContextTurns: 3,
             conversationHistoryLimit: 100,
+            hostContextExtractTag: 'content',
+            hostContextExcludeTags: [],
             worldbook: {
                 enabled: false,
                 bookName: '',
@@ -161,6 +165,8 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
             privateProactivePresetId: 'proactive-global',
             hostContextTurns: 7,
             conversationHistoryLimit: 42,
+            hostContextExtractTag: '<content>',
+            hostContextExcludeTags: ['status', '<table>'],
             worldbook: {
                 enabled: true,
                 bookName: 'Alice-manual-book',
@@ -176,6 +182,8 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
     const scopeASnapshot = await runtime.getSnapshot();
     assert.equal(scopeASnapshot.globalSettings.hostContextTurns, 7);
     assert.equal(scopeASnapshot.globalSettings.conversationHistoryLimit, 42);
+    assert.equal(scopeASnapshot.globalSettings.hostContextExtractTag, 'content');
+    assert.deepEqual(scopeASnapshot.globalSettings.hostContextExcludeTags, ['status', 'table']);
     assert.deepEqual(scopeASnapshot.globalSettings.worldbook, {
         enabled: true,
         bookName: 'Alice-manual-book',
@@ -198,6 +206,8 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
     assert.equal(scopeBDefaultSnapshot.globalSettings.privateProactivePresetId, 'proactive-global');
     assert.equal(scopeBDefaultSnapshot.globalSettings.hostContextTurns, 7);
     assert.equal(scopeBDefaultSnapshot.globalSettings.conversationHistoryLimit, 42);
+    assert.equal(scopeBDefaultSnapshot.globalSettings.hostContextExtractTag, 'content');
+    assert.deepEqual(scopeBDefaultSnapshot.globalSettings.hostContextExcludeTags, ['status', 'table']);
     assert.deepEqual(scopeBDefaultSnapshot.globalSettings.worldbook, {
         enabled: true,
         bookName: 'Bea-default-book',
@@ -1114,6 +1124,141 @@ async function testProductionFacadeOwnsApiPresetLifecycleAcrossScopes() {
     assert.equal((await facade.query.globalSettings()).settings.activeApiPresetId, '');
     assert.equal((await stateStore.read()).scopes[currentScopeId].settings.activeApiPresetId, '');
     assert.equal((await facade.query.sharedResources()).apiPresets.length, 0);
+    runtime.destroy();
+}
+
+async function testProductionFacadeListsDatabaseCurrentApiAsReadOnlyVirtualPreset() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeId = 'st:character:alice:chat-database-current-api';
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return {
+                    scopeId,
+                    chatId: 'chat-database-current-api',
+                    chatFile: 'chat-database-current-api',
+                    hostType: 'character',
+                    hostId: 'alice',
+                };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return '2042-05-20 09:30'; },
+            readStoryMessages() { return []; },
+            readRawContext() { return { getRequestHeaders: () => ({}) }; },
+        },
+        stateStore: createMemoryQQV2StateStore(),
+        cryptoApi: webcrypto,
+        getDatabaseApi: () => ({ callAI: async () => 'database reply' }),
+        backend: { async generate() {}, async loadModels() { return []; } },
+        worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} },
+    });
+
+    await runtime.initialize();
+    const resources = await runtime.getFacade().query.sharedResources();
+    const databasePreset = resources.apiPresets.find((preset) => preset.presetId === 'qq-v2.database-current-api');
+
+    assert.deepEqual(databasePreset, {
+        presetId: 'qq-v2.database-current-api',
+        name: '数据库当前 API',
+        endpoint: '',
+        model: '',
+        temperature: 1,
+        maxOutput: 4096,
+        hasApiKey: false,
+        readOnly: true,
+    });
+    runtime.destroy();
+}
+
+
+async function testProductionRuntimeRoutesDatabaseCurrentApiThroughQQRequests() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeId = 'st:character:alice:chat-database-request';
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    const databaseCalls = [];
+    const primaryCalls = [];
+    const actionInputs = [];
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return {
+                    scopeId,
+                    chatId: 'chat-database-request',
+                    chatFile: 'chat-database-request',
+                    hostType: 'character',
+                    hostId: 'alice',
+                };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return '2042-05-20 09:30'; },
+            readStoryMessages() { return []; },
+            readRawContext() { return { getRequestHeaders: () => ({}) }; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        getDatabaseApi: () => ({
+            async callAI(messages) {
+                databaseCalls.push(messages);
+                return '<qq><ignored /></qq>';
+            },
+        }),
+        backend: {
+            async generate(input) {
+                primaryCalls.push(input);
+                return { content: '<qq><ignored /></qq>' };
+            },
+            async loadModels() { return []; },
+        },
+        resources: {
+            async listApiPresets() { return []; },
+            async listPromptPresets() { return [{ presetId: 'builtin-private-reply', messages: [] }]; },
+            async listStickers() { return []; },
+            async getApiPresetForRequest() { return null; },
+            async getPromptPreset(presetId) {
+                return presetId === 'builtin-private-reply'
+                    ? { presetId, messages: [] }
+                    : null;
+            },
+        },
+        actionService: {
+            async execute(input) {
+                actionInputs.push(input);
+                return { applied: [], createdConversationIds: [] };
+            },
+        },
+        worldbookGateway: {
+            async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; },
+            async loadBook() { return { entries: {} }; },
+            async saveBook() {},
+        },
+        worldbookContextResolver: { async resolve() { return ''; } },
+    });
+
+    await runtime.initialize();
+    const conversation = await runtime.createPrivateConversation({ scopeId, name: 'Alice' });
+    await runtime.updateGlobalSettings({
+        scopeId,
+        settings: {
+            activeApiPresetId: 'qq-v2.database-current-api',
+            privateReplyPresetId: 'builtin-private-reply',
+        },
+    });
+
+    await runtime.sendManual({
+        scopeId,
+        conversationId: conversation.conversation.conversationId,
+        message: { type: 'text', content: 'Hello from database API' },
+    });
+    await waitUntil(() => databaseCalls.length === 1, 'the database current API request');
+
+    assert.equal(primaryCalls.length, 0);
+    assert.equal(actionInputs.length, 1);
+    assert.ok(databaseCalls[0].some((message) => message.content.includes('Hello from database API')));
     runtime.destroy();
 }
 
@@ -2861,6 +3006,8 @@ async function main() {
     await testProductionRuntimeCancelsLateSaveAndCleansOldScopeThroughCurrentHostContext();
     await testDefaultRuntimeEntryExposesTheProductionFacade();
     await testProductionFacadeOwnsApiPresetLifecycleAcrossScopes();
+    await testProductionFacadeListsDatabaseCurrentApiAsReadOnlyVirtualPreset();
+    await testProductionRuntimeRoutesDatabaseCurrentApiThroughQQRequests();
     await testProductionRuntimeWorksWithoutWebCryptoAndKeepsKeysOutOfExports();
     await testProductionFacadeListsOnlyExistingWorldbooks();
     await testProductionRuntimeInitializesDefaultWorldbookOncePerScope();

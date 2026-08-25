@@ -6,6 +6,10 @@ function asText(value) {
     return String(value || '').trim();
 }
 
+function isReadOnlyPreset(preset) {
+    return preset?.readOnly === true;
+}
+
 function createDraft(preset = {}) {
     return {
         presetId: asText(preset.presetId),
@@ -16,6 +20,7 @@ function createDraft(preset = {}) {
         temperature: Number.isFinite(Number(preset.temperature)) ? Number(preset.temperature) : 1,
         maxOutput: Number.isFinite(Number(preset.maxOutput)) ? Number(preset.maxOutput) : 4096,
         hasApiKey: preset.hasApiKey === true,
+        readOnly: isReadOnlyPreset(preset),
     };
 }
 
@@ -40,7 +45,9 @@ function buildPresetOptions(presets, selectedPresetId) {
         `<option value="" ${selectedId ? '' : 'selected'}>请选择 API 预设</option>`,
         ...(Array.isArray(presets) ? presets : []).map((preset) => {
             const presetId = asText(preset?.presetId);
-            return `<option value="${escapeHtmlAttr(presetId)}" ${presetId === selectedId ? 'selected' : ''}>${escapeHtml(preset?.name || '未命名预设')}</option>`;
+            const readOnly = isReadOnlyPreset(preset);
+            const label = `${preset?.name || '未命名预设'}${readOnly ? '（只读）' : ''}`;
+            return `<option value="${escapeHtmlAttr(presetId)}" ${presetId === selectedId ? 'selected' : ''} ${readOnly ? 'disabled' : ''}>${escapeHtml(label)}</option>`;
         }),
     ].join('');
 }
@@ -59,6 +66,8 @@ function buildApiPresetsPageHtml(pageState) {
     const draft = pageState.draft || createNewDraft();
     const models = Array.isArray(pageState.models) ? pageState.models : [];
     const disabled = pageState.loading || pageState.busy ? 'disabled' : '';
+    const editorDisabled = pageState.loading || pageState.busy || draft.readOnly ? 'disabled' : '';
+    const canEditDraft = !pageState.loading && !pageState.busy && !draft.readOnly;
     const status = pageState.error
         ? `<div class="phone-settings-inline-status is-danger"><span class="phone-settings-inline-status-text">${escapeHtml(pageState.error)}</span></div>`
         : pageState.loading
@@ -88,19 +97,20 @@ function buildApiPresetsPageHtml(pageState) {
         title: draft.presetId ? '编辑 API 预设' : '新建 API 预设',
         bodyHtml: `
             <div class="phone-ai-preset-toolbar">
-                <label class="phone-ai-preset-segment-field"><span>名称</span><input id="phone-api-preset-name" class="phone-settings-input" maxlength="120" value="${escapeHtmlAttr(draft.name)}" ${disabled}></label>
-                <label class="phone-ai-preset-segment-field"><span>API 地址</span><input id="phone-api-preset-endpoint" class="phone-settings-input" maxlength="2048" value="${escapeHtmlAttr(draft.endpoint)}" placeholder="https://api.example.com/v1" ${disabled}></label>
-                <label class="phone-ai-preset-segment-field"><span>API 密钥${draft.hasApiKey ? '（留空保持已有密钥）' : ''}</span><input id="phone-api-preset-key" type="password" class="phone-settings-input" autocomplete="off" ${disabled}></label>
-                <label class="phone-ai-preset-segment-field"><span>手写模型</span><input id="phone-api-preset-model" class="phone-settings-input" maxlength="256" value="${escapeHtmlAttr(draft.model)}" ${disabled}></label>
-                ${models.length ? `<label class="phone-ai-preset-segment-field"><span>模型列表</span><select id="phone-api-preset-model-list" class="phone-settings-select" ${disabled}>${buildModelOptions(models, draft.model)}</select></label>` : ''}
+                <label class="phone-ai-preset-segment-field"><span>名称</span><input id="phone-api-preset-name" class="phone-settings-input" maxlength="120" value="${escapeHtmlAttr(draft.name)}" ${editorDisabled}></label>
+                <label class="phone-ai-preset-segment-field"><span>API 地址</span><input id="phone-api-preset-endpoint" class="phone-settings-input" maxlength="2048" value="${escapeHtmlAttr(draft.endpoint)}" placeholder="https://api.example.com/v1" ${editorDisabled}></label>
+                <div class="phone-settings-note">支持 OpenAI 兼容接口；本机示例：<code>http://127.0.0.1:端口/v1</code>，局域网示例：<code>http://192.168.1.50:端口/v1</code>。局域网 HTTP 仅限受信任网络。</div>
+                <label class="phone-ai-preset-segment-field"><span>API 密钥${draft.hasApiKey ? '（留空保持已有密钥）' : ''}</span><input id="phone-api-preset-key" type="password" class="phone-settings-input" autocomplete="off" ${editorDisabled}></label>
+                <label class="phone-ai-preset-segment-field"><span>手写模型</span><input id="phone-api-preset-model" class="phone-settings-input" maxlength="256" value="${escapeHtmlAttr(draft.model)}" ${editorDisabled}></label>
+                ${models.length ? `<label class="phone-ai-preset-segment-field"><span>模型列表</span><select id="phone-api-preset-model-list" class="phone-settings-select" ${editorDisabled}>${buildModelOptions(models, draft.model)}</select></label>` : ''}
                 ${modelStatus}
-                <label class="phone-ai-preset-segment-field"><span>温度</span><input id="phone-api-preset-temperature" type="number" class="phone-settings-input" min="0" max="2" step="0.01" value="${escapeHtmlAttr(draft.temperature)}" ${disabled}></label>
-                <label class="phone-ai-preset-segment-field"><span>最大输出</span><input id="phone-api-preset-max-output" type="number" class="phone-settings-input" min="1" step="1" value="${escapeHtmlAttr(draft.maxOutput)}" ${disabled}></label>
+                <label class="phone-ai-preset-segment-field"><span>温度</span><input id="phone-api-preset-temperature" type="number" class="phone-settings-input" min="0" max="2" step="0.01" value="${escapeHtmlAttr(draft.temperature)}" ${editorDisabled}></label>
+                <label class="phone-ai-preset-segment-field"><span>最大输出</span><input id="phone-api-preset-max-output" type="number" class="phone-settings-input" min="1" step="1" value="${escapeHtmlAttr(draft.maxOutput)}" ${editorDisabled}></label>
             </div>
             <div class="phone-settings-action-row">
-                <button type="button" class="phone-settings-btn" id="phone-api-preset-load-models-btn" ${disabled}>加载模型</button>
-                <button type="button" class="phone-settings-btn phone-settings-btn-primary" id="phone-api-preset-save-btn" ${disabled}>保存预设</button>
-                <button type="button" class="phone-settings-btn phone-settings-btn-danger" id="phone-api-preset-delete-btn" ${draft.presetId && !disabled ? '' : 'disabled'}>删除预设</button>
+                <button type="button" class="phone-settings-btn" id="phone-api-preset-load-models-btn" ${editorDisabled}>加载模型</button>
+                <button type="button" class="phone-settings-btn phone-settings-btn-primary" id="phone-api-preset-save-btn" ${editorDisabled}>保存预设</button>
+                <button type="button" class="phone-settings-btn phone-settings-btn-danger" id="phone-api-preset-delete-btn" ${draft.presetId && canEditDraft ? '' : 'disabled'}>删除预设</button>
             </div>
         `,
     });
@@ -166,6 +176,7 @@ function createApiPresetSession(ctx) {
     const select = (presetId) => {
         if (state.busy) return;
         const preset = findPreset(presetId);
+        if (isReadOnlyPreset(preset)) return false;
         state.selectedPresetId = asText(preset?.presetId);
         state.draft = preset ? createDraft(preset) : createNewDraft();
         state.models = [];
@@ -173,10 +184,11 @@ function createApiPresetSession(ctx) {
         state.modelsLoaded = false;
         state.modelError = '';
         repaint();
+        return true;
     };
 
     const save = async (draft) => {
-        if (!active || state.busy) return false;
+        if (!active || state.busy || state.draft.readOnly || draft?.readOnly === true) return false;
         state.busy = true;
         state.draft = { ...state.draft, ...draft };
         const preset = {
@@ -201,7 +213,7 @@ function createApiPresetSession(ctx) {
     };
 
     const remove = async () => {
-        if (!active || state.busy || !state.draft.presetId) return false;
+        if (!active || state.busy || state.draft.readOnly || !state.draft.presetId) return false;
         state.busy = true;
         const result = await ctx.qqV2PresetService.deleteApiPreset({ apiPresetId: state.draft.presetId });
         if (!active) return false;
@@ -216,7 +228,7 @@ function createApiPresetSession(ctx) {
     };
 
     const loadModels = async (draft) => {
-        if (!active || state.busy) return false;
+        if (!active || state.busy || state.draft.readOnly || draft?.readOnly === true) return false;
         state.draft = { ...state.draft, ...draft };
         state.busy = true;
         state.models = [];

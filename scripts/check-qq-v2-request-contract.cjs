@@ -20,6 +20,67 @@ async function importModule(relativePath) {
     };
 }
 
+async function testQQV2BackendRouterSelectsDatabaseVirtualPreset() {
+    const { createQQV2BackendRouter } = await importModule('modules/qq-v2/request/database-current-api-backend.js');
+    const calls = [];
+    const router = createQQV2BackendRouter({
+        primaryBackend: {
+            async generate() {
+                calls.push('primary');
+                return { content: 'primary' };
+            },
+            async loadModels() {
+                return ['primary-model'];
+            },
+        },
+        databaseBackend: {
+            async generate() {
+                calls.push('database');
+                return { content: 'database' };
+            },
+        },
+    });
+
+    assert.deepEqual(await router.generate({ preset: { id: 'qq-v2.database-current-api' } }), { content: 'database' });
+    assert.deepEqual(await router.generate({ preset: { id: 'ordinary-api' } }), { content: 'primary' });
+    assert.deepEqual(await router.loadModels({ preset: { id: 'ordinary-api' } }), ['primary-model']);
+    assert.deepEqual(calls, ['database', 'primary']);
+}
+
+async function testDatabaseCurrentApiBackendUsesRestrictedCallAI() {
+    const { createQQV2DatabaseCurrentApiBackend } = await importModule('modules/qq-v2/request/database-current-api-backend.js');
+    const calls = [];
+    const databaseApi = {
+        async callAI(...args) {
+            calls.push({ receiver: this, args });
+            return '  <qq><none /></qq>  ';
+        },
+    };
+    const backend = createQQV2DatabaseCurrentApiBackend({
+        getDatabaseApi: () => databaseApi,
+    });
+    const messages = [{ role: 'system', content: 'reply with XML' }];
+
+    const result = await backend.generate({
+        preset: {
+            id: 'qq-v2.database-current-api',
+            endpoint: 'https://must-not-be-read.example/v1',
+            apiKey: 'must-not-be-read',
+            model: 'must-not-be-read',
+        },
+        messages,
+    });
+
+    assert.deepEqual(result, {
+        content: '<qq><none /></qq>',
+        model: '',
+        finishReason: '',
+    });
+    assert.equal(calls.length, 1);
+    assert.strictEqual(calls[0].receiver, databaseApi);
+    assert.deepEqual(calls[0].args, [messages]);
+}
+
 async function testBackendProxyUsesSillyTavernAndRedactsTheKey() {
     const { createSillyTavernQQV2Backend } = await importModule('modules/qq-v2/request/backend-proxy.js');
     const calls = [];
@@ -56,7 +117,7 @@ async function testBackendProxyUsesSillyTavernAndRedactsTheKey() {
 
     const result = await backend.generate({
         preset: {
-            endpoint: 'https://api.example.test/v1/chat/completions',
+            endpoint: 'http://192.168.1.50:8000/v1/chat/completions',
             apiKey: 'qq-v2-test-secret',
             model: 'test-model',
             temperature: 0.7,
@@ -82,7 +143,7 @@ async function testBackendProxyUsesSillyTavernAndRedactsTheKey() {
     const body = JSON.parse(calls[0].options.body);
     assert.deepEqual(body, {
         chat_completion_source: 'openai',
-        reverse_proxy: 'https://api.example.test/v1',
+        reverse_proxy: 'http://192.168.1.50:8000/v1',
         proxy_password: 'qq-v2-test-secret',
         model: 'test-model',
         messages: [{ role: 'system', content: 'reply with XML' }],
@@ -97,8 +158,32 @@ async function testBackendProxyUsesSillyTavernAndRedactsTheKey() {
         messages: [{ role: 'system', content: 'mutated by observer' }],
     }]);
     assert.deepEqual(Object.keys(observedPrompts[0]).sort(), ['messages', 'model']);
-    assert.doesNotMatch(JSON.stringify(observedPrompts[0]), /qq-v2-test-secret|proxy_password|reverse_proxy|api\.example/i);
+    assert.doesNotMatch(JSON.stringify(observedPrompts[0]), /qq-v2-test-secret|proxy_password|reverse_proxy/i);
     assert.equal(body.messages[0].content, 'reply with XML');
+}
+
+async function testBackendProxyRejectsPublicHttpBeforeSending() {
+    const { createSillyTavernQQV2Backend } = await importModule('modules/qq-v2/request/backend-proxy.js');
+    let fetchCount = 0;
+    const backend = createSillyTavernQQV2Backend({
+        fetchImpl: async () => {
+            fetchCount += 1;
+            throw new Error('fetch should not run');
+        },
+    });
+
+    await assert.rejects(
+        backend.generate({
+            preset: {
+                endpoint: 'http://api.example.test/v1',
+                apiKey: 'public-http-key',
+                model: 'test-model',
+            },
+            messages: [{ role: 'user', content: 'reply with XML' }],
+        }),
+        (error) => error?.code === 'invalid_endpoint',
+    );
+    assert.equal(fetchCount, 0);
 }
 
 async function testBackendProxyLoadsModelsWithoutModelAndParsesCommonShapes() {
@@ -1290,7 +1375,10 @@ async function testManualRequestCanCommitThroughTheProductionActionSeam() {
 }
 
 async function main() {
+    await testDatabaseCurrentApiBackendUsesRestrictedCallAI();
+    await testQQV2BackendRouterSelectsDatabaseVirtualPreset();
     await testBackendProxyUsesSillyTavernAndRedactsTheKey();
+    await testBackendProxyRejectsPublicHttpBeforeSending();
     await testBackendProxyLoadsModelsWithoutModelAndParsesCommonShapes();
     await testFinalPromptViewerBridgePostsOnlyThePromptSnapshot();
     testProductionRuntimeWiresThePromptObserver();

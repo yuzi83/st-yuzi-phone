@@ -1,4 +1,5 @@
 import { QQ_V2_BUILT_IN_PROMPT_PRESET_IDS } from '../domain/prompt-preset-ids.js';
+import { normalizeQQV2OpenAIBaseUrl } from '../api-endpoint-policy.js';
 import { createQQV2ApiKeyStore } from './api-key-store.js';
 
 const API_PRESETS_STORAGE_KEY = 'qq-v2.resources.api-presets';
@@ -613,30 +614,11 @@ function createId(cryptoApi) {
 }
 
 function normalizeApiEndpoint(value) {
-    let endpoint;
     try {
-        endpoint = new URL(String(value ?? '').trim());
-    } catch {
-        throw resourceError('invalid_api_endpoint', 'API endpoint must be a valid HTTPS or loopback HTTP URL');
+        return normalizeQQV2OpenAIBaseUrl(value);
+    } catch (error) {
+        throw resourceError('invalid_api_endpoint', error?.message || 'API 地址无效');
     }
-
-    const isLoopback = endpoint.hostname === 'localhost'
-        || endpoint.hostname === '127.0.0.1'
-        || endpoint.hostname === '[::1]'
-        || endpoint.hostname === '::1';
-    const usesAllowedProtocol = endpoint.protocol === 'https:'
-        || (endpoint.protocol === 'http:' && isLoopback);
-    if (!usesAllowedProtocol || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
-        throw resourceError('invalid_api_endpoint', 'API endpoint must use HTTPS unless it is a loopback URL');
-    }
-
-    let pathname = endpoint.pathname.replace(/\/+$/, '');
-    if (/\/(?:chat\/completions|models)$/i.test(pathname)) {
-        pathname = pathname.replace(/\/(?:chat\/completions|models)$/i, '');
-    }
-    if (!/\/v\d+$/i.test(pathname)) pathname = `${pathname}/v1`;
-    endpoint.pathname = pathname.replace(/\/{2,}/g, '/');
-    return endpoint.toString().replace(/\/$/, '');
 }
 
 function numberOrDefault(value, fallback) {

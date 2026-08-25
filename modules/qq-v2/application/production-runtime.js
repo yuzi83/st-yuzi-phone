@@ -1,7 +1,13 @@
 import { createQQV2Facade } from './facade.js';
+import { getDB } from '../../phone-core/db-bridge.js';
+import {
+    createQQV2DatabaseCurrentApiPreset,
+    isQQV2DatabaseCurrentApiPresetId,
+} from '../database-current-api.js';
 import { createQQV2GlobalRuntimeSettings } from './global-runtime-settings.js';
 import { createQQV2Repository } from '../domain/repository.js';
 import { QQ_V2_BUILT_IN_PROMPT_PRESET_IDS } from '../domain/prompt-preset-ids.js';
+import { normalizeQQV2TagName, normalizeQQV2TagNames } from '../domain/story-context-tags.js';
 import { createQQV2ActionService } from '../protocol/action-service.js';
 import { parseQQV2Response, validateQQV2ActionBatch } from '../protocol/xml.js';
 import { createQQV2ProactiveService } from '../proactive/service.js';
@@ -9,6 +15,10 @@ import { buildManualQQV2Request, buildQQV2StoryContext } from '../prompt/materia
 import { buildQQV2StickerCatalog } from '../prompt/sticker-catalog.js';
 import { createQQV2RequestService } from '../request/service.js';
 import { createSillyTavernQQV2Backend } from '../request/backend-proxy.js';
+import {
+    createQQV2BackendRouter,
+    createQQV2DatabaseCurrentApiBackend,
+} from '../request/database-current-api-backend.js';
 import { createQQImageLibraryPackService } from '../resources/image-library-pack.js';
 import { createQQDefaultImageLibraryInstaller } from '../resources/default-image-library.js';
 import { createQQV2ResourceService } from '../resources/service.js';
@@ -115,6 +125,8 @@ function defaultGlobalSettings() {
         groupProactivePresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.groupProactive,
         hostContextTurns: 3,
         conversationHistoryLimit: 100,
+        hostContextExtractTag: 'content',
+        hostContextExcludeTags: [],
         worldbook: {
             enabled: false,
             bookName: '',
@@ -147,6 +159,12 @@ function cloneGlobalSettings(settings) {
         conversationHistoryLimit: Number.isInteger(Number(source.conversationHistoryLimit))
             ? Number(source.conversationHistoryLimit)
             : defaults.conversationHistoryLimit,
+        hostContextExtractTag: Object.hasOwn(source, 'hostContextExtractTag')
+            ? (asText(source.hostContextExtractTag)
+                ? normalizeQQV2TagName(source.hostContextExtractTag) || defaults.hostContextExtractTag
+                : '')
+            : defaults.hostContextExtractTag,
+        hostContextExcludeTags: normalizeQQV2TagNames(source.hostContextExcludeTags),
         worldbook: { ...defaults.worldbook, ...(source.worldbook || {}) },
         proactive: {
             enabled: source.proactive?.enabled === true,
@@ -169,6 +187,12 @@ function runtimeSettingsPatch(settings) {
     }
     if (hasOwn(source, 'conversationHistoryLimit')) {
         patch.conversationHistoryLimit = nonNegativeInteger(source.conversationHistoryLimit, 'conversationHistoryLimit');
+    }
+    if (hasOwn(source, 'hostContextExtractTag')) {
+        patch.hostContextExtractTag = asText(source.hostContextExtractTag, 128);
+    }
+    if (hasOwn(source, 'hostContextExcludeTags')) {
+        patch.hostContextExcludeTags = source.hostContextExcludeTags;
     }
     return patch;
 }
@@ -342,15 +366,31 @@ export function createQQV2ProductionRuntime(options = {}) {
         stateStore,
         fetchImpl: options.fetchImpl || (typeof window === 'undefined' ? null : globalThis.fetch?.bind(globalThis)),
     });
+    const getDatabaseApi = typeof options.getDatabaseApi === 'function'
+        ? options.getDatabaseApi
+        : () => safeRead(getDB, null);
     const resources = options.resources || createQQV2ResourceService({
         storage: sharedStorage,
         cryptoApi: options.cryptoApi,
     });
-    const backend = options.backend || createSillyTavernQQV2Backend({
+    const primaryBackend = options.backend || createSillyTavernQQV2Backend({
         getRequestHeaders: () => resolveHeaders(host),
         logger: options.logger,
         onPromptReady: observeFinalPromptForViewer,
     });
+    const databaseBackend = createQQV2DatabaseCurrentApiBackend({
+        getDatabaseApi,
+        onPromptReady: observeFinalPromptForViewer,
+    });
+    const backend = createQQV2BackendRouter({
+        primaryBackend,
+        databaseBackend,
+    });
+    const resolveApiPreset = (presetId) => (
+        isQQV2DatabaseCurrentApiPresetId(presetId)
+            ? createQQV2DatabaseCurrentApiPreset()
+            : resources.getApiPresetForRequest(presetId)
+    );
     const worldbookGateway = options.worldbookGateway || createQQV2SillyTavernWorldbookGateway({
         getContext: () => host.readRawContext?.(),
         captureScopeSession,
@@ -798,7 +838,10 @@ export function createQQV2ProductionRuntime(options = {}) {
                     facts.peopleById,
                 )).join('\n') || '无'
                 : '无',
-            storyContext: buildQQV2StoryContext(storyMessages, settings.hostContextTurns),
+            storyContext: buildQQV2StoryContext(storyMessages, settings.hostContextTurns, {
+                extractTag: settings.hostContextExtractTag,
+                excludeTags: settings.hostContextExcludeTags,
+            }),
             worldbookContent,
             storyTime: getStoryTime(),
             availableStickers: stickerCatalog.text,
@@ -906,7 +949,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             });
         },
         runtimeSettingsResolver: resolveRuntimeSettings,
-        apiPresetResolver: (presetId) => resources.getApiPresetForRequest(presetId),
+        apiPresetResolver: resolveApiPreset,
         promptPresetResolver: (presetId) => resources.getPromptPreset(presetId),
         parseResponse: parseQQV2Response,
         validateActions: validateQQV2ActionBatch,
@@ -958,7 +1001,7 @@ export function createQQV2ProductionRuntime(options = {}) {
         runtimeSettingsResolver: resolveRuntimeSettings,
         privateOnly: true,
         backend,
-        apiPresetResolver: (presetId) => resources.getApiPresetForRequest(presetId),
+        apiPresetResolver: resolveApiPreset,
         promptPresetResolver: (presetId) => resources.getPromptPreset(presetId),
         listStickers,
         getStoryTime,
@@ -988,6 +1031,10 @@ export function createQQV2ProductionRuntime(options = {}) {
                 storyContext: buildQQV2StoryContext(
                     storyMessages,
                     runtimeSettings.hostContextTurns,
+                    {
+                        extractTag: runtimeSettings.hostContextExtractTag,
+                        excludeTags: runtimeSettings.hostContextExcludeTags,
+                    },
                 ),
                 worldbookContent,
                 storyTime,
@@ -1343,11 +1390,16 @@ export function createQQV2ProductionRuntime(options = {}) {
             };
         },
         async listSharedResources() {
-            const [apiPresets, promptPresets, stickers] = await Promise.all([
+            const [storedApiPresets, promptPresets, stickers] = await Promise.all([
                 resources.listApiPresets(),
                 resources.listPromptPresets(),
                 resources.listStickers(),
             ]);
+            const apiPresets = [...storedApiPresets];
+            const databaseApi = safeRead(getDatabaseApi, null);
+            if (typeof databaseApi?.callAI === 'function') {
+                apiPresets.push(createQQV2DatabaseCurrentApiPreset());
+            }
             return { apiPresets, promptPresets, stickers };
         },
         exportImageLibraryPack: () => imageLibraryPacks.exportPack(),
@@ -1720,6 +1772,8 @@ export function createQQV2ProductionRuntime(options = {}) {
                 'privateProactivePresetId',
                 'hostContextTurns',
                 'conversationHistoryLimit',
+                'hostContextExtractTag',
+                'hostContextExcludeTags',
             ]) {
                 if (!hasOwn(source, key)) continue;
                 sharedPatch[key] = scalarPatch[key];

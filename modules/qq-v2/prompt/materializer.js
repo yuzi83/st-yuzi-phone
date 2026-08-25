@@ -1,4 +1,5 @@
 import { formatQQV2MessageSemantic, qqV2MessageType } from '../domain/message-semantics.js';
+import { filterQQV2StoryContent } from '../domain/story-context-tags.js';
 import {
     QQ_V2_PROMPT_PLACEHOLDER_DEFINITIONS,
     QQ_V2_PROMPT_PLACEHOLDERS,
@@ -131,13 +132,14 @@ export function buildProactiveQQV2Request({ preset, variables = {} } = {}) {
 /**
  * 读取最近 N 条成功完成的正文 AI 回复。0 表示全部正文 AI 回复；用户消息不进入。
  */
-export function buildQQV2StoryContext(messages, turns = 0) {
+export function buildQQV2StoryContext(messages, turns = 0, tagSettings = {}) {
     const history = Array.isArray(messages) ? messages : [];
     const limit = positiveInteger(turns);
     const replies = history.filter(isSuccessfulStoryReply);
     const selectedReplies = limit ? replies.slice(-limit) : replies;
     const text = selectedReplies
-        .map((message) => `角色：${asText(message?.content)}`)
+        .map((message) => filterQQV2StoryContent(message?.content, tagSettings))
+        .filter(Boolean)
         .join('\n\n');
     return text || '无';
 }

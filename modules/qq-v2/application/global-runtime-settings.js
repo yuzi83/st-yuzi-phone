@@ -1,4 +1,9 @@
 import { QQ_V2_BUILT_IN_PROMPT_PRESET_IDS } from '../domain/prompt-preset-ids.js';
+import {
+    normalizeQQV2TagName,
+    normalizeQQV2TagNames,
+    parseQQV2TagInput,
+} from '../domain/story-context-tags.js';
 
 const STORAGE_KEY = 'qq-v2.runtime-settings';
 const LEGACY_WORLDBOOK_ENABLED_KEY = 'worldbookInjectionEnabled';
@@ -12,6 +17,8 @@ const GLOBAL_PRESET_DEFAULTS = Object.freeze({
 const GLOBAL_RUNTIME_DEFAULTS = Object.freeze({
     hostContextTurns: 3,
     conversationHistoryLimit: 100,
+    hostContextExtractTag: 'content',
+    hostContextExcludeTags: Object.freeze([]),
     worldbook: Object.freeze({
         enabled: false,
         timeWindow: Object.freeze({ mode: 'relative', value: 1, unit: 'month' }),
@@ -85,6 +92,14 @@ function normalizeSettings(value) {
             source.conversationHistoryLimit,
             GLOBAL_RUNTIME_DEFAULTS.conversationHistoryLimit,
         ),
+        hostContextExtractTag: Object.hasOwn(source, 'hostContextExtractTag')
+            && source.hostContextExtractTag !== undefined
+            && source.hostContextExtractTag !== null
+            ? (asText(source.hostContextExtractTag)
+                ? normalizeQQV2TagName(source.hostContextExtractTag) || GLOBAL_RUNTIME_DEFAULTS.hostContextExtractTag
+                : '')
+            : GLOBAL_RUNTIME_DEFAULTS.hostContextExtractTag,
+        hostContextExcludeTags: normalizeQQV2TagNames(source.hostContextExcludeTags),
         worldbook: {
             enabled: worldbook.enabled === true,
             timeWindow: normalizeTimeWindow(worldbook.timeWindow),
@@ -137,6 +152,12 @@ function backfillSharedSettings(current, legacy) {
         conversationHistoryLimit: Object.hasOwn(source, 'conversationHistoryLimit')
             ? source.conversationHistoryLimit
             : fallback.conversationHistoryLimit,
+        hostContextExtractTag: Object.hasOwn(source, 'hostContextExtractTag')
+            ? source.hostContextExtractTag
+            : fallback.hostContextExtractTag,
+        hostContextExcludeTags: Object.hasOwn(source, 'hostContextExcludeTags')
+            ? source.hostContextExcludeTags
+            : fallback.hostContextExcludeTags,
         worldbook: {
             ...worldbook,
             enabled: Object.hasOwn(worldbook, 'enabled') ? worldbook.enabled : fallbackWorldbook.enabled,
@@ -191,6 +212,20 @@ function applyPatch(current, patch) {
         const number = Number(source[key]);
         if (!Number.isInteger(number) || number < 0) throw new RangeError(`${key} must be a non-negative integer`);
         next[key] = number;
+    }
+    if (Object.hasOwn(source, 'hostContextExtractTag')) {
+        const rawTag = asText(source.hostContextExtractTag);
+        if (rawTag && !normalizeQQV2TagName(rawTag)) {
+            throw new RangeError('hostContextExtractTag must be a valid tag name');
+        }
+        next.hostContextExtractTag = rawTag ? normalizeQQV2TagName(rawTag) : '';
+    }
+    if (Object.hasOwn(source, 'hostContextExcludeTags')) {
+        const parsedTags = parseQQV2TagInput(source.hostContextExcludeTags);
+        if (parsedTags.invalid.length > 0) {
+            throw new RangeError('hostContextExcludeTags must contain valid tag names');
+        }
+        next.hostContextExcludeTags = parsedTags.tags;
     }
     const worldbook = asObject(source.worldbook);
     if (Object.hasOwn(worldbook, 'enabled')) next.worldbook.enabled = worldbook.enabled === true;

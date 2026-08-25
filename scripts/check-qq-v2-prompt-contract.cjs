@@ -120,7 +120,17 @@ async function testPromptHelpersKeepSuccessfulStoryRepliesAndEscapeProactiveSect
         { role: 'user', content: '第三句' },
         { role: 'assistant', content: '第三段回复' },
     ], 2);
-    assert.equal(storyContext, '角色：第二段回复\n\n角色：第三段回复');
+    assert.equal(storyContext, '第二段回复\n\n第三段回复');
+
+    const filteredStoryContext = buildQQV2StoryContext([
+        {
+            role: 'assistant',
+            content: '<status>表格</status>\n<content>第一段<table>子表</table></content>',
+        },
+        { role: 'assistant', content: '<CONTENT data="正文">第二段</CONTENT>' },
+        { role: 'assistant', content: '未包裹的旧正文' },
+    ], 0, { extractTag: '<content>', excludeTags: ['status', '<table>'] });
+    assert.equal(filteredStoryContext, '第一段\n\n第二段\n\n未包裹的旧正文');
 
     const sections = buildQQV2ProactiveSections({
         kind: 'private',

@@ -198,6 +198,30 @@ async function testApiPresetEndpointPolicyAndDefaults() {
         model: 'local-model',
         apiKey: 'ipv4-local-key',
     });
+    const ipv4LoopbackRange = await resources.saveApiPreset({
+        name: 'IPv4 loopback range',
+        endpoint: 'http://127.4.5.6:11434/v1',
+        model: 'local-model',
+        apiKey: 'ipv4-loopback-range-key',
+    });
+    const privateTen = await resources.saveApiPreset({
+        name: 'Private ten',
+        endpoint: 'http://10.20.30.40:8000/v1/chat/completions',
+        model: 'local-model',
+        apiKey: 'private-ten-key',
+    });
+    const private172 = await resources.saveApiPreset({
+        name: 'Private 172',
+        endpoint: 'http://172.16.1.50:8000/v1',
+        model: 'local-model',
+        apiKey: 'private-172-key',
+    });
+    const private192 = await resources.saveApiPreset({
+        name: 'Private 192',
+        endpoint: 'http://192.168.1.50:8000/v1/models',
+        model: 'local-model',
+        apiKey: 'private-192-key',
+    });
     const completionUrl = await resources.saveApiPreset({
         name: 'Completion URL',
         endpoint: 'https://api.example.test/v1/chat/completions',
@@ -217,6 +241,10 @@ async function testApiPresetEndpointPolicyAndDefaults() {
     assert.equal(loopback.endpoint, 'http://[::1]:11434/v1');
     assert.equal(namedLoopback.endpoint, 'http://localhost:11434/v1');
     assert.equal(ipv4Loopback.endpoint, 'http://127.0.0.1:11434/v1');
+    assert.equal(ipv4LoopbackRange.endpoint, 'http://127.4.5.6:11434/v1');
+    assert.equal(privateTen.endpoint, 'http://10.20.30.40:8000/v1');
+    assert.equal(private172.endpoint, 'http://172.16.1.50:8000/v1');
+    assert.equal(private192.endpoint, 'http://192.168.1.50:8000/v1');
     assert.equal(completionUrl.endpoint, 'https://api.example.test/v1');
     assert.equal(modelUrl.endpoint, 'https://api.example.test/v1');
     await assert.rejects(

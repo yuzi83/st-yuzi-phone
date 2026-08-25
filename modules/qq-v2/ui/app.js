@@ -43,6 +43,7 @@ import {
     downloadImageLibraryPack,
     pickImageLibraryPackFile,
 } from './image-library-pack-actions.js';
+import { normalizeQQV2TagName, parseQQV2TagInput } from '../domain/story-context-tags.js';
 
 const TABS = Object.freeze([
     ['messages', '消息'],
@@ -109,12 +110,19 @@ function cloneQQSettingsForUi(settings) {
     const proactive = asObject(source.proactive);
     const worldbook = asObject(source.worldbook);
     const timeWindow = asObject(worldbook.timeWindow);
+    const hasExtractTag = Object.hasOwn(source, 'hostContextExtractTag');
     return Object.freeze({
         activeApiPresetId: asText(source.activeApiPresetId),
         privateReplyPresetId: asText(source.privateReplyPresetId),
         privateProactivePresetId: asText(source.privateProactivePresetId),
         hostContextTurns: asInteger(source.hostContextTurns),
         conversationHistoryLimit: asInteger(source.conversationHistoryLimit),
+        hostContextExtractTag: hasExtractTag
+            ? (asText(source.hostContextExtractTag)
+                ? normalizeQQV2TagName(source.hostContextExtractTag) || 'content'
+                : '')
+            : 'content',
+        hostContextExcludeTags: Object.freeze(parseQQV2TagInput(source.hostContextExcludeTags).tags),
         proactive: Object.freeze({
             enabled: proactive.enabled === true,
             everyTurns: asInteger(proactive.everyTurns, 5),
@@ -161,12 +169,20 @@ function qqSettingsPatch(kind, values = {}, field = '') {
     }
     if (kind === 'context') {
         if (field === 'hostContextTurns') return { hostContextTurns: asInteger(source.hostContextTurns) };
+        if (field === 'hostContextExtractTag') {
+            return { hostContextExtractTag: asText(source.hostContextExtractTag) };
+        }
+        if (field === 'hostContextExcludeTags') {
+            return { hostContextExcludeTags: asArray(source.hostContextExcludeTags) };
+        }
         if (field === 'conversationHistoryLimit') {
             return { conversationHistoryLimit: asInteger(source.conversationHistoryLimit) };
         }
         if (field) return null;
         return {
             hostContextTurns: asInteger(source.hostContextTurns),
+            hostContextExtractTag: asText(source.hostContextExtractTag),
+            hostContextExcludeTags: asArray(source.hostContextExcludeTags),
             conversationHistoryLimit: asInteger(source.conversationHistoryLimit),
         };
     }
@@ -2655,10 +2671,21 @@ export function createQQApp({
             );
         } else if (kind === 'context') {
             const hostContext = settingField('\u5bbf\u4e3b\u4e0a\u4e0b\u6587\u6761\u6570', 'hostContextTurns', settings.hostContextTurns, 'number');
+            const extractTag = settingField('\u6807\u7b7e\u63d0\u53d6', 'hostContextExtractTag', settings.hostContextExtractTag, 'text');
+            const excludeTags = settingField(
+                '\u6807\u7b7e\u6392\u9664',
+                'hostContextExcludeTags',
+                settings.hostContextExcludeTags.join('\u3001'),
+                'text',
+            );
             const privateHistory = settingField('\u79c1\u804a\u5386\u53f2\u6761\u6570', 'conversationHistoryLimit', settings.conversationHistoryLimit, 'number');
             hostContext.querySelector('input')?.setAttribute('min', '0');
             privateHistory.querySelector('input')?.setAttribute('min', '0');
-            form.append(hostContext, privateHistory);
+            extractTag.querySelector('input')?.setAttribute('placeholder', 'content');
+            extractTag.querySelector('input')?.setAttribute('title', '\u8f93\u5165\u6807\u7b7e\u540d\u3001\u4e0d\u9700\u8981\u5c16\u62ec\u53f7');
+            excludeTags.querySelector('input')?.setAttribute('placeholder', '\u4f8b\u5982\uff1astatus\u3001table');
+            excludeTags.querySelector('input')?.setAttribute('title', '\u591a\u4e2a\u6807\u7b7e\u53ef\u7528\u987f\u53f7\u3001\u9017\u53f7\u6216\u7a7a\u683c\u5206\u9694\u3001\u4e0d\u9700\u8981\u5c16\u62ec\u53f7');
+            form.append(hostContext, extractTag, excludeTags, privateHistory);
         } else if (kind === 'worldbook') {
             const timeWindow = settings.worldbook.timeWindow;
             const worldbookOptions = [['', '\u672a\u9009\u62e9']].concat(asArray(worldbooksResult?.worldbooks).map((worldbook) => [
@@ -3461,6 +3488,8 @@ export function createQQApp({
             light: value('light'),
             depth: value('depth'),
             keywords: value('keywords'),
+            hostContextExtractTag: value('hostContextExtractTag'),
+            hostContextExcludeTags: value('hostContextExcludeTags'),
         };
         if (kind === 'reply') {
             if (field === 'everyTurns') {
@@ -3481,6 +3510,17 @@ export function createQQApp({
                 }
                 values.hostContextTurns = hostContextTurns;
             }
+            const rawExtractTag = value('hostContextExtractTag');
+            const extractTag = normalizeQQV2TagName(rawExtractTag);
+            if (rawExtractTag && !extractTag) {
+                return reject('\u6807\u7b7e\u63d0\u53d6\u5fc5\u987b\u662f\u6709\u6548\u7684\u6807\u7b7e\u540d');
+            }
+            const excludedTags = parseQQV2TagInput(value('hostContextExcludeTags'));
+            if (excludedTags.invalid.length > 0) {
+                return reject(`\u6807\u7b7e\u6392\u9664\u5305\u542b\u65e0\u6548\u6807\u7b7e\uff1a${excludedTags.invalid.join('\u3001')}`);
+            }
+            values.hostContextExtractTag = extractTag;
+            values.hostContextExcludeTags = [...excludedTags.tags];
             if (!field || field === 'conversationHistoryLimit') {
                 const conversationHistoryLimit = nonNegativeInteger('conversationHistoryLimit');
                 if (conversationHistoryLimit === null) {
@@ -3509,6 +3549,13 @@ export function createQQApp({
             field,
             values,
         });
+        if (result?.ok && kind === 'context') {
+            const saved = result.settings || {};
+            const extractInput = form.elements.hostContextExtractTag;
+            const excludeInput = form.elements.hostContextExcludeTags;
+            if (extractInput) extractInput.value = saved.hostContextExtractTag ?? values.hostContextExtractTag;
+            if (excludeInput) excludeInput.value = asArray(saved.hostContextExcludeTags).join('\u3001');
+        }
         if (status) status.textContent = result?.ok ? '' : (result?.error?.message
             || (result?.reason === 'scope-changed' ? '\u5f53\u524d\u804a\u5929\u5df2\u5207\u6362\uff0c\u672a\u4fdd\u5b58' : '\u4fdd\u5b58\u5931\u8d25'));
     };

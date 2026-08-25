@@ -69,6 +69,8 @@ async function testGlobalRuntimeStorage() {
         privateProactivePresetId: 'legacy-proactive',
         hostContextTurns: 0,
         conversationHistoryLimit: 0,
+        hostContextExtractTag: 'content',
+        hostContextExcludeTags: [],
         worldbook: {
             enabled: true,
             timeWindow: { mode: 'relative', value: 2, unit: 'day' },
@@ -167,6 +169,8 @@ async function testExistingSharedRuntimeMigration() {
         privateProactivePresetId: 'existing-proactive',
         hostContextTurns: 0,
         conversationHistoryLimit: 0,
+        hostContextExtractTag: 'content',
+        hostContextExcludeTags: [],
         worldbook: {
             enabled: true,
             timeWindow: { mode: 'relative', value: 6, unit: 'hour' },
