@@ -289,6 +289,28 @@ function isSheetTableAliasMatch(sheetKey, sheet, tableName) {
     return aliases.some((alias) => normalizeTableAlias(alias) === safeTableName);
 }
 
+function getSheetColumnAliases(sheet) {
+    const content = Array.isArray(sheet?.content) ? sheet.content : [];
+    if (!Array.isArray(content[0])) return null;
+
+    const columns = content[0]
+        .map((column) => String(column ?? '').trim())
+        .filter(Boolean);
+    const sourceData = sheet?.sourceData && typeof sheet.sourceData === 'object' ? sheet.sourceData : {};
+    const declaredAliases = sourceData.columnAliases;
+    if (declaredAliases && typeof declaredAliases === 'object' && !Array.isArray(declaredAliases)) {
+        for (const [physicalName, aliases] of Object.entries(declaredAliases)) {
+            const normalizedPhysicalName = String(physicalName || '').trim();
+            if (normalizedPhysicalName) columns.push(normalizedPhysicalName);
+            if (Array.isArray(aliases)) {
+                columns.push(...aliases.map((alias) => String(alias ?? '').trim()).filter(Boolean));
+            }
+        }
+    }
+
+    return [...new Set(columns)];
+}
+
 function normalizeRowId(value) {
     const rowId = Number(value);
     return Number.isInteger(rowId) && rowId > 0 ? rowId : null;
@@ -662,9 +684,12 @@ export function getTableAvailabilityViaApi(tableName) {
             return { status: 'unavailable' };
         }
 
-        return Object.entries(rawData).some(([sheetKey, sheet]) => isSheetTableAliasMatch(sheetKey, sheet, safeTableName))
-            ? { status: 'present' }
-            : { status: 'absent' };
+        const entry = Object.entries(rawData)
+            .find(([sheetKey, sheet]) => isSheetTableAliasMatch(sheetKey, sheet, safeTableName));
+        if (!entry) return { status: 'absent' };
+
+        const columns = getSheetColumnAliases(entry[1]);
+        return columns ? { status: 'present', columns } : { status: 'present' };
     } catch {
         return { status: 'unavailable' };
     }

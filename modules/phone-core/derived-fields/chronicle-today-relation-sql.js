@@ -13,6 +13,15 @@ export const CHRONICLE_TODAY_RELATION_REQUIRED_COLUMNS = Object.freeze([
     'today_relation',
 ]);
 export const CHRONICLE_TODAY_RELATION_ANCHOR_REQUIRED_COLUMNS = Object.freeze(['row_id', 'cur_time']);
+export const CHRONICLE_TODAY_RELATION_COLUMN_ALIASES = Object.freeze({
+    row_id: Object.freeze(['row_id', '行号']),
+    time_span: Object.freeze(['time_span', '时间跨度']),
+    today_relation: Object.freeze(['today_relation', '与今天的关系']),
+});
+export const CHRONICLE_TODAY_RELATION_ANCHOR_COLUMN_ALIASES = Object.freeze({
+    row_id: Object.freeze(['row_id', '行号']),
+    cur_time: Object.freeze(['cur_time', '当前时间']),
+});
 
 const CHRONICLE_TODAY_RELATION_ANCHOR_TABLE_NAMES = new Set(CHRONICLE_TODAY_RELATION_ANCHOR_TABLES);
 const CHRONICLE_TODAY_RELATION_TABLE_NAMES = new Set(CHRONICLE_TODAY_RELATION_TABLES);

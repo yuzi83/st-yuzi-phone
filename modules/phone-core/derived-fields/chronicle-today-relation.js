@@ -4,8 +4,10 @@ import { subscribeTableFillStart, subscribeTableUpdate } from '../callbacks.js';
 import { createDerivedFieldService, readDerivedField } from './derived-field-service.js';
 import { resolveFirstAvailableTableCandidate } from './table-candidate-resolver.js';
 import {
+    CHRONICLE_TODAY_RELATION_ANCHOR_COLUMN_ALIASES,
     CHRONICLE_TODAY_RELATION_ANCHOR_REQUIRED_COLUMNS,
     CHRONICLE_TODAY_RELATION_ANCHOR_TABLES,
+    CHRONICLE_TODAY_RELATION_COLUMN_ALIASES,
     CHRONICLE_TODAY_RELATION_REQUIRED_COLUMNS,
     CHRONICLE_TODAY_RELATION_TABLES,
     buildChronicleTodayRelationSignatureSql,
@@ -84,6 +86,7 @@ export async function resolveChronicleTodayRelationContext(deps, runtime = {}) {
         deps,
         tableNames: CHRONICLE_TODAY_RELATION_TABLES,
         columns: CHRONICLE_TODAY_RELATION_REQUIRED_COLUMNS,
+        columnAliases: CHRONICLE_TODAY_RELATION_COLUMN_ALIASES,
         runtime,
     });
     if (chronicleCandidate.status !== 'ready') return normalizeCandidateContextResult(chronicleCandidate);
@@ -92,6 +95,7 @@ export async function resolveChronicleTodayRelationContext(deps, runtime = {}) {
         deps,
         tableNames: CHRONICLE_TODAY_RELATION_ANCHOR_TABLES,
         columns: CHRONICLE_TODAY_RELATION_ANCHOR_REQUIRED_COLUMNS,
+        columnAliases: CHRONICLE_TODAY_RELATION_ANCHOR_COLUMN_ALIASES,
         runtime,
     });
     if (anchorCandidate.status !== 'ready') return normalizeCandidateContextResult(anchorCandidate);

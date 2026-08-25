@@ -3,7 +3,41 @@ const STRUCTURAL_QUERY_FAILURE_CODES = new Set([
     'column_not_resolved',
 ]);
 
-export async function resolveFirstAvailableTableCandidate({ deps, tableNames, columns, runtime = {} }) {
+function normalizeColumnAlias(value) {
+    return String(value ?? '').trim().toLocaleLowerCase();
+}
+
+function getSnapshotMissingColumns(availability, columns, columnAliases = {}) {
+    if (!Array.isArray(availability?.columns) || !Array.isArray(columns)) return null;
+
+    const availableColumns = new Set(availability.columns.map(normalizeColumnAlias).filter(Boolean));
+    return columns.filter((column) => {
+        const queryColumn = String(column ?? '').trim();
+        if (!queryColumn) return false;
+        const aliases = Array.isArray(columnAliases?.[queryColumn])
+            ? [queryColumn, ...columnAliases[queryColumn]]
+            : [queryColumn];
+        return !aliases.some((alias) => availableColumns.has(normalizeColumnAlias(alias)));
+    });
+}
+
+function buildSnapshotColumnFailure(tableName, missingColumns) {
+    return {
+        ok: false,
+        code: 'column_not_resolved',
+        message: tableName + ': 表格快照缺少必要字段 ' + missingColumns.join(', '),
+        source: 'table_snapshot',
+        missingColumns,
+    };
+}
+
+export async function resolveFirstAvailableTableCandidate({
+    deps,
+    tableNames,
+    columns,
+    columnAliases = {},
+    runtime = {},
+}) {
     const failures = [];
 
     for (const tableName of tableNames) {
@@ -11,6 +45,15 @@ export async function resolveFirstAvailableTableCandidate({ deps, tableNames, co
         if (runtime.shouldPause?.()) return { status: 'fill-active' };
         if (availability?.status === 'absent') continue;
         if (availability?.status === 'unavailable') return { status: 'runtime-not-ready' };
+
+        const missingSnapshotColumns = getSnapshotMissingColumns(availability, columns, columnAliases);
+        if (missingSnapshotColumns?.length > 0) {
+            failures.push({
+                tableName,
+                result: buildSnapshotColumnFailure(tableName, missingSnapshotColumns),
+            });
+            continue;
+        }
 
         const result = await deps.queryTableRows({
             tableName,

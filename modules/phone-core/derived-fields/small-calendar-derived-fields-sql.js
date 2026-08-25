@@ -10,6 +10,12 @@ export const SMALL_CALENDAR_DERIVED_FIELDS_REQUIRED_COLUMNS = Object.freeze([
     'weekday_text',
     'month_days',
 ]);
+export const SMALL_CALENDAR_DERIVED_FIELDS_COLUMN_ALIASES = Object.freeze({
+    row_id: Object.freeze(['row_id', '行号']),
+    date_text: Object.freeze(['date_text', '日期']),
+    weekday_text: Object.freeze(['weekday_text', '星期几']),
+    month_days: Object.freeze(['month_days', '月份几天']),
+});
 
 const SMALL_CALENDAR_DERIVED_FIELDS_TABLE_NAMES = new Set(SMALL_CALENDAR_DERIVED_FIELDS_TABLES);
 

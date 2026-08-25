@@ -4,6 +4,7 @@ import { subscribeTableFillStart, subscribeTableUpdate } from '../callbacks.js';
 import { createDerivedFieldService, readDerivedField } from './derived-field-service.js';
 import { resolveFirstAvailableTableCandidate } from './table-candidate-resolver.js';
 import {
+    SMALL_CALENDAR_DERIVED_FIELDS_COLUMN_ALIASES,
     SMALL_CALENDAR_DERIVED_FIELDS_REQUIRED_COLUMNS,
     SMALL_CALENDAR_DERIVED_FIELDS_TABLES,
     buildSmallCalendarDerivedFieldsSignatureSql,
@@ -42,6 +43,7 @@ export async function resolveSmallCalendarDerivedFieldsContext(deps, runtime = {
         deps,
         tableNames: SMALL_CALENDAR_DERIVED_FIELDS_TABLES,
         columns: SMALL_CALENDAR_DERIVED_FIELDS_REQUIRED_COLUMNS,
+        columnAliases: SMALL_CALENDAR_DERIVED_FIELDS_COLUMN_ALIASES,
         runtime,
     });
     if (candidate.status === 'ready') return { status: 'ready', context: { tableName: candidate.tableName } };
