@@ -271,6 +271,10 @@ async function main() {
         'a generated image must visibly support click-to-zoom');
     assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer-image', 'object-fit:\\s*contain'),
         'the QQ image viewer must show the whole picture');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-view-dialog', 'inline-size:\\s*100%'),
+        'the QQ image viewer dialog must fill the available phone width');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-view-dialog', 'block-size:\\s*100%'),
+        'the QQ image viewer dialog must fill the available phone height');
     assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer-close', 'backdrop-filter:\\s*blur'),
         'the viewer close control must use a translucent glass treatment');
     assert.ok(cssRuleHas(

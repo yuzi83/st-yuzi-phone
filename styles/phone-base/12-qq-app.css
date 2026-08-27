@@ -3550,8 +3550,10 @@
 }
 
 .yuzi-qq-image-view-dialog {
-    inline-size: min(100%, var(--yuzi-qq-dialog-width));
-    block-size: min(100%, var(--yuzi-qq-image-viewer-max-height));
+    inline-size: 100%;
+    block-size: 100%;
+    max-inline-size: none;
+    max-block-size: none;
     padding: 0;
     overflow: visible;
     background: transparent;

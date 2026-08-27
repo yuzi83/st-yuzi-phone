@@ -283,6 +283,8 @@ async function testSettingsHomeAndImageGenerationPageExposeConfirmedControls() {
             promptTranslationEnabled: true,
             promptTranslationApiPresetId: 'api-1',
             promptTranslationPresetId: 'image-1',
+            promptTranslationExtractTag: 'content',
+            promptTranslationExcludeTags: ['analysis', 'meta'],
         },
         tables: [{
             sheetKey: 'sheet_roles',
@@ -322,6 +324,8 @@ async function testSettingsHomeAndImageGenerationPageExposeConfirmedControls() {
     assert.match(pageHtml, /id="phone-image-generation-prompt-translation-enabled"/u);
     assert.match(pageHtml, /id="phone-image-generation-preset-select"/u);
     assert.match(pageHtml, /id="phone-image-generation-api-preset-select"/u);
+    assert.match(pageHtml, /id="phone-image-generation-prompt-translation-extract-tag"/u);
+    assert.match(pageHtml, /id="phone-image-generation-prompt-translation-exclude-tags"/u);
     assert.match(pageHtml, /id="phone-image-generation-preset-import-btn"/u);
     assert.match(pageHtml, /id="phone-image-generation-preset-export-btn"/u);
     assert.match(pageHtml, /id="phone-image-generation-preset-delete-btn"/u);

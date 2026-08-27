@@ -1,5 +1,8 @@
 import { Logger } from '../error-handler.js';
 import { normalizeTableContentReplacementSettings } from '../table-content-replacement/config.js';
+import {
+    normalizeImagePromptOutputFilterSettings,
+} from '../image-generation/prompt-output-filter.js';
 
 export const extensionName = 'YuziPhone';
 
@@ -53,6 +56,8 @@ export const IMAGE_GENERATION_DEFAULTS = Object.freeze({
     promptTranslationEnabled: false,
     promptTranslationApiPresetId: '',
     promptTranslationPresetId: '',
+    promptTranslationExtractTag: '',
+    promptTranslationExcludeTags: Object.freeze([]),
 });
 
 const APPEARANCE_RESOURCE_IMAGE_MIME_TYPES = new Set([
@@ -304,6 +309,7 @@ function normalizeImageGenerationRoleMappings(raw) {
 
 export function normalizeImageGenerationSettings(raw) {
     const source = isPlainObject(raw) ? raw : {};
+    const promptOutputFilter = normalizeImagePromptOutputFilterSettings(source);
     const timeout = Number(source.timeoutMs);
     const timeoutMs = Number.isFinite(timeout)
         ? Math.max(
@@ -328,6 +334,8 @@ export function normalizeImageGenerationSettings(raw) {
             source.promptTranslationPresetId,
             256,
         ),
+        promptTranslationExtractTag: promptOutputFilter.extractTag,
+        promptTranslationExcludeTags: promptOutputFilter.excludeTags,
     };
 }
 

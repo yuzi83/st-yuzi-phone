@@ -16,6 +16,8 @@ const BASE_CONFIG = {
     promptTranslationEnabled: true,
     promptTranslationApiPresetId: 'api-1',
     promptTranslationPresetId: 'image-1',
+    promptTranslationExtractTag: 'content',
+    promptTranslationExcludeTags: ['analysis'],
 };
 
 function createBaseHarness(overrides = {}) {
@@ -56,7 +58,7 @@ function createBaseHarness(overrides = {}) {
                 return {
                     ok: true,
                     status: 'translated',
-                    content: '1girl, silver hair, by the window',
+                    content: '<content>1girl, silver hair, by the window\n<analysis>internal</analysis></content>',
                 };
             },
         },
@@ -120,16 +122,28 @@ async function testTestGenerateTranslatesBeforeCallingImageGeneration() {
         imageGenerationPresetId: 'image-1',
         timeoutMs: 90_000,
     }]);
-    assert.deepEqual(harness.calls.generations, [{
-        prompt: '1girl, silver hair, by the window',
-        width: null,
-        height: null,
-        negativePrompt: '',
-        change: '',
-        timeoutMs: 90_000,
-        folder: 'yuzi-phone-generated',
-        filename: 'test',
-    }]);
+    assert.equal(harness.calls.generations.length, 1);
+    assert.deepEqual(
+        {
+            ...harness.calls.generations[0],
+            timeoutMs: 90_000,
+        },
+        {
+            prompt: '1girl, silver hair, by the window',
+            width: null,
+            height: null,
+            negativePrompt: '',
+            change: '',
+            timeoutMs: 90_000,
+            folder: 'yuzi-phone-generated',
+            filename: 'test',
+        },
+    );
+    assert.ok(
+        harness.calls.generations[0].timeoutMs > 0
+            && harness.calls.generations[0].timeoutMs <= 90_000,
+        'generation timeout must stay within the shared request deadline',
+    );
 }
 
 async function testTranslationFailureFallsBackToNaturalPrompt() {

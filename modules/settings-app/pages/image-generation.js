@@ -3,6 +3,7 @@ import { showImageViewerDialog } from '../services/image-viewer-dialog.js';
 import { downloadTextFile } from '../services/media-upload/download.js';
 import { buildSettingsPageFrame, buildSettingsSectionHtml } from '../layout/primitives.js';
 import { showAlertDialog, showConfirmDialog } from '../ui/confirm-dialog.js';
+import { normalizeImagePromptOutputFilterSettings } from '../../image-generation/prompt-output-filter.js';
 
 function asArray(value) {
     return Array.isArray(value) ? value : [];
@@ -90,6 +91,7 @@ function getConfig(viewModel = {}) {
     const config = viewModel?.config && typeof viewModel.config === 'object'
         ? viewModel.config
         : {};
+    const promptOutputFilter = normalizeImagePromptOutputFilterSettings(config);
     return {
         enabled: config.enabled === true,
         timeoutMs: Number.isFinite(Number(config.timeoutMs)) ? Number(config.timeoutMs) : 300000,
@@ -97,6 +99,8 @@ function getConfig(viewModel = {}) {
         promptTranslationEnabled: config.promptTranslationEnabled === true,
         promptTranslationApiPresetId: asText(config.promptTranslationApiPresetId),
         promptTranslationPresetId: asText(config.promptTranslationPresetId),
+        promptTranslationExtractTag: promptOutputFilter.extractTag,
+        promptTranslationExcludeTags: promptOutputFilter.excludeTags,
     };
 }
 
@@ -452,6 +456,22 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
                         ${buildApiPresetOptions(apiPresets, config.promptTranslationApiPresetId)}
                     </select>
                 </label>
+                <label class="phone-settings-field-inline phone-image-generation-preset-field">
+                    <span>标签提取</span>
+                    <input id="phone-image-generation-prompt-translation-extract-tag"
+                        class="phone-settings-input"
+                        value="${escapeHtmlAttr(config.promptTranslationExtractTag)}"
+                        placeholder="例如：content"
+                        title="输入要提取的标签名，可不带尖括号。留空则保留 AI 全部输出。">
+                </label>
+                <label class="phone-settings-field-inline phone-image-generation-preset-field">
+                    <span>标签排除</span>
+                    <input id="phone-image-generation-prompt-translation-exclude-tags"
+                        class="phone-settings-input"
+                        value="${escapeHtmlAttr(config.promptTranslationExcludeTags.join('、'))}"
+                        placeholder="例如：analysis、meta"
+                        title="多个标签可用顿号、逗号、分号或空格分隔，可不带尖括号。">
+                </label>
             </div>
             <div class="phone-image-generation-preset-status ${resourceStatus ? '' : 'is-empty'}">
                 ${escapeHtml(resourceStatus || '已选择生图预设后，转换接口才会参与生图请求。')}
@@ -711,6 +731,8 @@ function createImageGenerationPageSession(ctx) {
                 promptTranslationEnabled: false,
                 promptTranslationApiPresetId: '',
                 promptTranslationPresetId: '',
+                promptTranslationExtractTag: '',
+                promptTranslationExcludeTags: [],
             },
             tables: [],
         },
@@ -850,6 +872,12 @@ function createImageGenerationPageSession(ctx) {
         const translationToggle = ctx.container.querySelector('#phone-image-generation-prompt-translation-enabled');
         const imagePresetSelect = ctx.container.querySelector('#phone-image-generation-preset-select');
         const apiPresetSelect = ctx.container.querySelector('#phone-image-generation-api-preset-select');
+        const extractTagInput = ctx.container.querySelector(
+            '#phone-image-generation-prompt-translation-extract-tag',
+        );
+        const excludeTagsInput = ctx.container.querySelector(
+            '#phone-image-generation-prompt-translation-exclude-tags',
+        );
         return {
             enabled: ctx.container.querySelector('#phone-image-generation-enabled')?.checked === true,
             timeoutMs: clampTimeoutMs(ctx.container.querySelector('#phone-image-generation-timeout')?.value),
@@ -865,6 +893,12 @@ function createImageGenerationPageSession(ctx) {
             promptTranslationPresetId: imagePresetSelect
                 ? asText(imagePresetSelect.value)
                 : current.promptTranslationPresetId,
+            promptTranslationExtractTag: extractTagInput
+                ? asText(extractTagInput.value)
+                : current.promptTranslationExtractTag,
+            promptTranslationExcludeTags: excludeTagsInput
+                ? String(excludeTagsInput.value ?? '')
+                : current.promptTranslationExcludeTags,
         };
     };
     const setPromptPreview = (prompt) => {
@@ -1244,6 +1278,26 @@ function createImageGenerationPageSession(ctx) {
                 refreshPreviewAfter: false,
             });
         });
+        addListener(
+            ctx.container.querySelector('#phone-image-generation-prompt-translation-extract-tag'),
+            'change',
+            () => {
+                void saveConfig(readConfigFromDom(), {
+                    rerender: true,
+                    refreshPreviewAfter: false,
+                });
+            },
+        );
+        addListener(
+            ctx.container.querySelector('#phone-image-generation-prompt-translation-exclude-tags'),
+            'change',
+            () => {
+                void saveConfig(readConfigFromDom(), {
+                    rerender: true,
+                    refreshPreviewAfter: false,
+                });
+            },
+        );
         const presetImportInput = ctx.container.querySelector('#phone-image-generation-preset-import-file');
         addListener(ctx.container.querySelector('#phone-image-generation-preset-import-btn'), 'click', () => {
             presetImportInput?.click();

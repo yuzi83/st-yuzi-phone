@@ -34,6 +34,7 @@ import { createHostChatDeletedFact, resolveDeletedQQV2Scope } from '../host/life
 import { observeFinalPromptForViewer } from '../../integration/final-prompt-viewer-bridge.js';
 import { createWorldbookContextResolver } from '../../worldbook-reading/context-resolver.js';
 import { normalizeImageGenerationSettings } from '../../settings/schema.js';
+import { filterImagePromptOutput } from '../../image-generation/prompt-output-filter.js';
 import {
     buildImagePromptTranslationMessages,
     createImagePromptTranslationService,
@@ -2053,7 +2054,10 @@ export function createQQV2ProductionRuntime(options = {}) {
                     signal: scopeSession.signal,
                 });
                 if (translation.ok === true) {
-                    prompt = translation.content;
+                    prompt = filterImagePromptOutput(
+                        translation.content,
+                        imageGenerationConfig,
+                    );
                 } else if (translation.status === 'timeout' || translation.status === 'cancelled') {
                     throw imageGenerationError(
                         translation.error?.message || '生图提示词转换超时',

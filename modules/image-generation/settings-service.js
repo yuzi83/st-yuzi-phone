@@ -3,6 +3,7 @@ import {
     savePhoneSetting as persistPhoneSetting,
     normalizeImageGenerationSettings,
 } from '../settings.js';
+import { filterImagePromptOutput } from './prompt-output-filter.js';
 
 function cloneValue(value) {
     if (value === undefined) return undefined;
@@ -251,8 +252,12 @@ export function createImageGenerationSettingsService(options = {}) {
             }
 
             if (translation?.ok === true) {
-                prompt = translation.content;
-                aiOutput = translation.content;
+                const filteredOutput = filterImagePromptOutput(
+                    translation.content,
+                    config,
+                );
+                prompt = filteredOutput;
+                aiOutput = filteredOutput;
             } else if (translation?.status === 'timeout' || translation?.status === 'cancelled') {
                 return {
                     ok: false,

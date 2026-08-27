@@ -276,6 +276,8 @@ async function testRuntimeUsesPromptTranslationOutputBeforeCallingImageGeneratio
             promptTranslationEnabled: true,
             promptTranslationApiPresetId: 'translator-api',
             promptTranslationPresetId: 'image-preset',
+            promptTranslationExtractTag: 'content',
+            promptTranslationExcludeTags: ['analysis'],
         }),
         promptTranslationService: {
             async translate(input) {
@@ -283,7 +285,7 @@ async function testRuntimeUsesPromptTranslationOutputBeforeCallingImageGeneratio
                 return {
                     ok: true,
                     status: 'translated',
-                    content: '模型任意输出\n<not-a-tag>',
+                    content: '<content>1girl, silver hair\n<analysis>internal</analysis></content>',
                 };
             },
         },
@@ -315,7 +317,7 @@ async function testRuntimeUsesPromptTranslationOutputBeforeCallingImageGeneratio
         false,
     );
     assert.equal(fixture.generationInputs.length, 1);
-    assert.equal(fixture.generationInputs[0].prompt, '模型任意输出\n<not-a-tag>');
+    assert.equal(fixture.generationInputs[0].prompt, '1girl, silver hair');
 
     fixture.runtime.destroy();
 }
