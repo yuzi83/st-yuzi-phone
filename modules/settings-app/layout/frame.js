@@ -3,6 +3,7 @@ import {
     buildBeautifyTemplatePageHtml,
     buildButtonStylePageHtml,
     buildSettingsHomePageHtml,
+    buildTableContentReplacementPageHtml,
 } from './page-builders.js';
 import {
     SETTINGS_ENTRY_META,
@@ -32,4 +33,5 @@ export {
     buildAppearancePageHtml,
     buildButtonStylePageHtml,
     buildBeautifyTemplatePageHtml,
+    buildTableContentReplacementPageHtml,
 };

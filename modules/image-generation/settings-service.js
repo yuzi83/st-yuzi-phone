@@ -24,6 +24,22 @@ function text(value) {
     return String(value ?? '').trim();
 }
 
+function asArray(value) {
+    return Array.isArray(value) ? value : [];
+}
+
+function cloneSharedResources(result) {
+    const source = result && typeof result === 'object' && !Array.isArray(result)
+        ? result
+        : {};
+    return {
+        status: text(source.status) || 'ready',
+        ...(source.error ? { error: text(source.error?.message || source.error) } : {}),
+        apiPresets: cloneValue(asArray(source.apiPresets)),
+        imageGenerationPresets: cloneValue(asArray(source.imageGenerationPresets)),
+    };
+}
+
 function createDefaultTestFilename() {
     if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
         return `settings-test-${globalThis.crypto.randomUUID()}`;
@@ -49,6 +65,11 @@ export function createImageGenerationSettingsService(options = {}) {
         && typeof options.imageGenerationService === 'object'
         ? options.imageGenerationService
         : {};
+    const qqV2PresetService = options.qqV2PresetService
+        && typeof options.qqV2PresetService === 'object'
+        ? options.qqV2PresetService
+        : null;
+    const now = typeof options.now === 'function' ? options.now : Date.now;
 
     function readConfig(override) {
         if (override && typeof override === 'object' && !Array.isArray(override)) {
@@ -58,14 +79,37 @@ export function createImageGenerationSettingsService(options = {}) {
         return normalizeImageGenerationSettings(settings?.imageGeneration);
     }
 
+    async function readSharedResources() {
+        if (typeof qqV2PresetService?.readSharedResources !== 'function') return null;
+        try {
+            const result = await qqV2PresetService.readSharedResources();
+            if (result?.ok === false) {
+                return {
+                    status: text(result.status) || 'failed',
+                    error: text(result.error?.message || result.error) || '生图预设读取失败',
+                    apiPresets: [],
+                    imageGenerationPresets: [],
+                };
+            }
+            return cloneSharedResources(result);
+        } catch (error) {
+            return {
+                status: 'failed',
+                error: text(error?.message) || '生图预设读取失败',
+                apiPresets: [],
+                imageGenerationPresets: [],
+            };
+        }
+    }
+
     async function loadViewModel(input = {}) {
         const config = readConfig(input?.config);
-        let rawData;
-        try {
-            rawData = await tableReader();
-        } catch {
-            rawData = {};
-        }
+        const shouldReadSharedResources = input.includeSharedResources === true
+            || !Object.prototype.hasOwnProperty.call(input, 'testInput');
+        const [rawData, sharedResources] = await Promise.all([
+            Promise.resolve().then(() => tableReader()).catch(() => ({})),
+            shouldReadSharedResources ? readSharedResources() : Promise.resolve(null),
+        ]);
         const model = typeof characterMapping.buildCharacterMappingModel === 'function'
             ? characterMapping.buildCharacterMappingModel(rawData, config.roleMappings)
             : emptyMappingModel();
@@ -76,6 +120,7 @@ export function createImageGenerationSettingsService(options = {}) {
                 Array.isArray(model?.resolvedMappings) ? model.resolvedMappings : [],
             ),
         };
+        if (sharedResources) viewModel.sharedResources = sharedResources;
         if (input?.testInput && typeof input.testInput === 'object') {
             const names = text(input.testInput.names ?? input.testInput.explicitNames);
             const description = text(input.testInput.description);
@@ -137,7 +182,7 @@ export function createImageGenerationSettingsService(options = {}) {
             };
         }
 
-        const config = readConfig();
+        const config = readConfig(input?.config);
         const requestConfig = normalizeImageGenerationSettings({
             ...config,
             timeoutMs: input.timeoutMs ?? config.timeoutMs,
@@ -155,8 +200,8 @@ export function createImageGenerationSettingsService(options = {}) {
             description: text(input.description),
             scanDescription: true,
         }) || {};
-        const prompt = text(composition.prompt);
-        if (!prompt) {
+        const naturalPrompt = text(composition.prompt);
+        if (!naturalPrompt) {
             return {
                 ok: false,
                 status: 'invalid-input',
@@ -172,6 +217,79 @@ export function createImageGenerationSettingsService(options = {}) {
             };
         }
 
+        const shouldTranslate = config.promptTranslationEnabled
+            && text(config.promptTranslationApiPresetId)
+            && text(config.promptTranslationPresetId)
+            && typeof qqV2PresetService?.translateImagePrompt === 'function';
+        const startedAt = shouldTranslate ? Number(now()) : Number.NaN;
+        const deadline = Number.isFinite(startedAt)
+            ? startedAt + requestConfig.timeoutMs
+            : null;
+        let prompt = naturalPrompt;
+        let aiOutput;
+        if (shouldTranslate) {
+            let translation;
+            try {
+                translation = await qqV2PresetService.translateImagePrompt({
+                    prompt: naturalPrompt,
+                    apiPresetId: config.promptTranslationApiPresetId,
+                    imageGenerationPresetId: config.promptTranslationPresetId,
+                    timeoutMs: deadline === null
+                        ? requestConfig.timeoutMs
+                        : Math.max(0, deadline - Number(now())),
+                    ...(input.signal ? { signal: input.signal } : {}),
+                });
+            } catch (error) {
+                translation = {
+                    ok: false,
+                    status: 'failed',
+                    error: {
+                        code: error?.code || 'image-prompt-translation-failed',
+                        message: error?.message || '生图提示词转换失败',
+                    },
+                };
+            }
+
+            if (translation?.ok === true) {
+                prompt = translation.content;
+                aiOutput = translation.content;
+            } else if (translation?.status === 'timeout' || translation?.status === 'cancelled') {
+                return {
+                    ok: false,
+                    status: translation.status,
+                    prompt: naturalPrompt,
+                    characters: cloneValue(Array.isArray(composition.characters) ? composition.characters : []),
+                    unmatchedNames: cloneValue(
+                        Array.isArray(composition.unmatchedNames) ? composition.unmatchedNames : [],
+                    ),
+                    mappingDiagnostics: cloneValue(
+                        Array.isArray(composition.mappingDiagnostics) ? composition.mappingDiagnostics : [],
+                    ),
+                    error: cloneValue(translation.error || {
+                        code: translation.status === 'timeout'
+                            ? 'image-prompt-translation-timeout'
+                            : 'image-prompt-translation-cancelled',
+                    }),
+                };
+            }
+
+            if (deadline !== null && deadline - Number(now()) <= 0) {
+                return {
+                    ok: false,
+                    status: 'timeout',
+                    prompt: naturalPrompt,
+                    characters: cloneValue(Array.isArray(composition.characters) ? composition.characters : []),
+                    unmatchedNames: cloneValue(
+                        Array.isArray(composition.unmatchedNames) ? composition.unmatchedNames : [],
+                    ),
+                    mappingDiagnostics: cloneValue(
+                        Array.isArray(composition.mappingDiagnostics) ? composition.mappingDiagnostics : [],
+                    ),
+                    error: { code: 'image-generation-timeout', message: '图片生成总超时' },
+                };
+            }
+        }
+
         let generationResult;
         try {
             generationResult = await imageGenerationService.generateAndStore({
@@ -180,7 +298,9 @@ export function createImageGenerationSettingsService(options = {}) {
                 height: null,
                 negativePrompt: text(input.negativePrompt),
                 change: text(input.change),
-                timeoutMs: requestConfig.timeoutMs,
+                timeoutMs: deadline === null
+                    ? requestConfig.timeoutMs
+                    : Math.max(0, deadline - Number(now())),
                 folder: text(input.folder) || 'yuzi-phone-generated',
                 filename: text(input.filename) || createDefaultTestFilename(),
             });
@@ -200,7 +320,8 @@ export function createImageGenerationSettingsService(options = {}) {
                     status: 'failed',
                     error: { code: 'image-generation-failed' },
                 }),
-            prompt,
+            prompt: naturalPrompt,
+            ...(aiOutput !== undefined ? { aiOutput } : {}),
             characters: cloneValue(Array.isArray(composition.characters) ? composition.characters : []),
             unmatchedNames: cloneValue(
                 Array.isArray(composition.unmatchedNames) ? composition.unmatchedNames : [],

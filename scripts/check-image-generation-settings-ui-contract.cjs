@@ -280,6 +280,9 @@ async function testSettingsHomeAndImageGenerationPageExposeConfirmedControls() {
                     { columnIndex: 2, headerSnapshot: '穿着' },
                 ],
             }],
+            promptTranslationEnabled: true,
+            promptTranslationApiPresetId: 'api-1',
+            promptTranslationPresetId: 'image-1',
         },
         tables: [{
             sheetKey: 'sheet_roles',
@@ -295,6 +298,17 @@ async function testSettingsHomeAndImageGenerationPageExposeConfirmedControls() {
             names: '星野铃；木下',
             description: '两个人坐在咖啡店聊天',
             finalPrompt: '星野铃，银色长发，木下，黑色短发，两个人坐在咖啡店聊天',
+            aiOutput: '1girl, <anything>',
+        },
+        presetServiceAvailable: true,
+        sharedResources: {
+            status: 'ready',
+            apiPresets: [{ presetId: 'api-1', name: '转换 API' }],
+            imageGenerationPresets: [{
+                presetId: 'image-1',
+                name: 'Tag 规则',
+                entries: [{ role: 'system', content: '只输出 tag' }],
+            }],
         },
     });
 
@@ -305,6 +319,14 @@ async function testSettingsHomeAndImageGenerationPageExposeConfirmedControls() {
     assert.match(pageHtml, /id="phone-image-generation-test-names"/u);
     assert.match(pageHtml, /id="phone-image-generation-test-description"/u);
     assert.match(pageHtml, /id="phone-image-generation-prompt-preview"/u);
+    assert.match(pageHtml, /id="phone-image-generation-prompt-translation-enabled"/u);
+    assert.match(pageHtml, /id="phone-image-generation-preset-select"/u);
+    assert.match(pageHtml, /id="phone-image-generation-api-preset-select"/u);
+    assert.match(pageHtml, /id="phone-image-generation-preset-import-btn"/u);
+    assert.match(pageHtml, /id="phone-image-generation-preset-export-btn"/u);
+    assert.match(pageHtml, /id="phone-image-generation-preset-delete-btn"/u);
+    assert.match(pageHtml, /id="phone-image-generation-ai-output"/u);
+    assert.match(pageHtml, /1girl, &lt;anything&gt;/u);
     assert.match(pageHtml, /星野铃，银色长发/u);
     assert.match(pageHtml, /data-image-generation-mapping-id="mapping-1"/u);
     assert.match(pageHtml, /重要角色表/u);
@@ -316,6 +338,11 @@ async function testSettingsHomeAndImageGenerationPageExposeConfirmedControls() {
     assert.match(pageHtml, />删除</u);
     assert.match(pageHtml, /id="phone-image-generation-timeout"/u);
     assert.match(pageHtml, /id="phone-image-generation-clear-mappings"/u);
+
+    const noAiOutputHtml = buildImageGenerationPageHtml({
+        testInput: { finalPrompt: '只有中文' },
+    });
+    assert.doesNotMatch(noAiOutputHtml, /id="phone-image-generation-ai-output"/u);
 }
 
 async function testGeneratedTestImagePreviewKeepsTheWholeImageVisible() {

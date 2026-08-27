@@ -8,16 +8,25 @@ import {
     startSmallCalendarDerivedFieldsInjection,
     stopSmallCalendarDerivedFieldsInjection,
 } from './derived-fields/small-calendar-derived-fields.js';
+import { createTableContentReplacementService } from '../table-content-replacement/service.js';
 
 const TABLE_UPDATE_SIGNAL_TARGET = 2;
 const CHAT_CHANGE_SETTLE_DELAY_MS = 250;
 const CHAT_CHANGE_WAIT_TIMEOUT_MS = 3500;
+
+const tableContentReplacementService = createTableContentReplacementService();
+
+export function applyTableContentReplacementArea(area = {}) {
+    return tableContentReplacementService.applyArea(area);
+}
 
 const defaultDeps = Object.freeze({
     startChronicle: () => startChronicleTodayRelationInjection(),
     stopChronicle: () => stopChronicleTodayRelationInjection(),
     startSmallCalendar: () => startSmallCalendarDerivedFieldsInjection(),
     stopSmallCalendar: () => stopSmallCalendarDerivedFieldsInjection(),
+    startTableContentReplacement: () => tableContentReplacementService.start(),
+    stopTableContentReplacement: () => tableContentReplacementService.stop(),
     subscribeTableUpdate: (callback) => subscribeTableUpdate(callback),
     setTimeout: (...args) => globalThis.setTimeout(...args),
     clearTimeout: (...args) => globalThis.clearTimeout(...args),
@@ -57,10 +66,22 @@ function callLifecycleDependency(callback, action) {
     }
 }
 
+function callSilentTableContentReplacementLifecycle(callback) {
+    try {
+        return callback() !== false;
+    } catch {
+        // 词汇替换是低优先级旁路能力，生命周期异常必须完全静默。
+        return false;
+    }
+}
+
 function stopDerivedServices(reason) {
     runtime.running = false;
     const smallStopped = callLifecycleDependency(deps.stopSmallCalendar, 'derived.stop.small-calendar');
     const chronicleStopped = callLifecycleDependency(deps.stopChronicle, 'derived.stop.chronicle');
+    callSilentTableContentReplacementLifecycle(
+        deps.stopTableContentReplacement,
+    );
 
     logDebug('derived.stop', '后台派生服务已停止', {
         reason,
@@ -80,6 +101,9 @@ function rollbackDerivedServices(reason) {
         chronicleRolledBack: callLifecycleDependency(
             deps.stopChronicle,
             `derived.rollback.${reason}.chronicle`,
+        ),
+        tableContentReplacementRolledBack: callSilentTableContentReplacementLifecycle(
+            deps.stopTableContentReplacement,
         ),
     };
 }
@@ -101,6 +125,11 @@ function startDerivedServices(generation, reason) {
         return false;
     }
 
+    // 词汇替换是低优先级、故障隔离的旁路服务；它的启动失败不能让既有派生服务回滚。
+    callSilentTableContentReplacementLifecycle(
+        deps.startTableContentReplacement,
+    );
+
     runtime.running = chronicleStarted && smallStarted;
     if (!runtime.running) {
         const { smallRolledBack, chronicleRolledBack } = rollbackDerivedServices('partial');
@@ -113,7 +142,10 @@ function startDerivedServices(generation, reason) {
             smallRolledBack,
         });
     } else {
-        logDebug('derived.start', '后台派生服务已启动', { reason, generation });
+        logDebug('derived.start', '后台派生服务已启动', {
+            reason,
+            generation,
+        });
     }
 
     return runtime.running;

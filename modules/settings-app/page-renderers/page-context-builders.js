@@ -9,6 +9,7 @@ const SETTINGS_RENDERER_SERVICE_KEYS = [
     'contentPresetWorkshop',
     'worldbookReading',
     'imageGeneration',
+    'tableContentReplacement',
 ];
 
 function ensureObject(value) {
@@ -36,6 +37,7 @@ export function createSettingsRendererServices(deps = {}) {
         contentPresetWorkshop: ensureObject(deps.contentPresetWorkshop),
         worldbookReading: ensureObject(deps.worldbookReading),
         imageGeneration: ensureObject(deps.imageGeneration),
+        tableContentReplacement: ensureObject(deps.tableContentReplacement),
     };
 }
 
@@ -116,6 +118,17 @@ function buildImageGenerationPageContextFromServices(services) {
         showToast: services.feedback.showToast,
         rerenderImageGenerationKeepScroll: services.scroll.rerenderImageGenerationKeepScroll,
         imageGenerationSettingsService: services.imageGeneration,
+        qqV2PresetService: services.qqV2Presets,
+    };
+}
+
+function buildTableContentReplacementPageContextFromServices(services) {
+    return {
+        ...services.common,
+        navigateBack: services.navigation.navigateBack,
+        showToast: services.feedback.showToast,
+        rerenderTableContentReplacementKeepScroll: services.scroll.rerenderTableContentReplacementKeepScroll,
+        tableContentReplacementSettingsService: services.tableContentReplacement,
     };
 }
 
@@ -162,6 +175,7 @@ export function buildAppearancePageContext(deps = {}) { return buildAppearancePa
 export function buildButtonStylePageContext(deps = {}) { return buildButtonStylePageContextFromServices(getSettingsRendererServices(deps)); }
 export function buildWorldbookReadingPageContext(deps = {}) { return buildWorldbookReadingPageContextFromServices(getSettingsRendererServices(deps)); }
 export function buildImageGenerationPageContext(deps = {}) { return buildImageGenerationPageContextFromServices(getSettingsRendererServices(deps)); }
+export function buildTableContentReplacementPageContext(deps = {}) { return buildTableContentReplacementPageContextFromServices(getSettingsRendererServices(deps)); }
 export function buildBeautifyTemplatePageContext(deps = {}) { return buildBeautifyTemplatePageContextFromServices(getSettingsRendererServices(deps)); }
 export function buildAiInstructionPresetsPageContext(deps = {}) { return buildAiInstructionPresetsPageContextFromServices(getSettingsRendererServices(deps)); }
 export function buildApiPresetsPageContext(deps = {}) { return buildApiPresetsPageContextFromServices(getSettingsRendererServices(deps)); }
@@ -174,6 +188,7 @@ export function createSettingsPageContexts(deps = {}) {
         buttonStyle: buildButtonStylePageContextFromServices(services),
         worldbookReading: buildWorldbookReadingPageContextFromServices(services),
         imageGeneration: buildImageGenerationPageContextFromServices(services),
+        tableContentReplacement: buildTableContentReplacementPageContextFromServices(services),
         apiPresets: buildApiPresetsPageContextFromServices(services),
         beautifyTemplate: buildBeautifyTemplatePageContextFromServices(services),
         aiInstructionPresets: buildAiInstructionPresetsPageContextFromServices(services),

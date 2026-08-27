@@ -1,4 +1,5 @@
 import { Logger } from '../error-handler.js';
+import { normalizeTableContentReplacementSettings } from '../table-content-replacement/config.js';
 
 export const extensionName = 'YuziPhone';
 
@@ -49,6 +50,9 @@ export const IMAGE_GENERATION_DEFAULTS = Object.freeze({
     enabled: false,
     timeoutMs: 300_000,
     roleMappings: Object.freeze([]),
+    promptTranslationEnabled: false,
+    promptTranslationApiPresetId: '',
+    promptTranslationPresetId: '',
 });
 
 const APPEARANCE_RESOURCE_IMAGE_MIME_TYPES = new Set([
@@ -146,7 +150,11 @@ export const defaultSettings = {
         enabled: IMAGE_GENERATION_DEFAULTS.enabled,
         timeoutMs: IMAGE_GENERATION_DEFAULTS.timeoutMs,
         roleMappings: [],
+        promptTranslationEnabled: IMAGE_GENERATION_DEFAULTS.promptTranslationEnabled,
+        promptTranslationApiPresetId: IMAGE_GENERATION_DEFAULTS.promptTranslationApiPresetId,
+        promptTranslationPresetId: IMAGE_GENERATION_DEFAULTS.promptTranslationPresetId,
     },
+    tableContentReplacement: normalizeTableContentReplacementSettings(null),
 };
 
 export const REMOVED_SETTING_KEYS = new Set([
@@ -187,6 +195,7 @@ const validationRules = {
     worldbookReadingSelection: { type: 'object' },
     worldbookReadingBlockedKeywords: { type: 'array' },
     imageGeneration: { type: 'object' },
+    tableContentReplacement: { type: 'object' },
 };
 
 export function cloneSettingsValue(value) {
@@ -307,6 +316,18 @@ export function normalizeImageGenerationSettings(raw) {
         enabled: normalizeImageGenerationBoolean(source.enabled, IMAGE_GENERATION_DEFAULTS.enabled),
         timeoutMs,
         roleMappings: normalizeImageGenerationRoleMappings(source.roleMappings),
+        promptTranslationEnabled: normalizeImageGenerationBoolean(
+            source.promptTranslationEnabled,
+            IMAGE_GENERATION_DEFAULTS.promptTranslationEnabled,
+        ),
+        promptTranslationApiPresetId: normalizeImageGenerationText(
+            source.promptTranslationApiPresetId,
+            256,
+        ),
+        promptTranslationPresetId: normalizeImageGenerationText(
+            source.promptTranslationPresetId,
+            256,
+        ),
     };
 }
 
@@ -698,6 +719,9 @@ export function validateSetting(key, value) {
             if (key === 'imageGeneration') {
                 return createSettingsValidationResult(key, normalizeImageGenerationSettings(value));
             }
+            if (key === 'tableContentReplacement') {
+                return createSettingsValidationResult(key, normalizeTableContentReplacementSettings(value));
+            }
 
             return { valid: true, value: cloneSettingsValue(value) };
         }
@@ -711,6 +735,7 @@ export function validateSettings(settings) {
     const validated = {
         ...defaultSettings,
         imageGeneration: normalizeImageGenerationSettings(defaultSettings.imageGeneration),
+        tableContentReplacement: normalizeTableContentReplacementSettings(defaultSettings.tableContentReplacement),
     };
 
     if (!settings || typeof settings !== 'object') {
@@ -747,6 +772,7 @@ export function validateSettings(settings) {
         settings.worldbookReadingBlockedKeywords,
     );
     validated.imageGeneration = normalizeImageGenerationSettings(settings.imageGeneration);
+    validated.tableContentReplacement = normalizeTableContentReplacementSettings(settings.tableContentReplacement);
 
     return validated;
 }

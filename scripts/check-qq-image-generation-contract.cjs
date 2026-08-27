@@ -231,6 +231,12 @@ async function createImageRuntimeFixture(options = {}) {
             };
         },
         imageGenerationService,
+        ...(typeof options.getImageGenerationConfig === 'function'
+            ? { getImageGenerationConfig: options.getImageGenerationConfig }
+            : {}),
+        ...(options.promptTranslationService
+            ? { promptTranslationService: options.promptTranslationService }
+            : {}),
         projectionService: {
             async reconcileScope() { return []; },
             async retryPending() { return []; },
@@ -258,6 +264,102 @@ async function createImageRuntimeFixture(options = {}) {
         generationInputs,
         deletedPaths,
     };
+}
+
+async function testRuntimeUsesPromptTranslationOutputBeforeCallingImageGeneration() {
+    const translationCalls = [];
+    const fixture = await createImageRuntimeFixture({
+        getImageGenerationConfig: () => ({
+            enabled: true,
+            timeoutMs: 90_000,
+            roleMappings: [],
+            promptTranslationEnabled: true,
+            promptTranslationApiPresetId: 'translator-api',
+            promptTranslationPresetId: 'image-preset',
+        }),
+        promptTranslationService: {
+            async translate(input) {
+                translationCalls.push(input);
+                return {
+                    ok: true,
+                    status: 'translated',
+                    content: '模型任意输出\n<not-a-tag>',
+                };
+            },
+        },
+    });
+    const created = await fixture.repository.createPrivateConversation(fixture.scopeId, { name: '星野铃' });
+    const [message] = await fixture.repository.appendMessages(
+        fixture.scopeId,
+        created.conversation.conversationId,
+        [{
+            senderId: created.person.personId,
+            senderType: 'person',
+            type: 'image',
+            content: '站在窗边',
+        }],
+    );
+
+    await fixture.runtime.generateMessageImage({
+        scopeId: fixture.scopeId,
+        conversationId: created.conversation.conversationId,
+        messageId: message.messageId,
+    });
+
+    assert.equal(translationCalls.length, 1);
+    assert.equal(translationCalls[0].prompt, '星野铃，站在窗边');
+    assert.equal(translationCalls[0].apiPresetId, 'translator-api');
+    assert.deepEqual(translationCalls[0].messages, []);
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(translationCalls[0], 'imageGenerationPresetId'),
+        false,
+    );
+    assert.equal(fixture.generationInputs.length, 1);
+    assert.equal(fixture.generationInputs[0].prompt, '模型任意输出\n<not-a-tag>');
+
+    fixture.runtime.destroy();
+}
+
+async function testRuntimeSkipsPromptTranslationWhenItsSwitchIsOff() {
+    let translationCalls = 0;
+    const fixture = await createImageRuntimeFixture({
+        getImageGenerationConfig: () => ({
+            enabled: true,
+            timeoutMs: 90_000,
+            roleMappings: [],
+            promptTranslationEnabled: false,
+            promptTranslationApiPresetId: 'translator-api',
+            promptTranslationPresetId: 'image-preset',
+        }),
+        promptTranslationService: {
+            async translate() {
+                translationCalls += 1;
+                return { ok: true, status: 'translated', content: '不应被使用' };
+            },
+        },
+    });
+    const created = await fixture.repository.createPrivateConversation(fixture.scopeId, { name: '星野铃' });
+    const [message] = await fixture.repository.appendMessages(
+        fixture.scopeId,
+        created.conversation.conversationId,
+        [{
+            senderId: created.person.personId,
+            senderType: 'person',
+            type: 'image',
+            content: '站在窗边',
+        }],
+    );
+
+    await fixture.runtime.generateMessageImage({
+        scopeId: fixture.scopeId,
+        conversationId: created.conversation.conversationId,
+        messageId: message.messageId,
+    });
+
+    assert.equal(translationCalls, 0);
+    assert.equal(fixture.generationInputs[0].prompt, '星野铃，站在窗边');
+
+    fixture.runtime.destroy();
 }
 
 async function testRuntimeDeletesTheNewFileWhenMessageReplacementFails() {
@@ -757,6 +859,8 @@ async function main() {
     await testRuntimeDeletesReleasedFilesAfterMessageAndConversationDeletion();
     await testRuntimeKeepsAReplacedOldFileWhileAnotherScopeStillReferencesIt();
     await testRuntimeGeneratesForAiAndSelfThenSafelyReplacesTheOldImage();
+    await testRuntimeUsesPromptTranslationOutputBeforeCallingImageGeneration();
+    await testRuntimeSkipsPromptTranslationWhenItsSwitchIsOff();
     await testFacadeExposesGeneratedImageIntentWithoutLeakingRuntimeDetails();
 }
 

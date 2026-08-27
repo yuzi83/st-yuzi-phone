@@ -479,6 +479,48 @@ export interface AppearanceResourcePoolOperationResult {
 export type WorldbookReadingSelection = Record<string, Record<string, false>>;
 export type WorldbookReadingBlockedKeywords = string[];
 
+export type ImageGenerationPromptMessageRole = 'system' | 'user' | 'assistant';
+
+export interface ImageGenerationPresetEntry {
+    id: string;
+    name: string;
+    role: ImageGenerationPromptMessageRole;
+    content: string;
+    enabled: boolean;
+    triggerMode: string;
+    triggerWords: string;
+    andTriggerWords: string;
+}
+
+export interface ImageGenerationPresetEntrySource {
+    id?: string;
+    name?: string;
+    role: ImageGenerationPromptMessageRole;
+    content: string;
+    enabled?: boolean;
+    triggerMode?: string;
+    triggerWords?: string;
+    andTriggerWords?: string;
+}
+
+export interface ImageGenerationPreset {
+    id: string;
+    name: string;
+    entries: ImageGenerationPresetEntry[];
+}
+
+export interface SettingsImageGenerationPreset {
+    presetId: string;
+    name: string;
+    entries: readonly ImageGenerationPresetEntry[];
+}
+
+export interface ImageGenerationPresetSource {
+    [presetName: string]: {
+        entries: ImageGenerationPresetEntrySource[];
+    };
+}
+
 export interface ImageGenerationColumnRef {
     columnIndex: number;
     headerSnapshot: string;
@@ -496,6 +538,77 @@ export interface ImageGenerationSettings {
     enabled: boolean;
     timeoutMs: number;
     roleMappings: ImageGenerationRoleMapping[];
+    promptTranslationEnabled: boolean;
+    promptTranslationApiPresetId: string;
+    promptTranslationPresetId: string;
+}
+
+export interface ImagePromptTranslationMessage {
+    role: ImageGenerationPromptMessageRole;
+    content: string;
+}
+
+export interface ImagePromptTranslationInput {
+    prompt?: string;
+    apiPresetId: string;
+    messages: readonly ImagePromptTranslationMessage[];
+    signal?: AbortSignal;
+    timeoutMs?: number;
+}
+
+export interface SettingsImagePromptTranslationInput {
+    prompt: string;
+    apiPresetId?: string;
+    imageGenerationPresetId?: string;
+    promptTranslationPresetId?: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+}
+
+export interface ImagePromptTranslationError {
+    code: string;
+    message: string;
+}
+
+export type ImagePromptTranslationStatus =
+    | 'skipped'
+    | 'translated'
+    | 'timeout'
+    | 'cancelled'
+    | 'failed';
+
+export interface ImagePromptTranslationResult {
+    ok: boolean;
+    status: ImagePromptTranslationStatus;
+    reason?: string;
+    content?: string;
+    error?: ImagePromptTranslationError;
+}
+
+export interface ImagePromptTranslationService {
+    translate: (input: ImagePromptTranslationInput) => Promise<ImagePromptTranslationResult>;
+}
+
+export interface TableContentReplacementRule {
+    id: string;
+    source: string;
+    target: string;
+}
+
+export interface TableContentReplacementMapping {
+    mappingId: string;
+    sheetKey: string;
+    tableNameSnapshot: string;
+    enabled: boolean;
+    rules: TableContentReplacementRule[];
+}
+
+export interface TableContentReplacementSettings {
+    global: {
+        enabled: boolean;
+        rules: TableContentReplacementRule[];
+    };
+    tableRules: TableContentReplacementMapping[];
 }
 
 export interface PhoneSettings {
@@ -525,6 +638,7 @@ export interface PhoneSettings {
     worldbookReadingSelection: WorldbookReadingSelection;
     worldbookReadingBlockedKeywords: WorldbookReadingBlockedKeywords;
     imageGeneration: ImageGenerationSettings;
+    tableContentReplacement: TableContentReplacementSettings;
 }
 
 /**
@@ -726,7 +840,8 @@ export type SettingsPageMode =
     | 'button_style'
     | 'worldbook_reading'
     | 'image_generation'
-    | 'ai_instruction_presets';
+    | 'ai_instruction_presets'
+    | 'table_content_replacement';
 
 export interface SettingsAppState {
     mode: SettingsPageMode;
@@ -737,6 +852,7 @@ export interface SettingsAppState {
     buttonStyleScrollTop: number;
     aiInstructionPresetsScrollTop: number;
     imageGenerationScrollTop: number;
+    tableContentReplacementScrollTop: number;
 }
 
 export type SettingsToastHandler = (host: unknown, message: string, isError?: boolean) => void;
@@ -782,6 +898,7 @@ export interface SettingsPageRendererScrollDeps {
     rerenderAiInstructionPresetsKeepScroll: () => void;
     rerenderWorldbookReadingKeepScroll: () => void;
     rerenderImageGenerationKeepScroll: () => void;
+    rerenderTableContentReplacementKeepScroll: () => void;
 }
 
 export interface SettingsPageRendererFeedbackDeps {
@@ -842,6 +959,33 @@ export interface SettingsQQV2PresetService {
     importPromptPresets: (input: Record<string, any>) => Promise<Record<string, any>>;
     exportPromptPreset: (input: Record<string, any>) => Promise<Record<string, any>>;
     exportAllPromptPresets: () => Promise<Record<string, any>>;
+    importImageGenerationPresets: (input: {
+        source: ImageGenerationPresetSource;
+    }) => Promise<{
+        ok: boolean;
+        status: string;
+        imageGenerationPresets?: readonly SettingsImageGenerationPreset[];
+        error?: Record<string, any>;
+    }>;
+    exportImageGenerationPreset: (input: {
+        imageGenerationPresetId?: string;
+        presetId?: string;
+    }) => Promise<{
+        ok: boolean;
+        status: string;
+        source?: ImageGenerationPresetSource;
+        error?: Record<string, any>;
+    }>;
+    deleteImageGenerationPreset: (input: {
+        imageGenerationPresetId?: string;
+        presetId?: string;
+    }) => Promise<{
+        ok: boolean;
+        status: string;
+        deleted?: boolean;
+        error?: Record<string, any>;
+    }>;
+    translateImagePrompt: (input: SettingsImagePromptTranslationInput) => Promise<ImagePromptTranslationResult>;
 }
 
 export interface SettingsButtonStylePageService {
@@ -953,24 +1097,50 @@ export interface SettingsImageGenerationTable {
     rowCount?: number;
 }
 
+export interface SettingsImageGenerationTestInput {
+    names?: string;
+    description?: string;
+    finalPrompt?: string;
+    aiOutput?: string;
+    imagePath?: string;
+    statusText?: string;
+    generating?: boolean;
+}
+
+export interface SettingsImageGenerationTestResult {
+    ok: boolean;
+    status: string;
+    requestId?: string;
+    path?: string;
+    format?: string;
+    prompt: string;
+    change?: string;
+    generatedAt?: number;
+    characters?: readonly Record<string, any>[];
+    unmatchedNames?: readonly string[];
+    mappingDiagnostics?: readonly Record<string, any>[];
+    error?: Record<string, any>;
+    [key: string]: any;
+}
+
 export interface SettingsImageGenerationViewModel {
     config: ImageGenerationSettings;
     tables: readonly SettingsImageGenerationTable[];
     resolvedMappings?: readonly any[];
-    testInput?: {
-        names?: string;
-        description?: string;
-        finalPrompt?: string;
-        imagePath?: string;
-        statusText?: string;
-        generating?: boolean;
+    sharedResources?: {
+        status: string;
+        error?: string;
+        apiPresets: readonly Record<string, any>[];
+        imageGenerationPresets: readonly SettingsImageGenerationPreset[];
     };
+    testInput?: SettingsImageGenerationTestInput;
 }
 
 export interface SettingsImageGenerationService {
     loadViewModel: (request?: {
         config?: ImageGenerationSettings;
-        testInput?: { names?: string; description?: string };
+        includeSharedResources?: boolean;
+        testInput?: Pick<SettingsImageGenerationTestInput, 'names' | 'description'>;
     }) => Promise<SettingsImageGenerationViewModel>;
     saveConfig: (config: ImageGenerationSettings) => Promise<{
         ok?: boolean;
@@ -984,7 +1154,57 @@ export interface SettingsImageGenerationService {
         description?: string;
         prompt?: string;
         timeoutMs?: number;
+        negativePrompt?: string;
+        change?: string;
+        folder?: string;
+        filename?: string;
+        config?: ImageGenerationSettings;
+        signal?: AbortSignal;
+    }) => Promise<SettingsImageGenerationTestResult>;
+}
+
+export interface SettingsTableContentReplacementPageContext extends SettingsPageRendererCommonDeps {
+    navigateBack: () => void;
+    showToast: SettingsToastHandler;
+    rerenderTableContentReplacementKeepScroll: () => void;
+    tableContentReplacementSettingsService: SettingsTableContentReplacementService;
+}
+
+export interface SettingsTableContentReplacementTable {
+    sheetKey: string;
+    tableName: string;
+    status: string;
+    headers: readonly string[];
+    rowCount?: number;
+}
+
+export interface SettingsTableContentReplacementViewModel {
+    status: 'loading' | 'ready' | 'error';
+    error?: unknown;
+    config: TableContentReplacementSettings;
+    tables: readonly SettingsTableContentReplacementTable[];
+    tableRules: readonly (TableContentReplacementMapping & {
+        tableName?: string;
+        status?: string;
+        headers?: readonly string[];
+        rowCount?: number;
+    })[];
+    errors?: Record<string, any>;
+    busy?: boolean;
+}
+
+export interface SettingsTableContentReplacementService {
+    loadViewModel: (request?: { config?: TableContentReplacementSettings }) => Promise<SettingsTableContentReplacementViewModel>;
+    saveArea: (request: {
+        kind: 'global' | 'table';
+        mappingId?: string;
+        config: TableContentReplacementSettings;
     }) => Promise<Record<string, any>>;
+    deleteArea: (request: {
+        mappingId: string;
+        config: TableContentReplacementSettings;
+    }) => Promise<Record<string, any>>;
+    readConfig: () => TableContentReplacementSettings;
 }
 
 export interface SettingsPageRendererGroupedDeps {
@@ -998,6 +1218,7 @@ export interface SettingsPageRendererGroupedDeps {
     contentPresetWorkshop?: SettingsContentPresetWorkshopService;
     worldbookReading?: SettingsWorldbookReadingCatalog;
     imageGeneration?: SettingsImageGenerationService;
+    tableContentReplacement?: SettingsTableContentReplacementService;
 }
 
 export interface SettingsPageInstance {
@@ -1022,6 +1243,7 @@ export interface SettingsPageRenderers {
     renderAiInstructionPresetsPage(): void;
     renderWorldbookReadingPage(): void;
     renderImageGenerationPage(): void;
+    renderTableContentReplacementPage(): void;
 }
 
 /**

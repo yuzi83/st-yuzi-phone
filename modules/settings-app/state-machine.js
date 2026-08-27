@@ -7,5 +7,6 @@ export function createSettingsAppState() {
         buttonStyleScrollTop: 0,
         aiInstructionPresetsScrollTop: 0,
         imageGenerationScrollTop: 0,
+        tableContentReplacementScrollTop: 0,
     };
 }

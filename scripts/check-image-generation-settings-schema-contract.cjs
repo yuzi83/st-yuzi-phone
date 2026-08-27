@@ -21,6 +21,9 @@ async function testImageGenerationDefaultsAndNormalization() {
         enabled: false,
         timeoutMs: 300_000,
         roleMappings: [],
+        promptTranslationEnabled: false,
+        promptTranslationApiPresetId: '',
+        promptTranslationPresetId: '',
     });
     assert.deepEqual(validateSettings({}).imageGeneration, IMAGE_GENERATION_DEFAULTS);
 
@@ -34,6 +37,9 @@ async function testImageGenerationDefaultsAndNormalization() {
         enabled: true,
         timeoutMs: 1_800_000,
         roleMappings: [],
+        promptTranslationEnabled: false,
+        promptTranslationApiPresetId: '',
+        promptTranslationPresetId: '',
     });
     assert.deepEqual(validateSetting('imageGeneration', normalized), {
         valid: true,
@@ -197,6 +203,9 @@ async function testSettingsFacadeExportsImageGenerationSchema() {
         enabled: false,
         timeoutMs: 300_000,
         roleMappings: [],
+        promptTranslationEnabled: false,
+        promptTranslationApiPresetId: '',
+        promptTranslationPresetId: '',
     });
     assert.equal(settings.IMAGE_GENERATION_LIMITS.timeoutMs.min, 10_000);
     assert.equal(settings.IMAGE_GENERATION_LIMITS.timeoutMs.max, 1_800_000);
@@ -262,6 +271,9 @@ async function testSettingsServiceLoadsNormalizedMappingViewModel() {
                     promptColumns: [{ columnIndex: 1, headerSnapshot: '外貌' }],
                 },
             ],
+            promptTranslationEnabled: false,
+            promptTranslationApiPresetId: '',
+            promptTranslationPresetId: '',
         },
         tables: [{ sheetKey: 'sheet_people', tableName: '重要角色表' }],
         resolvedMappings: [{ mappingId: 'mapping-1', status: 'available' }],
@@ -295,6 +307,9 @@ async function testSettingsServiceBuildsPreviewFromDraftConfigAndTestInput() {
                 promptColumns: [{ columnIndex: 1, headerSnapshot: '设定' }],
             },
         ],
+        promptTranslationEnabled: false,
+        promptTranslationApiPresetId: '',
+        promptTranslationPresetId: '',
     };
     const composeCalls = [];
     const service = createImageGenerationSettingsService({
@@ -396,6 +411,9 @@ async function testSettingsServiceSavesOneNormalizedConfigObject() {
                     promptColumns: [{ columnIndex: 2, headerSnapshot: '外貌' }],
                 },
             ],
+            promptTranslationEnabled: false,
+            promptTranslationApiPresetId: '',
+            promptTranslationPresetId: '',
         },
     });
     assert.deepEqual(calls, [['imageGeneration', result.config]]);

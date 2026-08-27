@@ -74,6 +74,18 @@ export function createQQV2PresetSettingsService(options = {}) {
         loadModels(input) { return invoke('intent', 'loadModels', modelLoadInput(input)); },
         savePromptPreset(input) { return invoke('intent', 'savePromptPreset', input); },
         deletePromptPreset(input) { return invoke('intent', 'deletePromptPreset', input); },
+        importImageGenerationPresets(input) {
+            return invoke('intent', 'importImageGenerationPresets', input);
+        },
+        exportImageGenerationPreset(input) {
+            return invoke('intent', 'exportImageGenerationPreset', input);
+        },
+        deleteImageGenerationPreset(input) {
+            return invoke('intent', 'deleteImageGenerationPreset', input);
+        },
+        translateImagePrompt(input) {
+            return invoke('intent', 'translateImagePrompt', input);
+        },
         restoreBuiltInPromptPreset(input) { return invoke('intent', 'restoreBuiltInPromptPreset', input); },
         restoreAllBuiltInPromptPresets(input) { return invoke('intent', 'restoreAllBuiltInPromptPresets', input); },
         importPromptPresets(input) { return invoke('intent', 'importPromptPresets', input); },

@@ -33,6 +33,11 @@ import { formatQQV2MessageSemantic } from '../domain/message-semantics.js';
 import { createHostChatDeletedFact, resolveDeletedQQV2Scope } from '../host/lifecycle.js';
 import { observeFinalPromptForViewer } from '../../integration/final-prompt-viewer-bridge.js';
 import { createWorldbookContextResolver } from '../../worldbook-reading/context-resolver.js';
+import { normalizeImageGenerationSettings } from '../../settings/schema.js';
+import {
+    buildImagePromptTranslationMessages,
+    createImagePromptTranslationService,
+} from '../../image-generation/prompt-translation-service.js';
 import { sillyTavernWorldbookReadingCatalog } from '../../worldbook-reading/st-catalog-adapter.js';
 import { sillyTavernWorldbookReadingRuntimes } from '../../worldbook-reading/st-runtime-adapter.js';
 
@@ -391,6 +396,35 @@ export function createQQV2ProductionRuntime(options = {}) {
             ? createQQV2DatabaseCurrentApiPreset()
             : resources.getApiPresetForRequest(presetId)
     );
+    const getImageGenerationConfig = typeof options.getImageGenerationConfig === 'function'
+        ? options.getImageGenerationConfig
+        : () => ({});
+    const promptTranslationService = options.promptTranslationService
+        || createImagePromptTranslationService({
+            backend,
+            apiPresetResolver: resolveApiPreset,
+            now: options.now,
+        });
+    const getImageGenerationPreset = typeof resources.getImageGenerationPreset === 'function'
+        ? resources.getImageGenerationPreset.bind(resources)
+        : async () => null;
+    const resolveImagePromptTranslation = async ({
+        prompt,
+        apiPresetId,
+        imageGenerationPresetId,
+        timeoutMs,
+        signal,
+    } = {}) => {
+        const preset = await getImageGenerationPreset(asText(imageGenerationPresetId, 256));
+        const messages = buildImagePromptTranslationMessages(preset?.entries);
+        return promptTranslationService.translate({
+            prompt: typeof prompt === 'string' ? prompt : '',
+            apiPresetId: asText(apiPresetId, 256),
+            messages,
+            timeoutMs,
+            signal,
+        });
+    };
     const worldbookGateway = options.worldbookGateway || createQQV2SillyTavernWorldbookGateway({
         getContext: () => host.readRawContext?.(),
         captureScopeSession,
@@ -1390,9 +1424,13 @@ export function createQQV2ProductionRuntime(options = {}) {
             };
         },
         async listSharedResources() {
-            const [storedApiPresets, promptPresets, stickers] = await Promise.all([
+            const listImageGenerationPresets = typeof resources.listImageGenerationPresets === 'function'
+                ? resources.listImageGenerationPresets.bind(resources)
+                : async () => [];
+            const [storedApiPresets, promptPresets, imageGenerationPresets, stickers] = await Promise.all([
                 resources.listApiPresets(),
                 resources.listPromptPresets(),
+                listImageGenerationPresets(),
                 resources.listStickers(),
             ]);
             const apiPresets = [...storedApiPresets];
@@ -1400,7 +1438,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             if (typeof databaseApi?.callAI === 'function') {
                 apiPresets.push(createQQV2DatabaseCurrentApiPreset());
             }
-            return { apiPresets, promptPresets, stickers };
+            return { apiPresets, promptPresets, imageGenerationPresets, stickers };
         },
         exportImageLibraryPack: () => imageLibraryPacks.exportPack(),
         async importImageLibraryPack({ source } = {}) {
@@ -1439,6 +1477,13 @@ export function createQQV2ProductionRuntime(options = {}) {
         exportPromptPreset: ({ promptPresetId } = {}) => resources.exportPromptPreset(asText(promptPresetId, 256)),
         exportAllPromptPresets: () => resources.exportAllPromptPresets(),
         importPromptPresets: ({ source } = {}) => resources.importPromptPresets(source),
+        importImageGenerationPresets: ({ source } = {}) => resources.importImageGenerationPresets(source),
+        exportImageGenerationPreset: ({ imageGenerationPresetId } = {}) => resources.exportImageGenerationPreset(
+            asText(imageGenerationPresetId, 256),
+        ),
+        deleteImageGenerationPreset: ({ imageGenerationPresetId } = {}) => resources.deleteImageGenerationPreset(
+            asText(imageGenerationPresetId, 256),
+        ),
         restoreBuiltInPromptPreset: ({ promptPresetId } = {}) => resources.restoreBuiltInPromptPreset(
             asText(promptPresetId, 256),
         ),
@@ -1950,6 +1995,9 @@ export function createQQV2ProductionRuntime(options = {}) {
             await notifySubscribers(scopeId);
             return result;
         },
+        async translateImagePrompt(input = {}) {
+            return resolveImagePromptTranslation(input);
+        },
         async generateMessageImage({ scopeId, conversationId, messageId }) {
             if (!composeCharacterImagePrompt) {
                 throw imageGenerationError('QQ 人物提示词服务不可用', 'image_prompt_composer_unavailable');
@@ -1984,22 +2032,54 @@ export function createQQV2ProductionRuntime(options = {}) {
                 description: String(message.content ?? ''),
                 scanDescription: true,
             });
-            const prompt = asText(
+            const naturalPrompt = asText(
                 typeof promptResult === 'string' ? promptResult : promptResult?.prompt,
             );
-            if (!prompt) throw imageGenerationError('最终生图提示词为空', 'image_prompt_empty');
+            if (!naturalPrompt) throw imageGenerationError('最终生图提示词为空', 'image_prompt_empty');
             assertReadyScopeSession(scopeSession);
+
+            const imageGenerationConfig = normalizeImageGenerationSettings(
+                safeRead(getImageGenerationConfig, {}),
+            );
+            let prompt = naturalPrompt;
+            let requestTimeoutMs = null;
+            if (imageGenerationConfig.promptTranslationEnabled) {
+                const deadline = Number(now()) + imageGenerationConfig.timeoutMs;
+                const translation = await resolveImagePromptTranslation({
+                    prompt: naturalPrompt,
+                    apiPresetId: imageGenerationConfig.promptTranslationApiPresetId,
+                    imageGenerationPresetId: imageGenerationConfig.promptTranslationPresetId,
+                    timeoutMs: Math.max(0, deadline - Number(now())),
+                    signal: scopeSession.signal,
+                });
+                if (translation.ok === true) {
+                    prompt = translation.content;
+                } else if (translation.status === 'timeout' || translation.status === 'cancelled') {
+                    throw imageGenerationError(
+                        translation.error?.message || '生图提示词转换超时',
+                        translation.error?.code || 'image_prompt_translation_timeout',
+                    );
+                } else {
+                    prompt = naturalPrompt;
+                }
+                requestTimeoutMs = Math.max(0, deadline - Number(now()));
+                if (requestTimeoutMs <= 0) {
+                    throw imageGenerationError('图片生成总超时', 'image_generation_timeout');
+                }
+            }
 
             let generatedPath = '';
             let committed = false;
             try {
-                const generated = asObject(await imageGenerationService.generateAndStore({
+                const generationInput = {
                     prompt,
                     width: null,
                     height: null,
                     folder: 'yuzi-phone-generated',
                     filename: `qq-${normalizedMessageId}-${Math.trunc(Number(now()) || Date.now())}`,
-                }));
+                };
+                if (requestTimeoutMs !== null) generationInput.timeoutMs = requestTimeoutMs;
+                const generated = asObject(await imageGenerationService.generateAndStore(generationInput));
                 generatedPath = asText(generated.path, 2048);
                 if (generated.ok === false || !generatedPath) {
                     throw imageGenerationError(

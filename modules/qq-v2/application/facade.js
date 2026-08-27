@@ -166,6 +166,51 @@ function clonePromptPreset(preset) {
     });
 }
 
+function cloneImageGenerationPreset(preset) {
+    const source = asObject(preset);
+    return Object.freeze({
+        presetId: asText(source.presetId || source.id, 256),
+        name: asText(source.name, 256),
+        entries: Object.freeze(asArray(source.entries).map((entry) => {
+            const item = asObject(entry);
+            return Object.freeze({
+                id: asText(item.id, 256),
+                name: asText(item.name, 256),
+                role: asText(item.role, 32),
+                content: String(item.content ?? ''),
+                enabled: item.enabled !== false,
+                triggerMode: asText(item.triggerMode, 128) || 'always',
+                triggerWords: String(item.triggerWords ?? ''),
+                andTriggerWords: String(item.andTriggerWords ?? ''),
+            });
+        })),
+    });
+}
+
+function cloneImageGenerationPresetExport(source) {
+    const input = asObject(source);
+    const output = {};
+    Object.entries(input).forEach(([name, preset]) => {
+        const item = asObject(preset);
+        output[name] = {
+            entries: asArray(item.entries).map((entry) => {
+                const message = asObject(entry);
+                return {
+                    id: asText(message.id, 256),
+                    name: asText(message.name, 256),
+                    role: asText(message.role, 32),
+                    content: String(message.content ?? ''),
+                    enabled: message.enabled !== false,
+                    triggerMode: asText(message.triggerMode, 128) || 'always',
+                    triggerWords: String(message.triggerWords ?? ''),
+                    andTriggerWords: String(message.andTriggerWords ?? ''),
+                };
+            }),
+        };
+    });
+    return output;
+}
+
 function cloneSticker(sticker) {
     const source = asObject(sticker);
     return Object.freeze({
@@ -513,6 +558,9 @@ export function createQQV2Facade(options = {}) {
                     status: 'ready',
                     apiPresets: Object.freeze(asArray(resources.apiPresets).map(cloneApiPreset)),
                     promptPresets: Object.freeze(asArray(resources.promptPresets).map(clonePromptPreset)),
+                    imageGenerationPresets: Object.freeze(
+                        asArray(resources.imageGenerationPresets).map(cloneImageGenerationPreset),
+                    ),
                     stickers: Object.freeze(asArray(resources.stickers).map(cloneSticker)),
                 });
             },
@@ -778,6 +826,119 @@ export function createQQV2Facade(options = {}) {
                         ok: true,
                         status: 'accepted',
                         promptPresets: Object.freeze(asArray(promptPresets).map(clonePromptPreset)),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async importImageGenerationPresets(input = {}) {
+                if (typeof runtime.importImageGenerationPresets !== 'function') {
+                    return unavailable('importImageGenerationPresets');
+                }
+                try {
+                    const imageGenerationPresets = await runtime.importImageGenerationPresets({
+                        source: input.source,
+                    });
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        imageGenerationPresets: Object.freeze(
+                            asArray(imageGenerationPresets).map(cloneImageGenerationPreset),
+                        ),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async translateImagePrompt(input = {}) {
+                if (typeof runtime.translateImagePrompt !== 'function') {
+                    return unavailable('translateImagePrompt');
+                }
+                try {
+                    const result = await runtime.translateImagePrompt({
+                        prompt: typeof input.prompt === 'string' ? input.prompt : '',
+                        apiPresetId: asText(input.apiPresetId || input.promptTranslationApiPresetId, 256),
+                        imageGenerationPresetId: asText(
+                            input.imageGenerationPresetId || input.promptTranslationPresetId,
+                            256,
+                        ),
+                        timeoutMs: input.timeoutMs,
+                        signal: input.signal,
+                    });
+                    return Object.freeze({
+                        ok: result?.ok === true,
+                        status: asText(result?.status, 32) || 'failed',
+                        ...(result?.reason ? { reason: asText(result.reason, 128) } : {}),
+                        ...(result?.content !== undefined ? { content: result.content } : {}),
+                        ...(result?.error ? {
+                            error: Object.freeze({
+                                code: asText(result.error.code, 128),
+                                message: asText(result.error.message, 1000),
+                            }),
+                        } : {}),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async exportImageGenerationPreset(input = {}) {
+                if (typeof runtime.exportImageGenerationPreset !== 'function') {
+                    return unavailable('exportImageGenerationPreset');
+                }
+                const imageGenerationPresetId = asText(
+                    input.imageGenerationPresetId || input.presetId,
+                    256,
+                );
+                if (!imageGenerationPresetId) {
+                    return Object.freeze({
+                        ok: false,
+                        status: 'invalid',
+                        reason: 'image-generation-preset-required',
+                    });
+                }
+                try {
+                    const source = await runtime.exportImageGenerationPreset({
+                        imageGenerationPresetId,
+                    });
+                    if (!source) {
+                        return Object.freeze({
+                            ok: false,
+                            status: 'not-found',
+                            reason: 'image-generation-preset-not-found',
+                        });
+                    }
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        source: cloneImageGenerationPresetExport(source),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async deleteImageGenerationPreset(input = {}) {
+                if (typeof runtime.deleteImageGenerationPreset !== 'function') {
+                    return unavailable('deleteImageGenerationPreset');
+                }
+                const imageGenerationPresetId = asText(
+                    input.imageGenerationPresetId || input.presetId,
+                    256,
+                );
+                if (!imageGenerationPresetId) {
+                    return Object.freeze({
+                        ok: false,
+                        status: 'invalid',
+                        reason: 'image-generation-preset-required',
+                    });
+                }
+                try {
+                    const deleted = await runtime.deleteImageGenerationPreset({
+                        imageGenerationPresetId,
+                    });
+                    return Object.freeze({
+                        ok: deleted === true,
+                        status: deleted === true ? 'accepted' : 'not-found',
+                        deleted: deleted === true,
                     });
                 } catch (error) {
                     return failed(error);

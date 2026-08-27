@@ -16,8 +16,12 @@ export function buildSettingsHomePageHtml({
         'image_generation',
         'api_presets',
         'ai_instruction_presets',
+        'table_content_replacement',
     ];
-    const groups = [entries.slice(0, 2), entries.slice(2)];
+    const remainingEntries = entries.slice(2);
+    const groups = contentPresetFullPageRuntimeEnabled
+        ? [entries.slice(0, 2), remainingEntries.slice(0, 5), remainingEntries.slice(5)]
+        : [entries.slice(0, 1), entries.slice(1, 6), entries.slice(6)];
     const bodyHtml = `
         <div class="phone-settings-profile-action-groups">
             ${groups.filter(group => group.length > 0).map(group => `

@@ -52,9 +52,13 @@ export function createPhoneImageGenerationRuntime(options = {}) {
                 error: { code: 'image-generation-disabled' },
             };
         }
+        const requestedTimeout = Number(input.timeoutMs);
+        const timeoutMs = Number.isFinite(requestedTimeout)
+            ? Math.max(0, Math.min(config.timeoutMs, requestedTimeout))
+            : config.timeoutMs;
         return imageGenerationService.generateAndStore({
             ...input,
-            timeoutMs: config.timeoutMs,
+            timeoutMs,
         });
     }
 

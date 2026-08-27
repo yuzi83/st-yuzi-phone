@@ -55,6 +55,13 @@ export const SETTINGS_ENTRY_META = {
         tone: 'is-ai',
         badge: '提示词',
     },
+    table_content_replacement: {
+        glyph: '换',
+        title: '表格内容词汇替换',
+        description: '按全局或单表规则批量替换普通文字',
+        tone: 'is-table-content-replacement',
+        badge: '表格',
+    },
 };
 
 export function buildSettingsChipHtml(text, tone = 'neutral') {

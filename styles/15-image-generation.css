@@ -1,0 +1,76 @@
+/* 生图设置页专属视觉层。所有规则限定在页面根下，避免扩大宿主覆盖范围。 */
+.phone-image-generation-page .phone-image-generation-translation-section .phone-settings-section-body {
+    gap: 11px;
+}
+
+.phone-image-generation-translation-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.phone-image-generation-translation-toggle {
+    margin: 0;
+}
+
+.phone-image-generation-preset-field {
+    gap: 6px;
+}
+
+.phone-image-generation-preset-field > span {
+    color: var(--yuzi-settings-text-secondary, #7A7772);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.phone-image-generation-preset-field .phone-settings-select {
+    width: 100%;
+    min-width: 0;
+}
+
+.phone-image-generation-preset-status {
+    padding: 7px 9px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--yuzi-settings-accent, #5B7A6A) 8%, transparent);
+    color: var(--yuzi-settings-text-secondary, #7A7772);
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.phone-image-generation-preset-status.is-empty {
+    background: color-mix(in srgb, var(--yuzi-settings-danger, #8B5E5E) 7%, transparent);
+}
+
+.phone-image-generation-preset-actions {
+    align-items: flex-start;
+}
+
+.phone-image-generation-prompt-preview-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.phone-image-generation-prompt-preview-row[data-empty="true"] .phone-prompt-preview-content {
+    color: var(--yuzi-settings-text-secondary, #7A7772);
+}
+
+.phone-image-generation-prompt-preview-label {
+    color: var(--yuzi-settings-text-secondary, #7A7772);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.phone-image-generation-ai-output-row .phone-prompt-preview-content {
+    border-color: color-mix(in srgb, var(--yuzi-settings-accent, #5B7A6A) 24%, transparent);
+    background: color-mix(in srgb, var(--yuzi-settings-accent, #5B7A6A) 7%, transparent);
+}
+
+@media (max-width: 380px) {
+    .phone-image-generation-preset-actions .phone-settings-btn {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+}

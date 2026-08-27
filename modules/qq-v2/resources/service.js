@@ -5,7 +5,19 @@ import { createQQV2ApiKeyStore } from './api-key-store.js';
 const API_PRESETS_STORAGE_KEY = 'qq-v2.resources.api-presets';
 const PROMPT_PRESETS_STORAGE_KEY = 'qq-v2.resources.prompt-presets-v3';
 const STICKERS_STORAGE_KEY = 'qq-v2.resources.stickers';
+const IMAGE_GENERATION_PRESETS_STORAGE_KEY = 'qq-v2.resources.image-generation-presets';
 const PROMPT_MESSAGE_ROLES = new Set(['system', 'user', 'assistant']);
+const IMAGE_GENERATION_PRESET_KEYS = new Set(['entries']);
+const IMAGE_GENERATION_ENTRY_KEYS = new Set([
+    'id',
+    'name',
+    'role',
+    'content',
+    'enabled',
+    'triggerMode',
+    'triggerWords',
+    'andTriggerWords',
+]);
 
 const QQ_XML_PROTOCOL = String.raw`
 【QQ XML 输出协议】
@@ -661,6 +673,136 @@ function clonePromptPreset(record) {
     };
 }
 
+function cloneImageGenerationEntry(entry) {
+    return {
+        id: String(entry?.id ?? ''),
+        name: String(entry?.name ?? ''),
+        role: String(entry?.role ?? ''),
+        content: String(entry?.content ?? ''),
+        enabled: entry?.enabled !== false,
+        triggerMode: String(entry?.triggerMode ?? 'always'),
+        triggerWords: String(entry?.triggerWords ?? ''),
+        andTriggerWords: String(entry?.andTriggerWords ?? ''),
+    };
+}
+
+function publicImageGenerationPreset(record) {
+    return Object.freeze({
+        id: record.id,
+        name: record.name,
+        entries: Object.freeze(record.entries.map(entry => Object.freeze(cloneImageGenerationEntry(entry))),
+        ),
+    });
+}
+
+function cloneImageGenerationPreset(record) {
+    return {
+        id: String(record?.id ?? ''),
+        name: String(record?.name ?? ''),
+        entries: Array.isArray(record?.entries)
+            ? record.entries.map(cloneImageGenerationEntry)
+            : [],
+    };
+}
+
+function validateImageGenerationPresetSource(source) {
+    if (!source
+        || typeof source !== 'object'
+        || Array.isArray(source)
+        || Object.getPrototypeOf(source) !== Object.prototype) {
+        throw resourceError(
+            'invalid_image_generation_preset_import',
+            '生图预设导入必须是 st-chatu8 顶层预设对象',
+        );
+    }
+
+    const names = Object.keys(source);
+    if (names.length === 0) {
+        throw resourceError(
+            'invalid_image_generation_preset_import',
+            '生图预设导入至少需要一份预设',
+        );
+    }
+
+    return names.map((name) => {
+        const preset = source[name];
+        const normalizedName = String(name ?? '').trim();
+        if (!normalizedName || normalizedName === '__proto__'
+            || normalizedName === 'constructor' || normalizedName === 'prototype'
+            || !preset || typeof preset !== 'object'
+            || Array.isArray(preset)
+            || Object.getPrototypeOf(preset) !== Object.prototype
+            || !Array.isArray(preset.entries)
+            || Object.keys(preset).some(key => !IMAGE_GENERATION_PRESET_KEYS.has(key))) {
+            throw resourceError(
+                'invalid_image_generation_preset_import',
+                '生图预设必须包含合法的 entries 数组',
+            );
+        }
+
+        const entries = preset.entries.map((entry) => {
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+                throw resourceError(
+                    'invalid_image_generation_preset_import',
+                    '生图预设消息块必须是对象',
+                );
+            }
+            if (Object.getPrototypeOf(entry) !== Object.prototype
+                || Object.keys(entry).some(key => !IMAGE_GENERATION_ENTRY_KEYS.has(key))) {
+                throw resourceError(
+                    'invalid_image_generation_preset_import',
+                    '生图预设消息块包含未知字段',
+                );
+            }
+            const role = String(entry.role ?? '').trim();
+            if (!PROMPT_MESSAGE_ROLES.has(role)
+                || typeof entry.content !== 'string'
+                || (entry.id !== undefined && typeof entry.id !== 'string')
+                || (entry.name !== undefined && typeof entry.name !== 'string')
+                || (entry.triggerMode !== undefined && typeof entry.triggerMode !== 'string')
+                || (entry.triggerWords !== undefined && typeof entry.triggerWords !== 'string')
+                || (entry.andTriggerWords !== undefined && typeof entry.andTriggerWords !== 'string')) {
+                throw resourceError(
+                    'invalid_image_generation_preset_import',
+                    '生图预设消息块的 role 或 content 无效',
+                );
+            }
+            if (entry.enabled !== undefined && typeof entry.enabled !== 'boolean') {
+                throw resourceError(
+                    'invalid_image_generation_preset_import',
+                    '生图预设消息块的 enabled 必须是布尔值',
+                );
+            }
+            return {
+                id: String(entry.id ?? ''),
+                name: String(entry.name ?? ''),
+                role,
+                content: entry.content,
+                enabled: entry.enabled !== false,
+                triggerMode: String(entry.triggerMode ?? 'always'),
+                triggerWords: String(entry.triggerWords ?? ''),
+                andTriggerWords: String(entry.andTriggerWords ?? ''),
+            };
+        });
+
+        return { name: normalizedName, entries };
+    });
+}
+
+function nextImageGenerationPresetCopyName(requestedName, presets) {
+    const baseName = String(requestedName ?? '').trim() || 'Imported image preset';
+    const usedNames = new Set(presets.map(preset => String(preset?.name ?? '').trim()));
+    if (!usedNames.has(baseName)) return baseName;
+
+    let copyNumber = 1;
+    let candidate = `${baseName} (copy)`;
+    while (usedNames.has(candidate)) {
+        copyNumber += 1;
+        candidate = `${baseName} (copy ${copyNumber})`;
+    }
+    return candidate;
+}
+
 function nextPromptPresetCopyName(requestedName, presets) {
     const baseName = String(requestedName ?? '').trim() || 'Imported preset';
     const usedNames = new Set(presets.map((preset) => String(preset?.name ?? '').trim()));
@@ -741,6 +883,18 @@ export function createQQV2ResourceService(options = {}) {
         return stored && typeof stored === 'object' && Array.isArray(stored.stickers)
             ? { stickers: stored.stickers.map((sticker) => ({ ...sticker })) }
             : { stickers: [] };
+    };
+
+    const readImageGenerationPresetState = async () => {
+        const stored = await storage.get(IMAGE_GENERATION_PRESETS_STORAGE_KEY);
+        if (!stored || typeof stored !== 'object' || !Array.isArray(stored.presets)) {
+            return { presets: [] };
+        }
+        return {
+            presets: stored.presets
+                .filter(preset => preset && typeof preset === 'object')
+                .map(cloneImageGenerationPreset),
+        };
     };
 
     const saveStickerIntoState = (input, state) => {
@@ -941,6 +1095,54 @@ export function createQQV2ResourceService(options = {}) {
 
             state.presets.splice(index, 1);
             await storage.set(PROMPT_PRESETS_STORAGE_KEY, state);
+            return true;
+        },
+        async listImageGenerationPresets() {
+            const state = await readImageGenerationPresetState();
+            return Object.freeze(state.presets.map(publicImageGenerationPreset));
+        },
+        async getImageGenerationPreset(id) {
+            const normalizedId = String(id ?? '').trim();
+            if (!normalizedId) return null;
+            const state = await readImageGenerationPresetState();
+            const record = state.presets.find(preset => preset.id === normalizedId);
+            return record ? publicImageGenerationPreset(record) : null;
+        },
+        async importImageGenerationPresets(source) {
+            const importedSource = validateImageGenerationPresetSource(source);
+            const state = await readImageGenerationPresetState();
+            const imported = importedSource.map((preset) => {
+                const record = {
+                    id: createId(cryptoApi),
+                    name: nextImageGenerationPresetCopyName(preset.name, state.presets),
+                    entries: preset.entries.map(cloneImageGenerationEntry),
+                };
+                state.presets.push(record);
+                return record;
+            });
+            await storage.set(IMAGE_GENERATION_PRESETS_STORAGE_KEY, state);
+            return Object.freeze(imported.map(publicImageGenerationPreset));
+        },
+        async exportImageGenerationPreset(id) {
+            const normalizedId = String(id ?? '').trim();
+            if (!normalizedId) return null;
+            const state = await readImageGenerationPresetState();
+            const record = state.presets.find(preset => preset.id === normalizedId);
+            if (!record) return null;
+            return {
+                [record.name]: {
+                    entries: record.entries.map(cloneImageGenerationEntry),
+                },
+            };
+        },
+        async deleteImageGenerationPreset(id) {
+            const normalizedId = String(id ?? '').trim();
+            if (!normalizedId) return false;
+            const state = await readImageGenerationPresetState();
+            const index = state.presets.findIndex(preset => preset.id === normalizedId);
+            if (index === -1) return false;
+            state.presets.splice(index, 1);
+            await storage.set(IMAGE_GENERATION_PRESETS_STORAGE_KEY, state);
             return true;
         },
         async listApiPresets() {

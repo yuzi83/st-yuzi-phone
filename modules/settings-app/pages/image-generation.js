@@ -1,6 +1,8 @@
 import { escapeHtml, escapeHtmlAttr } from '../../utils/dom-escape.js';
 import { showImageViewerDialog } from '../services/image-viewer-dialog.js';
+import { downloadTextFile } from '../services/media-upload/download.js';
 import { buildSettingsPageFrame, buildSettingsSectionHtml } from '../layout/primitives.js';
+import { showAlertDialog, showConfirmDialog } from '../ui/confirm-dialog.js';
 
 function asArray(value) {
     return Array.isArray(value) ? value : [];
@@ -8,6 +10,51 @@ function asArray(value) {
 
 function asText(value) {
     return String(value ?? '').trim();
+}
+
+function getErrorMessage(result, fallback) {
+    return asText(result?.error?.message) || fallback;
+}
+
+function filenamePart(value) {
+    return asText(value).replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]+/g, '-').slice(0, 80) || 'preset';
+}
+
+function presetIdOf(preset) {
+    return asText(preset?.presetId || preset?.id);
+}
+
+function presetNameOf(preset) {
+    return asText(preset?.name) || '未命名预设';
+}
+
+function isUsableImageGenerationPreset(preset) {
+    return !!presetIdOf(preset)
+        && asArray(preset?.entries).some((entry) => (
+            entry
+            && entry.enabled !== false
+            && asText(entry.content)
+        ));
+}
+
+function getPresetService(ctx) {
+    return ctx?.qqV2PresetService
+        || ctx?.qqV2Presets
+        || ctx?.imageGenerationSettingsService?.qqV2PresetService
+        || null;
+}
+
+function clonePresetResources(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return {
+        status: asText(source.status) || 'unavailable',
+        error: asText(source.error),
+        apiPresets: asArray(source.apiPresets).map((preset) => ({ ...preset })),
+        imageGenerationPresets: asArray(source.imageGenerationPresets).map((preset) => ({
+            ...preset,
+            entries: asArray(preset?.entries).map((entry) => ({ ...entry })),
+        })),
+    };
 }
 
 const GENERATED_IMAGE_PATH_PREFIX = 'user/images/yuzi-phone-generated/';
@@ -47,6 +94,9 @@ function getConfig(viewModel = {}) {
         enabled: config.enabled === true,
         timeoutMs: Number.isFinite(Number(config.timeoutMs)) ? Number(config.timeoutMs) : 300000,
         roleMappings: asArray(config.roleMappings),
+        promptTranslationEnabled: config.promptTranslationEnabled === true,
+        promptTranslationApiPresetId: asText(config.promptTranslationApiPresetId),
+        promptTranslationPresetId: asText(config.promptTranslationPresetId),
     };
 }
 
@@ -271,6 +321,56 @@ function buildTestImagePreviewHtml(imagePath) {
     `;
 }
 
+function buildImageGenerationPresetOptions(presets, selectedPresetId) {
+    const selectedId = asText(selectedPresetId);
+    const list = asArray(presets);
+    const selectedPreset = list.find((preset) => presetIdOf(preset) === selectedId) || null;
+    const staleOption = selectedId && !selectedPreset
+        ? `<option value="${escapeHtmlAttr(selectedId)}" selected disabled>当前预设不可用</option>`
+        : '';
+    return [
+        `<option value="" ${selectedId ? '' : 'selected'}>请选择生图预设</option>`,
+        staleOption,
+        ...list.map((preset) => {
+            const presetId = presetIdOf(preset);
+            if (!presetId) return '';
+            const empty = !isUsableImageGenerationPreset(preset);
+            const suffix = empty ? '（空预设）' : '';
+            return `<option value="${escapeHtmlAttr(presetId)}" ${presetId === selectedId ? 'selected' : ''}>${escapeHtml(`${presetNameOf(preset)}${suffix}`)}</option>`;
+        }),
+    ].join('');
+}
+
+function buildApiPresetOptions(presets, selectedPresetId) {
+    const selectedId = asText(selectedPresetId);
+    const list = asArray(presets);
+    const selectedPreset = list.find((preset) => presetIdOf(preset) === selectedId) || null;
+    const staleOption = selectedId && !selectedPreset
+        ? `<option value="${escapeHtmlAttr(selectedId)}" selected disabled>当前中间模型 API 预设不可用</option>`
+        : '';
+    return [
+        `<option value="" ${selectedId ? '' : 'selected'}>请选择中间模型 API 预设</option>`,
+        staleOption,
+        ...list.map((preset) => {
+            const presetId = presetIdOf(preset);
+            if (!presetId) return '';
+            const suffix = preset?.readOnly === true ? '（只读）' : '';
+            return `<option value="${escapeHtmlAttr(presetId)}" ${presetId === selectedId ? 'selected' : ''}>${escapeHtml(`${presetNameOf(preset)}${suffix}`)}</option>`;
+        }),
+    ].join('');
+}
+
+function buildPromptPreviewRowHtml({ id, label, value, placeholder = '', extraClass = '' }) {
+    const resolvedValue = String(value ?? '');
+    const className = `phone-image-generation-prompt-preview-row${extraClass ? ` ${escapeHtmlAttr(extraClass)}` : ''}`;
+    return `
+        <div class="${className}" ${resolvedValue ? '' : 'data-empty="true"'}>
+            <span class="phone-image-generation-prompt-preview-label">${escapeHtml(label)}</span>
+            <div id="${escapeHtmlAttr(id)}" class="phone-prompt-preview-content">${escapeHtml(resolvedValue || placeholder)}</div>
+        </div>
+    `;
+}
+
 function getTestInput(viewModel = {}) {
     const testInput = viewModel?.testInput && typeof viewModel.testInput === 'object'
         ? viewModel.testInput
@@ -279,6 +379,14 @@ function getTestInput(viewModel = {}) {
         names: String(testInput.names ?? ''),
         description: String(testInput.description ?? ''),
         finalPrompt: String(testInput.finalPrompt ?? viewModel?.finalPrompt ?? ''),
+        aiOutput: String(
+            testInput.aiOutput
+            ?? testInput.translatedPrompt
+            ?? testInput.translationOutput
+            ?? viewModel?.aiOutput
+            ?? viewModel?.translatedPrompt
+            ?? '',
+        ),
         imagePath: normalizeGeneratedImagePath(
             testInput.imagePath ?? viewModel?.testImagePath,
         ),
@@ -291,6 +399,19 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
     const config = getConfig(viewModel);
     const testInput = getTestInput(viewModel);
     const mappings = config.roleMappings;
+    const sharedResources = clonePresetResources(viewModel.sharedResources);
+    const presetServiceAvailable = viewModel.presetServiceAvailable === true;
+    const presetBusy = viewModel.presetBusy === true;
+    const imageGenerationPresets = sharedResources.imageGenerationPresets;
+    const apiPresets = sharedResources.apiPresets;
+    const selectedImagePreset = imageGenerationPresets.find(
+        (preset) => presetIdOf(preset) === config.promptTranslationPresetId,
+    ) || null;
+    const hasUsableImagePreset = imageGenerationPresets.some(isUsableImageGenerationPreset);
+    const canUseTranslation = presetServiceAvailable && hasUsableImagePreset && !presetBusy;
+    const resourceStatus = sharedResources.status === 'ready'
+        ? (hasUsableImagePreset ? '' : '尚未导入有效的生图预设')
+        : sharedResources.error || (presetServiceAvailable ? '生图预设读取中或暂不可用' : '生图预设接口尚未接入');
     const engineSection = buildSettingsSectionHtml({
         title: '智慧姬',
         desc: '小手机负责整理提示词、保存图片与显示结果；实际生图模式跟随智慧姬当前设置。测试图片和之后的 QQ 生图会保存到：user/images/yuzi-phone-generated/',
@@ -301,9 +422,59 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
             </label>
         `,
     });
+    const translationSection = buildSettingsSectionHtml({
+        title: '中文提示词转换',
+        desc: '开启后，先使用选中的 QQ API 预设读取生图预设，把当前中文提示词交给中间 AI；转换结果会原样继续发送给智慧姬。',
+        extraClass: 'phone-image-generation-translation-section',
+        bodyHtml: `
+            <div class="phone-image-generation-translation-controls">
+                <label class="phone-appearance-check-item phone-image-generation-translation-toggle">
+                    <span class="phone-appearance-check-main">启用中文 → Tag 转换</span>
+                    <input id="phone-image-generation-prompt-translation-enabled" type="checkbox"
+                        class="phone-settings-switch"
+                        ${config.promptTranslationEnabled ? 'checked' : ''}
+                        ${canUseTranslation && !!selectedImagePreset && isUsableImageGenerationPreset(selectedImagePreset) ? '' : 'disabled'}>
+                </label>
+                <label class="phone-settings-field-inline phone-image-generation-preset-field">
+                    <span>生图预设</span>
+                    <select id="phone-image-generation-preset-select" class="phone-settings-select"
+                        ${presetServiceAvailable && !presetBusy ? '' : 'disabled'}>
+                        ${buildImageGenerationPresetOptions(
+                            imageGenerationPresets,
+                            config.promptTranslationPresetId,
+                        )}
+                    </select>
+                </label>
+                <label class="phone-settings-field-inline phone-image-generation-preset-field">
+                    <span>中间模型 API 预设</span>
+                    <select id="phone-image-generation-api-preset-select" class="phone-settings-select"
+                        ${presetServiceAvailable && !presetBusy ? '' : 'disabled'}>
+                        ${buildApiPresetOptions(apiPresets, config.promptTranslationApiPresetId)}
+                    </select>
+                </label>
+            </div>
+            <div class="phone-image-generation-preset-status ${resourceStatus ? '' : 'is-empty'}">
+                ${escapeHtml(resourceStatus || '已选择生图预设后，转换接口才会参与生图请求。')}
+            </div>
+            <div class="phone-settings-action phone-settings-action-wrap phone-image-generation-preset-actions">
+                <button type="button" class="phone-settings-btn"
+                    id="phone-image-generation-preset-import-btn"
+                    ${presetServiceAvailable && !presetBusy ? '' : 'disabled'}>导入生图预设</button>
+                <button type="button" class="phone-settings-btn"
+                    id="phone-image-generation-preset-export-btn"
+                    ${selectedImagePreset && presetServiceAvailable && !presetBusy ? '' : 'disabled'}>导出当前</button>
+                <button type="button" class="phone-settings-btn phone-settings-btn-danger"
+                    id="phone-image-generation-preset-delete-btn"
+                    ${selectedImagePreset && presetServiceAvailable && !presetBusy ? '' : 'disabled'}>删除当前</button>
+                <input type="file" id="phone-image-generation-preset-import-file"
+                    accept="application/json,.json" hidden
+                    ${presetServiceAvailable && !presetBusy ? '' : 'disabled'}>
+            </div>
+        `,
+    });
     const testSection = buildSettingsSectionHtml({
         title: '测试生图',
-        desc: '人物名字支持使用半角或全角分号分隔；最终提示词会按照当前角色资料映射生成。',
+        desc: '人物名字支持使用半角或全角分号分隔；中文提示词会按照当前角色资料映射生成。启用转换时，AI 输出会继续交给智慧姬。',
         bodyHtml: `
             <label class="phone-settings-field-inline">
                 <span>人物名字</span>
@@ -315,10 +486,20 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
                 <textarea id="phone-image-generation-test-description" class="phone-settings-textarea"
                     rows="4" placeholder="输入图片里发生的事情">${escapeHtml(testInput.description)}</textarea>
             </label>
-            <div class="phone-settings-field-inline">
-                <span>最终发送给智慧姬</span>
-                <div id="phone-image-generation-prompt-preview" class="phone-prompt-preview-content">${escapeHtml(testInput.finalPrompt || '输入人物名字或图片描述后，这里会显示最终提示词。')}</div>
-            </div>
+            ${buildPromptPreviewRowHtml({
+                id: 'phone-image-generation-prompt-preview',
+                label: '中文提示词',
+                value: testInput.finalPrompt,
+                placeholder: '输入人物名字或图片描述后，这里会显示中文提示词。',
+            })}
+            ${testInput.aiOutput
+                ? buildPromptPreviewRowHtml({
+                    id: 'phone-image-generation-ai-output',
+                    label: 'AI 输出',
+                    value: testInput.aiOutput,
+                    extraClass: 'phone-image-generation-ai-output-row',
+                })
+                : ''}
             <div class="phone-settings-action phone-settings-action-wrap">
                 <button type="button" class="phone-settings-btn phone-settings-btn-primary"
                     id="phone-image-generation-test-generate" ${testInput.generating ? 'disabled' : ''}>${testInput.generating ? '生成中…' : '测试生成'}</button>
@@ -358,7 +539,8 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
     });
     return buildSettingsPageFrame({
         title: '生图设置',
-        bodyHtml: `${engineSection}${testSection}${mappingsSection}${requestSection}`,
+        bodyClass: 'phone-app-body phone-settings-scroll phone-image-generation-page',
+        bodyHtml: `${engineSection}${translationSection}${testSection}${mappingsSection}${requestSection}`,
     });
 }
 
@@ -374,6 +556,31 @@ function getPromptFromViewModel(viewModel = {}) {
         viewModel?.testInput?.finalPrompt
         ?? viewModel?.finalPrompt
         ?? viewModel?.prompt
+        ?? '',
+    );
+}
+
+function getAiOutputFromViewModel(viewModel = {}) {
+    return String(
+        viewModel?.testInput?.aiOutput
+        ?? viewModel?.testInput?.translatedPrompt
+        ?? viewModel?.testInput?.translationOutput
+        ?? viewModel?.aiOutput
+        ?? viewModel?.translatedPrompt
+        ?? viewModel?.translationOutput
+        ?? '',
+    );
+}
+
+function getAiOutputFromResult(result = {}) {
+    return String(
+        result?.aiOutput
+        ?? result?.translatedPrompt
+        ?? result?.translationOutput
+        ?? result?.promptTranslationOutput
+        ?? result?.translatedTagPrompt
+        ?? result?.tagPrompt
+        ?? result?.promptTranslation?.content
         ?? '',
     );
 }
@@ -492,19 +699,39 @@ function createImageGenerationPageSession(ctx) {
             enabled: false,
             timeoutMs: 300000,
             roleMappings: [],
+            promptTranslationEnabled: false,
+            promptTranslationApiPresetId: '',
+            promptTranslationPresetId: '',
         },
         viewModel: {
-            config: { enabled: false, timeoutMs: 300000, roleMappings: [] },
+            config: {
+                enabled: false,
+                timeoutMs: 300000,
+                roleMappings: [],
+                promptTranslationEnabled: false,
+                promptTranslationApiPresetId: '',
+                promptTranslationPresetId: '',
+            },
             tables: [],
         },
         testInput: {
             names: '',
             description: '',
             finalPrompt: '',
+            aiOutput: '',
             imagePath: '',
             statusText: '',
             generating: false,
         },
+        sharedResources: {
+            status: 'unavailable',
+            error: '',
+            apiPresets: [],
+            imageGenerationPresets: [],
+        },
+        presetServiceAvailable: false,
+        presetBusy: false,
+        resourceRequestVersion: 0,
         cleanups: [],
     };
     const isActive = () => state.active && ctx?.pageRuntime?.isDisposed?.() !== true;
@@ -527,6 +754,92 @@ function createImageGenerationPageSession(ctx) {
         target.addEventListener?.(type, listener, options);
         state.cleanups.push(() => target.removeEventListener?.(type, listener, options));
     };
+    const presetService = getPresetService(ctx);
+    const notify = (message, isError = false) => {
+        ctx.showToast?.(ctx.container, message, isError, ctx.pageRuntime);
+    };
+    const repaintKeepScroll = () => {
+        if (!isActive()) return;
+        if (typeof ctx.rerenderImageGenerationKeepScroll === 'function') {
+            ctx.rerenderImageGenerationKeepScroll();
+            return;
+        }
+        paint();
+    };
+    const selectedImagePreset = (config = getConfig(state.viewModel)) => (
+        asArray(state.sharedResources.imageGenerationPresets).find(
+            (preset) => presetIdOf(preset) === asText(config.promptTranslationPresetId),
+        ) || null
+    );
+    const selectedImagePresetIsUsable = (config = getConfig(state.viewModel)) => (
+        isUsableImageGenerationPreset(selectedImagePreset(config))
+    );
+    const clearInvalidTranslationSelection = async ({ notifyUser = false } = {}) => {
+        const config = getConfig(state.viewModel);
+        if (!config.promptTranslationEnabled || selectedImagePresetIsUsable(config)) return false;
+        const saved = await saveConfig({
+            ...config,
+            promptTranslationEnabled: false,
+        }, {
+            rerender: false,
+            refreshPreviewAfter: false,
+        });
+        if (saved && notifyUser) notify('当前没有有效的生图预设，已自动关闭中文转换。', true);
+        return saved;
+    };
+    const applySharedResources = async (source, { autoDisable = true } = {}) => {
+        state.sharedResources = clonePresetResources(source);
+        if (autoDisable && state.sharedResources.status === 'ready') {
+            await clearInvalidTranslationSelection({ notifyUser: false });
+        }
+        return state.sharedResources.status === 'ready';
+    };
+    const loadSharedResources = async ({ autoDisable = true, source } = {}) => {
+        const resourceRequestVersion = ++state.resourceRequestVersion;
+        if (source !== undefined) {
+            state.presetServiceAvailable = Boolean(presetService);
+            return applySharedResources(source, { autoDisable });
+        }
+        if (!presetService || typeof presetService.readSharedResources !== 'function') {
+            state.presetServiceAvailable = false;
+            state.sharedResources = {
+                status: 'unavailable',
+                error: '生图预设接口尚未接入',
+                apiPresets: [],
+                imageGenerationPresets: [],
+            };
+            return false;
+        }
+
+        state.presetServiceAvailable = true;
+        try {
+            const result = await presetService.readSharedResources();
+            if (!isActive() || resourceRequestVersion !== state.resourceRequestVersion) return false;
+            if (result?.ok === false) {
+                state.sharedResources = {
+                    status: asText(result.status) || 'failed',
+                    error: getErrorMessage(result, '生图预设读取失败'),
+                    apiPresets: [],
+                    imageGenerationPresets: [],
+                };
+                return false;
+            }
+            return applySharedResources({
+                status: 'ready',
+                apiPresets: result?.apiPresets,
+                imageGenerationPresets: result?.imageGenerationPresets,
+            }, { autoDisable });
+        } catch (error) {
+            if (!isActive() || resourceRequestVersion !== state.resourceRequestVersion) return false;
+            state.sharedResources = {
+                status: 'failed',
+                error: error?.message || '生图预设读取失败',
+                apiPresets: [],
+                imageGenerationPresets: [],
+            };
+            return false;
+        }
+    };
     const getTestInputFromDom = () => ({
         names: String(ctx.container.querySelector('#phone-image-generation-test-names')?.value ?? state.testInput.names),
         description: String(ctx.container.querySelector('#phone-image-generation-test-description')?.value ?? state.testInput.description),
@@ -534,12 +847,24 @@ function createImageGenerationPageSession(ctx) {
     const readConfigFromDom = () => {
         const current = getConfig(state.viewModel);
         const cards = Array.from(ctx.container.querySelectorAll('.phone-image-generation-mapping-card') || []);
+        const translationToggle = ctx.container.querySelector('#phone-image-generation-prompt-translation-enabled');
+        const imagePresetSelect = ctx.container.querySelector('#phone-image-generation-preset-select');
+        const apiPresetSelect = ctx.container.querySelector('#phone-image-generation-api-preset-select');
         return {
             enabled: ctx.container.querySelector('#phone-image-generation-enabled')?.checked === true,
             timeoutMs: clampTimeoutMs(ctx.container.querySelector('#phone-image-generation-timeout')?.value),
             roleMappings: cards.length > 0
                 ? cards.map((card, index) => readMappingConfig(card, state.viewModel, current.roleMappings[index]))
                 : current.roleMappings,
+            promptTranslationEnabled: translationToggle
+                ? translationToggle.checked === true
+                : current.promptTranslationEnabled,
+            promptTranslationApiPresetId: apiPresetSelect
+                ? asText(apiPresetSelect.value)
+                : current.promptTranslationApiPresetId,
+            promptTranslationPresetId: imagePresetSelect
+                ? asText(imagePresetSelect.value)
+                : current.promptTranslationPresetId,
         };
     };
     const setPromptPreview = (prompt) => {
@@ -547,8 +872,31 @@ function createImageGenerationPageSession(ctx) {
         const target = ctx.container.querySelector('#phone-image-generation-prompt-preview');
         if (target) {
             target.textContent = state.testInput.finalPrompt
-                || '输入人物名字或图片描述后，这里会显示最终提示词。';
+                || '输入人物名字或图片描述后，这里会显示中文提示词。';
         }
+    };
+    const setAiOutput = (output) => {
+        state.testInput.aiOutput = String(output ?? '');
+        const existing = ctx.container.querySelector('#phone-image-generation-ai-output');
+        if (existing) {
+            const row = existing.closest('.phone-image-generation-prompt-preview-row');
+            if (row) row.remove();
+        }
+        if (!state.testInput.aiOutput) return;
+        const previewAnchor = ctx.container.querySelector('#phone-image-generation-prompt-preview');
+        const previewRow = previewAnchor?.closest('.phone-image-generation-prompt-preview-row');
+        if (!previewRow) return;
+        const row = document.createElement('div');
+        row.className = 'phone-image-generation-prompt-preview-row phone-image-generation-ai-output-row';
+        const label = document.createElement('span');
+        label.className = 'phone-image-generation-prompt-preview-label';
+        label.textContent = 'AI 输出';
+        const value = document.createElement('div');
+        value.id = 'phone-image-generation-ai-output';
+        value.className = 'phone-prompt-preview-content';
+        value.textContent = state.testInput.aiOutput;
+        row.append(label, value);
+        previewRow.insertAdjacentElement('afterend', row);
     };
     const setTestStatus = ({ generating = false, statusText = '', imagePath } = {}) => {
         state.testInput.generating = generating;
@@ -589,10 +937,18 @@ function createImageGenerationPageSession(ctx) {
                         : state.viewModel.resolvedMappings,
                 };
             }
+            if (hasOwn(next, 'sharedResources')) {
+                await loadSharedResources({
+                    source: next.sharedResources,
+                    autoDisable: false,
+                });
+            }
             setPromptPreview(getPromptFromViewModel(next));
+            setAiOutput(getAiOutputFromViewModel(next));
         } catch (error) {
             if (!isActive() || requestVersion !== state.requestVersion) return;
             setPromptPreview('');
+            setAiOutput('');
             ctx.showToast?.(ctx.container, error?.message || '提示词预览失败', true);
         }
     };
@@ -672,6 +1028,15 @@ function createImageGenerationPageSession(ctx) {
                 names: loadedTest.names || state.testInput.names,
                 description: loadedTest.description || state.testInput.description,
             };
+            if (hasOwn(loaded, 'sharedResources')) {
+                await loadSharedResources({
+                    source: loaded.sharedResources,
+                    autoDisable: true,
+                });
+            } else {
+                await loadSharedResources({ autoDisable: true });
+            }
+            if (!isActive()) return;
             paint();
         } catch (error) {
             if (!isActive() || requestVersion !== state.requestVersion) return;
@@ -682,14 +1047,18 @@ function createImageGenerationPageSession(ctx) {
     const runTestGeneration = async () => {
         const testInput = getTestInputFromDom();
         state.testInput = { ...state.testInput, ...testInput };
+        setAiOutput('');
         setTestStatus({ generating: true, statusText: '正在请求智慧姬…' });
         try {
             const result = await service.testGenerate({
                 ...testInput,
                 prompt: state.testInput.finalPrompt,
+                config: readConfigFromDom(),
                 timeoutMs: readConfigFromDom().timeoutMs,
             });
             if (!isActive()) return;
+            if (result?.prompt !== undefined) setPromptPreview(result.prompt);
+            setAiOutput(getAiOutputFromResult(result));
             if (result?.ok === false) {
                 throw new Error(result?.error?.message || result?.message || '图片生成失败');
             }
@@ -706,6 +1075,138 @@ function createImageGenerationPageSession(ctx) {
             ctx.showToast?.(ctx.container, error?.message || '测试生成失败', true);
         }
     };
+    const importImageGenerationPresetFile = async (file) => {
+        if (!file) return;
+        if (!presetService || typeof presetService.importImageGenerationPresets !== 'function') {
+            showAlertDialog(
+                ctx.container,
+                '无法导入生图预设',
+                '当前设置页还没有接入生图预设导入接口。',
+                '知道了',
+                ctx.pageRuntime,
+            );
+            return;
+        }
+
+        state.presetBusy = true;
+        repaintKeepScroll();
+        try {
+            const source = JSON.parse(await file.text());
+            const result = await presetService.importImageGenerationPresets({ source });
+            if (result?.ok !== true) {
+                throw new Error(getErrorMessage(result, '生图预设导入失败'));
+            }
+
+            const imported = asArray(result.imageGenerationPresets);
+            await loadSharedResources({ autoDisable: false });
+            const importedPresetId = presetIdOf(imported[0]);
+            const current = getConfig(state.viewModel);
+            const nextConfig = {
+                ...current,
+                ...(importedPresetId ? { promptTranslationPresetId: importedPresetId } : {}),
+            };
+            if (nextConfig.promptTranslationEnabled && !selectedImagePresetIsUsable(nextConfig)) {
+                nextConfig.promptTranslationEnabled = false;
+            }
+            if (importedPresetId) {
+                await saveConfig(nextConfig, {
+                    rerender: false,
+                    refreshPreviewAfter: false,
+                });
+            }
+            notify(imported.length
+                ? `已导入 ${imported.length} 个生图预设，并自动选中「${presetNameOf(imported[0])}」。`
+                : '生图预设文件已导入，但没有可选择的预设。');
+        } catch (error) {
+            notify(error?.message || '生图预设导入失败', true);
+        } finally {
+            state.presetBusy = false;
+            repaintKeepScroll();
+        }
+    };
+    const exportCurrentImageGenerationPreset = async () => {
+        const config = getConfig(state.viewModel);
+        const preset = selectedImagePreset(config);
+        const presetId = presetIdOf(preset);
+        if (!presetId) {
+            notify('请先选择要导出的生图预设。', true);
+            return;
+        }
+        if (!presetService || typeof presetService.exportImageGenerationPreset !== 'function') {
+            showAlertDialog(
+                ctx.container,
+                '无法导出生图预设',
+                '当前设置页还没有接入生图预设导出接口。',
+                '知道了',
+                ctx.pageRuntime,
+            );
+            return;
+        }
+
+        state.presetBusy = true;
+        repaintKeepScroll();
+        try {
+            const result = await presetService.exportImageGenerationPreset({
+                imageGenerationPresetId: presetId,
+            });
+            if (result?.ok !== true || !result.source || typeof result.source !== 'object') {
+                throw new Error(getErrorMessage(result, '生图预设导出失败'));
+            }
+            const filename = `yuzi-image-generation-${filenamePart(presetNameOf(preset))}.json`;
+            downloadTextFile(filename, JSON.stringify(result.source, null, 2), 'application/json');
+            notify(`已导出生图预设「${presetNameOf(preset)}」。`);
+        } catch (error) {
+            notify(error?.message || '生图预设导出失败', true);
+        } finally {
+            state.presetBusy = false;
+            repaintKeepScroll();
+        }
+    };
+    const deleteCurrentImageGenerationPreset = async () => {
+        const config = getConfig(state.viewModel);
+        const preset = selectedImagePreset(config);
+        const presetId = presetIdOf(preset);
+        if (!presetId) {
+            notify('请先选择要删除的生图预设。', true);
+            return;
+        }
+        if (!presetService || typeof presetService.deleteImageGenerationPreset !== 'function') {
+            showAlertDialog(
+                ctx.container,
+                '无法删除生图预设',
+                '当前设置页还没有接入生图预设删除接口。',
+                '知道了',
+                ctx.pageRuntime,
+            );
+            return;
+        }
+
+        state.presetBusy = true;
+        repaintKeepScroll();
+        try {
+            const result = await presetService.deleteImageGenerationPreset({
+                imageGenerationPresetId: presetId,
+            });
+            if (result?.ok !== true || result?.deleted !== true) {
+                throw new Error(getErrorMessage(result, '生图预设删除失败'));
+            }
+            await saveConfig({
+                ...config,
+                promptTranslationEnabled: false,
+                promptTranslationPresetId: '',
+            }, {
+                rerender: false,
+                refreshPreviewAfter: false,
+            });
+            await loadSharedResources({ autoDisable: true });
+            notify(`已删除生图预设「${presetNameOf(preset)}」。`);
+        } catch (error) {
+            notify(error?.message || '生图预设删除失败', true);
+        } finally {
+            state.presetBusy = false;
+            repaintKeepScroll();
+        }
+    };
     const bind = () => {
         clearBindings();
         addListener(ctx.container.querySelector('.phone-nav-back'), 'click', () => {
@@ -714,6 +1215,59 @@ function createImageGenerationPageSession(ctx) {
         });
         addListener(ctx.container.querySelector('#phone-image-generation-enabled'), 'change', () => {
             void saveConfig(readConfigFromDom(), { refreshPreviewAfter: false });
+        });
+        addListener(ctx.container.querySelector('#phone-image-generation-prompt-translation-enabled'), 'change', () => {
+            const config = readConfigFromDom();
+            if (config.promptTranslationEnabled && !selectedImagePresetIsUsable(config)) {
+                config.promptTranslationEnabled = false;
+                notify('当前没有有效的生图预设，已自动关闭中文转换。', true);
+            }
+            void saveConfig(config, {
+                rerender: true,
+                refreshPreviewAfter: false,
+            });
+        });
+        addListener(ctx.container.querySelector('#phone-image-generation-preset-select'), 'change', () => {
+            const config = readConfigFromDom();
+            if (config.promptTranslationEnabled && !selectedImagePresetIsUsable(config)) {
+                config.promptTranslationEnabled = false;
+                notify('所选生图预设为空，已自动关闭中文转换。', true);
+            }
+            void saveConfig(config, {
+                rerender: true,
+                refreshPreviewAfter: false,
+            });
+        });
+        addListener(ctx.container.querySelector('#phone-image-generation-api-preset-select'), 'change', () => {
+            void saveConfig(readConfigFromDom(), {
+                rerender: true,
+                refreshPreviewAfter: false,
+            });
+        });
+        const presetImportInput = ctx.container.querySelector('#phone-image-generation-preset-import-file');
+        addListener(ctx.container.querySelector('#phone-image-generation-preset-import-btn'), 'click', () => {
+            presetImportInput?.click();
+        });
+        addListener(presetImportInput, 'change', () => {
+            const file = presetImportInput?.files?.[0];
+            if (presetImportInput) presetImportInput.value = '';
+            if (file) void importImageGenerationPresetFile(file);
+        });
+        addListener(ctx.container.querySelector('#phone-image-generation-preset-export-btn'), 'click', () => {
+            void exportCurrentImageGenerationPreset();
+        });
+        addListener(ctx.container.querySelector('#phone-image-generation-preset-delete-btn'), 'click', () => {
+            const preset = selectedImagePreset();
+            const name = presetNameOf(preset);
+            showConfirmDialog(
+                ctx.container,
+                '删除生图预设',
+                `确定删除「${name}」吗？删除后无法恢复。`,
+                () => { void deleteCurrentImageGenerationPreset(); },
+                '删除',
+                '取消',
+                ctx.pageRuntime,
+            );
         });
         const namesInput = ctx.container.querySelector('#phone-image-generation-test-names');
         const descriptionInput = ctx.container.querySelector('#phone-image-generation-test-description');
@@ -824,6 +1378,9 @@ function createImageGenerationPageSession(ctx) {
             ...state.viewModel,
             config: getConfig(state.viewModel),
             testInput: state.testInput,
+            sharedResources: state.sharedResources,
+            presetServiceAvailable: state.presetServiceAvailable,
+            presetBusy: state.presetBusy,
         });
         bind();
     };

@@ -74,7 +74,7 @@ async function testPhoneRuntimeReadsCurrentMappingsAndTimeout() {
     assert.equal(generated.ok, true);
     assert.deepEqual(generationCalls, [{
         prompt: '星野铃，银色长发，坐在窗边',
-        timeoutMs: 135_000,
+        timeoutMs: 1,
         width: null,
         height: null,
     }]);

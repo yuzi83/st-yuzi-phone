@@ -65,6 +65,8 @@ import {
 import { createSettingsPageRenderers } from './page-renderers.js';
 import { createSettingsAppState } from './state-machine.js';
 import { createPageRuntimeManager } from './page-runtime.js';
+import { applyTableContentReplacementArea } from '../phone-core/background-services.js';
+import { createTableContentReplacementSettingsService } from './services/table-content-replacement.js';
 
 function selectContentPresetWorkshop(enabled, createAvailable, createUnavailable) {
     return enabled ? createAvailable() : createUnavailable();
@@ -86,6 +88,16 @@ const imageGenerationSettingsService = createImageGenerationSettingsService({
         composeCharacterImagePrompt,
     },
     imageGenerationService: sharedImageGenerationService,
+    qqV2PresetService: qqV2PresetSettingsService,
+});
+
+const tableContentReplacementSettingsService = createTableContentReplacementSettingsService({
+    getPhoneSettings,
+    savePhoneSetting,
+    tableReader: getTableDataAsync,
+    replacementService: {
+        applyArea: applyTableContentReplacementArea,
+    },
 });
 
 /**
@@ -143,6 +155,8 @@ export function renderSettings(container) {
             pageRenderers.renderButtonStylePage();
         } else if (mode === 'ai_instruction_presets') {
             pageRenderers.renderAiInstructionPresetsPage();
+        } else if (mode === 'table_content_replacement') {
+            pageRenderers.renderTableContentReplacementPage();
         } else {
             pageRenderers.renderHomePage();
         }
@@ -193,6 +207,7 @@ export function renderSettings(container) {
     const rerenderAiInstructionPresetsKeepScroll = createRerenderWithScroll('aiInstructionPresetsScrollTop', render);
     const rerenderWorldbookReadingKeepScroll = createRerenderWithScroll('worldbookReadingScrollTop', render);
     const rerenderImageGenerationKeepScroll = createRerenderWithScroll('imageGenerationScrollTop', render);
+    const rerenderTableContentReplacementKeepScroll = createRerenderWithScroll('tableContentReplacementScrollTop', render);
 
     /** @type {import('../../types').SettingsPageRendererGroupedDeps} */
     const pageRendererDeps = {
@@ -216,6 +231,7 @@ export function renderSettings(container) {
             rerenderBeautifyKeepScroll: rerenderBeautifyKeepScrollGlobal,
             rerenderAiInstructionPresetsKeepScroll,
             rerenderImageGenerationKeepScroll,
+            rerenderTableContentReplacementKeepScroll,
             rerenderWorldbookReadingKeepScroll,
         },
         feedback: {
@@ -262,6 +278,8 @@ export function renderSettings(container) {
         },
         worldbookReading: sillyTavernWorldbookReadingCatalog,
         imageGeneration: imageGenerationSettingsService,
+        qqV2PresetService: qqV2PresetSettingsService,
+        tableContentReplacement: tableContentReplacementSettingsService,
     };
 
     /** @type {import('../../types').SettingsPageRenderers} */

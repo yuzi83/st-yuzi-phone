@@ -2,6 +2,7 @@ import { ErrorCodes, assert } from '../error-handler.js';
 import { createEditorPageRenderers } from './page-renderers/editor-renderers.js';
 import { createPersonalizationPageRenderers } from './page-renderers/personalization-renderers.js';
 import { createPresetPageRenderers } from './page-renderers/preset-renderers.js';
+import { createTableContentReplacementPageRenderers } from './page-renderers/table-content-replacement-renderers.js';
 import {
     createSettingsPageContexts,
     createSettingsRendererServices,
@@ -121,6 +122,14 @@ function validateSettingsRendererDeps(deps = {}) {
         'saveConfig',
         'testGenerate',
     ]);
+    if (deps.tableContentReplacement) {
+        assertFunctionDeps('tableContentReplacement', deps.tableContentReplacement, [
+            'loadViewModel',
+            'saveArea',
+            'deleteArea',
+            'readConfig',
+        ]);
+    }
 }
 
 /**
@@ -140,15 +149,18 @@ export function createSettingsPageRenderers(deps = {}) {
     const { pages: personalizationPages = {}, ...personalizationRenderers } = createPersonalizationPageRenderers(rendererScope);
     const { pages: presetPages = {}, ...presetRenderers } = createPresetPageRenderers(rendererScope);
     const { pages: editorPages = {}, ...editorRenderers } = createEditorPageRenderers(rendererScope);
+    const { pages: tableContentReplacementPages = {}, ...tableContentReplacementRenderers } = createTableContentReplacementPageRenderers(rendererScope);
 
     return {
         pages: {
             ...personalizationPages,
             ...presetPages,
             ...editorPages,
+            ...tableContentReplacementPages,
         },
         ...personalizationRenderers,
         ...presetRenderers,
         ...editorRenderers,
+        ...tableContentReplacementRenderers,
     };
 }

@@ -20,6 +20,11 @@ async function main() {
         status: 'ready',
         apiPresets: [{ presetId: 'api-1', name: '主接口' }],
         promptPresets: [{ presetId: 'prompt-1', name: '私聊回复', isBuiltIn: true, messages: [] }],
+        imageGenerationPresets: [{
+            presetId: 'image-preset-1',
+            name: '生图转换',
+            entries: [{ role: 'system', content: '只转换', enabled: true }],
+        }],
         stickers: [],
     };
     const facade = {
@@ -42,6 +47,9 @@ async function main() {
         'importPromptPresets',
         'exportPromptPreset',
         'exportAllPromptPresets',
+        'importImageGenerationPresets',
+        'exportImageGenerationPreset',
+        'deleteImageGenerationPreset',
     ]) {
         facade.intent[method] = async (input) => {
             calls.push([method, input]);
@@ -64,6 +72,15 @@ async function main() {
         ['importPromptPresets', { source: { presets: [] } }],
         ['exportPromptPreset', { promptPresetId: 'prompt-1' }],
         ['exportAllPromptPresets', undefined],
+        ['importImageGenerationPresets', {
+            source: {
+                '生图转换': {
+                    entries: [{ role: 'system', content: '只转换' }],
+                },
+            },
+        }],
+        ['exportImageGenerationPreset', { imageGenerationPresetId: 'image-preset-1' }],
+        ['deleteImageGenerationPreset', { imageGenerationPresetId: 'image-preset-1' }],
     ];
     for (const [method, input] of operations) {
         assert.deepEqual(await service[method](input), { ok: true, status: 'accepted', method });

@@ -1,0 +1,421 @@
+/* 表格内容词汇替换：设置页专属视觉层。 */
+.phone-table-content-replacement-page .phone-settings-page-stack {
+    gap: 14px;
+}
+
+.phone-table-content-replacement-page .phone-settings-hero {
+    margin-bottom: 0;
+}
+
+.phone-table-content-replacement-running-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 13px 14px;
+    border: 1px solid var(--yuzi-settings-border, rgba(58, 55, 49, 0.08));
+    border-radius: 14px;
+    background: var(--yuzi-settings-surface, rgba(245, 243, 239, 0.96));
+    box-shadow: 0 6px 18px rgba(58, 55, 49, 0.04);
+}
+
+.phone-table-content-replacement-running-summary-head,
+.phone-table-content-replacement-running-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.phone-table-content-replacement-running-summary-title {
+    margin: 0;
+    color: var(--yuzi-settings-text-primary, #3A3731);
+    font-size: 14px;
+    line-height: 1.35;
+    font-weight: 700;
+}
+
+.phone-table-content-replacement-running-summary-meta,
+.phone-table-content-replacement-running-empty {
+    margin: 3px 0 0;
+    color: var(--yuzi-settings-text-secondary, #7A7772);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.phone-table-content-replacement-running-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.phone-table-content-replacement-running-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 9px 10px;
+    border: 1px solid var(--yuzi-settings-border, rgba(58, 55, 49, 0.08));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--yuzi-settings-surface-soft, #F5F3EF) 72%, transparent);
+}
+
+.phone-table-content-replacement-running-group-title {
+    min-width: 0;
+    color: var(--yuzi-settings-text-primary, #3A3731);
+    font-size: 12px;
+    line-height: 1.35;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+}
+
+.phone-table-content-replacement-running-group-count {
+    flex: 0 0 auto;
+    color: var(--yuzi-settings-text-secondary, #7A7772);
+    font-size: 10px;
+}
+
+.phone-table-content-replacement-running-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.phone-table-content-replacement-running-item {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.phone-table-content-replacement-running-index {
+    color: var(--yuzi-settings-text-secondary, #7A7772);
+    font-size: 10px;
+    text-align: center;
+}
+
+.phone-table-content-replacement-running-value {
+    display: block;
+    min-width: 0;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--yuzi-settings-text-primary, #3A3731) 5%, transparent);
+    color: var(--yuzi-settings-text-primary, #3A3731);
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.phone-table-content-replacement-running-arrow {
+    color: var(--yuzi-settings-accent-strong, #4B6648);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.phone-table-content-replacement-running-empty {
+    margin: 0;
+    padding: 4px 0;
+}
+
+.phone-table-content-replacement-area {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--yuzi-settings-border, rgba(58, 55, 49, 0.08));
+    border-radius: 14px;
+    background: var(--yuzi-settings-surface, rgba(245, 243, 239, 0.96));
+    box-shadow: 0 6px 18px rgba(58, 55, 49, 0.04);
+}
+
+.phone-table-content-replacement-area + .phone-table-content-replacement-area {
+    margin-top: 10px;
+}
+
+.phone-table-content-replacement-area.is-unavailable {
+    border-style: dashed;
+    background: color-mix(in srgb, var(--yuzi-settings-surface-soft, #F5F3EF) 88%, transparent);
+}
+
+.phone-table-content-replacement-area-head,
+.phone-table-content-replacement-area-title-row,
+.phone-table-content-replacement-rule-head,
+.phone-table-content-replacement-rule-actions,
+.phone-table-content-replacement-area-actions,
+.phone-table-content-replacement-add-table-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.phone-table-content-replacement-area-head {
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.phone-table-content-replacement-area-heading {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.phone-table-content-replacement-area-title-row {
+    flex-wrap: wrap;
+}
+
+.phone-table-content-replacement-area-title {
+    min-width: 0;
+    margin: 0;
+    color: var(--yuzi-settings-text-primary, #3A3731);
+    font-size: 15px;
+    line-height: 1.35;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.phone-table-content-replacement-area-meta,
+.phone-table-content-replacement-helper,
+.phone-table-content-replacement-unavailable-note {
+    margin: 0;
+    color: var(--yuzi-settings-text-secondary, #7A7772);
+    font-size: 11px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.phone-table-content-replacement-helper {
+    padding: 9px 10px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--yuzi-settings-accent, #5B7A6A) 6%, transparent);
+    color: var(--yuzi-settings-accent-strong, #4B6648);
+}
+
+.phone-table-content-replacement-unavailable-note {
+    padding: 9px 10px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--yuzi-settings-warning, #9A774A) 8%, transparent);
+    color: var(--yuzi-settings-warning-strong, #7B5B30);
+}
+
+.phone-table-content-replacement-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 0 auto;
+    color: var(--yuzi-settings-text-secondary, #7A7772);
+    font-size: 11px;
+    line-height: 1.4;
+    cursor: pointer;
+    user-select: none;
+}
+
+.phone-table-content-replacement-switch input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.phone-table-content-replacement-switch-track {
+    position: relative;
+    width: 32px;
+    height: 19px;
+    flex: 0 0 auto;
+    border: 1px solid var(--yuzi-settings-border-strong, rgba(58, 55, 49, 0.16));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--yuzi-settings-text-primary, #3A3731) 12%, transparent);
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.phone-table-content-replacement-switch-track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--yuzi-settings-surface, #F5F3EF);
+    box-shadow: 0 1px 3px rgba(58, 55, 49, 0.18);
+    transition: transform 0.18s ease;
+}
+
+.phone-table-content-replacement-switch input:checked + .phone-table-content-replacement-switch-track {
+    border-color: var(--yuzi-settings-accent, #5B7A6A);
+    background: var(--yuzi-settings-accent, #5B7A6A);
+}
+
+.phone-table-content-replacement-switch input:checked + .phone-table-content-replacement-switch-track::after {
+    transform: translateX(13px);
+}
+
+.phone-table-content-replacement-switch input:focus-visible + .phone-table-content-replacement-switch-track {
+    outline: 2px solid var(--yuzi-settings-accent-ring, rgba(91, 122, 106, 0.28));
+    outline-offset: 2px;
+}
+
+.phone-table-content-replacement-switch input:disabled + .phone-table-content-replacement-switch-track,
+.phone-table-content-replacement-switch:has(input:disabled) {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.phone-table-content-replacement-rules {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.phone-table-content-replacement-rule {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 11px;
+    border: 1px solid var(--yuzi-settings-border, rgba(58, 55, 49, 0.08));
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--yuzi-settings-surface-soft, #F5F3EF) 72%, transparent);
+}
+
+.phone-table-content-replacement-rule-head {
+    justify-content: space-between;
+}
+
+.phone-table-content-replacement-rule-index {
+    color: var(--yuzi-settings-text-primary, #3A3731);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.phone-table-content-replacement-rule-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.phone-table-content-replacement-rule-actions .phone-settings-btn {
+    min-width: 30px;
+    padding-right: 8px;
+    padding-left: 8px;
+}
+
+.phone-table-content-replacement-rule-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.phone-table-content-replacement-field,
+.phone-table-content-replacement-add-table {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.phone-table-content-replacement-field > span,
+.phone-table-content-replacement-add-table > label {
+    color: var(--yuzi-settings-text-secondary, #7A7772);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.phone-table-content-replacement-field textarea,
+.phone-table-content-replacement-table-select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--yuzi-settings-border-strong, rgba(58, 55, 49, 0.12));
+    border-radius: 8px;
+    background: var(--yuzi-settings-surface-soft, rgba(245, 243, 239, 0.6));
+    color: var(--yuzi-settings-text-primary, #3A3731);
+    font-size: 12px;
+    line-height: 1.5;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.phone-table-content-replacement-field textarea {
+    min-height: 64px;
+    padding: 8px 9px;
+    resize: vertical;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.phone-table-content-replacement-table-select {
+    min-height: 34px;
+    padding: 7px 9px;
+}
+
+.phone-table-content-replacement-field textarea:hover,
+.phone-table-content-replacement-table-select:hover {
+    border-color: var(--yuzi-settings-accent-ring, rgba(91, 122, 106, 0.24));
+}
+
+.phone-table-content-replacement-field textarea:focus,
+.phone-table-content-replacement-table-select:focus {
+    border-color: var(--yuzi-settings-accent, #5B7A6A);
+    outline: none;
+    box-shadow: 0 0 0 3px var(--yuzi-settings-accent-ring, rgba(91, 122, 106, 0.12));
+}
+
+.phone-table-content-replacement-error {
+    padding: 7px 9px;
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--yuzi-settings-danger, #8B5E5E) 8%, transparent);
+    color: var(--yuzi-settings-danger, #8B5E5E);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.phone-table-content-replacement-add-table {
+    min-width: 190px;
+}
+
+.phone-table-content-replacement-add-table-controls {
+    align-items: stretch;
+}
+
+.phone-table-content-replacement-add-table-controls .phone-settings-btn {
+    flex: 0 0 auto;
+}
+
+.phone-table-content-replacement-save-action,
+.phone-table-content-replacement-add-rule-action {
+    justify-content: flex-end;
+}
+
+.phone-table-content-replacement-empty-rules {
+    margin: 0;
+}
+
+@media (max-width: 380px) {
+    .phone-table-content-replacement-area-head {
+        flex-direction: column;
+    }
+
+    .phone-table-content-replacement-area-actions {
+        width: 100%;
+        align-items: flex-start;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+
+    .phone-table-content-replacement-rule-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .phone-table-content-replacement-add-table-controls {
+        flex-direction: column;
+    }
+
+    .phone-table-content-replacement-add-table-controls .phone-settings-btn {
+        width: 100%;
+    }
+}

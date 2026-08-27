@@ -3,6 +3,7 @@ import { createQQV2ProductionRuntime } from '../application/production-runtime.j
 import { createMemoryQQV2StateStore } from '../storage/state-store.js';
 import { Logger } from '../../error-handler.js';
 import { sharedPhoneImageGenerationRuntime } from '../../image-generation/runtime.js';
+import { getPhoneSettings } from '../../settings.js';
 
 const IDLE_STATUS = Object.freeze({
     phase: 'idle',
@@ -21,6 +22,7 @@ export function createQQV2DefaultProductionRuntime(options = {}) {
         logger: options.logger,
         ...(options.stateStore ? { stateStore: options.stateStore } : {}),
         imageGenerationService: imageGenerationRuntime,
+        getImageGenerationConfig: () => getPhoneSettings()?.imageGeneration,
         composeCharacterImagePrompt: input => (
             imageGenerationRuntime.composeCharacterImagePrompt(input)
         ),

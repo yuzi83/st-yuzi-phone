@@ -32,3 +32,9 @@
 
 /* 7) content preset shell / workshop */
 @import url('./styles/13-content-presets.css');
+
+/* 8) table content replacement settings */
+@import url('./styles/14-table-content-replacement.css');
+
+/* 9) image generation settings */
+@import url('./styles/15-image-generation.css');
