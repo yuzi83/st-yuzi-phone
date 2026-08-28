@@ -60,6 +60,7 @@ function cloneWorldbookSettings(settings) {
     const source = asObject(settings);
     const timeWindow = asObject(source.timeWindow);
     const all = timeWindow.mode === 'all';
+    const injectionCount = Number(source.injectionCount);
     return Object.freeze({
         enabled: source.enabled === true,
         bookName: asText(source.bookName, 256),
@@ -72,6 +73,7 @@ function cloneWorldbookSettings(settings) {
                     : 1,
                 unit: ['hour', 'day', 'month', 'year'].includes(timeWindow.unit) ? timeWindow.unit : 'month',
             }),
+        injectionCount: Number.isInteger(injectionCount) && injectionCount >= 0 ? injectionCount : 30,
         light: source.light === 'green' ? 'green' : 'blue',
         depth: Number.isInteger(Number(source.depth)) ? Number(source.depth) : 999,
         keywords: Object.freeze(asArray(source.keywords).map((item) => asText(item, 160)).filter(Boolean)),
@@ -981,6 +983,25 @@ export function createQQV2Facade(options = {}) {
                 try {
                     const deleted = await runtime.deleteSticker({ stickerId });
                     return Object.freeze({ ok: true, status: 'accepted', deleted: deleted === true });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async deleteStickers(input = {}) {
+                if (typeof runtime.deleteStickers !== 'function') return unavailable('deleteStickers');
+                const stickerIds = [...new Set(asArray(input.stickerIds).map((id) => asText(id, 256)).filter(Boolean))];
+                if (stickerIds.length === 0) return Object.freeze({ ok: false, status: 'invalid', reason: 'stickers-required' });
+                try {
+                    const result = asObject(await runtime.deleteStickers({ stickerIds }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        result: Object.freeze({
+                            deletedStickerIds: Object.freeze(asArray(result.deletedStickerIds)
+                                .map((id) => asText(id, 256))
+                                .filter(Boolean)),
+                        }),
+                    });
                 } catch (error) {
                     return failed(error);
                 }

@@ -9,6 +9,7 @@ const STORAGE_KEY = 'qq-v2.runtime-settings';
 const LEGACY_WORLDBOOK_ENABLED_KEY = 'worldbookInjectionEnabled';
 const WORLDBOOK_LIGHTS = new Set(['blue', 'green']);
 const WORLDBOOK_TIME_UNITS = new Set(['hour', 'day', 'month', 'year']);
+const DEFAULT_WORLDBOOK_INJECTION_COUNT = 30;
 const GLOBAL_PRESET_DEFAULTS = Object.freeze({
     activeApiPresetId: '',
     privateReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateReply,
@@ -22,6 +23,7 @@ const GLOBAL_RUNTIME_DEFAULTS = Object.freeze({
     worldbook: Object.freeze({
         enabled: false,
         timeWindow: Object.freeze({ mode: 'relative', value: 1, unit: 'month' }),
+        injectionCount: DEFAULT_WORLDBOOK_INJECTION_COUNT,
         light: 'blue',
         depth: 999,
         keywords: Object.freeze([]),
@@ -103,6 +105,10 @@ function normalizeSettings(value) {
         worldbook: {
             enabled: worldbook.enabled === true,
             timeWindow: normalizeTimeWindow(worldbook.timeWindow),
+            injectionCount: normalizeNonNegativeInteger(
+                worldbook.injectionCount,
+                DEFAULT_WORLDBOOK_INJECTION_COUNT,
+            ),
             light: WORLDBOOK_LIGHTS.has(worldbook.light)
                 ? worldbook.light
                 : GLOBAL_RUNTIME_DEFAULTS.worldbook.light,
@@ -162,6 +168,9 @@ function backfillSharedSettings(current, legacy) {
             ...worldbook,
             enabled: Object.hasOwn(worldbook, 'enabled') ? worldbook.enabled : fallbackWorldbook.enabled,
             timeWindow: Object.hasOwn(worldbook, 'timeWindow') ? worldbook.timeWindow : fallbackWorldbook.timeWindow,
+            injectionCount: Object.hasOwn(worldbook, 'injectionCount')
+                ? worldbook.injectionCount
+                : fallbackWorldbook.injectionCount,
             light: Object.hasOwn(worldbook, 'light') ? worldbook.light : fallbackWorldbook.light,
             depth: Object.hasOwn(worldbook, 'depth') ? worldbook.depth : fallbackWorldbook.depth,
 
@@ -236,6 +245,13 @@ function applyPatch(current, patch) {
             throw new RangeError('worldbook.timeWindow is invalid');
         }
         next.worldbook.timeWindow = normalizeTimeWindow(timeWindow);
+    }
+    if (Object.hasOwn(worldbook, 'injectionCount')) {
+        const injectionCount = Number(worldbook.injectionCount);
+        if (!Number.isInteger(injectionCount) || injectionCount < 0) {
+            throw new RangeError('worldbook.injectionCount must be a non-negative integer');
+        }
+        next.worldbook.injectionCount = injectionCount;
     }
     if (Object.hasOwn(worldbook, 'light')) {
         if (!WORLDBOOK_LIGHTS.has(worldbook.light)) throw new RangeError('worldbook.light is invalid');

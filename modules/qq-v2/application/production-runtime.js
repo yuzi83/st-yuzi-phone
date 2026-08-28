@@ -43,6 +43,7 @@ import { sillyTavernWorldbookReadingCatalog } from '../../worldbook-reading/st-c
 import { sillyTavernWorldbookReadingRuntimes } from '../../worldbook-reading/st-runtime-adapter.js';
 
 const SELF_ID = '__self__';
+const DEFAULT_WORLDBOOK_INJECTION_COUNT = 30;
 const BUILT_IN_PROMPT_PRESET_BY_SETTING = Object.freeze({
     privateReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateReply,
     privateProactivePresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateProactive,
@@ -137,6 +138,7 @@ function defaultGlobalSettings() {
             enabled: false,
             bookName: '',
             timeWindow: { mode: 'relative', value: 1, unit: 'month' },
+            injectionCount: DEFAULT_WORLDBOOK_INJECTION_COUNT,
             light: 'blue',
             depth: 999,
             keywords: [],
@@ -171,7 +173,14 @@ function cloneGlobalSettings(settings) {
                 : '')
             : defaults.hostContextExtractTag,
         hostContextExcludeTags: normalizeQQV2TagNames(source.hostContextExcludeTags),
-        worldbook: { ...defaults.worldbook, ...(source.worldbook || {}) },
+        worldbook: {
+            ...defaults.worldbook,
+            ...(source.worldbook || {}),
+            injectionCount: Number.isInteger(Number(source.worldbook?.injectionCount))
+                && Number(source.worldbook.injectionCount) >= 0
+                ? Number(source.worldbook.injectionCount)
+                : DEFAULT_WORLDBOOK_INJECTION_COUNT,
+        },
         proactive: {
             enabled: source.proactive?.enabled === true,
             everyTurns: Number.isInteger(Number(source.proactive?.everyTurns)) && Number(source.proactive.everyTurns) > 0
@@ -457,7 +466,7 @@ export function createQQV2ProductionRuntime(options = {}) {
         assertOptionalCurrentScopeSession(scopeSession);
         const source = asObject(patch);
         const sharedPatch = {};
-        for (const key of ['enabled', 'timeWindow', 'light', 'depth', 'keywords']) {
+        for (const key of ['enabled', 'timeWindow', 'injectionCount', 'light', 'depth', 'keywords']) {
             if (hasOwn(source, key)) sharedPatch[key] = source[key];
         }
         if (Object.keys(sharedPatch).length > 0) {
@@ -1474,6 +1483,9 @@ export function createQQV2ProductionRuntime(options = {}) {
             Number(targetIndex),
         ),
         deleteSticker: ({ stickerId } = {}) => resources.deleteSticker(asText(stickerId, 256)),
+        deleteStickers: ({ stickerIds } = {}) => resources.deleteStickers(
+            asArray(stickerIds).map((stickerId) => asText(stickerId, 256)),
+        ),
         savePromptPreset: ({ preset } = {}) => resources.savePromptPreset(asObject(preset)),
         exportPromptPreset: ({ promptPresetId } = {}) => resources.exportPromptPreset(asText(promptPresetId, 256)),
         exportAllPromptPresets: () => resources.exportAllPromptPresets(),

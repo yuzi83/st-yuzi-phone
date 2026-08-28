@@ -69,6 +69,7 @@ const TOOL_META = Object.freeze({
 });
 
 const EMPTY_PAGE = Object.freeze({ items: [], hasMore: false, nextBeforeSequence: null });
+const DEFAULT_WORLDBOOK_INJECTION_COUNT = 30;
 
 const QQ_SETTINGS_GROUPS = Object.freeze([
     Object.freeze({ kind: 'reply', title: 'AI \u56de\u590d\u4e0e\u4e3b\u52a8\u6d88\u606f' }),
@@ -130,6 +131,7 @@ function cloneQQSettingsForUi(settings) {
         worldbook: Object.freeze({
             enabled: worldbook.enabled === true,
             bookName: asText(worldbook.bookName),
+            injectionCount: asInteger(worldbook.injectionCount, DEFAULT_WORLDBOOK_INJECTION_COUNT),
             timeWindow: Object.freeze(timeWindow.mode === 'all'
                 ? { mode: 'all' }
                 : {
@@ -209,6 +211,9 @@ function qqSettingsPatch(kind, values = {}, field = '') {
         if (['timeWindowMode', 'timeWindowValue', 'timeWindowUnit'].includes(field)) {
             return { worldbook: { timeWindow } };
         }
+        if (field === 'injectionCount') {
+            return { worldbook: { injectionCount: asInteger(source.injectionCount, -1) } };
+        }
         if (field === 'light') return { worldbook: { light: source.light === 'green' ? 'green' : 'blue' } };
         if (field === 'depth') return { worldbook: { depth: asInteger(source.depth, -1) } };
         if (field === 'keywords') return { worldbook: { keywords: settingKeywords(source.keywords) } };
@@ -218,6 +223,7 @@ function qqSettingsPatch(kind, values = {}, field = '') {
                 enabled: source.enabled === true,
                 bookName: asText(source.bookName),
                 timeWindow,
+                injectionCount: asInteger(source.injectionCount, -1),
                 light: source.light === 'green' ? 'green' : 'blue',
                 depth: asInteger(source.depth, -1),
                 keywords: settingKeywords(source.keywords),
@@ -2475,6 +2481,53 @@ export function createQQApp({
         return field;
     };
 
+    const settingTimeWindow = (timeWindow = {}) => {
+        const source = asObject(timeWindow);
+        const field = createElement(
+            'div',
+            'yuzi-qq-field yuzi-qq-field-row yuzi-qq-field-group yuzi-qq-time-window-field is-control-stacked',
+        );
+        const labelText = createElement('span', 'yuzi-qq-field-label');
+        labelText.textContent = '时间范围';
+        const controls = createElement('div', 'yuzi-qq-time-window-controls');
+        const mode = createElement('select', 'yuzi-qq-field-control yuzi-qq-field-select');
+        mode.name = 'timeWindowMode';
+        mode.setAttribute('aria-label', '时间范围模式');
+        [['relative', '最近一段时间'], ['all', '全部消息']].forEach(([value, label]) => {
+            const option = createElement('option');
+            option.value = value;
+            option.textContent = label;
+            option.selected = value === (source.mode === 'all' ? 'all' : 'relative');
+            mode.append(option);
+        });
+        const amount = createElement('input', 'yuzi-qq-field-control yuzi-qq-field-input');
+        amount.type = 'number';
+        amount.name = 'timeWindowValue';
+        amount.value = source.value ?? 1;
+        amount.min = '1';
+        amount.setAttribute('aria-label', '时间范围数值');
+        const unit = createElement('select', 'yuzi-qq-field-control yuzi-qq-field-select');
+        unit.name = 'timeWindowUnit';
+        unit.setAttribute('aria-label', '时间范围单位');
+        [['hour', '小时'], ['day', '天'], ['month', '月'], ['year', '年']].forEach(([value, label]) => {
+            const option = createElement('option');
+            option.value = value;
+            option.textContent = label;
+            option.selected = value === (QQ_WORLDBOOK_TIME_UNITS.has(source.unit) ? source.unit : 'month');
+            unit.append(option);
+        });
+        const syncDisabledState = () => {
+            const disabled = mode.value === 'all';
+            amount.disabled = disabled;
+            unit.disabled = disabled;
+        };
+        mode.addEventListener('change', syncDisabledState);
+        controls.append(mode, amount, unit);
+        field.append(labelText, controls);
+        syncDisabledState();
+        return field;
+    };
+
     const renderImageLibrary = async (token) => {
         const packAction = createButton('', 'yuzi-qq-icon-button yuzi-qq-image-library-pack-action', {
             'aria-label': '导入或导出图片资料', title: '导入或导出', 'aria-haspopup': 'menu',
@@ -2697,8 +2750,13 @@ export function createQQApp({
             ]);
             const keywordField = settingField('\u5173\u952e\u8bcd', 'keywords', settings.worldbook.keywords.join('\u3001'));
             keywordField.setAttribute('data-qq-worldbook-keywords', '1');
-            const relativeValue = settingField('\u65f6\u95f4\u8303\u56f4', 'timeWindowValue', timeWindow.value, 'number');
-            relativeValue.querySelector('input')?.setAttribute('min', '1');
+            const injectionCount = settingField(
+                '\u6ce8\u5165\u6761\u6570',
+                'injectionCount',
+                settings.worldbook.injectionCount,
+                'number',
+            );
+            injectionCount.querySelector('input')?.setAttribute('min', '0');
             const syncWorldbookKeywords = () => {
                 const light = asText(lightField.querySelector('select')?.value);
                 const keywordsVisible = light === 'green';
@@ -2709,17 +2767,8 @@ export function createQQApp({
             form.append(
                 settingField('\u542f\u7528\u4e16\u754c\u4e66\u6ce8\u5165', 'enabled', settings.worldbook.enabled, 'checkbox'),
                 settingSelect('\u6ce8\u5165\u4e16\u754c\u4e66', 'bookName', settings.worldbook.bookName, worldbookOptions),
-                settingSelect('\u65f6\u95f4\u8303\u56f4', 'timeWindowMode', timeWindow.mode, [
-                    ['relative', '\u6700\u8fd1\u4e00\u6bb5\u65f6\u95f4'],
-                    ['all', '\u5168\u90e8\u6d88\u606f'],
-                ]),
-                relativeValue,
-                settingSelect('\u8303\u56f4\u5355\u4f4d', 'timeWindowUnit', timeWindow.unit, [
-                    ['hour', '\u5c0f\u65f6'],
-                    ['day', '\u5929'],
-                    ['month', '\u6708'],
-                    ['year', '\u5e74'],
-                ]),
+                settingTimeWindow(timeWindow),
+                injectionCount,
                 lightField,
                 settingField('\u6df1\u5ea6', 'depth', settings.worldbook.depth, 'number'),
                 keywordField,
@@ -3428,17 +3477,19 @@ export function createQQApp({
         confirm.addEventListener('click', async () => {
             confirm.disabled = true;
             confirm.textContent = '\u5220\u9664\u4e2d\u2026';
-            const [imageResult, stickerResults] = await Promise.all([
+            const [imageResult, stickerResult] = await Promise.all([
                 assetIds.length > 0
                     ? facade.intent.deleteImageLibraryAssets({ assetIds })
                     : Promise.resolve({ ok: true, result: { deletedAssetIds: [] } }),
-                Promise.all(stickerIds.map((stickerId) => facade.intent.deleteSticker({ stickerId }))),
+                stickerIds.length > 0
+                    ? facade.intent.deleteStickers({ stickerIds })
+                    : Promise.resolve({ ok: true, result: { deletedStickerIds: [] } }),
             ]);
-            if (!imageResult?.ok || stickerResults.some((result) => !result?.ok)) {
+            if (!imageResult?.ok || !stickerResult?.ok) {
                 confirm.disabled = false;
                 confirm.textContent = '\u5220\u9664';
                 status.textContent = imageResult?.error?.message
-                    || stickerResults.find((result) => !result?.ok)?.error?.message
+                    || stickerResult?.error?.message
                     || '\u5220\u9664\u5931\u8d25';
                 return;
             }
@@ -3485,6 +3536,7 @@ export function createQQApp({
             timeWindowMode: value('timeWindowMode'),
             timeWindowValue: value('timeWindowValue'),
             timeWindowUnit: value('timeWindowUnit'),
+            injectionCount: value('injectionCount'),
             light: value('light'),
             depth: value('depth'),
             keywords: value('keywords'),
@@ -3541,6 +3593,13 @@ export function createQQApp({
                     return reject('\u65f6\u95f4\u8303\u56f4\u5fc5\u987b\u662f\u6b63\u6574\u6570');
                 }
                 values.timeWindowValue = timeWindowValue ?? values.timeWindowValue;
+            }
+            if (!field || field === 'injectionCount') {
+                const injectionCount = nonNegativeInteger('injectionCount');
+                if (injectionCount === null) {
+                    return reject('\u6ce8\u5165\u6761\u6570\u5fc5\u987b\u662f 0 \u6216\u66f4\u5927\u7684\u6574\u6570');
+                }
+                values.injectionCount = injectionCount;
             }
         }
         const result = await saveQQSettings(facade, {

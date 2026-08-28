@@ -885,6 +885,25 @@ export function createQQV2ResourceService(options = {}) {
             : { stickers: [] };
     };
 
+    const deleteStickerRecords = async (ids) => {
+        if (!Array.isArray(ids)) {
+            throw resourceError('invalid_sticker_batch', 'Sticker batch must be an array');
+        }
+        const requestedIds = [...new Set(ids.map((id) => String(id ?? '').trim()).filter(Boolean))];
+        if (requestedIds.length === 0) return { deletedStickerIds: [] };
+
+        const state = await readStickerState();
+        const existingIds = new Set(state.stickers.map((sticker) => sticker.id));
+        const deletedStickerIds = requestedIds.filter((id) => existingIds.has(id));
+        if (deletedStickerIds.length === 0) return { deletedStickerIds };
+
+        const deleted = new Set(deletedStickerIds);
+        state.stickers = orderedStickers(state.stickers.filter((sticker) => !deleted.has(sticker.id)))
+            .map((sticker, order) => ({ ...sticker, order }));
+        await storage.set(STICKERS_STORAGE_KEY, state);
+        return { deletedStickerIds };
+    };
+
     const readImageGenerationPresetState = async () => {
         const stored = await storage.get(IMAGE_GENERATION_PRESETS_STORAGE_KEY);
         if (!stored || typeof stored !== 'object' || !Array.isArray(stored.presets)) {
@@ -973,15 +992,11 @@ export function createQQV2ResourceService(options = {}) {
             return publicSticker(state.stickers[targetIndex]);
         },
         async deleteSticker(id) {
-            const state = await readStickerState();
-            const index = state.stickers.findIndex((sticker) => sticker.id === id);
-            if (index === -1) return false;
-
-            state.stickers.splice(index, 1);
-            state.stickers = orderedStickers(state.stickers)
-                .map((sticker, order) => ({ ...sticker, order }));
-            await storage.set(STICKERS_STORAGE_KEY, state);
-            return true;
+            const { deletedStickerIds } = await deleteStickerRecords([id]);
+            return deletedStickerIds.length > 0;
+        },
+        async deleteStickers(ids) {
+            return deleteStickerRecords(ids);
         },
         async listPromptPresets() {
             const state = await readPromptState();

@@ -4,6 +4,7 @@ import { qqV2WorldbookPlacement } from './placement.js';
 const MARKER_KEY = 'yuziPhoneQQV2';
 const COMMENT_PREFIX = 'YuziQQ｜';
 const SELF_ID = '__self__';
+const DEFAULT_WORLDBOOK_INJECTION_COUNT = 30;
 
 function asText(value, maxLength = 0) {
     const text = String(value ?? '').trim();
@@ -106,6 +107,14 @@ function inAutomaticWindow(message, settings, storyTime) {
     return Boolean(cutoff && messageTime >= cutoff && messageTime <= now);
 }
 
+function sortProjectionMessages(messages) {
+    return [...messages].sort((left, right) => {
+        const sequenceDifference = Number(left.sequence || 0) - Number(right.sequence || 0);
+        if (sequenceDifference) return sequenceDifference;
+        return (parseStoryTime(left.storyTime)?.getTime() || 0) - (parseStoryTime(right.storyTime)?.getTime() || 0);
+    });
+}
+
 function isInjectableMessage(message) {
     if (!asText(message?.messageId, 256)) return false;
     if (message.isTimeSeparator === true || message.kind === 'time-separator' || message.type === 'time-separator') return false;
@@ -119,19 +128,38 @@ function isInjectableMessage(message) {
 
 function selectProjectionMessages(data, storyTime) {
     const selectedIds = new Set(data.conversation.injection.selectedMessageIds || []);
-    const messages = new Map();
+    const uniqueMessages = new Map();
     for (const message of data.messages || []) {
-        if (!isInjectableMessage(message)) continue;
-        if (message.selectedForInjection !== true
-            && !selectedIds.has(message.messageId)
-            && !inAutomaticWindow(message, data.settings, storyTime)) continue;
-        if (!messages.has(message.messageId)) messages.set(message.messageId, message);
+        if (isInjectableMessage(message) && !uniqueMessages.has(message.messageId)) {
+            uniqueMessages.set(message.messageId, message);
+        }
     }
-    return [...messages.values()].sort((left, right) => {
-        const sequenceDifference = Number(left.sequence || 0) - Number(right.sequence || 0);
-        if (sequenceDifference) return sequenceDifference;
-        return (parseStoryTime(left.storyTime)?.getTime() || 0) - (parseStoryTime(right.storyTime)?.getTime() || 0);
-    });
+    const allMessages = [];
+    const manualMessages = [];
+    const manualMessageIds = new Set();
+    const automaticMessages = [];
+    for (const message of uniqueMessages.values()) {
+        allMessages.push(message);
+        const manuallySelected = message.selectedForInjection === true || selectedIds.has(message.messageId);
+        if (manuallySelected) {
+            manualMessages.push(message);
+            manualMessageIds.add(message.messageId);
+        }
+        if (!manuallySelected && inAutomaticWindow(message, data.settings, storyTime)) {
+            automaticMessages.push(message);
+        }
+    }
+    const injectionCount = Number(data.settings?.injectionCount);
+    const normalizedInjectionCount = Number.isInteger(injectionCount) && injectionCount >= 0
+        ? injectionCount
+        : DEFAULT_WORLDBOOK_INJECTION_COUNT;
+    let selectedAutomaticMessages = automaticMessages;
+    if (normalizedInjectionCount > 0) {
+        const fallbackMessages = allMessages.filter((message) => !manualMessageIds.has(message.messageId));
+        const automaticSource = automaticMessages.length > 0 ? automaticMessages : fallbackMessages;
+        selectedAutomaticMessages = sortProjectionMessages(automaticSource).slice(-normalizedInjectionCount);
+    }
+    return sortProjectionMessages([...manualMessages, ...selectedAutomaticMessages]);
 }
 
 function dedupeKeywords(values) {

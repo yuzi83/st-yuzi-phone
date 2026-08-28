@@ -1367,6 +1367,98 @@ async function testProjectionMessageUnionIsDeduplicatedAndSkipsNonDeletableSyste
     assert.doesNotMatch(entry.content, /系统：08:03/);
 }
 
+async function testInjectionCountLimitsAutomaticMessagesWithHistoryFallback() {
+    const { createQQV2WorldbookProjectionService } = await importModule('modules/qq-v2/worldbook/projection-service.js');
+    const repository = await createRepository();
+    const fixture = await createPrivateFixture(repository);
+    const gateway = createWorldbookGateway({ 主书: { entries: {} } });
+    const service = createQQV2WorldbookProjectionService({ repository, worldbookGateway: gateway });
+    const syncSettings = async (timeWindow, injectionCount, storyTime) => {
+        await service.setGlobalSettings({
+            scopeId: fixture.scopeId,
+            settings: {
+                enabled: true,
+                bookName: '主书',
+                timeWindow,
+                injectionCount,
+            },
+            userName: '玩家',
+            storyTime,
+        });
+        await service.setConversationInjection({
+            scopeId: fixture.scopeId,
+            conversationId: fixture.conversation.conversationId,
+            injection: { enabled: true },
+            userName: '玩家',
+            storyTime,
+        });
+        return qqEntries(gateway.getBook('主书'))[0];
+    };
+
+    let entry = await syncSettings(
+        { mode: 'relative', value: 1, unit: 'hour' },
+        3,
+        '2042-05-01 08:00',
+    );
+    assert.match(entry.content, /玩家：早安/);
+    assert.doesNotMatch(entry.content, /林知夏：图片：一张日出照片/);
+    assert.doesNotMatch(entry.content, /昨天的旧消息/);
+
+    entry = await syncSettings(
+        { mode: 'relative', value: 1, unit: 'day' },
+        1,
+        '2042-05-01 08:01',
+    );
+    assert.doesNotMatch(entry.content, /玩家：早安/);
+    assert.match(entry.content, /林知夏：图片：一张日出照片/);
+    assert.doesNotMatch(entry.content, /昨天的旧消息/);
+
+    entry = await syncSettings(
+        { mode: 'relative', value: 1, unit: 'day' },
+        2,
+        '2042-11-01 08:00',
+    );
+    assert.doesNotMatch(entry.content, /玩家：早安/);
+    assert.match(entry.content, /林知夏：图片：一张日出照片/);
+    assert.match(entry.content, /玩家：昨天的旧消息/);
+
+    entry = await syncSettings(
+        { mode: 'relative', value: 1, unit: 'day' },
+        2,
+        '',
+    );
+    assert.doesNotMatch(entry.content, /玩家：早安/);
+    assert.match(entry.content, /林知夏：图片：一张日出照片/);
+    assert.match(entry.content, /玩家：昨天的旧消息/);
+
+    entry = await syncSettings(
+        { mode: 'relative', value: 1, unit: 'hour' },
+        1,
+        '2042-05-01 08:00',
+    );
+    await service.setMessageSelected({
+        scopeId: fixture.scopeId,
+        conversationId: fixture.conversation.conversationId,
+        messageId: fixture.messages[2].messageId,
+        selected: true,
+        userName: '玩家',
+        storyTime: '2042-05-01 08:00',
+    });
+    entry = qqEntries(gateway.getBook('主书'))[0];
+    assert.match(entry.content, /玩家：早安/);
+    assert.match(entry.content, /玩家：昨天的旧消息/);
+    assert.doesNotMatch(entry.content, /林知夏：图片：一张日出照片/);
+
+    await repository.clearSelectedMessagesForInjection(
+        fixture.scopeId,
+        fixture.conversation.conversationId,
+    );
+    entry = await syncSettings({ mode: 'all' }, 1, '2042-05-01 08:01');
+    assert.match(entry.content, /玩家：昨天的旧消息/);
+    assert.doesNotMatch(entry.content, /玩家：早安/);
+    assert.doesNotMatch(entry.content, /林知夏：图片：一张日出照片/);
+}
+
 async function testTargetMigrationRollsBackNewBookWhenOldBookDeletionFails() {
     const { createQQV2WorldbookProjectionService } = await importModule('modules/qq-v2/worldbook/projection-service.js');
     const repository = await createRepository();
@@ -1748,6 +1840,7 @@ async function main() {
     await testLifecycleCleanupTreatsDeletedTargetBookAsAlreadyRemoved();
     await testSyncConversationKeepsTheOriginalScopeSessionAcrossGatewayCalls();
     await testInactiveScopeSessionDoesNotMarkProjectionPending();
+    await testInjectionCountLimitsAutomaticMessagesWithHistoryFallback();
     console.log('[qq-v2-worldbook-projection-contract] passed');
 }
 

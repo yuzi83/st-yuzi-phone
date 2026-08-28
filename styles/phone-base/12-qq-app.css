@@ -2690,6 +2690,20 @@
     padding: var(--yuzi-qq-inline-gap) var(--yuzi-qq-list-row-padding);
 }
 
+.yuzi-qq-time-window-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(var(--yuzi-qq-time-window-control-min-inline-size), 0.7fr) minmax(var(--yuzi-qq-time-window-control-min-inline-size), 0.7fr);
+    gap: var(--yuzi-qq-inline-gap);
+    inline-size: 100%;
+}
+
+.yuzi-qq-time-window-controls :is(input, select).yuzi-qq-field-control {
+    grid-column: auto;
+    justify-self: stretch;
+    inline-size: 100%;
+    max-inline-size: none;
+}
+
 .yuzi-qq-field-row textarea.yuzi-qq-field-control {
     grid-column: 1 / -1;
     justify-self: stretch;

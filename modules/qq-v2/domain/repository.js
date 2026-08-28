@@ -7,6 +7,7 @@ const MESSAGE_TYPES = new Set(['text', 'image', 'video', 'voice', 'transfer', 's
 const GROUP_ROLES = new Set(['owner', 'admin', 'member']);
 const WORLDBOOK_LIGHTS = new Set(['blue', 'green']);
 const WORLDBOOK_TIME_UNITS = new Set(['hour', 'day', 'month', 'year']);
+const DEFAULT_WORLDBOOK_INJECTION_COUNT = 30;
 const SHARED_WORLDBOOK_ENABLED_KEY = 'worldbookInjectionEnabled';
 const SHARED_IMAGE_LIBRARY_KEY = 'imageLibraryAssets';
 const IMAGE_LIBRARY_KINDS = Object.freeze({
@@ -123,6 +124,7 @@ function emptyScope(scopeId) {
             worldbook: {
                 bookName: '',
                 timeWindow: { mode: 'relative', value: 1, unit: 'month' },
+                injectionCount: DEFAULT_WORLDBOOK_INJECTION_COUNT,
                 light: 'blue',
                 depth: 999,
                 keywords: [],
@@ -135,6 +137,7 @@ function createDefaultWorldbookSettings() {
     return {
         bookName: '',
         timeWindow: { mode: 'relative', value: 1, unit: 'month' },
+        injectionCount: DEFAULT_WORLDBOOK_INJECTION_COUNT,
         light: 'blue',
         depth: 999,
         keywords: [],
@@ -190,6 +193,11 @@ function normalizeTimeWindow(value, fallback = createDefaultWorldbookSettings().
     };
 }
 
+function normalizeInjectionCount(value, fallback = DEFAULT_WORLDBOOK_INJECTION_COUNT) {
+    const number = Number(value);
+    return Number.isInteger(number) && number >= 0 ? number : fallback;
+}
+
 function normalizeDepth(value, fallback = 999) {
     const number = Number(value);
     return Number.isInteger(number) && number >= 0 ? number : fallback;
@@ -206,6 +214,7 @@ function ensureScopeWorldbookState(scope) {
     scope.settings.worldbook = {
         bookName: asText(current.bookName, 256),
         timeWindow: normalizeTimeWindow(current.timeWindow, defaults.timeWindow),
+        injectionCount: normalizeInjectionCount(current.injectionCount, defaults.injectionCount),
         light: WORLDBOOK_LIGHTS.has(current.light) ? current.light : defaults.light,
         depth: normalizeDepth(current.depth, defaults.depth),
         keywords: normalizeKeywords(current.keywords),
@@ -972,6 +981,13 @@ export function createQQV2Repository(options = {}) {
                         throw new QQV2DomainError('世界书时间窗口无效', 'worldbook_window_invalid');
                     }
                     next.timeWindow = normalizeTimeWindow(window, current.timeWindow);
+                }
+                if (Object.hasOwn(patch, 'injectionCount')) {
+                    const injectionCount = Number(patch.injectionCount);
+                    if (!Number.isInteger(injectionCount) || injectionCount < 0) {
+                        throw new QQV2DomainError('世界书注入条数无效', 'worldbook_injection_count_invalid');
+                    }
+                    next.injectionCount = injectionCount;
                 }
                 if (Object.hasOwn(patch, 'light')) {
                     if (!WORLDBOOK_LIGHTS.has(patch.light)) throw new QQV2DomainError('世界书灯色无效', 'worldbook_light_invalid');

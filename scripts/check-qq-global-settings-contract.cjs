@@ -74,6 +74,7 @@ async function testGlobalRuntimeStorage() {
         worldbook: {
             enabled: true,
             timeWindow: { mode: 'relative', value: 2, unit: 'day' },
+            injectionCount: 30,
             light: 'green',
             depth: 0,
             keywords: ['Legacy', 'dawn'],
@@ -96,6 +97,7 @@ async function testGlobalRuntimeStorage() {
             enabled: false,
             bookName: 'must-stay-in-scope',
             timeWindow: { mode: 'all' },
+            injectionCount: 30,
             light: 'blue',
             depth: 13,
             keywords: ['north', 'North', 'dawn'],
@@ -109,6 +111,7 @@ async function testGlobalRuntimeStorage() {
     assert.deepEqual(scopeASettings.worldbook, {
         enabled: false,
         timeWindow: { mode: 'all' },
+        injectionCount: 30,
         light: 'blue',
         depth: 13,
         keywords: ['north', 'dawn'],
@@ -119,6 +122,14 @@ async function testGlobalRuntimeStorage() {
     assert.deepEqual(scopeASettings.proactive, { enabled: true, everyTurns: 2 });
     assert.deepEqual((await runtimeSettings.get('scope-b')).proactive, { enabled: true, everyTurns: 2 },
         '主动消息设置在所有聊天 scope 间共享');
+    await runtimeSettings.update('scope-a', { worldbook: { injectionCount: 0 } });
+    assert.equal((await runtimeSettings.get('scope-b')).worldbook.injectionCount, 0,
+        'worldbook injection count is shared across chat scopes');
+    await assert.rejects(
+        () => runtimeSettings.update('scope-a', { worldbook: { injectionCount: -1 } }),
+        /worldbook\.injectionCount must be a non-negative integer/,
+    );
+    await runtimeSettings.update('scope-a', { worldbook: { injectionCount: 30 } });
     const migratedState = await stateStore.read();
     assert.equal(Object.hasOwn(migratedState.scopes['scope-a'].settings, 'proactive'), false,
         '首次读取共享设置会删除旧 scope 主动消息字段');
@@ -174,6 +185,7 @@ async function testExistingSharedRuntimeMigration() {
         worldbook: {
             enabled: true,
             timeWindow: { mode: 'relative', value: 6, unit: 'hour' },
+            injectionCount: 30,
             light: 'green',
             depth: 0,
             keywords: ['scope-b'],
@@ -256,6 +268,7 @@ function settings(label) {
             enabled: true,
             bookName: `book-${label}`,
             timeWindow: { mode: 'relative', value: 2, unit: 'day' },
+            injectionCount: 30,
             light: 'green',
             depth: 8,
             keywords: [`key-${label}`],
@@ -328,6 +341,11 @@ async function main() {
     assert.equal(initial.settings.groupReplyPresetId, undefined, 'read model never exposes hidden group configuration');
     assert.equal(initial.settings.groupProactivePresetId, undefined, 'read model never exposes hidden group configuration');
 
+    const uiSource = fs.readFileSync(path.join(process.cwd(), 'modules/qq-v2/ui/app.js'), 'utf8');
+    assert.match(uiSource, /const settingTimeWindow =/, 'time range controls share one UI field');
+    assert.match(uiSource, /settingTimeWindow\(timeWindow\)/, 'worldbook settings render the merged time range field');
+    assert.match(uiSource, /'injectionCount'/, 'worldbook settings expose the injection count control');
+
     const worldbookSave = await saveQQSettings(facade, {
         scopeId: initial.scopeId,
         kind: 'worldbook',
@@ -337,6 +355,7 @@ async function main() {
             timeWindowMode: 'relative',
             timeWindowValue: '6',
             timeWindowUnit: 'hour',
+            injectionCount: '18',
             light: 'blue',
             depth: '11',
             keywords: 'north\u3001north\u3001 dawn ',
@@ -350,6 +369,7 @@ async function main() {
                 enabled: true,
                 bookName: 'book-next',
                 timeWindow: { mode: 'relative', value: 6, unit: 'hour' },
+                injectionCount: 18,
                 light: 'blue',
                 depth: 11,
                 keywords: ['north', 'dawn'],
@@ -423,6 +443,17 @@ async function main() {
         scopeId: 'scope-a',
         settings: { worldbook: { timeWindow: { mode: 'relative', value: 5, unit: 'day' } } },
     }], 'a time-window control saves the complete nested value as one field');
+
+    await saveQQSettings(facade, {
+        scopeId: initial.scopeId,
+        kind: 'worldbook',
+        field: 'injectionCount',
+        values: { injectionCount: '24', timeWindowMode: 'all' },
+    });
+    assert.deepEqual(calls.at(-1), ['updateGlobalSettings', {
+        scopeId: 'scope-a',
+        settings: { worldbook: { injectionCount: 24 } },
+    }], 'injection count persists as a global worldbook policy field');
 
     const gate = deferred();
     const order = [];

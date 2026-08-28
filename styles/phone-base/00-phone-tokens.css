@@ -1040,6 +1040,7 @@
     --yuzi-qq-secondary-row-padding-block: 13px;
     --yuzi-qq-secondary-row-padding-inline: 16px;
     --yuzi-qq-secondary-control-max-width: 58%;
+    --yuzi-qq-time-window-control-min-inline-size: 4.5rem;
     --yuzi-qq-checkbox-size: 18px;
     --yuzi-qq-checkbox-radius: 4px;
     --yuzi-qq-profile-cover-height: 234px;

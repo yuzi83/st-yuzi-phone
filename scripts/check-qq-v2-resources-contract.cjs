@@ -841,6 +841,36 @@ async function testDeletingStickerRemovesItsBlobAndAvailability() {
     assert.equal(await resources.deleteSticker(sticker.id), false);
 }
 
+async function testDeletingMultipleStickersInOneBatch() {
+    const { createQQV2ResourceService } = await importModule('modules/qq-v2/resources/service.js');
+    const resources = createQQV2ResourceService({
+        storage: createMemoryStorage(),
+        cryptoApi: webcrypto,
+    });
+    const stickers = await resources.saveStickers([
+        {
+            description: 'First batch deletion sticker.',
+            blob: new Blob(['batch delete first'], { type: 'image/png' }),
+        },
+        {
+            description: 'Second batch deletion sticker.',
+            blob: new Blob(['batch delete second'], { type: 'image/png' }),
+        },
+        {
+            description: 'Third batch deletion sticker.',
+            blob: new Blob(['batch delete third'], { type: 'image/png' }),
+        },
+    ]);
+
+    const result = await resources.deleteStickers(stickers.map((sticker) => sticker.id));
+
+    assert.deepEqual(result, { deletedStickerIds: stickers.map((sticker) => sticker.id) });
+    assert.deepEqual(await resources.listStickers(), []);
+    for (const sticker of stickers) {
+        assert.equal(await resources.getStickerBlob(sticker.id), null);
+    }
+}
+
 async function testStickerMetadataCanBeEditedWithoutReplacingItsBlob() {
     const { createQQV2ResourceService } = await importModule('modules/qq-v2/resources/service.js');
     const resources = createQQV2ResourceService({
@@ -957,6 +987,7 @@ async function main() {
     await testStickerStoresMetadataAndOriginalBlobWithRequiredDescription();
     await testStickersCanBeListedAndManuallyReordered();
     await testDeletingStickerRemovesItsBlobAndAvailability();
+    await testDeletingMultipleStickersInOneBatch();
     await testStickerMetadataCanBeEditedWithoutReplacingItsBlob();
     await testResourcesAreSharedAcrossServiceInstances();
     await testStickersCanBeAddedInOneBatch();

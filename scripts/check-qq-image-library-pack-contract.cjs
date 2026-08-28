@@ -254,6 +254,10 @@ async function testFacadeAndRuntimeWiring() {
         '图片资料选择态清理必须清空选择并退出删除模式',
     );
     assert.match(deleteHandlerSource, /clearImageLibrarySelection\(\)/u, '图片资料删除成功后必须退出删除模式');
+    assert.match(deleteHandlerSource, /facade\.intent\.deleteStickers\(\{ stickerIds \}\)/u,
+        '表情多选删除必须走批量 Facade 接口');
+    assert.doesNotMatch(deleteHandlerSource, /Promise\.all\(stickerIds\.map/u,
+        '表情多选删除不得并发调用单条删除');
     assert.match(
         backHandlerSource,
         /page\?\.type === 'settings' && page\.kind === 'image-library'[\s\S]*clearImageLibrarySelection\(\)/u,
