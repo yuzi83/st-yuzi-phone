@@ -67,6 +67,7 @@ import { createSettingsAppState } from './state-machine.js';
 import { createPageRuntimeManager } from './page-runtime.js';
 import { applyTableContentReplacementArea } from '../phone-core/background-services.js';
 import { createTableContentReplacementSettingsService } from './services/table-content-replacement.js';
+import { createFullscreenOverlaySettingsService } from './services/fullscreen-overlay.js';
 
 function selectContentPresetWorkshop(enabled, createAvailable, createUnavailable) {
     return enabled ? createAvailable() : createUnavailable();
@@ -98,6 +99,12 @@ const tableContentReplacementSettingsService = createTableContentReplacementSett
     replacementService: {
         applyArea: applyTableContentReplacementArea,
     },
+});
+
+const fullscreenOverlaySettingsService = createFullscreenOverlaySettingsService({
+    getPhoneSettings,
+    savePhoneSetting,
+    tableReader: getTableDataAsync,
 });
 
 /**
@@ -157,6 +164,8 @@ export function renderSettings(container) {
             pageRenderers.renderAiInstructionPresetsPage();
         } else if (mode === 'table_content_replacement') {
             pageRenderers.renderTableContentReplacementPage();
+        } else if (mode === 'fullscreen_overlay') {
+            pageRenderers.renderFullscreenOverlayPage();
         } else {
             pageRenderers.renderHomePage();
         }
@@ -208,6 +217,7 @@ export function renderSettings(container) {
     const rerenderWorldbookReadingKeepScroll = createRerenderWithScroll('worldbookReadingScrollTop', render);
     const rerenderImageGenerationKeepScroll = createRerenderWithScroll('imageGenerationScrollTop', render);
     const rerenderTableContentReplacementKeepScroll = createRerenderWithScroll('tableContentReplacementScrollTop', render);
+    const rerenderFullscreenOverlayKeepScroll = createRerenderWithScroll('fullscreenOverlayScrollTop', render);
 
     /** @type {import('../../types').SettingsPageRendererGroupedDeps} */
     const pageRendererDeps = {
@@ -232,6 +242,7 @@ export function renderSettings(container) {
             rerenderAiInstructionPresetsKeepScroll,
             rerenderImageGenerationKeepScroll,
             rerenderTableContentReplacementKeepScroll,
+            rerenderFullscreenOverlayKeepScroll,
             rerenderWorldbookReadingKeepScroll,
         },
         feedback: {
@@ -280,6 +291,7 @@ export function renderSettings(container) {
         imageGeneration: imageGenerationSettingsService,
         qqV2PresetService: qqV2PresetSettingsService,
         tableContentReplacement: tableContentReplacementSettingsService,
+        fullscreenOverlay: fullscreenOverlaySettingsService,
     };
 
     /** @type {import('../../types').SettingsPageRenderers} */

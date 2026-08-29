@@ -17,6 +17,7 @@ export function buildSettingsHomePageHtml({
         'api_presets',
         'ai_instruction_presets',
         'table_content_replacement',
+        'fullscreen_overlay',
     ];
     const remainingEntries = entries.slice(2);
     const groups = contentPresetFullPageRuntimeEnabled

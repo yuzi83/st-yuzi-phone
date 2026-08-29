@@ -5,6 +5,8 @@ import { getPhoneCoreState } from './state.js';
 const logger = Logger.withScope({ scope: 'phone-core/callbacks', feature: 'callbacks' });
 const tableUpdateSubscribers = new Set();
 const tableFillStartSubscribers = new Set();
+let registeredTableUpdateApi = null;
+let registeredTableUpdateNativeCallback = null;
 let registeredTableFillStartApi = null;
 let registeredTableFillStartNativeCallback = null;
 let viewingSheetOwnerCounter = 0;
@@ -12,6 +14,51 @@ let activeViewingSheetOwner = null;
 
 function clearRegisteredTableUpdateCallback(state = getPhoneCoreState()) {
     state.registeredTableUpdateCallback = null;
+}
+
+function releaseTableUpdateNativeListener(options = {}) {
+    const state = getPhoneCoreState();
+    const api = registeredTableUpdateApi;
+    const callback = registeredTableUpdateNativeCallback;
+    const allowLocalDetach = options.allowLocalDetach === true;
+    if (!callback) {
+        registeredTableUpdateApi = null;
+        registeredTableUpdateNativeCallback = null;
+        clearRegisteredTableUpdateCallback(state);
+        return true;
+    }
+    if (!api || typeof api.unregisterTableUpdateCallback !== 'function') {
+        if (allowLocalDetach) {
+            registeredTableUpdateApi = null;
+            registeredTableUpdateNativeCallback = null;
+            clearRegisteredTableUpdateCallback(state);
+            logger.debug({
+                action: 'table-update.unregister.best-effort',
+                message: '旧表格更新 owner 不支持注销，已清理本地 owner 以允许重绑',
+            });
+            return true;
+        }
+        return false;
+    }
+
+    try {
+        api.unregisterTableUpdateCallback(callback);
+        registeredTableUpdateApi = null;
+        registeredTableUpdateNativeCallback = null;
+        clearRegisteredTableUpdateCallback(state);
+        logger.debug({
+            action: 'table-update.unregister',
+            message: '表格更新底层回调已注销',
+        });
+        return true;
+    } catch (error) {
+        logger.warn({
+            action: 'table-update.unregister',
+            message: '注销表格更新底层回调失败',
+            error,
+        });
+        return false;
+    }
 }
 
 function clearRegisteredTableFillStartCallback(state = getPhoneCoreState()) {
@@ -48,9 +95,17 @@ function dispatchTableFillStartToSubscribers() {
 
 function ensureTableUpdateNativeListener() {
     const state = getPhoneCoreState();
-    if (state.registeredTableUpdateCallback) return true;
-
     const api = getDB();
+    if (registeredTableUpdateNativeCallback && registeredTableUpdateApi === api) {
+        state.registeredTableUpdateCallback = registeredTableUpdateNativeCallback;
+        return true;
+    }
+    if (registeredTableUpdateNativeCallback && registeredTableUpdateApi !== api) {
+        if (!releaseTableUpdateNativeListener({ allowLocalDetach: true })) return false;
+    } else if (state.registeredTableUpdateCallback) {
+        clearRegisteredTableUpdateCallback(state);
+    }
+
     if (!api || typeof api.registerTableUpdateCallback !== 'function') {
         logger.debug({
             action: 'table-update.register',
@@ -62,8 +117,10 @@ function ensureTableUpdateNativeListener() {
     const nativeCallback = (newData) => dispatchTableUpdateToSubscribers(newData);
 
     try {
-        state.registeredTableUpdateCallback = nativeCallback;
         api.registerTableUpdateCallback(nativeCallback);
+        registeredTableUpdateApi = api;
+        registeredTableUpdateNativeCallback = nativeCallback;
+        state.registeredTableUpdateCallback = nativeCallback;
         logger.debug({
             action: 'table-update.register',
             message: '表格更新底层回调已注册',
@@ -75,9 +132,16 @@ function ensureTableUpdateNativeListener() {
             message: '注册表格更新底层回调失败',
             error,
         });
+        registeredTableUpdateApi = null;
+        registeredTableUpdateNativeCallback = null;
         clearRegisteredTableUpdateCallback(state);
         return false;
     }
+}
+
+export function ensureTableUpdateListenerCurrent() {
+    if (tableUpdateSubscribers.size === 0) return false;
+    return ensureTableUpdateNativeListener();
 }
 
 export function subscribeTableUpdate(callback) {
@@ -102,7 +166,10 @@ export function subscribeTableUpdate(callback) {
         context: { subscriberCount: tableUpdateSubscribers.size },
     });
 
+    let active = true;
     return () => {
+        if (!active) return;
+        active = false;
         tableUpdateSubscribers.delete(callback);
         logger.debug({
             action: 'table-update.unsubscribe',
@@ -132,37 +199,13 @@ export function registerTableUpdateListener(callback) {
 }
 
 export function unregisterTableUpdateListener() {
-    const api = getDB();
-    const state = getPhoneCoreState();
-    const callback = state.registeredTableUpdateCallback;
-
     if (typeof registerTableUpdateListener.unsubscribe === 'function') {
         registerTableUpdateListener.unsubscribe();
         registerTableUpdateListener.unsubscribe = null;
     }
-    tableUpdateSubscribers.clear();
-
-    if (!api || typeof api.unregisterTableUpdateCallback !== 'function') {
-        clearRegisteredTableUpdateCallback(state);
-        return;
+    if (tableUpdateSubscribers.size === 0) {
+        releaseTableUpdateNativeListener();
     }
-
-    if (!callback) return;
-
-    try {
-        api.unregisterTableUpdateCallback(callback);
-        logger.debug({
-            action: 'table-update.unregister',
-            message: '表格更新底层回调已注销',
-        });
-    } catch (error) {
-        logger.warn({
-            action: 'table-update.unregister',
-            message: '注销表格更新底层回调失败',
-            error,
-        });
-    }
-    clearRegisteredTableUpdateCallback(state);
 }
 registerTableUpdateListener.unsubscribe = null;
 

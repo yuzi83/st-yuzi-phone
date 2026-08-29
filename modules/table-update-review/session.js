@@ -23,6 +23,7 @@ export function createTableUpdateReviewSession(options = {}) {
     let sessionState = {
         version,
         sessionId: '',
+        sessionKey: '',
         contextFingerprint: '',
         schemaSignature: '',
         activeFloor: null,
@@ -42,6 +43,7 @@ export function createTableUpdateReviewSession(options = {}) {
             ...sessionState,
             version,
             sessionId: '',
+            sessionKey: '',
             contextFingerprint: '',
             schemaSignature: '',
             activeFloor: null,
@@ -55,8 +57,8 @@ export function createTableUpdateReviewSession(options = {}) {
         return cloneSessionState(sessionState);
     };
 
-    const beginPreSnapshot = (reason = 'generation-started') => {
-        const snapshot = readSnapshot();
+    const beginPreSnapshot = (reason = 'generation-started', snapshotOverride) => {
+        const snapshot = snapshotOverride === undefined ? readSnapshot() : snapshotOverride;
         const context = buildReviewContextFingerprint(snapshot);
         sessionState = {
             ...sessionState,
@@ -70,21 +72,26 @@ export function createTableUpdateReviewSession(options = {}) {
         return cloneSessionState(sessionState);
     };
 
-    const openAiFloor = (payload = {}, reason = 'ai-floor') => {
+    const openAiFloor = (payload = {}, reason = 'ai-floor', snapshotOverride) => {
         const floorId = normalizeFloorId(payload.floorId);
         const messageRef = normalizeText(payload.messageRef || payload.messageId || floorId);
         const nextSessionId = `${floorId}:${messageRef || 'message'}`;
-        if (sessionState.sessionId === nextSessionId && sessionState.baselineSnapshot) {
+        const hasPreAiSnapshot = !!sessionState.preAiSnapshot;
+        if (!hasPreAiSnapshot
+            && sessionState.sessionId === nextSessionId
+            && sessionState.baselineSnapshot) {
             sessionState = { ...sessionState, receivingOpen: true, lastReason: reason };
             return cloneSessionState(sessionState);
         }
-        const hasPreAiSnapshot = !!sessionState.preAiSnapshot;
-        const baselineSnapshot = hasPreAiSnapshot ? sessionState.preAiSnapshot : readSnapshot();
+        const baselineSnapshot = hasPreAiSnapshot
+            ? sessionState.preAiSnapshot
+            : (snapshotOverride === undefined ? readSnapshot() : snapshotOverride);
         const context = buildReviewContextFingerprint(baselineSnapshot);
         version += 1;
         sessionState = {
             version,
             sessionId: nextSessionId,
+            sessionKey: `${version}:${nextSessionId}`,
             contextFingerprint: context.fingerprint,
             schemaSignature: context.schemaSignature,
             activeFloor: {
@@ -114,13 +121,13 @@ export function createTableUpdateReviewSession(options = {}) {
         return cloneSessionState(sessionState);
     };
 
-    const applyTableUpdate = (reason = 'table-update') => {
+    const applyTableUpdate = (reason = 'table-update', snapshotOverride) => {
         if (!sessionState.baselineSnapshot || !sessionState.activeFloor || !sessionState.receivingOpen) {
             sessionState = { ...sessionState, lastReason: `skipped:${reason}` };
             return null;
         }
 
-        const latestSnapshot = readSnapshot();
+        const latestSnapshot = snapshotOverride === undefined ? readSnapshot() : snapshotOverride;
         const context = buildReviewContextFingerprint(latestSnapshot);
         if (sessionState.contextFingerprint && context.fingerprint !== sessionState.contextFingerprint) {
             resetReviewSession('context-changed');
@@ -136,11 +143,15 @@ export function createTableUpdateReviewSession(options = {}) {
             lastReason: reason,
         };
 
-        return diffSnapshots(sessionState.baselineSnapshot, sessionState.latestSnapshot, {
+        return {
+            ...diffSnapshots(sessionState.baselineSnapshot, sessionState.latestSnapshot, {
+                floorId: sessionState.activeFloor.floorId,
+                floorLabel: sessionState.activeFloor.floorLabel,
+                reason,
+            }),
+            sessionKey: sessionState.sessionKey,
             floorId: sessionState.activeFloor.floorId,
-            floorLabel: sessionState.activeFloor.floorLabel,
-            reason,
-        });
+        };
     };
 
     const getReviewSessionStatus = () => cloneSessionState(sessionState);

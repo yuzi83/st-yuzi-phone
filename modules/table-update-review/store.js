@@ -2,6 +2,8 @@ const subscribers = new Set();
 
 const EMPTY_REVIEW_STATE = Object.freeze({
     status: 'empty',
+    sessionKey: '',
+    chatKey: '',
     floorId: -1,
     createdAt: 0,
     updatedAt: 0,
@@ -163,6 +165,8 @@ export function setReviewState(nextState = {}) {
     currentState = {
         ...EMPTY_REVIEW_STATE,
         ...source,
+        sessionKey: normalizeText(source.sessionKey),
+        chatKey: normalizeText(source.chatKey),
         tables: Array.isArray(source.tables) ? source.tables.map(cloneTable) : [],
         updatedAt: Date.now(),
     };
@@ -170,8 +174,14 @@ export function setReviewState(nextState = {}) {
     return getReviewState();
 }
 
-export function resetReviewState(message = '暂无本楼更新') {
-    return setReviewState({ ...EMPTY_REVIEW_STATE, message, updatedAt: Date.now() });
+export function resetReviewState(message = '暂无本楼更新', overrides = {}) {
+    const source = overrides && typeof overrides === 'object' ? overrides : {};
+    return setReviewState({
+        ...EMPTY_REVIEW_STATE,
+        ...source,
+        message,
+        updatedAt: Date.now(),
+    });
 }
 
 export function subscribeReviewState(callback) {

@@ -10,10 +10,6 @@ import { initPhoneShellDrag } from '../window/drag.js';
 import { initPhoneShellResize } from '../window/resize.js';
 import { unregisterTableFillStartListener, unregisterTableUpdateListener, initSmartRefreshListener } from './callbacks.js';
 import { debugCheckAPI } from './data-api.js';
-import {
-    startTableUpdateReviewService,
-    stopTableUpdateReviewService,
-} from '../table-update-review/service.js';
 import { getPhoneCoreState, phoneRuntime, resetPhoneCoreState, resetPhoneRuntimeScope } from './state.js';
 import { getCurrentRoute, navigateTo, onRouteChange } from './routing.js';
 import { bindPhoneShellAppControls } from './shell-app-controls.js';
@@ -134,7 +130,6 @@ function initializePhoneRuntimeBindings(state = getPhoneCoreState()) {
     ensureRouteRenderSubscription(state);
     scheduleIdleApiDebugTask(state);
     initSmartRefreshListener();
-    startTableUpdateReviewService();
     scheduleShellWindowInteractions(state);
 
     logger.debug({
@@ -185,7 +180,6 @@ function deactivatePhoneRuntimeState(state = getPhoneCoreState()) {
 function cleanupPhoneRuntimeBindings(state = getPhoneCoreState()) {
     clearIdleApiDebugTask(state);
     clearRouteRenderSubscription(state);
-    stopTableUpdateReviewService();
     unregisterTableUpdateListener();
     unregisterTableFillStartListener();
     destroyPhoneWindowInteractions();

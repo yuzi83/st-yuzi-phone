@@ -1,0 +1,6 @@
+/* 玉子手机 - 全屏浮层聚合入口
+ * 仅串联 Yuzi 全屏浮层运行时与设置页样式，不在聚合层承载视觉规则。
+ */
+
+@import url('./fullscreen-overlay/00-runtime.css');
+@import url('./fullscreen-overlay/01-settings.css');

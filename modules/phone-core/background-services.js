@@ -9,6 +9,16 @@ import {
     stopSmallCalendarDerivedFieldsInjection,
 } from './derived-fields/small-calendar-derived-fields.js';
 import { createTableContentReplacementService } from '../table-content-replacement/service.js';
+import {
+    startTableUpdateReviewService,
+    stopTableUpdateReviewService,
+} from '../table-update-review/service.js';
+import {
+    resumeFullscreenOverlayAfterChatChange,
+    startFullscreenOverlayRuntime,
+    stopFullscreenOverlayRuntime,
+    suspendFullscreenOverlayForChatChange,
+} from '../fullscreen-overlay/index.js';
 
 const TABLE_UPDATE_SIGNAL_TARGET = 2;
 const CHAT_CHANGE_SETTLE_DELAY_MS = 250;
@@ -27,6 +37,12 @@ const defaultDeps = Object.freeze({
     stopSmallCalendar: () => stopSmallCalendarDerivedFieldsInjection(),
     startTableContentReplacement: () => tableContentReplacementService.start(),
     stopTableContentReplacement: () => tableContentReplacementService.stop(),
+    startTableUpdateReview: () => startTableUpdateReviewService(),
+    stopTableUpdateReview: () => stopTableUpdateReviewService(),
+    startFullscreenOverlay: reason => startFullscreenOverlayRuntime(reason),
+    stopFullscreenOverlay: reason => stopFullscreenOverlayRuntime(reason),
+    suspendFullscreenOverlayForChatChange: chatId => suspendFullscreenOverlayForChatChange(chatId),
+    resumeFullscreenOverlayAfterChatChange: () => resumeFullscreenOverlayAfterChatChange(),
     subscribeTableUpdate: (callback) => subscribeTableUpdate(callback),
     setTimeout: (...args) => globalThis.setTimeout(...args),
     clearTimeout: (...args) => globalThis.clearTimeout(...args),
@@ -71,6 +87,30 @@ function callSilentTableContentReplacementLifecycle(callback) {
         return callback() !== false;
     } catch {
         // 词汇替换是低优先级旁路能力，生命周期异常必须完全静默。
+        return false;
+    }
+}
+
+function callIsolatedFullscreenOverlayLifecycle(callback, action, context = {}) {
+    try {
+        const result = callback();
+        if (result && typeof result.then === 'function') {
+            void result.catch((error) => {
+                logWarning(action, '全屏浮层旁路生命周期调用失败', context, error);
+            });
+        }
+        return result !== false;
+    } catch (error) {
+        logWarning(action, '全屏浮层旁路生命周期调用失败', context, error);
+        return false;
+    }
+}
+
+function callIsolatedTableUpdateReviewLifecycle(callback, action, context = {}) {
+    try {
+        return callback() !== false;
+    } catch (error) {
+        logWarning(action, '表格更新审核后台生命周期调用失败', context, error);
         return false;
     }
 }
@@ -128,6 +168,11 @@ function startDerivedServices(generation, reason) {
     // 词汇替换是低优先级、故障隔离的旁路服务；它的启动失败不能让既有派生服务回滚。
     callSilentTableContentReplacementLifecycle(
         deps.startTableContentReplacement,
+    );
+    callIsolatedFullscreenOverlayLifecycle(
+        () => deps.startFullscreenOverlay(reason),
+        'fullscreen-overlay.start',
+        { reason, generation },
     );
 
     runtime.running = chronicleStarted && smallStarted;
@@ -202,7 +247,17 @@ function completePendingBarrier(pending, reason) {
     runtime.pendingBarrier = null;
     pending.stage = 'completed';
     clearBarrierResources(pending, reason);
-    return startDerivedServices(pending.generation, reason);
+    const started = startDerivedServices(pending.generation, reason);
+    callIsolatedFullscreenOverlayLifecycle(
+        () => deps.resumeFullscreenOverlayAfterChatChange(),
+        'fullscreen-overlay.chat-change.resume',
+        {
+            reason,
+            chatId: pending.chatId,
+            generation: pending.generation,
+        },
+    );
+    return started;
 }
 
 function scheduleBarrierTimer(pending, key, delay, callback) {
@@ -244,7 +299,19 @@ function handleTableUpdateSignal(pending) {
 
 export function startPhoneBackgroundServices(reason = 'enabled') {
     runtime.enabled = true;
-    if (runtime.running && !runtime.pendingBarrier) return true;
+    callIsolatedTableUpdateReviewLifecycle(
+        deps.startTableUpdateReview,
+        'table-update-review.start',
+        { reason, generation: runtime.generation },
+    );
+    if (runtime.running && !runtime.pendingBarrier) {
+        callIsolatedFullscreenOverlayLifecycle(
+            () => deps.startFullscreenOverlay(reason),
+            'fullscreen-overlay.start.idempotent',
+            { reason, generation: runtime.generation },
+        );
+        return true;
+    }
 
     runtime.generation += 1;
     const generation = runtime.generation;
@@ -257,6 +324,16 @@ export function stopPhoneBackgroundServices(reason = 'disabled') {
     runtime.generation += 1;
     cancelPendingBarrier(reason);
     stopDerivedServices(reason);
+    callIsolatedFullscreenOverlayLifecycle(
+        () => deps.stopFullscreenOverlay(reason),
+        'fullscreen-overlay.stop',
+        { reason, generation: runtime.generation },
+    );
+    callIsolatedTableUpdateReviewLifecycle(
+        deps.stopTableUpdateReview,
+        'table-update-review.stop',
+        { reason, generation: runtime.generation },
+    );
     return true;
 }
 
@@ -266,6 +343,11 @@ export function handlePhoneBackgroundChatChanged(chatId = null) {
     runtime.generation += 1;
     const generation = runtime.generation;
     cancelPendingBarrier('chat-change-replace');
+    callIsolatedFullscreenOverlayLifecycle(
+        () => deps.suspendFullscreenOverlayForChatChange(chatId),
+        'fullscreen-overlay.chat-change.suspend',
+        { chatId, generation },
+    );
     stopDerivedServices('chat-change');
 
     const pending = {
@@ -327,7 +409,16 @@ export function isPhoneBackgroundServicesStarted() {
 
 export function __test__setPhoneBackgroundServiceDeps(overrides = {}) {
     stopPhoneBackgroundServices('test-deps-replace');
-    deps = { ...defaultDeps, ...overrides };
+    deps = {
+        ...defaultDeps,
+        startFullscreenOverlay: () => true,
+        stopFullscreenOverlay: () => true,
+        suspendFullscreenOverlayForChatChange: () => true,
+        resumeFullscreenOverlayAfterChatChange: () => true,
+        startTableUpdateReview: () => true,
+        stopTableUpdateReview: () => true,
+        ...overrides,
+    };
     runtime.enabled = false;
     runtime.running = false;
     runtime.generation = 0;

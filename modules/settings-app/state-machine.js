@@ -8,5 +8,6 @@ export function createSettingsAppState() {
         aiInstructionPresetsScrollTop: 0,
         imageGenerationScrollTop: 0,
         tableContentReplacementScrollTop: 0,
+        fullscreenOverlayScrollTop: 0,
     };
 }

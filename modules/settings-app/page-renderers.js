@@ -19,6 +19,14 @@ function assertFunctionDeps(groupName, group, keys = []) {
     });
 }
 
+function assertObjectDep(groupName, group) {
+    assert(
+        group && typeof group === 'object',
+        `[玉子手机] settings renderer 缺少有效的 ${groupName}`,
+        ErrorCodes.INVALID_SETTINGS,
+    );
+}
+
 function validateSettingsRendererDeps(deps = {}) {
     const common = deps.common && typeof deps.common === 'object' ? deps.common : {};
     const hasHTMLElement = typeof HTMLElement !== 'undefined';
@@ -128,6 +136,12 @@ function validateSettingsRendererDeps(deps = {}) {
             'saveArea',
             'deleteArea',
             'readConfig',
+        ]);
+    }
+    if (deps.fullscreenOverlay !== undefined) {
+        assertObjectDep('fullscreenOverlay', deps.fullscreenOverlay);
+        assertFunctionDeps('scroll', deps.scroll, [
+            'rerenderFullscreenOverlayKeepScroll',
         ]);
     }
 }

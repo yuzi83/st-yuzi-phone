@@ -5,6 +5,118 @@ const logger = Logger.withScope({ scope: 'table-update-review/snapshot', feature
 const ROW_ID_HEADERS = ['row_id', 'ROW_ID', '行号'];
 const REVIEW_IDENTITY_HEADERS = ['row_id', 'ROW_ID', '行号', 'id', 'ID'];
 
+function isPlainObject(value) {
+    return Object.prototype.toString.call(value) === '[object Object]';
+}
+
+function cloneRawValue(value) {
+    if (Array.isArray(value)) return Array.from(value, cloneRawValue);
+    if (!isPlainObject(value)) return value;
+    return Object.fromEntries(
+        Object.entries(value).map(([key, entry]) => [key, cloneRawValue(entry)]),
+    );
+}
+
+function cloneRawSheet(sheet) {
+    return cloneRawValue(sheet);
+}
+
+export function cloneRawTableSnapshot(rawData) {
+    return cloneRawValue(rawData);
+}
+
+export function selectChangedRawTableSnapshot(rawData, tables = []) {
+    if (!isPlainObject(rawData) || !Array.isArray(tables)) return {};
+    const changedSheetKeys = new Set(
+        tables
+            .map(table => String(table?.sheetKey ?? '').trim())
+            .filter(Boolean),
+    );
+    return Object.fromEntries(
+        Object.entries(rawData)
+            .filter(([sheetKey]) => changedSheetKeys.has(sheetKey))
+            .map(([sheetKey, sheet]) => [sheetKey, cloneRawSheet(sheet)]),
+    );
+}
+
+export function hasRequiredChangedRawTableSnapshot(changedSnapshot, tables = []) {
+    if (!isPlainObject(changedSnapshot) || !Array.isArray(tables)) return false;
+    return tables.every((table) => {
+        const changes = Array.isArray(table?.changes) ? table.changes : [];
+        const requiresCurrentSheet = changes.some((change) => (
+            change?.type === 'insert' || change?.type === 'update'
+        ));
+        if (!requiresCurrentSheet) return true;
+
+        const sheetKey = String(table?.sheetKey ?? '').trim();
+        if (!sheetKey || !Object.hasOwn(changedSnapshot, sheetKey)) return false;
+        const sheet = changedSnapshot[sheetKey];
+        return isPlainObject(sheet)
+            && Array.isArray(sheet.content)
+            && Array.isArray(sheet.content[0]);
+    });
+}
+
+export function isCompleteRawTableSnapshot(value) {
+    if (!isPlainObject(value)) return false;
+    const physicalSheets = Object.entries(value)
+        .filter(([sheetKey]) => String(sheetKey).startsWith('sheet_'));
+    return physicalSheets.length > 0
+        && physicalSheets.every(([, sheet]) => (
+            isPlainObject(sheet)
+            && Array.isArray(sheet.content)
+            && Array.isArray(sheet.content[0])
+        ));
+}
+
+export function getSingleTableUpdatePayload(value) {
+    if (!isPlainObject(value) || !Array.isArray(value.content)) return null;
+    const sheetKey = [value.sheetKey, value.tableKey, value.key]
+        .map(candidate => String(candidate ?? '').trim())
+        .find(Boolean);
+    if (!sheetKey) return null;
+    const {
+        sheetKey: _sheetKey,
+        tableKey: _tableKey,
+        key: _key,
+        ...sheet
+    } = value;
+    return {
+        sheetKey,
+        sheet: cloneRawSheet(sheet),
+    };
+}
+
+export function mergeTableUpdatePayload(payload, currentRawSnapshot, lastCompleteRawSnapshot) {
+    if (isCompleteRawTableSnapshot(payload)) {
+        return cloneRawTableSnapshot(payload);
+    }
+
+    const singleSheetPayload = getSingleTableUpdatePayload(payload);
+    if (!singleSheetPayload) {
+        const fallbackSnapshot = isCompleteRawTableSnapshot(currentRawSnapshot)
+            ? currentRawSnapshot
+            : (isCompleteRawTableSnapshot(lastCompleteRawSnapshot)
+                ? lastCompleteRawSnapshot
+                : {});
+        return cloneRawTableSnapshot(fallbackSnapshot);
+    }
+
+    const baseSnapshot = isCompleteRawTableSnapshot(currentRawSnapshot)
+        ? currentRawSnapshot
+        : (isCompleteRawTableSnapshot(lastCompleteRawSnapshot)
+            ? lastCompleteRawSnapshot
+            : {});
+    const merged = cloneRawTableSnapshot(baseSnapshot) || {};
+    merged[singleSheetPayload.sheetKey] = {
+        ...(isPlainObject(merged[singleSheetPayload.sheetKey])
+            ? merged[singleSheetPayload.sheetKey]
+            : {}),
+        ...singleSheetPayload.sheet,
+    };
+    return merged;
+}
+
 function isReviewIdentityHeader(header) {
     const normalized = normalizeText(header).toLowerCase();
     return REVIEW_IDENTITY_HEADERS.some((candidate) => normalizeText(candidate).toLowerCase() === normalized);
@@ -97,6 +209,10 @@ export function normalizeTableSnapshot(rawData) {
 }
 
 export function readCurrentTableSnapshot() {
+    return normalizeTableSnapshot(readCurrentRawTableSnapshot());
+}
+
+export function readCurrentRawTableSnapshot() {
     const api = getDB();
     if (!api || typeof api.exportTableAsJson !== 'function') {
         const error = new Error('AutoCardUpdaterAPI.exportTableAsJson 不可用');
@@ -104,7 +220,7 @@ export function readCurrentTableSnapshot() {
         throw error;
     }
     try {
-        return normalizeTableSnapshot(api.exportTableAsJson());
+        return api.exportTableAsJson();
     } catch (error) {
         logger.warn({ action: 'snapshot.read', message: '读取表格快照失败', error });
         throw error;

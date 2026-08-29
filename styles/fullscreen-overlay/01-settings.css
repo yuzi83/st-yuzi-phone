@@ -1,0 +1,337 @@
+/* 全屏浮层设置页：只消费 settings 语义 token，不建立并行主题体系。 */
+.phone-fullscreen-overlay-settings-page {
+    --yuzi-phone-fullscreen-overlay-accent: var(--yuzi-settings-accent, #5B7A6A);
+    --yuzi-phone-fullscreen-overlay-surface: var(--yuzi-settings-surface, #F5F3EF);
+    --yuzi-phone-fullscreen-overlay-surface-soft: var(--yuzi-settings-surface-soft, rgba(245, 243, 239, 0.72));
+    --yuzi-phone-fullscreen-overlay-border: var(--yuzi-settings-border, rgba(58, 55, 49, 0.08));
+    --yuzi-phone-fullscreen-overlay-text: var(--yuzi-settings-text-primary, #3A3731);
+    --yuzi-phone-fullscreen-overlay-text-secondary: var(--yuzi-settings-text-secondary, #7A7772);
+}
+
+.phone-fullscreen-overlay-master-switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    min-height: 48px;
+    cursor: pointer;
+}
+
+.phone-fullscreen-overlay-master-switch > span {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.phone-fullscreen-overlay-master-switch strong {
+    color: var(--yuzi-phone-fullscreen-overlay-text);
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.35;
+}
+
+.phone-fullscreen-overlay-master-switch small {
+    color: var(--yuzi-phone-fullscreen-overlay-text-secondary);
+    font-size: 11px;
+    line-height: 1.55;
+}
+
+.phone-fullscreen-overlay-source-list,
+.phone-fullscreen-overlay-color-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.phone-fullscreen-overlay-source-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--yuzi-phone-fullscreen-overlay-border);
+}
+
+.phone-fullscreen-overlay-source-row:last-child {
+    border-bottom: 0;
+}
+
+.phone-fullscreen-overlay-source-row.is-disabled {
+    opacity: 0.68;
+}
+
+.phone-fullscreen-overlay-source-toggle {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.phone-fullscreen-overlay-source-toggle:has(.phone-settings-switch:not(:disabled)) {
+    cursor: pointer;
+}
+
+.phone-fullscreen-overlay-source-copy {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.phone-fullscreen-overlay-source-name {
+    overflow: hidden;
+    color: var(--yuzi-phone-fullscreen-overlay-text);
+    font-size: 12px;
+    font-weight: 620;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.phone-fullscreen-overlay-source-meta {
+    overflow: hidden;
+    color: var(--yuzi-settings-text-faint, #9A9790);
+    font-size: 10px;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.phone-fullscreen-overlay-source-side {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.phone-fullscreen-overlay-source-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 2px 8px;
+    border: 1px solid var(--yuzi-phone-fullscreen-overlay-border);
+    border-radius: var(--yuzi-phone-radius-pill, 999px);
+    background: var(--yuzi-phone-fullscreen-overlay-surface-soft);
+    color: var(--yuzi-phone-fullscreen-overlay-text-secondary);
+    font-size: 10px;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
+.phone-fullscreen-overlay-source-status.is-available {
+    border-color: color-mix(in srgb, var(--yuzi-phone-fullscreen-overlay-accent) 24%, transparent);
+    background: color-mix(in srgb, var(--yuzi-phone-fullscreen-overlay-accent) 9%, transparent);
+    color: var(--yuzi-phone-fullscreen-overlay-accent);
+}
+
+.phone-fullscreen-overlay-source-status.is-format_mismatch {
+    border-color: color-mix(in srgb, var(--yuzi-settings-danger, #8B5E5E) 20%, transparent);
+    background: color-mix(in srgb, var(--yuzi-settings-danger, #8B5E5E) 7%, transparent);
+    color: var(--yuzi-settings-danger, #8B5E5E);
+}
+
+.phone-fullscreen-overlay-order-actions {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.phone-fullscreen-overlay-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    padding: 0;
+    line-height: 1;
+}
+
+.phone-fullscreen-overlay-parameter-list {
+    display: flex;
+    flex-direction: column;
+    margin-top: 8px;
+}
+
+.phone-fullscreen-overlay-parameter-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    min-height: 38px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--yuzi-phone-fullscreen-overlay-border);
+    cursor: pointer;
+}
+
+.phone-fullscreen-overlay-parameter-row:last-child {
+    border-bottom: 0;
+}
+
+.phone-fullscreen-overlay-parameter-label {
+    min-width: 0;
+    color: var(--yuzi-phone-fullscreen-overlay-text);
+    font-size: 12px;
+    font-weight: 620;
+}
+
+.phone-fullscreen-overlay-parameter-control {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+}
+
+.phone-fullscreen-overlay-settings-page .phone-fullscreen-overlay-parameter-row .phone-fullscreen-overlay-parameter-input {
+    box-sizing: border-box;
+    width: 68px;
+    min-width: 68px;
+    height: 30px;
+    padding: 4px 8px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.phone-fullscreen-overlay-parameter-unit {
+    min-width: 18px;
+    color: var(--yuzi-phone-fullscreen-overlay-text-secondary);
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.phone-fullscreen-overlay-color-row {
+    display: grid;
+    grid-template-columns: 24px 34px minmax(0, 1fr) 30px 30px;
+    gap: 7px;
+    align-items: center;
+    min-width: 0;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--yuzi-phone-fullscreen-overlay-border);
+}
+
+.phone-fullscreen-overlay-color-row:last-child {
+    border-bottom: 0;
+}
+
+.phone-fullscreen-overlay-color-index {
+    color: var(--yuzi-settings-text-faint, #9A9790);
+    font-size: 10px;
+    text-align: center;
+}
+
+.phone-fullscreen-overlay-color-swatch {
+    position: relative;
+    display: block;
+    width: 32px;
+    height: 32px;
+    overflow: hidden;
+    border: 1px solid var(--yuzi-settings-border-strong, rgba(58, 55, 49, 0.12));
+    border-radius: 8px;
+    background:
+        linear-gradient(45deg, rgba(127, 127, 127, 0.18) 25%, transparent 25%) 0 0 / 8px 8px,
+        linear-gradient(45deg, transparent 75%, rgba(127, 127, 127, 0.18) 75%) 0 0 / 8px 8px,
+        linear-gradient(45deg, transparent 25%, rgba(127, 127, 127, 0.18) 25%) 4px 4px / 8px 8px,
+        linear-gradient(45deg, rgba(127, 127, 127, 0.18) 75%, transparent 75%) 4px 4px / 8px 8px;
+    cursor: pointer;
+}
+
+.phone-fullscreen-overlay-color-swatch > span {
+    position: absolute;
+    inset: 3px;
+    border-radius: 5px;
+    background: var(--yuzi-phone-fullscreen-overlay-swatch, #FFFFFF);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+    pointer-events: none;
+}
+
+.phone-fullscreen-overlay-color-swatch > input[type="color"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.phone-fullscreen-overlay-color-hex {
+    min-width: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.phone-fullscreen-overlay-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.phone-fullscreen-overlay-action-grid .phone-settings-btn {
+    justify-content: center;
+    min-height: 38px;
+}
+
+.phone-fullscreen-overlay-primary-action {
+    border-color: color-mix(in srgb, var(--yuzi-phone-fullscreen-overlay-accent) 28%, transparent);
+    background: color-mix(in srgb, var(--yuzi-phone-fullscreen-overlay-accent) 10%, transparent);
+    color: var(--yuzi-phone-fullscreen-overlay-accent);
+}
+
+/*
+ * SillyTavern 深色美化可能为原生 input/select/option 注入黑底黑字。
+ * 继续复用设置页既有 class 与 --yuzi-settings-* token，并用页面作用域兜底。
+ */
+.phone-fullscreen-overlay-settings-page .phone-settings-input,
+.phone-fullscreen-overlay-settings-page .phone-settings-select {
+    border-color: var(--yuzi-settings-border-strong, rgba(58, 55, 49, 0.12)) !important;
+    background: var(--yuzi-settings-surface-soft, rgba(245, 243, 239, 0.72)) !important;
+    background-color: var(--yuzi-settings-surface-soft, rgba(245, 243, 239, 0.72)) !important;
+    color: var(--yuzi-settings-text-primary, #3A3731) !important;
+    -webkit-text-fill-color: var(--yuzi-settings-text-primary, #3A3731) !important;
+    caret-color: var(--yuzi-settings-text-primary, #3A3731) !important;
+}
+
+.phone-fullscreen-overlay-settings-page .phone-settings-input:hover,
+.phone-fullscreen-overlay-settings-page .phone-settings-input:focus,
+.phone-fullscreen-overlay-settings-page .phone-settings-select:hover,
+.phone-fullscreen-overlay-settings-page .phone-settings-select:focus {
+    background: var(--yuzi-settings-surface, #F5F3EF) !important;
+    background-color: var(--yuzi-settings-surface, #F5F3EF) !important;
+    color: var(--yuzi-settings-text-primary, #3A3731) !important;
+    -webkit-text-fill-color: var(--yuzi-settings-text-primary, #3A3731) !important;
+}
+
+.phone-fullscreen-overlay-settings-page .phone-settings-select option {
+    background: var(--yuzi-settings-surface, #F5F3EF) !important;
+    background-color: var(--yuzi-settings-surface, #F5F3EF) !important;
+    color: var(--yuzi-settings-text-primary, #3A3731) !important;
+    -webkit-text-fill-color: var(--yuzi-settings-text-primary, #3A3731) !important;
+}
+
+@container yuzi-phone-screen (max-width: 420px) {
+    .phone-fullscreen-overlay-source-row {
+        align-items: flex-start;
+    }
+
+    .phone-fullscreen-overlay-source-side {
+        flex-direction: column;
+        align-items: flex-end;
+    }
+
+    .phone-fullscreen-overlay-action-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .phone-fullscreen-overlay-color-row {
+        grid-template-columns: 20px 32px minmax(0, 1fr) 30px 30px;
+        gap: 5px;
+    }
+}

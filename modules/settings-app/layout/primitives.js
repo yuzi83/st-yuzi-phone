@@ -62,6 +62,13 @@ export const SETTINGS_ENTRY_META = {
         tone: 'is-table-content-replacement',
         badge: '表格',
     },
+    fullscreen_overlay: {
+        glyph: '幕',
+        title: '弹幕设置',
+        description: '管理表格内容的全屏浮层展示',
+        tone: 'is-fullscreen-overlay',
+        badge: '浮层',
+    },
 };
 
 export function buildSettingsChipHtml(text, tone = 'neutral') {

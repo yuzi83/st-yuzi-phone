@@ -2,6 +2,7 @@ import {
     buildAppearancePageHtml,
     buildBeautifyTemplatePageHtml,
     buildButtonStylePageHtml,
+    buildFullscreenOverlayPageHtml,
     buildSettingsHomePageHtml,
     buildTableContentReplacementPageHtml,
 } from './page-builders.js';
@@ -34,4 +35,5 @@ export {
     buildButtonStylePageHtml,
     buildBeautifyTemplatePageHtml,
     buildTableContentReplacementPageHtml,
+    buildFullscreenOverlayPageHtml,
 };

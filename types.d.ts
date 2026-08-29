@@ -611,6 +611,161 @@ export interface TableContentReplacementSettings {
     tableRules: TableContentReplacementMapping[];
 }
 
+// ===== 全屏浮层类型定义 =====
+
+export interface FullscreenOverlayScrollingBarrageSettings {
+    maxConcurrent: number;
+    intervalMs: number;
+    durationMs: number;
+    fontSizePx: number;
+    opacity: number;
+    palette: string[];
+}
+
+export interface FullscreenOverlaySettings {
+    enabled: boolean;
+    sourceEnabledBySheetKey: Record<string, boolean>;
+    sourceOrder: string[];
+    sourceModelBySheetKey: Record<string, string>;
+    models: {
+        'scrolling-barrage': FullscreenOverlayScrollingBarrageSettings;
+    };
+}
+
+export type FullscreenOverlayChangedSnapshot = Readonly<Record<string, unknown>>;
+
+export interface FullscreenOverlayRowSelection {
+    rowIndexes: readonly number[];
+    rowIds: readonly string[];
+}
+
+export type FullscreenOverlayRowSelectionBySheetKey = Readonly<
+    Record<string, FullscreenOverlayRowSelection>
+>;
+
+export interface FullscreenOverlayAutomaticPlaybackInput {
+    changedSnapshot: FullscreenOverlayChangedSnapshot;
+    changedSheetKeys: readonly string[];
+    changedRowsBySheetKey: FullscreenOverlayRowSelectionBySheetKey;
+}
+
+export interface FullscreenOverlaySourceCatalogEntry {
+    sheetKey: string;
+    tableName: string;
+    orderIndex: number;
+    sourceOrderIndex: number;
+    presentation: 'theater' | 'generic';
+    sceneId?: string;
+    route: string;
+    sourceId: string;
+    modelId: string;
+    supported: boolean;
+    disabled: boolean;
+    enabled: boolean;
+}
+
+export interface FullscreenOverlayEvent {
+    sourceId: string;
+    sheetKey: string;
+    text: string;
+    rowIndex?: number;
+    field?: string;
+    itemIndex?: number;
+}
+
+export interface FullscreenOverlaySourceBatch {
+    sourceId: string;
+    rendererId: string;
+    sheetKey?: string;
+    items: readonly FullscreenOverlayEvent[];
+}
+
+export interface FullscreenOverlayRuntimeActionResult {
+    ok: boolean;
+    code?: string;
+}
+
+export interface FullscreenOverlayTestSourcesRequest {
+    sourceSheetKeys: readonly string[];
+    config: FullscreenOverlaySettings;
+}
+
+export interface FullscreenOverlayRuntimeTestResult {
+    ok: boolean;
+    reason?: string;
+    sourceCount: number;
+    itemCount: number;
+}
+
+export interface FullscreenOverlayRuntimeState {
+    started: boolean;
+    suspended: boolean;
+    generation: number;
+    settings: FullscreenOverlaySettings;
+    sourceSignatures: Record<string, string>;
+    hasPendingBaseline: boolean;
+    coordinator: Readonly<Record<string, unknown>> | null;
+    scheduler: Readonly<Record<string, unknown>> | null;
+    layer: Readonly<Record<string, unknown>>;
+}
+
+export interface FullscreenOverlayRuntimePublicSeam {
+    start: (reason?: string) => boolean;
+    stop: (reason?: string) => boolean;
+    suspendForChatChange: (chatId?: string | null) => boolean;
+    resumeAfterChatChange: (snapshot?: unknown) => Promise<boolean>;
+    refreshSettings: (value?: unknown) => FullscreenOverlaySettings;
+    testSelectedSources: (snapshot?: unknown) => Promise<FullscreenOverlayRuntimeTestResult>;
+    clear: () => boolean;
+    getState: () => FullscreenOverlayRuntimeState;
+}
+
+export interface FullscreenOverlayActionsPublicSeam {
+    testSources: (
+        request?: {
+            settings?: FullscreenOverlaySettings;
+            snapshot?: unknown;
+        },
+    ) => Promise<FullscreenOverlayRuntimeTestResult>;
+    clear: () => boolean;
+    refreshSettings: (value?: unknown) => FullscreenOverlaySettings;
+}
+
+export type SettingsFullscreenOverlayAvailability =
+    | 'available'
+    | 'format_mismatch'
+    | 'unsupported';
+
+export interface SettingsFullscreenOverlayTable extends FullscreenOverlaySourceCatalogEntry {
+    availability: SettingsFullscreenOverlayAvailability;
+    statusLabel: string;
+}
+
+export interface SettingsFullscreenOverlayViewModel {
+    status: 'loading' | 'ready' | 'error';
+    error: unknown;
+    config: FullscreenOverlaySettings;
+    tables: readonly SettingsFullscreenOverlayTable[];
+    eyeDropperSupported: boolean;
+}
+
+export interface SettingsFullscreenOverlaySaveResult extends FullscreenOverlayRuntimeActionResult {
+    config: FullscreenOverlaySettings;
+    tables?: readonly SettingsFullscreenOverlayTable[];
+}
+
+export interface SettingsFullscreenOverlayService {
+    loadViewModel: () => Promise<SettingsFullscreenOverlayViewModel>;
+    saveConfig: (
+        config: FullscreenOverlaySettings,
+    ) => Promise<SettingsFullscreenOverlaySaveResult>;
+    testSelectedSources: (
+        config: FullscreenOverlaySettings,
+    ) => Promise<SettingsFullscreenOverlaySaveResult>;
+    clearOverlay: () => Promise<FullscreenOverlayRuntimeActionResult>;
+    readConfig: () => FullscreenOverlaySettings;
+}
+
 export interface PhoneSettings {
     enabled: boolean;
     phoneToggleX: number | null;
@@ -639,6 +794,7 @@ export interface PhoneSettings {
     worldbookReadingBlockedKeywords: WorldbookReadingBlockedKeywords;
     imageGeneration: ImageGenerationSettings;
     tableContentReplacement: TableContentReplacementSettings;
+    fullscreenOverlay: FullscreenOverlaySettings;
 }
 
 /**
@@ -841,7 +997,8 @@ export type SettingsPageMode =
     | 'worldbook_reading'
     | 'image_generation'
     | 'ai_instruction_presets'
-    | 'table_content_replacement';
+    | 'table_content_replacement'
+    | 'fullscreen_overlay';
 
 export interface SettingsAppState {
     mode: SettingsPageMode;
@@ -853,6 +1010,7 @@ export interface SettingsAppState {
     aiInstructionPresetsScrollTop: number;
     imageGenerationScrollTop: number;
     tableContentReplacementScrollTop: number;
+    fullscreenOverlayScrollTop: number;
 }
 
 export type SettingsToastHandler = (host: unknown, message: string, isError?: boolean) => void;
@@ -899,6 +1057,7 @@ export interface SettingsPageRendererScrollDeps {
     rerenderWorldbookReadingKeepScroll: () => void;
     rerenderImageGenerationKeepScroll: () => void;
     rerenderTableContentReplacementKeepScroll: () => void;
+    rerenderFullscreenOverlayKeepScroll: () => void;
 }
 
 export interface SettingsPageRendererFeedbackDeps {
@@ -1219,6 +1378,7 @@ export interface SettingsPageRendererGroupedDeps {
     worldbookReading?: SettingsWorldbookReadingCatalog;
     imageGeneration?: SettingsImageGenerationService;
     tableContentReplacement?: SettingsTableContentReplacementService;
+    fullscreenOverlay?: SettingsFullscreenOverlayService;
 }
 
 export interface SettingsPageInstance {
@@ -1244,6 +1404,7 @@ export interface SettingsPageRenderers {
     renderWorldbookReadingPage(): void;
     renderImageGenerationPage(): void;
     renderTableContentReplacementPage(): void;
+    renderFullscreenOverlayPage(): void;
 }
 
 /**
