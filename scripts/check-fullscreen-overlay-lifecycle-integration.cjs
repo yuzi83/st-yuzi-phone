@@ -997,6 +997,60 @@ async function testChatAndStopLifecycle() {
     assert.equal(seam.getState().started, false);
 }
 
+async function testEternalLoopKeepsCurrentCycleWhenUpdateHasNoEvents() {
+    const {
+        createFullscreenOverlayRuntime,
+    } = await import(moduleUrl('modules/fullscreen-overlay/runtime.js'));
+    const loopCalls = [];
+    const renderer = {
+        id: 'renderer',
+        refreshSettings() {},
+        stopLoop() {
+            loopCalls.push('stop');
+        },
+    };
+    const h = createRuntimeHarness(createFullscreenOverlayRuntime, {
+        createRendererRegistry: () => new Map([['barrage', renderer]]),
+    });
+    h.setSettings({
+        ...h.getSettings(),
+        enabled: true,
+        models: {
+            barrage: { eternalEnabled: true },
+        },
+    });
+    const seam = h.runtime;
+    assert.equal(seam.start(), true);
+    await flushAsync();
+
+    const firstSnapshot = structuredClone(h.getRawData());
+    firstSnapshot.sheet_a.content[1][0] = 'A-永恒首轮';
+    h.setRawData(firstSnapshot);
+    assert.equal(await h.publishStableSnapshot(), true);
+    assert.equal(loopCalls.length, 1, '有新有效内容时必须先终止旧循环，再交给新首轮接管');
+    const scheduledCount = h.calls.filter(call => call[0] === 'scheduler.replace').length;
+
+    h.setSourceEventReader('sheet_a', () => []);
+    const emptySnapshot = structuredClone(h.getRawData());
+    emptySnapshot.sheet_a.content[1][0] = 'A-空弹幕更新';
+    h.setRawData(emptySnapshot);
+    assert.equal(await h.publishStableSnapshot(), true);
+    assert.equal(
+        loopCalls.length,
+        1,
+        '审核确认表格变化但没有有效弹幕文本时，不能停止现有永恒循环',
+    );
+    assert.equal(
+        h.calls.filter(call => call[0] === 'scheduler.replace').length,
+        scheduledCount,
+        '空弹幕更新不能清空 Scheduler，从而让正在发射的首轮或旧循环自然继续',
+    );
+
+    seam.clear();
+    assert.equal(loopCalls.length, 2, '清空浮层必须停止永恒循环');
+    seam.stop();
+}
+
 async function testDisabledRuntimeDefersAutomaticWorkButKeepsTestButton() {
     const {
         createFullscreenOverlayRuntime,
@@ -1339,6 +1393,7 @@ async function main() {
     await testRuntimeStableSnapshotAcknowledgementSemantics();
     await testRuntimePublicSeamAndSourceOrchestration();
     await testChatAndStopLifecycle();
+    await testEternalLoopKeepsCurrentCycleWhenUpdateHasNoEvents();
     await testDisabledRuntimeDefersAutomaticWorkButKeepsTestButton();
     await testDisablingClearsCoordinatorAndBaselineRetries();
     await testBackgroundSidecarIsolationAndBarrierReuse();

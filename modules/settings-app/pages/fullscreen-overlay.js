@@ -193,6 +193,13 @@ export function createFullscreenOverlayPage(ctx) {
             });
         });
 
+        const eternalInput = ctx.container?.querySelector?.('#phone-fullscreen-overlay-eternal');
+        bind(eternalInput, 'change', () => {
+            void persist(updateBarrageModel(state.config, {
+                eternalEnabled: eternalInput.checked === true,
+            }));
+        });
+
         bindNumericSetting('#phone-fullscreen-overlay-density', value => ({
             maxConcurrent: value,
         }));

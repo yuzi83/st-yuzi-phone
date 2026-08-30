@@ -175,6 +175,15 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
                             <option value="scrolling-barrage" selected>横向滚动弹幕</option>
                         </select>
                     </label>
+                    <label class="phone-fullscreen-overlay-master-switch" for="phone-fullscreen-overlay-eternal">
+                        <span>
+                            <strong>永恒弹幕</strong>
+                            <small>当前内容完整发射一轮后持续循环；新内容到达时会自动接管，不阻塞后续表格。</small>
+                        </span>
+                        <input type="checkbox"
+                            id="phone-fullscreen-overlay-eternal"
+                            class="phone-settings-switch"${checked(barrage.eternalEnabled)}>
+                    </label>
                     <div class="phone-fullscreen-overlay-parameter-list">
                         ${buildParameterField({
                             id: 'phone-fullscreen-overlay-density',
@@ -252,7 +261,7 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
 
             ${buildSettingsSectionHtml({
                 title: '立即操作',
-                desc: '测试会读取所有已勾选且可用的来源，主开关关闭时也可以使用。',
+                desc: '测试会读取所有已勾选且可用的来源，主开关关闭时也可以使用；开启永恒弹幕后会持续循环，直到清空浮层。',
                 bodyHtml: `
                     <div class="phone-fullscreen-overlay-action-grid">
                         <button type="button" class="phone-settings-btn phone-fullscreen-overlay-primary-action"

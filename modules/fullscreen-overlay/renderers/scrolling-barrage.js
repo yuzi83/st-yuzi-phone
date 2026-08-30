@@ -146,6 +146,8 @@ export function createScrollingBarrageRenderer(options = {}) {
     let disposed = false;
     let trackCursor = 0;
     let lastColor = null;
+    let loopController = null;
+    let loopBatch = null;
 
     const getLayer = () => layerRuntime.getElement?.() || layerRuntime.mount();
 
@@ -256,13 +258,35 @@ export function createScrollingBarrageRenderer(options = {}) {
         });
     };
 
-    const readSettings = () => {
+    const readRawSettings = () => {
         try {
-            return normalizeScrollingBarrageRuntimeSettings(getSettings());
+            return getSettings();
         } catch (error) {
             onError(error, { phase: 'read-settings' });
+            return {};
+        }
+    };
+
+    const readSettings = () => {
+        try {
+            return normalizeScrollingBarrageRuntimeSettings(readRawSettings());
+        } catch (error) {
+            onError(error, { phase: 'normalize-settings' });
             return normalizeScrollingBarrageRuntimeSettings();
         }
+    };
+
+    const isLoopEligible = (batch) => {
+        const rawSettings = readRawSettings();
+        if (readSettings().eternalEnabled !== true) return false;
+        const sourceEnabledBySheetKey = rawSettings?.sourceEnabledBySheetKey;
+        if (!batch?.sheetKey
+            || !sourceEnabledBySheetKey
+            || typeof sourceEnabledBySheetKey !== 'object'
+            || Array.isArray(sourceEnabledBySheetKey)) {
+            return true;
+        }
+        return sourceEnabledBySheetKey[batch.sheetKey] === true;
     };
 
     const getEnabledTrackSlots = (settings) => {
@@ -419,12 +443,11 @@ export function createScrollingBarrageRenderer(options = {}) {
         return record;
     };
 
-    const play = async (batch, context = {}) => {
+    const playBatch = async (batch, signal) => {
         if (disposed) {
-            return { status: 'disposed', emittedCount: 0 };
+            return { status: 'disposed', emittedCount: 0, completed: false };
         }
         const items = normalizeItems(batch);
-        const signal = context.signal;
         const playGeneration = generation;
         const batchRecords = [];
         let emittedCount = 0;
@@ -457,7 +480,58 @@ export function createScrollingBarrageRenderer(options = {}) {
         } else if (signal?.aborted) {
             status = 'replaced';
         }
-        return { status, emittedCount };
+        return {
+            status,
+            emittedCount,
+            completed: status === 'completed' && emittedCount === items.length,
+        };
+    };
+
+    const stopLoop = () => {
+        const controller = loopController;
+        loopController = null;
+        loopBatch = null;
+        if (!controller) return false;
+        controller.abort('loop-stopped');
+        return true;
+    };
+
+    const startLoop = (batch) => {
+        if (!isLoopEligible(batch)) return false;
+        const controller = new AbortController();
+        loopController = controller;
+        loopBatch = batch;
+        void (async () => {
+            while (
+                !disposed
+                && loopController === controller
+                && !controller.signal.aborted
+                && isLoopEligible(batch)
+            ) {
+                const result = await playBatch(batch, controller.signal);
+                if (!result.completed) return;
+            }
+        })().catch((error) => {
+            onError(error, { phase: 'eternal-loop' });
+        }).finally(() => {
+            if (loopController === controller) {
+                loopController = null;
+                loopBatch = null;
+            }
+        });
+        return true;
+    };
+
+    const play = async (batch, context = {}) => {
+        stopLoop();
+        const result = await playBatch(batch, context.signal);
+        if (result.completed && isLoopEligible(batch)) {
+            startLoop(batch);
+        }
+        return {
+            status: result.status,
+            emittedCount: result.emittedCount,
+        };
     };
 
     const clearActive = () => {
@@ -468,6 +542,7 @@ export function createScrollingBarrageRenderer(options = {}) {
 
     const clear = () => {
         if (disposed) return;
+        stopLoop();
         generation += 1;
         cancelAllTimers();
         clearActive();
@@ -495,11 +570,15 @@ export function createScrollingBarrageRenderer(options = {}) {
 
     const refreshSettings = () => {
         if (disposed) return;
+        if (loopBatch && !isLoopEligible(loopBatch)) {
+            stopLoop();
+        }
         notifyStateChange();
     };
 
     const dispose = () => {
         if (disposed) return;
+        stopLoop();
         disposed = true;
         generation += 1;
         cancelAllTimers();
@@ -511,6 +590,7 @@ export function createScrollingBarrageRenderer(options = {}) {
     return {
         id: SCROLLING_BARRAGE_RENDERER_ID,
         play,
+        stopLoop,
         clear,
         pause,
         resume,

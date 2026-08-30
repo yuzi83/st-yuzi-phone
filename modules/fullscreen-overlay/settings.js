@@ -17,6 +17,7 @@ export const FULLSCREEN_OVERLAY_DEFAULTS = Object.freeze({
             durationMs: 8000,
             fontSizePx: 14,
             opacity: 0.86,
+            eternalEnabled: false,
             palette: Object.freeze(['#FFFFFF']),
         }),
     }),
@@ -173,6 +174,7 @@ function normalizeScrollingBarrageModel(value) {
             max: 1,
             fallback: defaults.opacity,
         }),
+        eternalEnabled: source.eternalEnabled === true,
         palette: normalizeOverlayPalette(source.palette),
     };
 }

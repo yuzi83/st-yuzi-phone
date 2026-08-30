@@ -585,6 +585,7 @@ async function testScrollingRendererUsesCanonicalSettingsRanges() {
             durationMs: 4000,
             fontSizePx: 12,
             opacity: 0.3,
+            eternalEnabled: false,
             palette: ['#FFFFFF'],
         },
         'renderer 必须复用全屏浮层共享设置的安全范围与调色板规范',

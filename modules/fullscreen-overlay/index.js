@@ -51,10 +51,7 @@ const fullscreenOverlayRuntime = createFullscreenOverlayRuntime({
         const renderer = createScrollingBarrageRenderer({
             layerRuntime,
             documentRef: globalThis.document,
-            getSettings: () => (
-                getSettings()?.models?.[SCROLLING_BARRAGE_MODEL_ID]
-                || {}
-            ),
+            getSettings: () => getSettings() || {},
             onError,
         });
         return new Map([

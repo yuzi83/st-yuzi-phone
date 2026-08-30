@@ -485,6 +485,75 @@ async function testAbortStopsPendingEmissionWithoutDestroyingVisibleRecords() {
     harness.renderer.dispose();
 }
 
+async function testEternalBarrageRepeatsWithoutBlockingAndReplacementKeepsVisibleItems() {
+    const harness = await createHarness({
+        maxConcurrent: 2,
+        intervalMs: 500,
+        durationMs: 4000,
+        fontSizePx: 14,
+        opacity: 0.86,
+        eternalEnabled: true,
+        palette: ['#FFFFFF'],
+    });
+    const oldPlay = harness.renderer.play({
+        sourceId: 'live',
+        sheetKey: 'sheet_live',
+        items: ['旧内容'],
+    });
+    await flushMicrotasks();
+    harness.clock.tick(1000);
+    await flushMicrotasks();
+    assert.deepEqual(
+        await oldPlay,
+        { status: 'completed', emittedCount: 1 },
+        '永恒弹幕的首轮完成入口交接后必须正常 resolve，不能阻塞后续表格',
+    );
+    assert.equal(
+        harness.layer.children.filter(item => item.textContent === '旧内容').length,
+        2,
+        '首轮交接后必须在后台开始下一轮，而不是把无限循环塞进 scheduler',
+    );
+
+    const newPlay = harness.renderer.play({
+        sourceId: 'live',
+        sheetKey: 'sheet_live',
+        items: ['新内容'],
+    });
+    await flushMicrotasks();
+    assert(
+        harness.layer.children.some(item => item.textContent === '旧内容'),
+        '新内容接管循环时，已经可见的旧弹幕必须自然飞完，不能被直接清空',
+    );
+    assert(
+        harness.layer.children.some(item => item.textContent === '新内容'),
+        '新内容必须立即进入自己的首轮发射',
+    );
+
+    harness.clock.tick(2000);
+    await flushMicrotasks();
+    assert.deepEqual(
+        await newPlay,
+        { status: 'completed', emittedCount: 1 },
+        '新内容首轮同样必须按既有 handoff 规则完成',
+    );
+    assert.equal(
+        harness.layer.children.filter(item => item.textContent === '旧内容').length,
+        2,
+        '新内容接管后，旧循环不得继续发射新的旧内容',
+    );
+    assert(
+        harness.layer.children.filter(item => item.textContent === '新内容').length >= 2,
+        '新内容首轮完成后必须接管为新的后台循环',
+    );
+
+    harness.renderer.clear();
+    harness.clock.tick(10000);
+    await flushMicrotasks();
+    assert.equal(harness.layer.children.length, 0, '清空必须停止永恒循环并移除当前内容');
+    assert.equal(harness.renderer.getActiveCount(), 0, '清空后不得残留活动弹幕记录');
+    harness.renderer.dispose();
+}
+
 async function main() {
     await testMeasuredWidthControlsTrackHandoff();
     console.log('✓ measured element width controls the right-side handoff');
@@ -500,6 +569,8 @@ async function main() {
     console.log('✓ pause freezes handoff and clear still settles the batch');
     await testAbortStopsPendingEmissionWithoutDestroyingVisibleRecords();
     console.log('✓ abort stops pending emission while visible records finish naturally');
+    await testEternalBarrageRepeatsWithoutBlockingAndReplacementKeepsVisibleItems();
+    console.log('✓ eternal barrage repeats in background and hands over naturally');
 }
 
 main().catch((error) => {

@@ -203,6 +203,37 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         return rendererRegistry.get(String(rendererId || '').trim()) || null;
     }
 
+    function stopRendererLoops(rendererIds, action) {
+        for (const rendererId of new Set(rendererIds)) {
+            const normalizedRendererId = String(rendererId || '').trim();
+            if (!normalizedRendererId) continue;
+            safeCall(
+                () => getRenderer(normalizedRendererId)?.stopLoop?.(),
+                undefined,
+                onError,
+                { action, rendererId: normalizedRendererId },
+            );
+        }
+    }
+
+    function stopAllRendererLoops(action) {
+        stopRendererLoops(rendererRegistry.keys(), action);
+    }
+
+    function stopScheduledRendererLoops(batches, action) {
+        stopRendererLoops(
+            Array.isArray(batches) ? batches.map(batch => batch?.rendererId) : [],
+            action,
+        );
+    }
+
+    function hasEternalLoopEnabled() {
+        const models = isRecord(settings?.models) ? settings.models : {};
+        return Object.values(models).some(model => (
+            isRecord(model) && model.eternalEnabled === true
+        ));
+    }
+
     function refreshSettings(value) {
         const wasEnabled = settings.enabled === true;
         const rawValue = arguments.length > 0
@@ -699,6 +730,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     }
 
     async function replaceScheduledBatches(batches, action) {
+        stopScheduledRendererLoops(batches, action);
         try {
             return await scheduler?.replace?.(batches);
         } catch (error) {
@@ -748,6 +780,12 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         } = collection;
 
         if (hasReviewChangedSheetKeys && !hasEligibleChangedSource) {
+            commitSourceSignatures(nextSignatures);
+            return true;
+        }
+
+        // 审核已确认表格变化但 Adapter 没有可播文本时，保留现有永恒循环与首轮。
+        if (batches.length === 0 && hasEternalLoopEnabled()) {
             commitSourceSignatures(nextSignatures);
             return true;
         }
@@ -1068,6 +1106,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         clearBatchConfirmations();
         coordinatorRetryAttempt = 0;
         baselineSyncRetryAttempt = 0;
+        stopAllRendererLoops('settings-disabled');
         safeCall(
             () => coordinator?.stop?.(),
             undefined,
@@ -1118,6 +1157,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
 
     function suspendForChatChange(chatId = null) {
         if (!started) return false;
+        stopAllRendererLoops('chat-change-suspend');
         if (settings.enabled !== true) {
             awaitingExternalChatResume = false;
             suspended = false;
@@ -1185,11 +1225,9 @@ export function createFullscreenOverlayRuntime(deps = {}) {
                 };
             }
 
-            const accepted = safeCall(
-                () => scheduler?.replace?.(batches),
-                false,
-                onError,
-                { action: 'scheduler.test-selected' },
+            const accepted = await replaceScheduledBatches(
+                batches,
+                'scheduler.test-selected',
             );
             return {
                 ok: accepted !== false,
@@ -1208,6 +1246,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     }
 
     function clear() {
+        stopAllRendererLoops('clear');
         safeCall(
             () => scheduler?.clear?.(),
             undefined,
@@ -1234,6 +1273,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         sourceSignatures.clear();
         clearBatchConfirmations();
         baselinePromise = null;
+        stopAllRendererLoops('stop');
 
         safeCall(
             () => coordinator?.stop?.(),

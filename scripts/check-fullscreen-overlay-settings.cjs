@@ -35,6 +35,7 @@ async function testPublicDefaults(mod) {
                     durationMs: 8000,
                     fontSizePx: 14,
                     opacity: 0.86,
+                    eternalEnabled: false,
                     palette: ['#FFFFFF'],
                 },
             },
@@ -113,6 +114,7 @@ async function testScrollingBarrageNumericNormalization(mod) {
             durationMs: 20000,
             fontSizePx: 18,
             opacity: 0.3,
+            eternalEnabled: false,
             palette: ['#FFFFFF'],
         },
         '弹幕数值设置必须夹紧到手机安全范围',
@@ -133,6 +135,34 @@ async function testScrollingBarrageNumericNormalization(mod) {
         invalid.models['scrolling-barrage'],
         mod.FULLSCREEN_OVERLAY_DEFAULTS.models['scrolling-barrage'],
         '非法弹幕数值必须逐项回落到公共默认值',
+    );
+}
+
+async function testEternalBarrageNormalization(mod) {
+    const enabled = mod.normalizeFullscreenOverlaySettings({
+        models: {
+            'scrolling-barrage': {
+                eternalEnabled: true,
+            },
+        },
+    });
+    assert.strictEqual(
+        enabled.models['scrolling-barrage'].eternalEnabled,
+        true,
+        '永恒弹幕必须是滚动弹幕模型级的显式开关',
+    );
+
+    const invalid = mod.normalizeFullscreenOverlaySettings({
+        models: {
+            'scrolling-barrage': {
+                eternalEnabled: 'true',
+            },
+        },
+    });
+    assert.strictEqual(
+        invalid.models['scrolling-barrage'].eternalEnabled,
+        false,
+        '永恒弹幕只接受显式 true，避免旧配置或脏值意外开启无限循环',
     );
 }
 
@@ -255,6 +285,7 @@ async function main() {
     await testPublicDefaults(mod);
     await testTopLevelSettingsNormalization(mod);
     await testScrollingBarrageNumericNormalization(mod);
+    await testEternalBarrageNormalization(mod);
     await testHexAndPaletteNormalization(mod);
     await testPaletteColorPicking(mod);
     console.log('[通过] 全屏浮层设置：设置模型与调色板核心');

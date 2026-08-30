@@ -312,6 +312,7 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
                     durationMs: 8000,
                     fontSizePx: 14,
                     opacity: 0.86,
+                    eternalEnabled: true,
                     palette: ['#FFFFFF', '#FF0000'],
                 },
             },
@@ -344,6 +345,8 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
     assert.match(html, /id="phone-fullscreen-overlay-duration"/u);
     assert.match(html, /id="phone-fullscreen-overlay-font-size"/u);
     assert.match(html, /id="phone-fullscreen-overlay-opacity"/u);
+    assert.match(html, /id="phone-fullscreen-overlay-eternal"[^>]*checked/u);
+    assert.match(html, /永恒弹幕/u);
     assert.match(html, /data-fullscreen-overlay-color-input/u);
     assert.match(html, /data-fullscreen-overlay-color-hex/u);
     assert.match(html, /data-fullscreen-overlay-eyedropper[^>]*disabled/u);
@@ -365,6 +368,7 @@ async function testPageAndRendererExposeLifecycleAndScrollSafeSeams() {
     assert.match(pageSource, /ctx\.pageRuntime/u);
     assert.match(pageSource, /pageRuntime\.addEventListener/u);
     assert.match(pageSource, /rerenderFullscreenOverlayKeepScroll/u);
+    assert.match(pageSource, /phone-fullscreen-overlay-eternal/u);
     assert.doesNotMatch(
         pageSource,
         /(?<!pageRuntime\.)addEventListener\s*\(/u,
