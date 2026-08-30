@@ -585,6 +585,7 @@ async function testScrollingRendererUsesCanonicalSettingsRanges() {
             durationMs: 4000,
             fontSizePx: 12,
             opacity: 0.3,
+            areaPercent: 75,
             eternalEnabled: false,
             palette: ['#FFFFFF'],
         },

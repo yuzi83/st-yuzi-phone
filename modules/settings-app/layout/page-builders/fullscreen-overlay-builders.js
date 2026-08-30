@@ -17,6 +17,10 @@ function checked(value) {
     return value === true ? ' checked' : '';
 }
 
+function selected(value) {
+    return value ? ' selected' : '';
+}
+
 function disabled(value) {
     return value ? ' disabled' : '';
 }
@@ -121,6 +125,9 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
     const enabledCount = tables.filter(table => table?.enabled === true).length;
     const availableCount = tables.filter(table => table?.availability === 'available').length;
     const palette = asArray(barrage.palette);
+    const barrageAreaPercent = [25, 50, 75, 100].includes(Number(barrage.areaPercent))
+        ? Number(barrage.areaPercent)
+        : 75;
 
     const heroHtml = buildSettingsHeroHtml({
         eyebrow: '全屏临时视觉内容',
@@ -167,12 +174,21 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
 
             ${buildSettingsSectionHtml({
                 title: '全局播放模型',
-                desc: '第一版只提供横向滚动弹幕；后续模型仍从这里统一复用。',
+                desc: '第一版只提供横向滚动弹幕；区域、循环和其他模型参数都从这里统一复用。',
                 bodyHtml: `
                     <label class="phone-settings-field-inline" for="phone-fullscreen-overlay-playback-model">
                         <span>播放模型</span>
                         <select id="phone-fullscreen-overlay-playback-model" class="phone-settings-select" disabled>
                             <option value="scrolling-barrage" selected>横向滚动弹幕</option>
+                        </select>
+                    </label>
+                    <label class="phone-settings-field-inline" for="phone-fullscreen-overlay-area">
+                        <span>弹幕区域</span>
+                        <select id="phone-fullscreen-overlay-area" class="phone-settings-select">
+                            <option value="25"${selected(barrageAreaPercent === 25)}>上方 25%</option>
+                            <option value="50"${selected(barrageAreaPercent === 50)}>上方 50%</option>
+                            <option value="75"${selected(barrageAreaPercent === 75)}>上方 75%</option>
+                            <option value="100"${selected(barrageAreaPercent === 100)}>全屏</option>
                         </select>
                     </label>
                     <label class="phone-fullscreen-overlay-master-switch" for="phone-fullscreen-overlay-eternal">

@@ -193,6 +193,13 @@ export function createFullscreenOverlayPage(ctx) {
             });
         });
 
+        const areaInput = ctx.container?.querySelector?.('#phone-fullscreen-overlay-area');
+        bind(areaInput, 'change', () => {
+            void persist(updateBarrageModel(state.config, {
+                areaPercent: Number(areaInput.value),
+            }));
+        });
+
         const eternalInput = ctx.container?.querySelector?.('#phone-fullscreen-overlay-eternal');
         bind(eternalInput, 'change', () => {
             void persist(updateBarrageModel(state.config, {

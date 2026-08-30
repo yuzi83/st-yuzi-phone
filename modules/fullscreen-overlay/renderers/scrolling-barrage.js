@@ -14,7 +14,7 @@ const MAX_TRACK_COUNT = 6;
 // 轨道只约束入口占用；完整动画记录另设固定上限，避免慢速配置无限堆积 DOM。
 const MAX_ACTIVE_BARRAGE_COUNT = MAX_TRACK_COUNT * 3;
 const SAFE_TOP_PERCENT = 8;
-const SAFE_BOTTOM_PERCENT = 78;
+const FULLSCREEN_SAFE_BOTTOM_PERCENT = 92;
 const FALLBACK_VIEWPORT_WIDTH_PX = 390;
 const TEXT_ENTRY_BUFFER_EM = 2;
 
@@ -354,9 +354,12 @@ export function createScrollingBarrageRenderer(options = {}) {
         return null;
     };
 
-    const trackTopPercent = (trackSlot) => {
+    const trackTopPercent = (trackSlot, settings) => {
         const progress = trackSlot / (MAX_TRACK_COUNT - 1);
-        return SAFE_TOP_PERCENT + ((SAFE_BOTTOM_PERCENT - SAFE_TOP_PERCENT) * progress);
+        const bottomPercent = settings.areaPercent === 100
+            ? FULLSCREEN_SAFE_BOTTOM_PERCENT
+            : settings.areaPercent;
+        return SAFE_TOP_PERCENT + ((bottomPercent - SAFE_TOP_PERCENT) * progress);
     };
 
     const emit = (item, batch, settings) => {
@@ -388,7 +391,7 @@ export function createScrollingBarrageRenderer(options = {}) {
         );
         element.style.setProperty(
             '--yuzi-phone-fullscreen-overlay-track-top',
-            `${trackTopPercent(track)}%`,
+            `${trackTopPercent(track, settings)}%`,
         );
 
         const record = {

@@ -3,6 +3,7 @@ export const SCROLLING_BARRAGE_MODEL_ID = 'scrolling-barrage';
 
 const DEFAULT_OVERLAY_COLOR = '#FFFFFF';
 const MAX_OVERLAY_PALETTE_SIZE = 16;
+const SCROLLING_BARRAGE_AREA_PERCENTS = Object.freeze([25, 50, 75, 100]);
 const OVERLAY_HEX_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
 
 export const FULLSCREEN_OVERLAY_DEFAULTS = Object.freeze({
@@ -13,6 +14,7 @@ export const FULLSCREEN_OVERLAY_DEFAULTS = Object.freeze({
     models: Object.freeze({
         [SCROLLING_BARRAGE_MODEL_ID]: Object.freeze({
             maxConcurrent: 3,
+            areaPercent: 75,
             intervalMs: 1600,
             durationMs: 8000,
             fontSizePx: 14,
@@ -96,6 +98,13 @@ function normalizeBoundedNumber(value, { min, max, fallback, integer = false }) 
     return Math.max(min, Math.min(max, normalized));
 }
 
+function normalizeScrollingBarrageAreaPercent(value, fallback) {
+    const normalized = Number(value);
+    return SCROLLING_BARRAGE_AREA_PERCENTS.includes(normalized)
+        ? normalized
+        : fallback;
+}
+
 function asOverlayHexColor(value) {
     if (typeof value !== 'string') return '';
     const normalized = value.trim().toUpperCase();
@@ -151,6 +160,10 @@ function normalizeScrollingBarrageModel(value) {
             fallback: defaults.maxConcurrent,
             integer: true,
         }),
+        areaPercent: normalizeScrollingBarrageAreaPercent(
+            source.areaPercent,
+            defaults.areaPercent,
+        ),
         intervalMs: normalizeBoundedNumber(source.intervalMs, {
             min: 500,
             max: 10000,

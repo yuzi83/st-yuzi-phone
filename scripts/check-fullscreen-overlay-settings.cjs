@@ -35,6 +35,7 @@ async function testPublicDefaults(mod) {
                     durationMs: 8000,
                     fontSizePx: 14,
                     opacity: 0.86,
+                    areaPercent: 75,
                     eternalEnabled: false,
                     palette: ['#FFFFFF'],
                 },
@@ -114,6 +115,7 @@ async function testScrollingBarrageNumericNormalization(mod) {
             durationMs: 20000,
             fontSizePx: 18,
             opacity: 0.3,
+            areaPercent: 75,
             eternalEnabled: false,
             palette: ['#FFFFFF'],
         },
@@ -135,6 +137,34 @@ async function testScrollingBarrageNumericNormalization(mod) {
         invalid.models['scrolling-barrage'],
         mod.FULLSCREEN_OVERLAY_DEFAULTS.models['scrolling-barrage'],
         '非法弹幕数值必须逐项回落到公共默认值',
+    );
+}
+
+async function testBarrageAreaNormalization(mod) {
+    const selected = mod.normalizeFullscreenOverlaySettings({
+        models: {
+            'scrolling-barrage': {
+                areaPercent: '50',
+            },
+        },
+    });
+    assert.strictEqual(
+        selected.models['scrolling-barrage'].areaPercent,
+        50,
+        '弹幕区域必须只保存预设百分比，并兼容 select 传来的字符串值',
+    );
+
+    const invalid = mod.normalizeFullscreenOverlaySettings({
+        models: {
+            'scrolling-barrage': {
+                areaPercent: 60,
+            },
+        },
+    });
+    assert.strictEqual(
+        invalid.models['scrolling-barrage'].areaPercent,
+        75,
+        '非 25/50/75/100 的区域值必须回落到默认上方 75%',
     );
 }
 
@@ -285,6 +315,7 @@ async function main() {
     await testPublicDefaults(mod);
     await testTopLevelSettingsNormalization(mod);
     await testScrollingBarrageNumericNormalization(mod);
+    await testBarrageAreaNormalization(mod);
     await testEternalBarrageNormalization(mod);
     await testHexAndPaletteNormalization(mod);
     await testPaletteColorPicking(mod);

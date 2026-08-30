@@ -312,6 +312,7 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
                     durationMs: 8000,
                     fontSizePx: 14,
                     opacity: 0.86,
+                    areaPercent: 25,
                     eternalEnabled: true,
                     palette: ['#FFFFFF', '#FF0000'],
                 },
@@ -340,6 +341,8 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
     assert.match(html, /data-fullscreen-overlay-move="up"/u);
     assert.match(html, /data-fullscreen-overlay-move="down"/u);
     assert.match(html, /class="phone-settings-select"/u);
+    assert.match(html, /id="phone-fullscreen-overlay-area"/u);
+    assert.match(html, /option value="25" selected>上方 25%<\/option>/u);
     assert.match(html, /id="phone-fullscreen-overlay-density"/u);
     assert.match(html, /id="phone-fullscreen-overlay-interval"/u);
     assert.match(html, /id="phone-fullscreen-overlay-duration"/u);
@@ -369,6 +372,7 @@ async function testPageAndRendererExposeLifecycleAndScrollSafeSeams() {
     assert.match(pageSource, /pageRuntime\.addEventListener/u);
     assert.match(pageSource, /rerenderFullscreenOverlayKeepScroll/u);
     assert.match(pageSource, /phone-fullscreen-overlay-eternal/u);
+    assert.match(pageSource, /phone-fullscreen-overlay-area/u);
     assert.doesNotMatch(
         pageSource,
         /(?<!pageRuntime\.)addEventListener\s*\(/u,

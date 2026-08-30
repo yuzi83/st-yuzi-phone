@@ -239,6 +239,7 @@ async function testDensityChangeKeepsStablePhysicalTrackOwners() {
         durationMs: 20000,
         fontSizePx: 14,
         opacity: 0.86,
+        areaPercent: 75,
         palette: ['#FFFFFF'],
     };
     const harness = await createHarness(
@@ -258,7 +259,7 @@ async function testDensityChangeKeepsStablePhysicalTrackOwners() {
     assert.equal(
         harness.layer.children.filter((element) => (
             element.style.getPropertyValue('--yuzi-phone-fullscreen-overlay-track-top')
-            === '78%'
+            === '75%'
         )).length,
         1,
     );
@@ -277,7 +278,7 @@ async function testDensityChangeKeepsStablePhysicalTrackOwners() {
     assert.equal(
         harness.layer.children.filter((element) => (
             element.style.getPropertyValue('--yuzi-phone-fullscreen-overlay-track-top')
-            === '78%'
+            === '75%'
         )).length,
         1,
         '动态密度变化不得让不同 owner 同时占用相同的物理 top',
@@ -485,6 +486,100 @@ async function testAbortStopsPendingEmissionWithoutDestroyingVisibleRecords() {
     harness.renderer.dispose();
 }
 
+async function testBarrageAreaOnlyChangesNewTracks() {
+    const harness = await createHarness({
+        maxConcurrent: 2,
+        intervalMs: 500,
+        durationMs: 4000,
+        fontSizePx: 14,
+        opacity: 0.86,
+        areaPercent: 25,
+        palette: ['#FFFFFF'],
+    });
+    const oldPlay = harness.renderer.play({
+        sourceId: 'live',
+        items: ['旧区域一', '旧区域二'],
+    });
+    await flushMicrotasks();
+    harness.clock.tick(500);
+    await flushMicrotasks();
+    const oldTracks = harness.layer.children
+        .filter(element => element.textContent.startsWith('旧区域'))
+        .map(element => element.style.getPropertyValue('--yuzi-phone-fullscreen-overlay-track-top'));
+    assert.deepEqual(
+        oldTracks,
+        ['8%', '25%'],
+        '上方 25% 必须把用户选择的全部轨道压入顶部区域',
+    );
+
+    harness.setSettings({
+        maxConcurrent: 2,
+        intervalMs: 500,
+        durationMs: 4000,
+        fontSizePx: 14,
+        opacity: 0.86,
+        areaPercent: 75,
+        palette: ['#FFFFFF'],
+    });
+    harness.renderer.refreshSettings();
+    harness.clock.tick(800);
+    await flushMicrotasks();
+    await oldPlay;
+
+    const newPlay = harness.renderer.play({
+        sourceId: 'live',
+        items: ['新区域一', '新区域二'],
+    });
+    await flushMicrotasks();
+    harness.clock.tick(500);
+    await flushMicrotasks();
+    const newTracks = harness.layer.children
+        .filter(element => element.textContent.startsWith('新区域'))
+        .map(element => element.style.getPropertyValue('--yuzi-phone-fullscreen-overlay-track-top'));
+    assert.deepEqual(
+        newTracks,
+        ['8%', '75%'],
+        '修改为上方 75% 后，新弹幕必须立即使用更大的发送区域',
+    );
+    assert.deepEqual(
+        oldTracks,
+        ['8%', '25%'],
+        '已经出现的旧弹幕必须保留原路线并自然飞完',
+    );
+
+    harness.clock.tick(800);
+    await flushMicrotasks();
+    await newPlay;
+    harness.setSettings({
+        maxConcurrent: 2,
+        intervalMs: 500,
+        durationMs: 4000,
+        fontSizePx: 14,
+        opacity: 0.86,
+        areaPercent: 100,
+        palette: ['#FFFFFF'],
+    });
+    harness.renderer.refreshSettings();
+    const fullPlay = harness.renderer.play({
+        sourceId: 'live',
+        items: ['全屏一', '全屏二'],
+    });
+    await flushMicrotasks();
+    harness.clock.tick(500);
+    await flushMicrotasks();
+    assert.equal(
+        harness.layer.children
+            .find(element => element.textContent === '全屏二')
+            ?.style.getPropertyValue('--yuzi-phone-fullscreen-overlay-track-top'),
+        '92%',
+        '全屏选项仍必须保留底部安全距离，避免文字被浏览器边缘裁切',
+    );
+
+    harness.renderer.clear();
+    await Promise.all([oldPlay, newPlay, fullPlay]);
+    harness.renderer.dispose();
+}
+
 async function testEternalBarrageRepeatsWithoutBlockingAndReplacementKeepsVisibleItems() {
     const harness = await createHarness({
         maxConcurrent: 2,
@@ -569,6 +664,8 @@ async function main() {
     console.log('✓ pause freezes handoff and clear still settles the batch');
     await testAbortStopsPendingEmissionWithoutDestroyingVisibleRecords();
     console.log('✓ abort stops pending emission while visible records finish naturally');
+    await testBarrageAreaOnlyChangesNewTracks();
+    console.log('✓ barrage area constrains new tracks without moving visible items');
     await testEternalBarrageRepeatsWithoutBlockingAndReplacementKeepsVisibleItems();
     console.log('✓ eternal barrage repeats in background and hands over naturally');
 }
