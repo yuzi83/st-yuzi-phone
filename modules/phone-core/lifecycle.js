@@ -10,7 +10,13 @@ import { initPhoneShellDrag } from '../window/drag.js';
 import { initPhoneShellResize } from '../window/resize.js';
 import { unregisterTableFillStartListener, unregisterTableUpdateListener, initSmartRefreshListener } from './callbacks.js';
 import { debugCheckAPI } from './data-api.js';
-import { getPhoneCoreState, phoneRuntime, resetPhoneCoreState, resetPhoneRuntimeScope } from './state.js';
+import {
+    consumePhoneRouteRefreshPending,
+    getPhoneCoreState,
+    phoneRuntime,
+    resetPhoneCoreState,
+    resetPhoneRuntimeScope,
+} from './state.js';
 import { getCurrentRoute, navigateTo, onRouteChange } from './routing.js';
 import { bindPhoneShellAppControls } from './shell-app-controls.js';
 import {
@@ -164,6 +170,11 @@ export function __test__requestPhoneRuntimeActivationRoute(options = {}) {
     return requestPhoneRuntimeActivationRoute(options);
 }
 
+function hasCommittedPhoneRoutePage(state = getPhoneCoreState()) {
+    const screen = state.phoneContainer?.querySelector?.('.yuzi-phone-screen');
+    return !!screen?.querySelector?.('.phone-page.phone-page-active');
+}
+
 function activatePhoneRuntimeState(state = getPhoneCoreState(), options = {}) {
     state.isDestroying = false;
     state.isPhoneActive = true;
@@ -220,6 +231,7 @@ export function initPhoneUI() {
     state.isPhoneUiInitialized = true;
 
     initializePhoneRuntimeBindings(state);
+    consumePhoneRouteRefreshPending(state);
     activatePhoneRuntimeState(state, { routeMode: 'home' });
 
     logger.info({
@@ -242,7 +254,9 @@ export function onPhoneActivated() {
     applyAppearanceFontLibrary(state.phoneContainer);
     applyPhoneThemeMode();
     applyReadableTextScale(state.phoneContainer);
-    activatePhoneRuntimeState(state);
+    const shouldRefreshRoute = consumePhoneRouteRefreshPending(state)
+        || !hasCommittedPhoneRoutePage(state);
+    activatePhoneRuntimeState(state, { requestRoute: shouldRefreshRoute });
 
     logger.debug({
         action: 'activate',

@@ -84,9 +84,9 @@ function main() {
         && has(contents.genericRuntime, 'navigationSheetKey,')
         && !has(contents.genericRuntime, 'renderDetailPage({\n                navigationSheetKey,'));
 
-    check(results, 'listPageRenderer', 'uses live table data for generic navigation controls', has(contents.listPageRenderer, 'buildTableNavigationControlState(')
-        && has(contents.listPageRenderer, 'rawData: getTableData(),')
-        && has(contents.listPageRenderer, 'navigationSheetKey,'));
+    check(results, 'listPageRenderer', 'reuses route navigation context for generic navigation controls', has(contents.listPageRenderer, 'buildTableNavigationControlState(')
+        && has(contents.listPageRenderer, 'navigationContext,')
+        && !has(contents.listPageRenderer, 'rawData: getTableData(),'));
     check(results, 'listPageRenderer', 'refreshes the navigation region for management state changes', has(contents.listPageRenderer, "changedKeySet.has('deleteManageMode')")
         && has(contents.listPageRenderer, "changedKeySet.has('lockManageMode')")
         && has(contents.listPageRenderer, "changedKeySet.has('deletingRowIndex')")

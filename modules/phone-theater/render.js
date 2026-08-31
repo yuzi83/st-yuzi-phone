@@ -123,17 +123,25 @@ export function renderTheaterScene(container, sceneId, options = {}) {
     const scrollPreserver = createRuntimeScrollPreserver(container, state, '.phone-app-body.phone-theater-body', phoneRuntime);
     const hasExistingScrollableBody = !!container.querySelector('.phone-app-body.phone-theater-body');
     const prevContainerHeight = Math.max(0, container.offsetHeight || 0);
+    const nextRenderOptions = options.initialTableData || options.initialNavigationContext
+        ? {
+            ...options,
+            initialTableData: undefined,
+            initialNavigationContext: undefined,
+        }
+        : options;
     const renderCurrentScene = () => {
         if (!lifecycle.isActive()) return;
-        renderTheaterScene(container, state.sceneId, options);
+        renderTheaterScene(container, state.sceneId, nextRenderOptions);
     };
-    const rawData = getTableData();
+    const rawData = options.initialTableData || getTableData();
     const viewModel = buildTheaterSceneViewModel(rawData, state.sceneId);
     state.navigationSheetKey = resolveTheaterNavigationSheetKey(rawData, viewModel, options.navigationSheetKey);
     const uiState = buildUiState(state, viewModel);
     uiState.tableNavigation = state.navigationSheetKey
         ? buildTableNavigationControlState(rawData, state.navigationSheetKey, {
             blocked: state.deleteManageMode || state.deleting,
+            navigationContext: options.initialNavigationContext,
         })
         : null;
 

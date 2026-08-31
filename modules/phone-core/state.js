@@ -23,6 +23,8 @@ function createInitialState() {
         onRouteChangeCallbacks: [],
         isPhoneUiInitialized: false,
         isPhoneActive: false,
+        pendingRouteRefresh: false,
+        pendingRouteRefreshReason: '',
         isDestroying: false,
         statusClockTimerId: null,
         shellInteractionTimerId: null,
@@ -45,6 +47,25 @@ export function getPhoneCoreState() {
     return state;
 }
 
+export function markPhoneRouteRefreshPending(reason = '', targetState = state) {
+    if (!targetState || typeof targetState !== 'object' || targetState.isPhoneActive !== false) {
+        return false;
+    }
+
+    targetState.pendingRouteRefresh = true;
+    targetState.pendingRouteRefreshReason = String(reason || '').trim();
+    return true;
+}
+
+export function consumePhoneRouteRefreshPending(targetState = state) {
+    if (!targetState || typeof targetState !== 'object') return false;
+
+    const pending = targetState.pendingRouteRefresh === true;
+    targetState.pendingRouteRefresh = false;
+    targetState.pendingRouteRefreshReason = '';
+    return pending;
+}
+
 export function resetPhoneCoreState() {
     const next = createInitialState();
     state.currentRoute = next.currentRoute;
@@ -53,6 +74,8 @@ export function resetPhoneCoreState() {
     state.onRouteChangeCallbacks = next.onRouteChangeCallbacks;
     state.isPhoneUiInitialized = next.isPhoneUiInitialized;
     state.isPhoneActive = next.isPhoneActive;
+    state.pendingRouteRefresh = next.pendingRouteRefresh;
+    state.pendingRouteRefreshReason = next.pendingRouteRefreshReason;
     state.isDestroying = next.isDestroying;
     state.statusClockTimerId = next.statusClockTimerId;
     state.shellInteractionTimerId = next.shellInteractionTimerId;

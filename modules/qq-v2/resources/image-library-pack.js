@@ -84,32 +84,39 @@ async function blobToDataUrl(blob, mimeType) {
     return `data:${mimeType};base64,${btoa(binary)}`;
 }
 
-async function exportImageAsset(asset, usedIds) {
-    if (!(asset?.blob instanceof Blob)) throw new Error(`图片资源 ${asset?.assetId || ''} 缺少 Blob`);
+async function resolveBlob(record, readMedia) {
+    if (record?.blob instanceof Blob) return record.blob;
+    return readMedia(record?.mediaKey);
+}
+
+async function exportImageAsset(asset, usedIds, readMedia) {
+    const blob = await resolveBlob(asset, readMedia);
+    if (!(blob instanceof Blob)) throw new Error(`图片资源 ${asset?.assetId || ''} 缺少 Blob`);
     const label = `图片资源 ${asset.assetId || ''}`;
     const id = requireUniqueId(asset.assetId, label, usedIds);
-    const mimeType = requireImageMimeType(asset.mimeType || asset.blob.type, label);
+    const mimeType = requireImageMimeType(asset.mimeType || blob.type, label);
     return {
         id,
         mimeType,
         createdAt: Math.max(0, Number(asset.createdAt) || 0),
-        dataUrl: await blobToDataUrl(asset.blob, mimeType),
+        dataUrl: await blobToDataUrl(blob, mimeType),
     };
 }
 
-async function exportSticker(sticker, usedIds) {
-    if (!(sticker?.blob instanceof Blob)) throw new Error(`表情资源 ${sticker?.id || ''} 缺少 Blob`);
+async function exportSticker(sticker, usedIds, readMedia) {
+    const blob = await resolveBlob(sticker, readMedia);
+    if (!(blob instanceof Blob)) throw new Error(`表情资源 ${sticker?.id || ''} 缺少 Blob`);
     const label = `表情资源 ${sticker.id || ''}`;
     const id = requireUniqueId(sticker.id, label, usedIds);
     const description = asText(sticker.description, 4000);
     if (!description) throw new Error(`${label}缺少表情含义`);
-    const mimeType = requireImageMimeType(sticker.mimeType || sticker.blob.type, label);
+    const mimeType = requireImageMimeType(sticker.mimeType || blob.type, label);
     return {
         id,
         description,
         mimeType,
         order: Math.max(0, Number(sticker.order) || 0),
-        dataUrl: await blobToDataUrl(sticker.blob, mimeType),
+        dataUrl: await blobToDataUrl(blob, mimeType),
     };
 }
 
@@ -184,6 +191,9 @@ function normalizeImportedLibraries(input) {
 
 export function createQQImageLibraryPackService(options = {}) {
     const stateStore = requireStateStore(options.stateStore);
+    const readMedia = typeof stateStore.readMedia === 'function'
+        ? (key) => stateStore.readMedia(key)
+        : async () => null;
 
     return Object.freeze({
         async exportPack() {
@@ -198,12 +208,12 @@ export function createQQImageLibraryPackService(options = {}) {
                 libraries[key] = await Promise.all(assets
                     .filter((asset) => asset?.library === definition.library)
                     .sort((left, right) => Number(right.createdAt || 0) - Number(left.createdAt || 0))
-                    .map((asset) => exportImageAsset(asset, usedImageIds)));
+                    .map((asset) => exportImageAsset(asset, usedImageIds, readMedia)));
             }
             const usedStickerIds = new Set();
             libraries.stickers = await Promise.all([...stickers]
                 .sort((left, right) => Number(left.order || 0) - Number(right.order || 0))
-                .map((sticker) => exportSticker(sticker, usedStickerIds)));
+                .map((sticker) => exportSticker(sticker, usedStickerIds, readMedia)));
             return {
                 format: QQ_IMAGE_LIBRARY_PACK_FORMAT,
                 schemaVersion: QQ_IMAGE_LIBRARY_PACK_SCHEMA_VERSION,

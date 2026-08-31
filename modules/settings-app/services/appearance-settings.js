@@ -4,6 +4,7 @@ import {
     renderHiddenTableAppsList as renderHiddenTableAppsListImpl,
     setupAppearanceToggles as setupAppearanceTogglesImpl,
 } from './appearance-settings/visibility-settings.js';
+import { buildAppearanceAppCatalog as buildAppearanceAppCatalogImpl } from './appearance-settings/icon-slots.js';
 import {
     getLayoutValue as getLayoutValueImpl,
     setupIconLayoutSettings as setupIconLayoutSettingsImpl,
@@ -59,12 +60,16 @@ export function renderIconUploadList(listEl, options = {}) {
     return renderIconUploadListImpl(listEl, options);
 }
 
+export function buildAppearanceAppCatalog(rawData) {
+    return buildAppearanceAppCatalogImpl(rawData);
+}
+
 export function setupAppearanceToggles(container) {
     return setupAppearanceTogglesImpl(container);
 }
 
-export function renderHiddenTableAppsList(listEl) {
-    return renderHiddenTableAppsListImpl(listEl);
+export function renderHiddenTableAppsList(listEl, options = {}) {
+    return renderHiddenTableAppsListImpl(listEl, options);
 }
 
 export function setupIconLayoutSettings(container) {

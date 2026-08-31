@@ -54,6 +54,7 @@ function buildAppearancePageService(services) {
     return {
         getLayoutValue: services.appearance.getLayoutValue,
         getPhoneSettings: services.appearance.getPhoneSettings,
+        buildAppearanceAppCatalog: services.appearance.buildAppearanceAppCatalog,
         setupBgUpload: services.appearance.setupBgUpload,
         setupIconLayoutSettings: services.appearance.setupIconLayoutSettings,
         setupAppearanceToggles: services.appearance.setupAppearanceToggles,

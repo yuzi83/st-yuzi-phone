@@ -798,7 +798,10 @@ export class QQV2DomainError extends Error {
 export function createQQV2Repository(options = {}) {
     const stateStore = options.stateStore;
     const random = typeof options.random === 'function' ? options.random : Math.random;
-    if (!stateStore || typeof stateStore.read !== 'function' || typeof stateStore.transact !== 'function') {
+    if (!stateStore
+        || typeof stateStore.read !== 'function'
+        || typeof stateStore.transact !== 'function'
+        || typeof stateStore.readMedia !== 'function') {
         throw new TypeError('QQ v2 repository 需要 stateStore');
     }
 
@@ -1509,7 +1512,12 @@ export function createQQV2Repository(options = {}) {
             const state = await stateStore.read();
             const scope = getScope(state, scopeId, false);
             const id = asText(assetId, 256);
-            return copy(scope.assets[id] || findImageLibraryAsset(state, id));
+            const asset = copy(scope.assets[id] || findImageLibraryAsset(state, id));
+            if (!asset) return null;
+            const blob = asset.blob instanceof Blob
+                ? asset.blob
+                : await stateStore.readMedia(asset.mediaKey);
+            return blob ? { ...asset, blob } : asset;
         },
         saveImageLibraryAssets,
         async saveImageLibraryAsset(scopeId, input = {}, operationOptions = {}) {

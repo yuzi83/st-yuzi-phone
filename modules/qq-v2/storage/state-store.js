@@ -1,7 +1,10 @@
 const DB_NAME = 'yuzi-phone-qq-v2';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'state';
+const MEDIA_STORE_NAME = 'media';
 const STATE_KEY = 'root';
+const IMAGE_LIBRARY_KEY = 'imageLibraryAssets';
+const STICKERS_KEY = 'qq-v2.resources.stickers';
 
 function clone(value) {
     if (typeof globalThis.structuredClone === 'function') {
@@ -31,6 +34,74 @@ function normalizeState(value) {
     }
     state.version = 2;
     return state;
+}
+
+function isBlob(value) {
+    return typeof globalThis.Blob === 'function' && value instanceof globalThis.Blob;
+}
+
+function mediaKey(value) {
+    return String(value ?? '').trim();
+}
+
+function visitMediaRecords(state, visitor) {
+    const sharedResources = state?.sharedResources;
+    const imageAssets = sharedResources?.[IMAGE_LIBRARY_KEY];
+    if (imageAssets && typeof imageAssets === 'object' && !Array.isArray(imageAssets)) {
+        Object.entries(imageAssets).forEach(([assetId, asset]) => {
+            if (asset && typeof asset === 'object' && !Array.isArray(asset)) {
+                visitor(asset, `shared:image:${assetId}`);
+            }
+        });
+    }
+
+    const stickers = sharedResources?.[STICKERS_KEY]?.stickers;
+    if (Array.isArray(stickers)) {
+        stickers.forEach((sticker) => {
+            if (sticker && typeof sticker === 'object' && !Array.isArray(sticker)) {
+                visitor(sticker, `shared:sticker:${String(sticker.id ?? '').trim()}`);
+            }
+        });
+    }
+
+    Object.entries(state?.scopes || {}).forEach(([scopeId, scope]) => {
+        const assets = scope?.assets;
+        if (!assets || typeof assets !== 'object' || Array.isArray(assets)) return;
+        Object.entries(assets).forEach(([assetId, asset]) => {
+            if (asset && typeof asset === 'object' && !Array.isArray(asset)) {
+                visitor(asset, `scope:${scopeId}:asset:${assetId}`);
+            }
+        });
+    });
+}
+
+function collectMediaKeys(state) {
+    const keys = new Set();
+    visitMediaRecords(state, (record) => {
+        const key = mediaKey(record.mediaKey);
+        if (key) keys.add(key);
+    });
+    return keys;
+}
+
+function prepareStateForPersistence(value) {
+    const state = normalizeState(value);
+    const writes = new Map();
+    visitMediaRecords(state, (record, fallbackKey) => {
+        const blob = isBlob(record.blob) ? record.blob : null;
+        const key = mediaKey(record.mediaKey) || fallbackKey;
+        if (blob) writes.set(key, blob);
+        if (blob || mediaKey(record.mediaKey)) {
+            record.mediaKey = key;
+            record.size = Math.max(0, Number(blob?.size ?? record.size) || 0);
+        }
+        if (Object.hasOwn(record, 'blob')) delete record.blob;
+    });
+    return {
+        state,
+        writes,
+        keys: collectMediaKeys(state),
+    };
 }
 
 function sharedResourceKey(value) {
@@ -80,7 +151,9 @@ export function createQQV2SharedResourceStorage(options = {}) {
 
 /** A test-friendly serial state store with the same public contract as IndexedDB. */
 export function createMemoryQQV2StateStore(initialState = undefined) {
-    let state = normalizeState(initialState);
+    const initial = prepareStateForPersistence(initialState);
+    let state = initial.state;
+    const media = new Map(initial.writes);
     let pending = Promise.resolve();
 
     return Object.freeze({
@@ -92,11 +165,21 @@ export function createMemoryQQV2StateStore(initialState = undefined) {
             const task = pending.then(async () => {
                 const draft = clone(state);
                 const result = await mutator(draft);
-                state = normalizeState(draft);
+                const previousKeys = collectMediaKeys(state);
+                const prepared = prepareStateForPersistence(draft);
+                prepared.writes.forEach((blob, key) => media.set(key, blob));
+                previousKeys.forEach((key) => {
+                    if (!prepared.keys.has(key)) media.delete(key);
+                });
+                state = prepared.state;
                 return clone(result);
             });
             pending = task.catch(() => {});
             return task;
+        },
+        async readMedia(key) {
+            await pending;
+            return media.get(mediaKey(key)) || null;
         },
         async close() {},
     });
@@ -120,9 +203,24 @@ function transactionDone(transaction, label) {
 function openDatabase(indexedDb) {
     return new Promise((resolve, reject) => {
         const request = indexedDb.open(DB_NAME, DB_VERSION);
-        request.addEventListener('upgradeneeded', () => {
-            if (!request.result.objectStoreNames.contains(STORE_NAME)) {
-                request.result.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        request.addEventListener('upgradeneeded', (event) => {
+            const db = request.result;
+            const transaction = request.transaction;
+            const stateStore = db.objectStoreNames.contains(STORE_NAME)
+                ? transaction.objectStore(STORE_NAME)
+                : db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+            const mediaStore = db.objectStoreNames.contains(MEDIA_STORE_NAME)
+                ? transaction.objectStore(MEDIA_STORE_NAME)
+                : db.createObjectStore(MEDIA_STORE_NAME, { keyPath: 'id' });
+
+            if (Number(event.oldVersion) < 2) {
+                const stateRequest = stateStore.get(STATE_KEY);
+                stateRequest.addEventListener('success', () => {
+                    if (!stateRequest.result?.value) return;
+                    const prepared = prepareStateForPersistence(stateRequest.result.value);
+                    prepared.writes.forEach((blob, id) => mediaStore.put({ id, blob }));
+                    stateStore.put({ id: STATE_KEY, value: prepared.state });
+                }, { once: true });
             }
         });
         request.addEventListener('success', () => resolve(request.result), { once: true });
@@ -153,11 +251,30 @@ export function createIndexedDbQQV2StateStore(options = {}) {
         await transactionDone(transaction, '读取 QQ v2 状态');
         return normalizeState(record?.value);
     };
-    const writeState = async (state) => {
+    const writeState = async (state, previousState) => {
         const db = await database();
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
-        transaction.objectStore(STORE_NAME).put({ id: STATE_KEY, value: normalizeState(state) });
+        const prepared = prepareStateForPersistence(state);
+        const previousKeys = collectMediaKeys(previousState);
+        const transaction = db.transaction([STORE_NAME, MEDIA_STORE_NAME], 'readwrite');
+        transaction.objectStore(STORE_NAME).put({ id: STATE_KEY, value: prepared.state });
+        const mediaStore = transaction.objectStore(MEDIA_STORE_NAME);
+        prepared.writes.forEach((blob, id) => mediaStore.put({ id, blob }));
+        previousKeys.forEach((id) => {
+            if (!prepared.keys.has(id)) mediaStore.delete(id);
+        });
         await transactionDone(transaction, '保存 QQ v2 状态');
+    };
+    const readMedia = async (key) => {
+        const normalizedKey = mediaKey(key);
+        if (!normalizedKey) return null;
+        const db = await database();
+        const transaction = db.transaction([MEDIA_STORE_NAME], 'readonly');
+        const record = await requestResult(
+            transaction.objectStore(MEDIA_STORE_NAME).get(normalizedKey),
+            '读取 QQ v2 媒体',
+        );
+        await transactionDone(transaction, '读取 QQ v2 媒体');
+        return isBlob(record?.blob) ? record.blob : null;
     };
 
     return Object.freeze({
@@ -167,13 +284,18 @@ export function createIndexedDbQQV2StateStore(options = {}) {
         },
         transact(mutator) {
             const task = pending.then(async () => {
-                const draft = await readState();
+                const previousState = await readState();
+                const draft = clone(previousState);
                 const result = await mutator(draft);
-                await writeState(draft);
+                await writeState(draft, previousState);
                 return clone(result);
             });
             pending = task.catch(() => {});
             return task;
+        },
+        async readMedia(key) {
+            await pending;
+            return readMedia(key);
         },
         async close() {
             if (!databasePromise) return;

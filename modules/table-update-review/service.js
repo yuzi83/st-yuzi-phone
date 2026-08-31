@@ -28,7 +28,7 @@ import { publishTableUpdateReviewResult } from './result-channel.js';
 
 const logger = Logger.withScope({ scope: 'table-update-review/service', feature: 'table-update-review' });
 const SUBSCRIPTION_RETRY_DELAYS_MS = Object.freeze([1000, 2000, 5000]);
-const SUBSCRIPTION_HEALTH_CHECK_INTERVAL_MS = 5000;
+const SUBSCRIPTION_HEALTH_CHECK_INTERVAL_MS = 30000;
 
 function subscribeReviewTableUpdate(callback) {
     const unsubscribe = subscribeTableUpdate((event) => {

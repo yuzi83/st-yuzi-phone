@@ -23,6 +23,10 @@ function createAppFactory(records) {
     };
 }
 
+function nextTurn() {
+    return new Promise((resolve) => setImmediate(resolve));
+}
+
 async function main() {
     const { __test__loadRouteRenderer } = await load('modules/phone-core/route-renderer.js');
     const { disposeRoutePage } = await load('modules/phone-core/route-page-lifecycle.js');
@@ -53,6 +57,7 @@ async function main() {
     assert.equal(rootRoute.routeType, 'qq');
     const rootPage = {};
     await rootRoute.render(rootPage);
+    await nextTurn();
     assert.equal(records.length, 1);
     assert.equal(records[0].mounted, rootPage);
     assert.equal(records[0].options.facade, facade);
@@ -63,6 +68,7 @@ async function main() {
     const nestedRoute = await __test__loadRouteRenderer('qq:old-chat-state-must-not-restore', 402, routeDeps);
     const nestedPage = {};
     await nestedRoute.render(nestedPage);
+    await nextTurn();
     assert.equal(records.length, 2, 'every qq:* launch receives a new QQ root instance');
     assert.equal(records[1].mounted, nestedPage);
 
@@ -76,6 +82,7 @@ async function main() {
         }),
     });
     await missingFacadeRoute.render({ replaceChildren() { blanked += 1; } });
+    await nextTurn();
     assert.equal(blanked, 1, 'missing Facade keeps the QQ shell content blank');
     assert.equal(shell.toasts.length, 1, 'missing Facade reports one shell toast');
 
@@ -86,11 +93,41 @@ async function main() {
     });
     let failedBlanked = 0;
     await loadFailure.render({ replaceChildren() { failedBlanked += 1; } });
+    await nextTurn();
     assert.equal(loadFailure.routeType, 'qq');
     assert.equal(failedBlanked, 1, 'dynamic loader failures keep the QQ shell content blank');
     assert.equal(failedShell.toasts.length, 1, 'dynamic loader failures produce one safe toast');
 
-    const appSource = require('node:fs').readFileSync(path.resolve('modules/qq-v2/ui/app.js'), 'utf8');
+    let resolveDelayedDependencies;
+    let delayedLifecycleCreated = 0;
+    const delayedRoute = await __test__loadRouteRenderer('qq', 405, {
+        ...routeDeps,
+        loadQQRouteDependencies: () => new Promise((resolve) => {
+            resolveDelayedDependencies = resolve;
+        }),
+    });
+    const delayedPage = {};
+    assert.equal(delayedRoute.render(delayedPage), undefined, 'QQ 路由不得等待动态模块和 bootstrap 才返回');
+    disposeRoutePage(delayedPage);
+    resolveDelayedDependencies({
+        createQQApp: createAppFactory([]),
+        createQQRouteLifecycle: () => {
+            delayedLifecycleCreated += 1;
+            return { async mount() {}, destroy() {} };
+        },
+        getQQV2Facade: () => facade,
+    });
+    await nextTurn();
+    assert.equal(delayedLifecycleCreated, 0, '路由页提前销毁后不得再挂载迟到的 QQ App');
+
+    const fs = require('node:fs');
+    const routeSource = fs.readFileSync(path.resolve('modules/phone-core/route-renderer.js'), 'utf8');
+    assert.match(routeSource, /dataset\.qqRouteSkeleton/u,
+        'QQ 路由必须先提交可见骨架');
+    assert.match(routeSource, /void \(async \(\) => \{[\s\S]*loadQQRouteDependencies/u,
+        'QQ 动态依赖与 bootstrap 必须在骨架之后异步加载');
+
+    const appSource = fs.readFileSync(path.resolve('modules/qq-v2/ui/app.js'), 'utf8');
     assert.doesNotMatch(appSource, /phone-status-bar|phone-home-indicator/, 'QQ must consume shell status and Home Indicator instead of duplicating them');
     assert.doesNotMatch(appSource, /navigateTo\(|replaceCurrentRoute\(|routeHistory|currentRoute\s*=/,
         'QQ root tab switches must stay inside the app and never mutate phone route history');

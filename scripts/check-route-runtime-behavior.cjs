@@ -21,6 +21,7 @@ function createDeferred() {
 function createRouteRuntimeState(overrides = {}) {
     return {
         isDestroying: false,
+        isPhoneActive: true,
         currentRoute: 'home',
         routeHistory: [],
         routeRenderToken: 0,
@@ -55,6 +56,63 @@ async function testRouteRuntimeSkip(routeRuntimeModule) {
     assert.equal(result, false);
     assert.equal(renderCalls, 0);
     assert.equal(state.routeRenderToken, 7);
+}
+
+async function testInactiveRouteRequestsDefer(routeRuntimeModule, stateModule) {
+    const state = createRouteRuntimeState({
+        isPhoneActive: false,
+        routeRenderToken: 7,
+    });
+    let renderCalls = 0;
+
+    routeRuntimeModule.__test__setRouteRuntimeDeps({
+        getPhoneCoreState: () => state,
+        getCurrentRoute: () => 'settings',
+        renderPhoneRoute: async () => {
+            renderCalls += 1;
+            return true;
+        },
+    });
+
+    assert.equal(
+        await routeRuntimeModule.requestCurrentPhoneRouteRender({ reason: 'inactive-route' }),
+        true,
+        '隐藏状态把路由刷新延后，而不是视作失败',
+    );
+    assert.equal(renderCalls, 0, '隐藏状态不进入实际 route renderer');
+    assert.equal(state.routeRenderToken, 7, '隐藏状态不创建新的渲染 token');
+    assert.equal(state.pendingRouteRefresh, true, '隐藏状态记录一次待刷新');
+    assert.equal(state.pendingRouteRefreshReason, 'inactive-route');
+    assert.equal(stateModule.consumePhoneRouteRefreshPending(state), true, '重新显示时可消费待刷新标记');
+    assert.equal(state.pendingRouteRefresh, false, '消费后清空待刷新标记');
+}
+
+async function testInactiveRouteCompletionDefersWithoutRollback(routeRuntimeModule) {
+    const state = createRouteRuntimeState({
+        currentRoute: 'app:message',
+        routeHistory: [{ route: 'settings', timestamp: 1 }],
+    });
+
+    routeRuntimeModule.__test__setRouteRuntimeDeps({
+        getPhoneCoreState: () => state,
+        getCurrentRoute: () => state.currentRoute,
+        renderPhoneRoute: async () => {
+            state.isPhoneActive = false;
+            return false;
+        },
+    });
+
+    assert.equal(
+        await routeRuntimeModule.requestPhoneRouteRender('app:message', {
+            fromRoute: 'settings',
+            pushedHistory: true,
+        }),
+        true,
+        '关闭发生在异步渲染中时保留目标路由，等待下次打开再渲染',
+    );
+    assert.equal(state.currentRoute, 'app:message', '隐藏不触发 route 回滚');
+    assert.deepEqual(state.routeHistory, [{ route: 'settings', timestamp: 1 }]);
+    assert.equal(state.pendingRouteRefresh, true, '异步渲染中隐藏同样会标记待刷新');
 }
 
 async function testCurrentAndHomeRouteRequests(routeRuntimeModule) {
@@ -329,6 +387,8 @@ async function main() {
     const { routeRuntimeModule, lifecycleModule, routingModule, stateModule } = await importModules();
 
     await testRouteRuntimeSkip(routeRuntimeModule);
+    await testInactiveRouteRequestsDefer(routeRuntimeModule, stateModule);
+    await testInactiveRouteCompletionDefersWithoutRollback(routeRuntimeModule);
     await testCurrentAndHomeRouteRequests(routeRuntimeModule);
     await testFailedRouteRollback(routeRuntimeModule);
     await testRoutingNavigationMetadata(routingModule, stateModule);
@@ -344,6 +404,7 @@ async function main() {
     console.log('- OK | push / replace / back / history-top replacement 发布稳定导航元数据');
     console.log('- OK | replace / back / 压缩编辑失败分别保持或原子恢复 history');
     console.log('- OK | ABA、不同 route reject、同 route overlap 的旧 token 不得误回滚');
+    console.log('- OK | 隐藏状态延后 route 渲染，重新显示时仅补一次');
     console.log('- OK | requestPhoneRuntimeActivationRoute() 保持 disabled/home/current/explicit 路径语义');
 }
 

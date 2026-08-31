@@ -1,18 +1,12 @@
-import {
-    getTableData,
-    getSheetKeys,
-} from '../../../phone-core/data-api.js';
+import { getTableData } from '../../../phone-core/data-api.js';
 import {
     getPhoneSettings,
     savePhoneSetting,
 } from '../../../settings.js';
-import { getAvailableTheaterScenes, getGroupedTheaterSheetKeys } from '../../../phone-theater/data.js';
 import { escapeHtml, escapeHtmlAttr } from '../../../utils/dom-escape.js';
 import { Logger } from '../../../error-handler.js';
 import { showToast } from '../../ui/toast.js';
-import { VARIABLE_MANAGER_APP } from '../../../variable-manager/index.js';
-import { QQ_APP } from '../../../qq-v2/app-definition.js';
-import { TABLE_UPDATE_REVIEW_APP_ID, TABLE_UPDATE_REVIEW_APP_NAME } from '../../../table-update-review/constants.js';
+import { collectAppearanceIconSlots } from './icon-slots.js';
 
 const logger = Logger.withScope({ scope: 'settings-app/services/appearance-settings/visibility-settings', feature: 'settings-app' });
 
@@ -43,9 +37,8 @@ export function setupAppearanceToggles(container) {
     };
 }
 
-export function renderHiddenTableAppsList(listEl) {
+export function renderHiddenTableAppsList(listEl, options = {}) {
     if (!listEl) return () => {};
-    const rawData = getTableData();
     const hiddenMap = normalizeHiddenTableApps(getPhoneSettings().hiddenTableApps);
     const cleanups = [];
 
@@ -55,30 +48,10 @@ export function renderHiddenTableAppsList(listEl) {
         }
     };
 
-    if (!rawData) {
-        listEl.innerHTML = '<div class="phone-empty-msg">暂无表格可配置</div>';
-        return () => {};
-    }
-
-    const sheetKeys = getSheetKeys(rawData);
-    const groupedTheaterSheetKeys = getGroupedTheaterSheetKeys(rawData);
-    const theaterItems = getAvailableTheaterScenes(rawData).map((scene) => ({
-        key: scene.appKey,
-        name: scene.name,
-    }));
-    const tableItems = sheetKeys
-        .filter(sheetKey => !groupedTheaterSheetKeys.has(sheetKey))
-        .map((sheetKey) => ({
-            key: sheetKey,
-            name: String(rawData?.[sheetKey]?.name || sheetKey),
-        }));
-    const allItems = [
-        { key: TABLE_UPDATE_REVIEW_APP_ID, name: TABLE_UPDATE_REVIEW_APP_NAME },
-        { key: VARIABLE_MANAGER_APP.id, name: VARIABLE_MANAGER_APP.name },
-        { key: QQ_APP.id, name: QQ_APP.name },
-        ...theaterItems,
-        ...tableItems,
-    ];
+    const allItems = (Array.isArray(options.items)
+        ? options.items
+        : collectAppearanceIconSlots(getTableData()))
+        .filter(item => item.type !== 'dock');
 
     if (allItems.length === 0) {
         listEl.innerHTML = '<div class="phone-empty-msg">暂无表格可配置</div>';

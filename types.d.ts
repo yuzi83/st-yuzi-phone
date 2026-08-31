@@ -1,6 +1,6 @@
 /**
  * 玉子手机扩展 - TypeScript 类型定义
- * @version 2.1.0
+ * @version 2.2.0
  * @description 提供完整的类型定义，增强代码类型安全
  */
 
@@ -1064,14 +1064,27 @@ export interface SettingsPageRendererFeedbackDeps {
     showToast: SettingsToastHandler;
 }
 
+export interface SettingsAppearanceIconSlot {
+    key: string;
+    name: string;
+    type: string;
+}
+
+export interface SettingsAppearanceAppCatalog {
+    rawData: Record<string, any> | null;
+    navigationContext: Record<string, any>;
+    iconSlots: SettingsAppearanceIconSlot[];
+}
+
 export interface SettingsAppearancePageService {
     getLayoutValue: (key: string, fallback: number) => string;
     getPhoneSettings: SettingsModule['getPhoneSettings'];
+    buildAppearanceAppCatalog: (rawData?: Record<string, any> | null) => SettingsAppearanceAppCatalog;
     setupBgUpload: (container: HTMLElement, options?: Record<string, any>) => (() => void) | void;
     setupIconLayoutSettings: (container: HTMLElement) => (() => void) | void;
     setupAppearanceToggles: (container: HTMLElement) => (() => void) | void;
-    renderHiddenTableAppsList: (listEl: Element | null) => (() => void) | void;
-    renderIconUploadList: (listEl: Element | null, options?: Record<string, any>) => (() => void) | void;
+    renderHiddenTableAppsList: (listEl: Element | null, options?: { items?: SettingsAppearanceIconSlot[] }) => (() => void) | void;
+    renderIconUploadList: (listEl: Element | null, options?: { runtime?: SettingsPageRuntime; pageRuntime?: SettingsPageRuntime; items?: SettingsAppearanceIconSlot[] }) => (() => void) | void;
     importAppearanceResourcePackFromData: (input: string | object, options?: Record<string, any>) => AppearanceResourcePackResult;
     validateAppearanceResourcePack: (input: string | object) => AppearanceResourcePackResult;
     applyAppearanceResourcePack: (packInput: string | object, options?: Record<string, any>) => AppearanceResourcePackResult;

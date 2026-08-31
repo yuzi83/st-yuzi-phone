@@ -97,6 +97,7 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
     const {
         sheet,
         sheetKey,
+        navigationContext,
         navigationSheetKey = sheetKey,
         tableName,
         headers,
@@ -115,6 +116,7 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
         rawHeaders,
     });
     const state = createTableViewerState(sheetKey);
+    const listRowProjectionCache = new WeakMap();
     let enteredReviewDetail = false;
     const reviewNavigationIntent = consumePendingTableReviewNavigationIntent(sheetKey, hooks.reviewNavigationAttemptId);
     if (reviewNavigationIntent) {
@@ -134,6 +136,8 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
     const scrollPreserver = createTableViewerScrollPreserver(container, state, undefined, viewerRuntime);
     let activeListRefreshHandler = null;
     let isDispatchingListStateRefresh = false;
+    let pendingListRefreshFrameId = null;
+    const pendingListRefreshKeys = new Set();
     const LIST_STATE_REFRESH_KEYS = new Set([
         'listSearchQuery',
         'listSortDescending',
@@ -150,7 +154,7 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
         activeListRefreshHandler = typeof handler === 'function' ? handler : null;
     };
 
-    const dispatchSubscribedListRefresh = (changedKeys = []) => {
+    const runSubscribedListRefresh = (changedKeys = []) => {
         if (isDispatchingListStateRefresh) return;
         if (typeof activeListRefreshHandler !== 'function') return;
 
@@ -160,6 +164,32 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
         } finally {
             isDispatchingListStateRefresh = false;
         }
+    };
+
+    const dispatchSubscribedListRefresh = (changedKeys = []) => {
+        const safeChangedKeys = Array.isArray(changedKeys) ? changedKeys : [];
+        const shouldCoalesce = safeChangedKeys.includes('listSearchQuery')
+            && typeof viewerRuntime?.requestAnimationFrame === 'function';
+
+        if (!shouldCoalesce) {
+            if (pendingListRefreshFrameId !== null) {
+                viewerRuntime?.cancelAnimationFrame?.(pendingListRefreshFrameId);
+                pendingListRefreshFrameId = null;
+            }
+            const mergedKeys = [...pendingListRefreshKeys, ...safeChangedKeys];
+            pendingListRefreshKeys.clear();
+            runSubscribedListRefresh(mergedKeys);
+            return;
+        }
+
+        safeChangedKeys.forEach(key => pendingListRefreshKeys.add(key));
+        if (pendingListRefreshFrameId !== null) return;
+        pendingListRefreshFrameId = viewerRuntime.requestAnimationFrame(() => {
+            pendingListRefreshFrameId = null;
+            const mergedKeys = [...pendingListRefreshKeys];
+            pendingListRefreshKeys.clear();
+            runSubscribedListRefresh(mergedKeys);
+        });
     };
 
     state.subscribe((changedKeys = []) => {
@@ -288,6 +318,8 @@ export function createGenericTableViewerRuntime(container, context, hooks = {}) 
             rawHeaders,
             rows,
             genericMatch,
+            navigationContext,
+            rowProjectionCache: listRowProjectionCache,
             ddlFieldMetadata,
             addRowModalId,
             render,

@@ -1,7 +1,7 @@
 // index.js
 /**
  * 玉子手机 - 独立扩展入口
- * @version 2.1.0
+ * @version 2.2.0
  * @description 集成 SillyTavern 事件系统、TavernHelper API、Slash 命令、错误处理等
  * @fix P0-001 修复 innerHTML XSS 风险
  * @fix P0-002 修复事件监听器内存泄漏
@@ -61,6 +61,7 @@ import {
 } from './modules/phone-core/background-services.js';
 import { getCurrentRoute } from './modules/phone-core/routing.js';
 import { requestCurrentPhoneRouteRender, requestHomePhoneRouteRender } from './modules/phone-core/route-runtime.js';
+import { markPhoneRouteRefreshPending } from './modules/phone-core/state.js';
 import {
     destroyQQV2Runtime,
     handleQQV2ChatChanged,
@@ -71,7 +72,7 @@ import {
 } from './modules/qq-v2/runtime/default-runtime.js';
 
 // 全局事件管理器 - 用于统一管理事件监听器的清理
-const EXTENSION_VERSION = '2.1.0';
+const EXTENSION_VERSION = '2.2.0';
 const globalEventManager = new EventManager();
 const logger = Logger.withScope({ scope: 'index' });
 const INSTANCE_KEY = '__YUZI_PHONE_INSTANCE__';
@@ -332,6 +333,11 @@ function scheduleVisibleHomeRefreshAfterTableUpdate() {
     return true;
 }
 
+function handlePhoneBackgroundChatChangedAndMarkRoute(chatId) {
+    markPhoneRouteRefreshPending('chat-changed');
+    return handlePhoneBackgroundChatChanged(chatId);
+}
+
 async function handleQQV2ChatChangedAndRefreshRoute(chatId) {
     const scope = await handleQQV2ChatChanged(chatId);
     if (!scope?.scopeId || isDestroying || !isPhoneVisibleForHomeRefresh()) return scope;
@@ -401,7 +407,7 @@ function setupSlashCommandHandlers() {
  */
 async function registerEventListeners() {
     await registerPhoneEventListeners({
-        onBackgroundChatChanged: handlePhoneBackgroundChatChanged,
+        onBackgroundChatChanged: handlePhoneBackgroundChatChangedAndMarkRoute,
         onVisiblePhoneRefresh: scheduleVisibleHomeRefreshAfterTableUpdate,
         onQQV2ChatChanged: handleQQV2ChatChangedAndRefreshRoute,
         onQQV2ChatDeleted: handleQQV2ChatDeleted,

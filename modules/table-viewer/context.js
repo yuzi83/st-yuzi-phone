@@ -2,8 +2,8 @@ import { getTableData } from '../phone-core/data-api.js';
 import { buildPhoneBackButton, buildPhoneNavBar, buildPhoneNavTitleSwitcher } from '../phone-core/navigation-ui.js';
 import { escapeHtml } from '../utils/dom-escape.js';
 
-export function resolveTableViewerContext(sheetKey) {
-    const rawData = getTableData();
+export function resolveTableViewerContext(sheetKey, options = {}) {
+    const rawData = options.initialTableData || getTableData();
     const sheet = rawData?.[sheetKey];
     if (!sheet || !sheet.content || !Array.isArray(sheet.content) || sheet.content.length === 0) {
         return null;

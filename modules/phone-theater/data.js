@@ -1,7 +1,6 @@
 import { getSheetKeys } from '../phone-core/data-api.js';
 import {
     getTheaterSceneDefinition,
-    getTheaterSceneDefinitionByTableName,
     getTheaterSceneDefinitions,
 } from './config.js';
 import {
@@ -31,8 +30,8 @@ export {
     parseTheaterDeleteKey,
 } from './core/delete-key.js';
 
-export function resolveTheaterSceneTables(rawData, sceneDefinition) {
-    const index = buildTheaterTableIndex(rawData);
+export function resolveTheaterSceneTables(rawData, sceneDefinition, options = {}) {
+    const index = options.index || buildTheaterTableIndex(rawData);
     const scene = sceneDefinition || null;
     if (!scene) {
         return {
@@ -71,6 +70,51 @@ export function resolveTheaterSceneTables(rawData, sceneDefinition) {
     };
 }
 
+function buildAvailableSceneProjection(resolved) {
+    return Object.freeze({
+        ...resolved.scene,
+        primarySheetKey: resolved.primaryTable?.sheetKey || '',
+        rowCount: resolved.rowCount,
+        childSheetKeys: Object.freeze([...resolved.childSheetKeys]),
+    });
+}
+
+function buildSceneSheetProjection(scene, resolved, table) {
+    return Object.freeze({
+        ...scene,
+        sourceTableName: table.tableName,
+        sourceSheetKey: table.sheetKey,
+        rowCount: resolved.rowCount,
+        childSheetKeys: Object.freeze([...resolved.childSheetKeys]),
+    });
+}
+
+export function buildTheaterSceneCatalog(rawData) {
+    const index = buildTheaterTableIndex(rawData, { includeRows: false });
+    const availableScenes = [];
+    const groupedTheaterSheetKeys = new Set();
+    const sceneBySheetKey = new Map();
+
+    getTheaterSceneDefinitions().forEach((scene) => {
+        const resolved = resolveTheaterSceneTables(rawData, scene, { index });
+        if (!resolved.available) return;
+
+        availableScenes.push(buildAvailableSceneProjection(resolved));
+        resolved.childSheetKeys.forEach(sheetKey => groupedTheaterSheetKeys.add(sheetKey));
+        Object.values(resolved.tables).forEach((table) => {
+            if (!table?.sheetKey) return;
+            sceneBySheetKey.set(table.sheetKey, buildSceneSheetProjection(scene, resolved, table));
+        });
+    });
+
+    return Object.freeze({
+        index,
+        availableScenes: Object.freeze(availableScenes),
+        groupedTheaterSheetKeys,
+        sceneBySheetKey,
+    });
+}
+
 export function resolveTheaterNavigationSheetKey(rawData, viewModel, requestedSheetKey) {
     const tables = viewModel?.tables && typeof viewModel.tables === 'object'
         ? viewModel.tables
@@ -90,45 +134,17 @@ export function resolveTheaterNavigationSheetKey(rawData, viewModel, requestedSh
 }
 
 export function getAvailableTheaterScenes(rawData) {
-    return getTheaterSceneDefinitions()
-        .map(scene => resolveTheaterSceneTables(rawData, scene))
-        .filter(resolved => resolved.available)
-        .map(resolved => ({
-            ...resolved.scene,
-            primarySheetKey: resolved.primaryTable?.sheetKey || '',
-            rowCount: resolved.rowCount,
-            childSheetKeys: [...resolved.childSheetKeys],
-        }));
+    return buildTheaterSceneCatalog(rawData).availableScenes;
 }
 
 export function getGroupedTheaterSheetKeys(rawData) {
-    const keys = new Set();
-    getTheaterSceneDefinitions().forEach((scene) => {
-        const resolved = resolveTheaterSceneTables(rawData, scene);
-        if (!resolved.available) return;
-        resolved.childSheetKeys.forEach(sheetKey => keys.add(sheetKey));
-    });
-    return keys;
+    return buildTheaterSceneCatalog(rawData).groupedTheaterSheetKeys;
 }
 
 export function resolveTheaterSceneBySheetKey(rawData, sheetKey) {
-    const index = buildTheaterTableIndex(rawData);
-    const table = index.tableBySheetKey.get(normalizeText(sheetKey));
-    if (!table) return null;
-
-    const scene = getTheaterSceneDefinitionByTableName(table.tableName);
-    if (!scene) return null;
-
-    const resolved = resolveTheaterSceneTables(rawData, scene);
-    if (!resolved.available) return null;
-
-    return {
-        ...scene,
-        sourceTableName: table.tableName,
-        sourceSheetKey: table.sheetKey,
-        rowCount: resolved.rowCount,
-        childSheetKeys: [...resolved.childSheetKeys],
-    };
+    return buildTheaterSceneCatalog(rawData)
+        .sceneBySheetKey
+        .get(normalizeText(sheetKey)) || null;
 }
 
 function buildEditableTableEntries(scene, tables = {}) {

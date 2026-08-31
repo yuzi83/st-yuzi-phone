@@ -1,6 +1,6 @@
 import { Logger } from '../error-handler.js';
 import { getDB } from './db-bridge.js';
-import { getPhoneCoreState } from './state.js';
+import { getPhoneCoreState, markPhoneRouteRefreshPending } from './state.js';
 
 const logger = Logger.withScope({ scope: 'phone-core/callbacks', feature: 'callbacks' });
 const tableUpdateSubscribers = new Set();
@@ -448,6 +448,11 @@ export function initSmartRefreshListener() {
 
     const registered = registerTableUpdateListener((newData) => {
         const state = getPhoneCoreState();
+        if (state.isPhoneActive === false) {
+            markPhoneRouteRefreshPending('table-update', state);
+            return;
+        }
+
         const sheetKey = String(state.currentViewingSheetKey || '').trim();
         if (!sheetKey) {
             shouldSkipSmartRefresh(state, sheetKey, '');

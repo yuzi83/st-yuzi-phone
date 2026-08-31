@@ -156,7 +156,7 @@ sequenceDiagram
 - `app:<sheetKey>` 兼容 route -> 复用同一目录分类，只为历史链接和 history 保留；它不是跨表循环的目标 route，不参与 content preset 绑定或自动刷新。
 - `theater:<sceneId>` 兼容 route -> [`renderTheaterScene()`](../modules/phone-theater/render.js:118) 的历史 scene 入口；正常用户入口必须使用主物理表的 `table:<sheetKey>`，它不参与 content preset 绑定或自动刷新。
 - `table-generic:<sheetKey>` -> [`renderTableViewer()`](../modules/table-viewer/render.js:23) with force generic list mode；它只保留给小剧场编辑桥，永久旁路 content preset。
-- `qq` / `qq:*` -> 最小安全 fallback。QQ App 图标仍保留，但在 Figma UI 融合前不得加载旧页面、旧路由参数或旧存储模型。
+- `qq` / `qq:*` -> [`createQQRouteLifecycle()`](../modules/qq-v2/ui/route-lifecycle.js) 驱动的 QQ v2 App。route page 先同步提交只含现有 QQ class 的轻量骨架，再在后台动态加载 UI、runtime Facade 与 bootstrap；旧 route 被销毁或 render token 失效后，迟到的 mount 不得写入新页面。
 - table-update-review route -> [`renderTableUpdateReview()`](../modules/table-update-review/index.js:112)
 - settings route -> [`renderSettings()`](../modules/settings-app/render.js:102)
 - fusion route -> [`renderFusion()`](../modules/phone-fusion/render.js:80)
@@ -372,7 +372,10 @@ sequenceDiagram
 - [`default-runtime.js`](../modules/qq-v2/runtime/default-runtime.js) 负责扩展级 runtime 生命周期与宿主事件转发；[`production-runtime.js`](../modules/qq-v2/application/production-runtime.js) 组合状态仓储、请求、世界书和主动消息服务。
 - [`runtime.js`](../modules/qq-v2/runtime/runtime.js) 通过 [`scope-coordinator.js`](../modules/qq-v2/runtime/scope-coordinator.js) 管理 Scope Session：每次 refresh 请求立即撤销旧 Session，即使 scopeId 相同也创建新 generation；宿主读取、转场与 ready 回调仍在单一 host mutation lane 串行，只有最新请求可发布 ready Session，旧 Session 的异步写入必须以 `scope_inactive` 停止。
 - 宿主 `CHAT_CHANGED` 完成新 Scope Session 后，若手机当前可见且 route 为 `qq` 或 `qq:*`，入口层必须重渲当前 route，让旧 QQ lifecycle 销毁并以新 Session 重挂；Facade 订阅故意只接收挂载时的 scope 事件，不能把跨 scope 通知当成普通页面刷新。
-- [`state-store.js`](../modules/qq-v2/storage/state-store.js) 保存 v2 领域状态；会话、消息、资源与世界书投影不写回表格。
+- [`state-store.js`](../modules/qq-v2/storage/state-store.js) 保存 v2 领域状态；会话、消息、资源与世界书投影不写回表格。数据库 `yuzi-phone-qq-v2` 当前版本为 2：`state/root` 只保存结构化领域状态和媒体 `mediaKey`，图片资料、表情与 scope 图片的原始 Blob 单独保存在 `media` object store。
+- IndexedDB v1 → v2 在同一个升级事务中把旧根状态 Blob 搬到 `media` store，并把根状态改写为元数据引用；任一写入失败必须让整个升级事务回滚，不能先删旧 Blob 再补写媒体。
+- Repository 与资源模块的列表查询只返回轻量元数据；只有 `getMediaAsset()`、`getStickerBlob()`、图片资料包导出或渲染租约实际需要内容时才通过 `readMedia(mediaKey)` 读取 Blob。删除最后一个媒体引用时，state 与 media 的删除在同一个事务中提交。
+- QQ 用户上传的头像、资料背景、聊天背景和表情不写入生图专属文件夹。生图路径由已有生成器/宿主文件能力管理；用户上传 Blob 则由浏览器持久媒体仓库管理，两者不能因为都显示图片就混成同一生命周期。
 - [`action-service.js`](../modules/qq-v2/protocol/action-service.js) 解析并原子校验 AI 动作批次，[`projection-service.js`](../modules/qq-v2/worldbook/projection-service.js) 管理真实世界书条目投影与恢复。
 - [`conversation-swipe.js`](../modules/qq-v2/ui/conversation-swipe.js) 独立管理消息页会话行的横向拖动、开合吸附和滑动后点击抑制；拖动偏移通过 `--yuzi-qq-swipe-offset` 交给 CSS，删除确认与领域删除仍由 [`app.js`](../modules/qq-v2/ui/app.js) 和 Facade 负责。
 - 世界书投影以 `YuziQQ｜私聊｜人物真名｜<完整 conversationId>` / `YuziQQ｜群聊｜群名｜<完整 conversationId>` 作为稳定公开身份。`conversationId` 决定归属，Repository 保存的 `entryUid` 提供快速定位，`extensions.yuziPhoneQQV2 = { version, scopeId, conversationId }` 只作为辅助 marker；人物或群聊改名时在原 UID 更新 comment。外部 TavernHelper 整书重写即使丢失未知 `extensions`，也不会使 QQ 创建第二条投影。
@@ -426,9 +429,11 @@ flowchart LR
 
 - 禁止恢复旧 QQ v1 运行时、存储模型、页面、样式、路由参数、迁移或兼容分支。
 - QQ v2 与当前酒馆聊天作用域绑定，但 QQ 内容不是正文表格数据；切换作用域由 v2 runtime 和仓储维护。
+- 普通全局设置读取必须先走只读 `stateStore.read()`，仅在发现旧字段或缺少共享设置时执行迁移事务；已迁移查询不得为“规范化”反复写回整份根状态。
+- Runtime 查询不得先用 `repository.getScope()` 读取整份根状态再执行真正查询；直接查询并仅把 `scope_not_found` 归一化为空结果。同一微任务中的重复 bootstrap 快照可以复用一个进行中的 Promise，但不得形成跨轮长期缓存。
 - 修改图片资料包格式、覆盖范围或 Facade/Runtime 接线时，必须同步更新并通过 [`check-qq-image-library-pack-contract.cjs`](../scripts/check-qq-image-library-pack-contract.cjs)。
 - 世界书列表、角色绑定、世界书读写和聊天文件查证必须使用第 4.1 节登记的宿主 API；遇到新宿主需求先扩展桥接层与本节清单，不在业务代码中临时硬编码。
-- Figma UI 融合前，首页 QQ App 只能进入最小安全 fallback，不能借用旧 UI 作为临时回退。
+- QQ route 只能挂载当前 v2 UI，不能借用或恢复旧 QQ v1 UI、旧路由参数或旧存储模型作为加载 fallback。
 - 不要在 Table Viewer、通用表 CRUD 或 Theater 中补回 QQ 分支；广场、论坛等小剧场仍由 `modules/phone-theater/**` 独立维护。
 
 ## 6. UI 模块职责
@@ -1427,11 +1432,13 @@ graph TD
 
 ### QQ 视图刷新状态
 
+- QQ route 首次进入时由 [`route-renderer.js`](../modules/phone-core/route-renderer.js) 立即提交消息页骨架，并立刻登记 route page cleanup；动态 import、Facade bootstrap 和 App mount 在后台继续。骨架只提供稳定视觉框架，不承载可交互的伪数据。
 - [`createPhoneViewScrollState()`](../modules/phone-core/view-scroll-state.js) 是跨 App 复用入口。页面必须显式注册页面 key、滚动根和恢复模式；动态列表使用稳定内容锚点，设置表单使用受限的 `scrollTop`。
 - 滚动快照同时绑定作用域 key、页面 key 和注册 key。切换 SillyTavern 聊天、QQ 根 Tab、会话或设置二级页后，旧快照必须失效，禁止把滚动位置串到另一个视图。
 - [`createViewSnapshotCache()`](../modules/qq-v2/ui/view-snapshot-cache.js) 只为消息根页、私聊页和会话设置页保留有限的上一帧 DOM，当前容量为 4；切换时必须先恢复目标快照，没有快照则立即提交固定页面框架，再从 Facade 后台读取事实数据并原子替换。图片资料等媒体密集页面不进入 DOM 快照缓存，禁止把该机制扩展成全页面常驻缓存。
-- [`createRenderLeaseCoordinator()`](../modules/qq-v2/ui/render-lease-coordinator.js) 管理 QQ 渲染期 Blob URL。新 DOM 完成替换前保留旧画面的租约；相同资源跨刷新复用，只有后继画面确认不再使用或 QQ 销毁时才释放。
+- [`createRenderLeaseCoordinator()`](../modules/qq-v2/ui/render-lease-coordinator.js) 管理 QQ 渲染期 Blob URL。新 DOM 完成替换前保留旧画面的租约；相同资源跨刷新复用，只有后继画面确认不再使用或 QQ 销毁时才释放。图片资料页可在 render commit 前用 `peek()` 预留 key，并在 commit 后等资源接近可见区时延迟 `load()`；abort 后禁止再申请租约。
 - 普通媒体保持零空闲缓存；聊天/资料背景、头像和表情分别使用独立的有限租约缓存，当前上限为 8、48、96。删除图片资料时必须同步失效头像与背景缓存，恢复 DOM 快照时不得引用已释放的 Blob URL。
+- 图片资料页复用 [`createLazyLoader()`](../modules/utils/observers.js)，以二级页滚动容器为观察 root、在可见区前后 `180px` 预取；图片与表情共用最多 4 个并发媒体任务并使用异步解码。每轮 QQ render 和 destroy 都必须断开旧 observer、丢弃未开始任务，过期 token 不得应用迟到结果。
 - Facade 高频通知由 QQ route lifecycle 合并为“一个进行中刷新 + 一个最新待刷新”。保存动作仍以运行时状态为事实源，但同一波通知不得并发重建多份页面。
 - 小手机 resize start 只关闭临时交互层并恢复当前视图锚点，不得为了响应 CSS 尺寸变化重建业务页面。
 
@@ -1454,7 +1461,7 @@ graph TD
 - 通用模板样式必须以 [`phone-generic-template-scope`](../styles/05-phone-generic-template.css:7) 为根。
 - 通用模板 token 优先级必须保持 `payload inline > --_gt-* > --yuzi-theme-* > fallback`，不要为了“统一”把 `--_gt-*` 抹掉，否则会直接破坏模板内联样式覆盖链。
 - Theater 样式必须以 [`phone-theater-page`](../styles/phone-theater/00-core.css:7) 和 `data-theater-scene` 为根。
-- QQ v2 Figma UI 接入前不新增 QQ 页面样式层；现有安全 fallback 不依赖旧聊天样式。
+- QQ v2 页面样式统一保留在 [`styles/phone-base/12-qq-app.css`](../styles/phone-base/12-qq-app.css) 的 `.yuzi-qq-app` 作用域内；route 启动骨架必须复用同一 token 和现有 QQ class，不建立第二套加载主题。
 - 新增页面样式必须先确认作用域根，再决定是否进入 base、template、scene 或 page-specific 层。
 - `!important` 只能用于压制宿主输入控件样式等明确场景；新增前必须确认普通作用域、token 或 import 顺序无法解决。
 - 设置页/变量管理/缝合反馈等基础页面颜色统一走 `--yuzi-settings-*` 或 `--vm-* -> --yuzi-theme-*` 映射链路；允许保留 `--yuzi-phone-*` 仅用于布局语义变量（如安全宽度、radius、文本缩放倍率），不要把布局变量和主题颜色变量混为一谈。

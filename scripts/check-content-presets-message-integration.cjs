@@ -86,11 +86,15 @@ async function main() {
         tryRenderContentPreset: async () => false,
     });
     await fallbackRoute.render({ page: 'contacts-fallback' });
-    assert.deepEqual(originalCalls.pop(), [
+    const fallbackCall = originalCalls.pop();
+    assert.deepEqual(fallbackCall.slice(0, 2), [
         { page: 'contacts-fallback' },
         'sheet_contacts',
-        { forceGenericList: true, navigationSheetKey: 'sheet_contacts' },
     ]);
+    assert.equal(fallbackCall[2].forceGenericList, true);
+    assert.equal(fallbackCall[2].navigationSheetKey, 'sheet_contacts');
+    assert.equal(fallbackCall[2].initialTableData, rawData);
+    assert.equal(fallbackCall[2].initialNavigationContext.catalog[0].sheetKey, 'sheet_contacts');
 
     let bypassPresetCalls = 0;
     const bypassCalls = [];

@@ -485,8 +485,9 @@ function main() {
     pushCheck(results, 'diaryCss', 'diary CSS 删除选择按钮不被装饰遮挡', has(contents.diaryCss, '.phone-theater-select-toggle') && has(contents.diaryCss, 'z-index: 12') && has(contents.diaryCss, 'pointer-events: none'));
     pushCheck(results, 'homeCss', '桌面普通 App text icon 使用正方形尺寸', has(contents.homeCss, '.phone-app-icon-svg .phone-dock-text-icon') && has(contents.homeCss, 'width: 100%') && has(contents.homeCss, 'height: 100%'));
 
-    pushCheck(results, 'homeViewModel', '首页 view-model 导入组合数据函数', has(contents.homeViewModel, "from '../phone-theater/data.js'"));
-    pushCheck(results, 'homeViewModel', '首页 view-model 生成组合 app', has(contents.homeViewModel, 'getAvailableTheaterScenes(rawData).forEach'));
+    pushCheck(results, 'homeViewModel', '首页 view-model 复用统一导航上下文', has(contents.homeViewModel, "from '../table-navigation/catalog.js'")
+        && has(contents.homeViewModel, 'buildTableNavigationContext(rawData)'));
+    pushCheck(results, 'homeViewModel', '首页 view-model 生成组合 app', has(contents.homeViewModel, '(navigationContext?.theaterScenes || []).forEach'));
     pushCheck(results, 'homeViewModel', '首页 view-model 使用组合 appKey', has(contents.homeViewModel, 'key: scene.appKey'));
     pushCheck(results, 'homeViewModel', '首页 view-model 通过主物理表目录写入组合 route', has(contents.homeViewModel, "from '../table-navigation/catalog.js'")
         && has(contents.homeViewModel, 'scene.primarySheetKey')
@@ -498,17 +499,17 @@ function main() {
     pushCheck(results, 'routeRenderer', 'route-renderer 识别 theater route', has(contents.routeRenderer, 'if (isTheaterRoute(route))'));
     pushCheck(results, 'routeRenderer', 'route-renderer 动态导入 theater render', has(contents.routeRenderer, "await import('../phone-theater/render.js')"));
     pushCheck(results, 'routeRenderer', 'route-renderer 调用 renderTheaterScene() 并传递 renderToken', has(contents.routeRenderer, 'renderTheaterScene(page, sceneId, { renderToken })'));
-    pushCheck(results, 'routeRenderer', 'route-renderer 普通 app 子表复用统一目录进入 theater scene', has(contents.routeRenderer, "import('./data-api.js')") && has(contents.routeRenderer, "import('../table-navigation/catalog.js')") && has(contents.routeRenderer, 'resolveTableNavigationTarget(getTableData(), sheetKey)') && has(contents.routeRenderer, "target?.presentation === 'theater'") && has(contents.routeRenderer, "routeType: 'theater-app-redirect'") && has(contents.routeRenderer, 'renderTheaterScene(page, target.sceneId, {') && has(contents.routeRenderer, 'navigationSheetKey: target.sheetKey'));
+    pushCheck(results, 'routeRenderer', 'route-renderer 普通 app 子表复用统一目录进入 theater scene', has(contents.routeRenderer, "import('./data-api.js')") && has(contents.routeRenderer, "import('../table-navigation/catalog.js')") && has(contents.routeRenderer, 'const navigationContext = buildTableNavigationContext(initialTableData);') && has(contents.routeRenderer, 'resolveTableNavigationTarget(initialTableData, sheetKey, { navigationContext })') && has(contents.routeRenderer, "target?.presentation === 'theater'") && has(contents.routeRenderer, "routeType: 'theater-app-redirect'") && has(contents.routeRenderer, 'renderTheaterScene(page, target.sceneId, {') && has(contents.routeRenderer, 'navigationSheetKey: target.sheetKey'));
     pushCheck(results, 'routeRenderer', 'route-renderer 支持 table-generic 强制通用表 route', has(contents.routeRenderer, 'TABLE_GENERIC_ROUTE_PREFIX') && has(contents.routeRenderer, "routeType: 'table-generic'") && has(contents.routeRenderer, 'forceGenericList: true'));
 
-    pushCheck(results, 'visibilitySettings', '隐藏设置导入组合数据函数', has(contents.visibilitySettings, "from '../../../phone-theater/data.js'"));
-    pushCheck(results, 'visibilitySettings', '隐藏设置生成组合项', has(contents.visibilitySettings, 'const theaterItems = getAvailableTheaterScenes(rawData).map'));
-    pushCheck(results, 'visibilitySettings', '隐藏设置过滤已成组子表', has(contents.visibilitySettings, 'groupedTheaterSheetKeys.has(sheetKey)'));
+    pushCheck(results, 'visibilitySettings', '隐藏设置复用共享 App 目录', has(contents.visibilitySettings, "import { collectAppearanceIconSlots } from './icon-slots.js';"));
+    pushCheck(results, 'visibilitySettings', '隐藏设置支持页面传入预建目录', has(contents.visibilitySettings, 'Array.isArray(options.items)'));
+    pushCheck(results, 'visibilitySettings', '隐藏设置不展示 dock 图标位', has(contents.visibilitySettings, ".filter(item => item.type !== 'dock')"));
 
-    pushCheck(results, 'iconUploadService', '自定义图标复用共享 icon slot 枚举', has(contents.iconUploadService, "import { collectAppearanceIconSlots } from './icon-slots.js';") && has(contents.iconUploadService, 'collectAppearanceIconSlots(rawData)'));
-    pushCheck(results, 'iconSlots', '自定义图标导入 theater 分组函数', has(contents.iconSlots, "from '../../../phone-theater/data.js'"));
-    pushCheck(results, 'iconSlots', '自定义图标生成 theater 虚拟项', has(contents.iconSlots, 'const theaterItems = getAvailableTheaterScenes(rawData).map'));
-    pushCheck(results, 'iconSlots', '自定义图标过滤 theater 子表', has(contents.iconSlots, 'groupedTheaterSheetKeys.has(sheetKey)'));
+    pushCheck(results, 'iconUploadService', '自定义图标复用共享 icon slot 枚举', has(contents.iconUploadService, "import { collectAppearanceIconSlots } from './icon-slots.js';") && has(contents.iconUploadService, 'const iconSlots = Array.isArray(safeOptions.items)'));
+    pushCheck(results, 'iconSlots', '自定义图标复用统一导航上下文', has(contents.iconSlots, "from '../../../table-navigation/catalog.js'") && has(contents.iconSlots, 'options.navigationContext || buildTableNavigationContext(rawData)'));
+    pushCheck(results, 'iconSlots', '自定义图标生成 theater 虚拟项', has(contents.iconSlots, 'navigationContext.theaterScenes.map'));
+    pushCheck(results, 'iconSlots', '自定义图标过滤 theater 子表', has(contents.iconSlots, "filter(item => item.presentation === 'generic')"));
 
     pushCheck(results, 'specDoc', '扩展规范文档包含 scene module 契约', has(contents.specDoc, 'Scene module 必填契约') && has(contents.specDoc, 'buildViewModel') && has(contents.specDoc, 'deleteEntities'));
     pushCheck(results, 'specDoc', '扩展规范文档明确禁止裸 delete key', has(contents.specDoc, '禁止使用裸自然键') && has(contents.specDoc, 'role:rowIndex:encodedIdentity'));

@@ -64,6 +64,13 @@ async function bytes(blob) {
     return [...new Uint8Array(await blob.arrayBuffer())];
 }
 
+async function storedBytes(stateStore, record) {
+    assert.equal(Object.hasOwn(record, 'blob'), false, 'QQ 根状态不得继续内嵌 Blob');
+    assert.equal(typeof record.mediaKey, 'string');
+    assert.notEqual(record.mediaKey, '');
+    return bytes(await stateStore.readMedia(record.mediaKey));
+}
+
 async function testRoundTripAndAtomicAppend() {
     const { createQQImageLibraryPackService } = await importModule('modules/qq-v2/resources/image-library-pack.js');
     const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
@@ -125,14 +132,28 @@ async function testRoundTripAndAtomicAppend() {
     assert.deepEqual(Object.keys(state.sharedResources[IMAGE_LIBRARY_KEY]).sort(), [
         'avatar-1', 'avatar-1(1)', 'chat-1', 'old', 'profile-1',
     ]);
-    assert.deepEqual(await bytes(state.sharedResources[IMAGE_LIBRARY_KEY]['avatar-1'].blob), [98], '同 ID 旧图片必须保留');
-    assert.deepEqual(await bytes(state.sharedResources[IMAGE_LIBRARY_KEY]['avatar-1(1)'].blob), [1, 2, 3]);
+    assert.deepEqual(
+        await storedBytes(targetStore, state.sharedResources[IMAGE_LIBRARY_KEY]['avatar-1']),
+        [98],
+        '同 ID 旧图片必须保留',
+    );
+    assert.deepEqual(
+        await storedBytes(targetStore, state.sharedResources[IMAGE_LIBRARY_KEY]['avatar-1(1)']),
+        [1, 2, 3],
+    );
     assert.equal(state.sharedResources[IMAGE_LIBRARY_KEY]['avatar-1(1)'].mimeType, 'image/png');
     assert.deepEqual(state.sharedResources[STICKERS_KEY].stickers.map((item) => item.id), [
         'old-sticker', 'sticker-1', 'sticker-1(1)',
     ]);
-    assert.deepEqual(await bytes(state.sharedResources[STICKERS_KEY].stickers[1].blob), [98], '同 ID 旧表情必须保留');
-    assert.deepEqual(await bytes(state.sharedResources[STICKERS_KEY].stickers[2].blob), [9, 10]);
+    assert.deepEqual(
+        await storedBytes(targetStore, state.sharedResources[STICKERS_KEY].stickers[1]),
+        [98],
+        '同 ID 旧表情必须保留',
+    );
+    assert.deepEqual(
+        await storedBytes(targetStore, state.sharedResources[STICKERS_KEY].stickers[2]),
+        [9, 10],
+    );
     assert.equal(state.sharedResources[STICKERS_KEY].stickers[2].order, 11, '导入表情必须排在现有最大顺序之后');
 
     await createQQImageLibraryPackService({ stateStore: targetStore }).importPack(pack);
@@ -160,9 +181,11 @@ async function testExportUsesOneNormalizedMimeType() {
 
     await service.importPack(pack);
     const state = await store.read();
-    assert.equal(state.sharedResources[IMAGE_LIBRARY_KEY]['avatar-mime'].blob.type, 'image/png');
-    assert.equal(state.sharedResources[IMAGE_LIBRARY_KEY]['avatar-mime(1)'].blob.type, 'image/webp');
-    assert.deepEqual(await bytes(state.sharedResources[IMAGE_LIBRARY_KEY]['avatar-mime(1)'].blob), [11, 12]);
+    const originalBlob = await store.readMedia(state.sharedResources[IMAGE_LIBRARY_KEY]['avatar-mime'].mediaKey);
+    const importedBlob = await store.readMedia(state.sharedResources[IMAGE_LIBRARY_KEY]['avatar-mime(1)'].mediaKey);
+    assert.equal(originalBlob.type, 'image/png');
+    assert.equal(importedBlob.type, 'image/webp');
+    assert.deepEqual(await bytes(importedBlob), [11, 12]);
 }
 
 async function testInvalidPacksNeverWrite() {

@@ -395,6 +395,7 @@ export function renderAppearancePage(ctx) {
     } = ctx;
     const getLayoutValue = appearancePageService.getLayoutValue;
     const getPhoneSettings = appearancePageService.getPhoneSettings;
+    const buildAppearanceAppCatalog = appearancePageService.buildAppearanceAppCatalog;
     const setupBgUpload = appearancePageService.setupBgUpload;
     const setupIconLayoutSettings = appearancePageService.setupIconLayoutSettings;
     const setupAppearanceToggles = appearancePageService.setupAppearanceToggles;
@@ -418,6 +419,9 @@ export function renderAppearancePage(ctx) {
         appGridGap: getLayoutValue('appGridGap', defaultSettings.appGridGap),
         dockIconSize: getLayoutValue('dockIconSize', defaultSettings.dockIconSize),
     };
+    const appearanceAppCatalog = buildAppearanceAppCatalog();
+    const iconSlots = appearanceAppCatalog.iconSlots;
+    const visibilityItems = iconSlots.filter(item => item.type !== 'dock');
 
     container.innerHTML = buildAppearancePageHtml({
         layoutValues,
@@ -448,8 +452,14 @@ export function renderAppearancePage(ctx) {
         runtime.registerCleanup(setupBgUpload(container, { runtime }));
         runtime.registerCleanup(setupIconLayoutSettings(container));
         runtime.registerCleanup(setupAppearanceToggles(container));
-        runtime.registerCleanup(renderHiddenTableAppsList(container.querySelector('#phone-hidden-table-apps')));
-        runtime.registerCleanup(renderIconUploadList(container.querySelector('#phone-icon-upload-list'), { runtime }));
+        runtime.registerCleanup(renderHiddenTableAppsList(
+            container.querySelector('#phone-hidden-table-apps'),
+            { items: visibilityItems },
+        ));
+        runtime.registerCleanup(renderIconUploadList(
+            container.querySelector('#phone-icon-upload-list'),
+            { runtime, items: iconSlots },
+        ));
         runtime.registerCleanup(bindAppearanceResourcePackActions(ctx, runtime));
         runtime.registerCleanup(bindAppearanceFontLibraryActions(ctx, runtime));
         runtime.registerCleanup(setupReadableTextScaleSettings(container));
@@ -459,8 +469,14 @@ export function renderAppearancePage(ctx) {
         registerCleanup(setupBgUpload(container));
         registerCleanup(setupIconLayoutSettings(container));
         registerCleanup(setupAppearanceToggles(container));
-        registerCleanup(renderHiddenTableAppsList(container.querySelector('#phone-hidden-table-apps')));
-        registerCleanup(renderIconUploadList(container.querySelector('#phone-icon-upload-list')));
+        registerCleanup(renderHiddenTableAppsList(
+            container.querySelector('#phone-hidden-table-apps'),
+            { items: visibilityItems },
+        ));
+        registerCleanup(renderIconUploadList(
+            container.querySelector('#phone-icon-upload-list'),
+            { items: iconSlots },
+        ));
         registerCleanup(bindAppearanceResourcePackActions(ctx, null));
         registerCleanup(bindAppearanceFontLibraryActions(ctx, null));
         registerCleanup(setupReadableTextScaleSettings(container));

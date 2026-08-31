@@ -1133,6 +1133,59 @@
     line-height: var(--yuzi-qq-nav-label-line-height);
 }
 
+.yuzi-qq-route-skeleton {
+    pointer-events: none;
+}
+
+.yuzi-qq-route-skeleton-list {
+    padding-block-start: 0;
+}
+
+.yuzi-qq-route-skeleton-row {
+    cursor: default;
+}
+
+.yuzi-qq-route-skeleton-avatar,
+.yuzi-qq-route-skeleton-line,
+.yuzi-qq-route-skeleton-nav-icon {
+    display: block;
+    border-radius: var(--yuzi-phone-radius-pill);
+    background: var(--yuzi-qq-control);
+}
+
+.yuzi-qq-route-skeleton-avatar {
+    flex: 0 0 var(--yuzi-qq-avatar-size);
+    inline-size: var(--yuzi-qq-avatar-size);
+    block-size: var(--yuzi-qq-avatar-size);
+}
+
+.yuzi-qq-route-skeleton-copy {
+    justify-content: center;
+}
+
+.yuzi-qq-route-skeleton-line {
+    block-size: 0.62em;
+}
+
+.yuzi-qq-route-skeleton-line.is-title {
+    inline-size: min(44%, 8rem);
+}
+
+.yuzi-qq-route-skeleton-line.is-preview {
+    inline-size: min(72%, 14rem);
+}
+
+.yuzi-qq-route-skeleton-line.is-meta {
+    align-self: flex-start;
+    inline-size: 2.5rem;
+    margin-block-start: 0.35rem;
+}
+
+.yuzi-qq-route-skeleton-nav-icon {
+    inline-size: var(--yuzi-qq-nav-icon-size);
+    block-size: var(--yuzi-qq-nav-icon-size);
+}
+
 /* Figma continuous list sheet and its tokenized search band. */
 .yuzi-qq-list-sheet {
     display: flex;

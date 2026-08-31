@@ -1,4 +1,3 @@
-import { getTableData } from '../../../phone-core/data-api.js';
 import {
     getPhoneSettings,
     savePhoneSettingsPatch,
@@ -37,6 +36,9 @@ export function createIconUploadService(deps = {}) {
 
         const safeOptions = options && typeof options === 'object' ? options : {};
         const runtime = safeOptions.runtime || safeOptions.pageRuntime || null;
+        const iconSlots = Array.isArray(safeOptions.items)
+            ? safeOptions.items
+            : collectAppearanceIconSlots();
         let disposed = false;
         let currentCleanups = [];
 
@@ -175,14 +177,13 @@ export function createIconUploadService(deps = {}) {
             if (disposed) return;
             resetBoundListeners();
 
-            const rawData = getTableData();
             const phoneSettings = getPhoneSettings();
             const currentIcons = phoneSettings.appIcons || {};
             const currentIconsBytes = estimateIconsStorageBytes(currentIcons);
             const totalLimitText = formatFileSize(STORAGE_BUDGETS.appIconsTotalBytes, 2);
             const totalUsageText = formatFileSize(currentIconsBytes, 2);
 
-            if (!rawData) {
+            if (iconSlots.length === 0) {
                 listEl.innerHTML = '<div class="phone-empty-msg">无数据</div>';
                 return;
             }
@@ -193,8 +194,7 @@ export function createIconUploadService(deps = {}) {
                 && activePackState.id === activePackId
                 && !activePackState.ready;
 
-            const allItems = collectAppearanceIconSlots(rawData);
-            const slotMap = new Map(allItems.map(item => [item.key, item]));
+            const slotMap = new Map(iconSlots.map(item => [item.key, item]));
 
             const summaryHtml = `
                 <div class="phone-settings-desc" style="margin-bottom:10px;">
@@ -227,7 +227,7 @@ export function createIconUploadService(deps = {}) {
                 </div>
             `;
 
-            listEl.innerHTML = summaryHtml + allItems.map((item) => {
+            listEl.innerHTML = summaryHtml + iconSlots.map((item) => {
                 const hasCustom = phoneSettings.appIcons?.[item.key];
                 return `
                     <div class="phone-icon-upload-row" data-icon-key="${escapeHtmlAttr(item.key)}">

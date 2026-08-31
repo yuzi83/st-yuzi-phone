@@ -1,11 +1,8 @@
-import {
-    getTableData,
-    getSheetKeys,
-} from '../../../phone-core/data-api.js';
+import { getTableData } from '../../../phone-core/data-api.js';
+import { buildTableNavigationContext } from '../../../table-navigation/catalog.js';
 import { VARIABLE_MANAGER_APP } from '../../../variable-manager/index.js';
 import { QQ_APP } from '../../../qq-v2/app-definition.js';
 import { TABLE_UPDATE_REVIEW_APP_ID, TABLE_UPDATE_REVIEW_APP_NAME } from '../../../table-update-review/constants.js';
-import { getAvailableTheaterScenes, getGroupedTheaterSheetKeys } from '../../../phone-theater/data.js';
 
 const DOCK_ICON_SLOTS = Object.freeze([
     Object.freeze({ key: 'dock_settings', name: '设置', type: 'dock' }),
@@ -41,23 +38,22 @@ function dedupeIconSlots(slots) {
     return normalized;
 }
 
-export function collectAppearanceIconSlots(rawData = getTableData()) {
+export function collectAppearanceIconSlots(rawData = getTableData(), options = {}) {
     if (!rawData || typeof rawData !== 'object') {
         return [];
     }
 
-    const sheetKeys = getSheetKeys(rawData);
-    const groupedTheaterSheetKeys = getGroupedTheaterSheetKeys(rawData);
-    const theaterItems = getAvailableTheaterScenes(rawData).map((scene) => ({
+    const navigationContext = options.navigationContext || buildTableNavigationContext(rawData);
+    const theaterItems = navigationContext.theaterScenes.map((scene) => ({
         key: scene.appKey,
         name: scene.name,
         type: 'theater',
     }));
-    const tableItems = sheetKeys
-        .filter(sheetKey => !groupedTheaterSheetKeys.has(sheetKey))
-        .map((key) => ({
-            key,
-            name: rawData[key]?.name || key,
+    const tableItems = navigationContext.catalog
+        .filter(item => item.presentation === 'generic')
+        .map((item) => ({
+            key: item.sheetKey,
+            name: item.tableName,
             type: 'table',
         }));
 
@@ -69,4 +65,13 @@ export function collectAppearanceIconSlots(rawData = getTableData()) {
         ...tableItems,
         ...DOCK_ICON_SLOTS,
     ]);
+}
+
+export function buildAppearanceAppCatalog(rawData = getTableData()) {
+    const navigationContext = buildTableNavigationContext(rawData);
+    return Object.freeze({
+        rawData,
+        navigationContext,
+        iconSlots: collectAppearanceIconSlots(rawData, { navigationContext }),
+    });
 }

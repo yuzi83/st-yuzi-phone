@@ -3,9 +3,8 @@ import { formatTableCountBadge, getHomeDockApps, getSheetRowCount, normalizeHidd
 import { getIconForSheet, getTextIcon } from './icons.js';
 import { formatQQHomeUnreadBadge, normalizeQQHomeUnreadTotal } from './qq-unread.js';
 import { VARIABLE_MANAGER_APP, getVariableManagerIcon } from '../variable-manager/index.js';
-import { getAvailableTheaterScenes, getGroupedTheaterSheetKeys } from '../phone-theater/data.js';
 import { QQ_APP } from '../qq-v2/app-definition.js';
-import { buildTableNavigationCatalog } from '../table-navigation/catalog.js';
+import { buildTableNavigationContext } from '../table-navigation/catalog.js';
 import {
     TABLE_UPDATE_REVIEW_APP_ICON_TEXT,
     TABLE_UPDATE_REVIEW_APP_ID,
@@ -27,7 +26,9 @@ export function buildHomeScreenViewModel(rawData, phoneSettings, options = {}) {
     const hiddenTableApps = normalizeHiddenTableApps(phoneSettings?.hiddenTableApps);
     const hideTableCountBadge = !!phoneSettings?.hideTableCountBadge;
     const qqUnreadTotal = normalizeQQHomeUnreadTotal(options?.qqUnreadTotal);
-    const tableCatalog = rawData ? buildTableNavigationCatalog(rawData) : [];
+    const navigationContext = options.navigationContext
+        || (rawData ? buildTableNavigationContext(rawData) : null);
+    const tableCatalog = navigationContext?.catalog || [];
     const tableTargetBySheetKey = new Map(tableCatalog.map(target => [target.sheetKey, target]));
 
     const apps = [];
@@ -93,10 +94,10 @@ export function buildHomeScreenViewModel(rawData, phoneSettings, options = {}) {
         });
     }
 
-    const groupedTheaterSheetKeys = rawData ? getGroupedTheaterSheetKeys(rawData) : new Set();
+    const groupedTheaterSheetKeys = navigationContext?.groupedTheaterSheetKeys || new Set();
 
     if (rawData) {
-        getAvailableTheaterScenes(rawData).forEach((scene) => {
+        (navigationContext?.theaterScenes || []).forEach((scene) => {
             if (hiddenTableApps[scene.appKey]) return;
 
             const target = tableTargetBySheetKey.get(scene.primarySheetKey);

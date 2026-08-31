@@ -16,6 +16,7 @@ const FILES = {
     settingsAppRender: 'modules/settings-app/render.js',
     backgroundService: 'modules/settings-app/services/appearance-settings/background-service.js',
     iconUploadService: 'modules/settings-app/services/appearance-settings/icon-upload-service.js',
+    iconSlots: 'modules/settings-app/services/appearance-settings/icon-slots.js',
     layoutSettings: 'modules/settings-app/services/appearance-settings/layout-settings.js',
     visibilitySettings: 'modules/settings-app/services/appearance-settings/visibility-settings.js',
     tableViewerRender: 'modules/table-viewer/render.js',
@@ -99,9 +100,11 @@ function main() {
     check(results, 'backgroundService', 'background-service 改为直接从 settings 导入基础设置能力', has(contents.backgroundService, "from '../../../settings.js';"));
     check(results, 'backgroundService', 'background-service 不再从 phone-core façade 导入', !has(contents.backgroundService, "from '../../../phone-core.js';"));
 
-    check(results, 'iconUploadService', 'icon-upload-service 改为直接从 data-api 导入表格能力', has(contents.iconUploadService, "from '../../../phone-core/data-api.js';"));
+    check(results, 'iconUploadService', 'icon-upload-service 复用共享图标位目录且不再自行读取表格', has(contents.iconUploadService, "from './icon-slots.js';")
+        && !has(contents.iconUploadService, "from '../../../phone-core/data-api.js';"));
     check(results, 'iconUploadService', 'icon-upload-service 改为直接从 settings 导入基础设置能力', has(contents.iconUploadService, "from '../../../settings.js';"));
     check(results, 'iconUploadService', 'icon-upload-service 不再从 phone-core façade 导入', !has(contents.iconUploadService, "from '../../../phone-core.js';"));
+    check(results, 'iconSlots', 'icon-slots 直接从 data-api 导入表格能力', has(contents.iconSlots, "from '../../../phone-core/data-api.js';"));
 
     check(results, 'layoutSettings', 'layout-settings 改为直接从 settings 导入基础设置能力', has(contents.layoutSettings, "from '../../../settings.js';"));
     check(results, 'layoutSettings', 'layout-settings 不再从 phone-core façade 导入', !has(contents.layoutSettings, "from '../../../phone-core.js';"));

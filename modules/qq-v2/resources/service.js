@@ -860,6 +860,9 @@ function orderedStickers(stickers) {
  */
 export function createQQV2ResourceService(options = {}) {
     const storage = requireStorage(options.storage);
+    const readMedia = typeof options.readMedia === 'function'
+        ? options.readMedia
+        : async () => null;
     const cryptoApi = options.cryptoApi ?? globalThis.crypto;
     const apiKeys = createQQV2ApiKeyStore({ storage, cryptoApi });
 
@@ -930,18 +933,20 @@ export function createQQV2ResourceService(options = {}) {
         if (!description) {
             throw resourceError('sticker_description_required', 'Sticker description is required');
         }
-        const blob = input?.blob ?? existing?.blob;
-        if (!isBlob(blob)) {
+        const blob = isBlob(input?.blob) ? input.blob : null;
+        if (!blob && !existing?.mediaKey && !isBlob(existing?.blob)) {
             throw resourceError('invalid_sticker_blob', 'Sticker must contain a Blob');
         }
+        const storedBlob = blob || (isBlob(existing?.blob) ? existing.blob : null);
 
         const record = {
             id: existing?.id ?? createId(cryptoApi),
             description,
-            mimeType: blob.type,
-            size: blob.size,
+            mimeType: storedBlob?.type || existing?.mimeType || '',
+            size: Math.max(0, Number(storedBlob?.size ?? existing?.size) || 0),
             order: existing?.order ?? state.stickers.length,
-            blob,
+            ...(existing?.mediaKey ? { mediaKey: existing.mediaKey } : {}),
+            ...(storedBlob ? { blob: storedBlob } : {}),
         };
         if (existingIndex === -1) {
             state.stickers.push(record);
@@ -974,7 +979,10 @@ export function createQQV2ResourceService(options = {}) {
         },
         async getStickerBlob(id) {
             const state = await readStickerState();
-            return state.stickers.find((sticker) => sticker.id === id)?.blob ?? null;
+            const sticker = state.stickers.find((item) => item.id === id);
+            if (!sticker) return null;
+            if (isBlob(sticker.blob)) return sticker.blob;
+            return readMedia(sticker.mediaKey);
         },
         async moveSticker(id, targetIndex) {
             const state = await readStickerState();

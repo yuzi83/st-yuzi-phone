@@ -10,9 +10,17 @@ function importModule(relativePath) {
 }
 
 async function createRepository(options = {}) {
+    return (await createRepositoryHarness(options)).repository;
+}
+
+async function createRepositoryHarness(options = {}) {
     const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
     const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
-    return createQQV2Repository({ stateStore: createMemoryQQV2StateStore(), ...options });
+    const stateStore = createMemoryQQV2StateStore();
+    return {
+        stateStore,
+        repository: createQQV2Repository({ stateStore, ...options }),
+    };
 }
 
 function image(label) {
@@ -98,7 +106,7 @@ async function testProfilesLibrariesAndReferenceFallback() {
 }
 
 async function testImageLibraryBatchPreservesSelectionOrderAndRollsBackInvalidInput() {
-    const repository = await createRepository();
+    const { repository, stateStore } = await createRepositoryHarness();
     await repository.ensureScope('scope-a');
     const originalNow = Date.now;
     Date.now = () => 1_000;
@@ -118,11 +126,20 @@ async function testImageLibraryBatchPreservesSelectionOrderAndRollsBackInvalidIn
         ['first', 'second', 'third'],
         'batch results preserve the system file-selection order',
     );
+    const firstList = await repository.listImageLibraryAssets('scope-a', 'avatar');
+    assert.equal(firstList.every((asset) => !Object.hasOwn(asset, 'blob') && asset.mediaKey), true,
+        '图片资料列表只返回轻量元数据');
     assert.deepEqual(
-        await Promise.all((await repository.listImageLibraryAssets('scope-a', 'avatar'))
-            .map((asset) => asset.blob.text())),
+        await Promise.all(firstList.map(async (asset) => (
+            (await repository.getMediaAsset('scope-a', asset.assetId)).blob.text()
+        ))),
         ['first', 'second', 'third'],
         'newest-first library rendering must not reverse one selected batch',
+    );
+    assert.equal(
+        await stateStore.readMedia(firstList[0].mediaKey) instanceof Blob,
+        true,
+        '图片 Blob 必须保存在独立媒体存储中',
     );
 
     Date.now = () => 1_000;
@@ -131,9 +148,11 @@ async function testImageLibraryBatchPreservesSelectionOrderAndRollsBackInvalidIn
     } finally {
         Date.now = originalNow;
     }
+    const orderedList = await repository.listImageLibraryAssets('scope-a', 'avatar');
     assert.deepEqual(
-        await Promise.all((await repository.listImageLibraryAssets('scope-a', 'avatar'))
-            .map((asset) => asset.blob.text())),
+        await Promise.all(orderedList.map(async (asset) => (
+            (await repository.getMediaAsset('scope-a', asset.assetId)).blob.text()
+        ))),
         ['newest', 'first', 'second', 'third'],
         'a later upload must stay ahead of an earlier batch even within the same millisecond',
     );
@@ -145,9 +164,11 @@ async function testImageLibraryBatchPreservesSelectionOrderAndRollsBackInvalidIn
         ]),
         (error) => error?.code === 'asset_blob_required',
     );
+    const afterInvalidBatch = await repository.listImageLibraryAssets('scope-a', 'avatar');
     assert.deepEqual(
-        await Promise.all((await repository.listImageLibraryAssets('scope-a', 'avatar'))
-            .map((asset) => asset.blob.text())),
+        await Promise.all(afterInvalidBatch.map(async (asset) => (
+            (await repository.getMediaAsset('scope-a', asset.assetId)).blob.text()
+        ))),
         ['newest', 'first', 'second', 'third'],
         'one invalid item must roll back the complete image batch',
     );

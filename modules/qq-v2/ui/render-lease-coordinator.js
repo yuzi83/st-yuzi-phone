@@ -43,6 +43,7 @@ export function createRenderLeaseCoordinator({ acquire, release, cacheLimit = 0 
     };
 
     const loadEntry = async (key) => {
+        if (disposed) return null;
         let entry = entries.get(key);
         if (entry?.value) return touch(entry).value;
         if (!entry) {
@@ -73,30 +74,32 @@ export function createRenderLeaseCoordinator({ acquire, release, cacheLimit = 0 
         if (disposed) throw new Error('Render lease coordinator is disposed');
         const session = {
             usedKeys: new Set(),
-            closed: false,
+            state: 'open',
             peek(rawKey) {
                 const key = normalizedKey(rawKey);
-                if (!key || this.closed) return null;
-                this.usedKeys.add(key);
+                if (!key || this.state === 'aborted') return null;
+                if (this.state === 'committed' && !this.usedKeys.has(key)) return null;
+                if (this.state === 'open') this.usedKeys.add(key);
                 const entry = entries.get(key);
                 return entry?.value ? touch(entry).value : null;
             },
             async load(rawKey) {
                 const key = normalizedKey(rawKey);
-                if (!key || this.closed) return null;
-                this.usedKeys.add(key);
+                if (!key || this.state === 'aborted') return null;
+                if (this.state === 'committed' && !this.usedKeys.has(key)) return null;
+                if (this.state === 'open') this.usedKeys.add(key);
                 return loadEntry(key);
             },
             async commit() {
-                if (this.closed) return;
-                this.closed = true;
+                if (this.state !== 'open') return;
+                this.state = 'committed';
                 sessions.delete(this);
                 mountedKeys = new Set(this.usedKeys);
                 await releaseUnused();
             },
             async abort() {
-                if (this.closed) return;
-                this.closed = true;
+                if (this.state !== 'open') return;
+                this.state = 'aborted';
                 sessions.delete(this);
                 await releaseUnused();
             },
@@ -123,7 +126,7 @@ export function createRenderLeaseCoordinator({ acquire, release, cacheLimit = 0 
         },
         async dispose() {
             disposed = true;
-            sessions.forEach((session) => { session.closed = true; });
+            sessions.forEach((session) => { session.state = 'aborted'; });
             sessions.clear();
             mountedKeys.clear();
             await releaseUnused();

@@ -93,7 +93,9 @@ function main() {
     check(results, 'background', '存在 setupBgUpload()', has(contents.background, 'export function setupBgUpload('));
     check(results, 'iconUpload', '存在 createIconUploadService()', has(contents.iconUpload, 'export function createIconUploadService('));
     check(results, 'iconUpload', '图标上传复用共享图标位枚举', has(contents.iconUpload, "import { collectAppearanceIconSlots } from './icon-slots.js';")
-        && has(contents.iconUpload, 'const allItems = collectAppearanceIconSlots(rawData);'));
+        && has(contents.iconUpload, 'const iconSlots = Array.isArray(safeOptions.items)')
+        && has(contents.iconUpload, ': collectAppearanceIconSlots();')
+        && !has(contents.iconUpload, "import { getTableData } from '../../../phone-core/data-api.js';"));
     check(results, 'iconUpload', '自定义图标总占用来自 appIcons 而不是资源池', has(contents.iconUpload, 'const currentIcons = phoneSettings.appIcons || {};')
         && has(contents.iconUpload, 'const currentIconsBytes = estimateIconsStorageBytes(currentIcons);'));
     check(results, 'iconUpload', '自定义图标 UI 展示当前 appIcons 全量清理入口', has(contents.iconUpload, 'const allCurrentIconEntries = Object.entries(currentIcons);')
@@ -105,6 +107,9 @@ function main() {
         && has(contents.iconUpload, 'savePhoneSettingsPatch(nextState)')
         && !has(contents.iconUpload, 'const icons = getPhoneSettings().appIcons || {};\n                    delete icons[key];'));
     check(results, 'iconSlots', '存在共享图标位枚举函数', has(contents.iconSlots, 'export function collectAppearanceIconSlots('));
+    check(results, 'iconSlots', '外观页目录复用单次导航上下文', has(contents.iconSlots, 'export function buildAppearanceAppCatalog(')
+        && has(contents.iconSlots, 'const navigationContext = buildTableNavigationContext(rawData);')
+        && has(contents.iconSlots, 'collectAppearanceIconSlots(rawData, { navigationContext })'));
     check(results, 'qqAppDefinition', 'QQ 提供外观设置可复用的系统 App 定义', has(contents.qqAppDefinition, 'export const QQ_APP = Object.freeze({')
         && has(contents.qqAppDefinition, "id: '__qq__'")
         && has(contents.qqAppDefinition, "name: 'QQ'"));
@@ -255,8 +260,9 @@ function main() {
         && exists('assets/fonts/chill-round-f/LICENSE.txt'));
     check(results, 'visibility', '存在 setupAppearanceToggles()', has(contents.visibility, 'export function setupAppearanceToggles('));
     check(results, 'visibility', '存在 renderHiddenTableAppsList()', has(contents.visibility, 'export function renderHiddenTableAppsList('));
-    check(results, 'visibility', '隐藏 App 列表登记 QQ 系统 App', has(contents.visibility, "from '../../../qq-v2/app-definition.js'")
-        && has(contents.visibility, '{ key: QQ_APP.id, name: QQ_APP.name }'));
+    check(results, 'visibility', '隐藏 App 列表复用共享图标位目录', has(contents.visibility, "import { collectAppearanceIconSlots } from './icon-slots.js';")
+        && has(contents.visibility, 'Array.isArray(options.items)')
+        && has(contents.visibility, ".filter(item => item.type !== 'dock')"));
     check(results, 'layout', '存在 setupIconLayoutSettings()', has(contents.layout, 'export function setupIconLayoutSettings('));
     check(results, 'layout', '存在 getLayoutValue()', has(contents.layout, 'export function getLayoutValue('));
     check(results, 'homeLabelColor', '存在首页 App 名称颜色读取与绑定服务', has(contents.homeLabelColor, 'export function getHomeAppLabelColorModeValue()')
@@ -266,6 +272,7 @@ function main() {
 
     check(results, 'settingsRender', 'settings render 从 appearance-settings façade 导入服务', has(contents.settingsRender, "from './services/appearance-settings.js';"));
     check(results, 'settingsRender', 'settings render 将 appearance 服务注入 grouped deps', has(contents.settingsRender, 'appearance: {')
+        && has(contents.settingsRender, 'buildAppearanceAppCatalog,')
         && has(contents.settingsRender, 'setupBgUpload,')
         && has(contents.settingsRender, 'setupIconLayoutSettings,')
         && has(contents.settingsRender, 'setupAppearanceToggles,')
@@ -374,11 +381,15 @@ function main() {
 
     check(results, 'appearancePage', '外观页从 appearancePageService 读取 setupBgUpload()', has(contents.appearancePage, 'const setupBgUpload = appearancePageService.setupBgUpload;'));
     check(results, 'appearancePage', '外观页从 appearancePageService 读取 renderIconUploadList()', has(contents.appearancePage, 'const renderIconUploadList = appearancePageService.renderIconUploadList;'));
+    check(results, 'appearancePage', '外观页只构建一次 App 目录并复用', has(contents.appearancePage, 'const appearanceAppCatalog = buildAppearanceAppCatalog();')
+        && has(contents.appearancePage, 'const iconSlots = appearanceAppCatalog.iconSlots;')
+        && has(contents.appearancePage, 'const visibilityItems = iconSlots.filter('));
     check(results, 'appearancePage', '外观页通过 pageRuntime 托管背景上传 cleanup', has(contents.appearancePage, 'runtime.registerCleanup(setupBgUpload(container, { runtime }));'));
-    check(results, 'appearancePage', '外观页通过 pageRuntime 托管图标上传 cleanup', has(contents.appearancePage, "runtime.registerCleanup(renderIconUploadList(container.querySelector('#phone-icon-upload-list'), { runtime }));"));
+    check(results, 'appearancePage', '外观页通过 pageRuntime 托管图标上传 cleanup', has(contents.appearancePage, '{ runtime, items: iconSlots },'));
     check(results, 'appearancePage', '外观页保留 registerCleanup fallback', has(contents.appearancePage, "registerCleanup(setupBgUpload(container));")
-        && has(contents.appearancePage, "registerCleanup(renderIconUploadList(container.querySelector('#phone-icon-upload-list')));"));
-    check(results, 'appearancePage', '外观页继续渲染隐藏表格与布局设置入口', has(contents.appearancePage, "renderHiddenTableAppsList(container.querySelector('#phone-hidden-table-apps'))")
+        && has(contents.appearancePage, '{ items: iconSlots },'));
+    check(results, 'appearancePage', '外观页继续渲染隐藏表格与布局设置入口', has(contents.appearancePage, "container.querySelector('#phone-hidden-table-apps'),")
+        && has(contents.appearancePage, '{ items: visibilityItems },')
         && has(contents.appearancePage, 'setupIconLayoutSettings(container)'));
     check(results, 'appearancePage', '外观页绑定资源包导入导出并托管 cleanup', has(contents.appearancePage, 'function bindAppearanceResourcePackActions(')
         && has(contents.appearancePage, "container.querySelector('#phone-import-appearance-pack')")

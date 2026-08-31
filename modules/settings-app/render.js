@@ -34,6 +34,7 @@ import { sharedImageGenerationService } from '../image-generation/runtime.js';
 import { createImageGenerationSettingsService } from '../image-generation/settings-service.js';
 import {
     setupBgUpload,
+    buildAppearanceAppCatalog,
     renderIconUploadList,
     setupAppearanceToggles,
     renderHiddenTableAppsList,
@@ -251,6 +252,7 @@ export function renderSettings(container) {
         appearance: {
             getLayoutValue,
             getPhoneSettings,
+            buildAppearanceAppCatalog,
             setupBgUpload,
             setupIconLayoutSettings,
             setupAppearanceToggles,

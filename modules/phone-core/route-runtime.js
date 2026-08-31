@@ -1,7 +1,7 @@
 import { Logger } from '../error-handler.js';
 import { getCurrentRoute, onRouteChange } from './routing.js';
 import { renderPhoneRoute } from './route-renderer.js';
-import { getPhoneCoreState } from './state.js';
+import { getPhoneCoreState, markPhoneRouteRefreshPending } from './state.js';
 
 const logger = Logger.withScope({ scope: 'phone-core/route-runtime', feature: 'route' });
 const routeRuntimeDeps = {
@@ -98,6 +98,16 @@ export function requestPhoneRouteRender(route = routeRuntimeDeps.getCurrentRoute
         return Promise.resolve(false);
     }
 
+    if (state.isPhoneActive === false) {
+        markPhoneRouteRefreshPending(opts.reason || 'route-request', state);
+        logger.debug({
+            action: 'render.defer',
+            message: 'route 渲染已延后：小手机当前隐藏',
+            context: buildRouteRequestContext(nextRoute, getActiveRouteRenderToken(state), opts),
+        });
+        return Promise.resolve(true);
+    }
+
     const renderToken = bumpRouteRenderToken(state);
     const requestContext = buildRouteRequestContext(nextRoute, renderToken, opts);
 
@@ -111,11 +121,19 @@ export function requestPhoneRouteRender(route = routeRuntimeDeps.getCurrentRoute
         ...opts,
         renderToken,
     }).then((result) => {
+        if (result === false && state.isPhoneActive === false) {
+            markPhoneRouteRefreshPending(opts.reason || 'route-render-inactive', state);
+            return true;
+        }
         if (result === false) {
             rollbackFailedRouteRequest(nextRoute, { ...opts, renderToken }, state);
         }
         return result;
     }).catch((error) => {
+        if (state.isPhoneActive === false) {
+            markPhoneRouteRefreshPending(opts.reason || 'route-render-inactive', state);
+            return true;
+        }
         rollbackFailedRouteRequest(nextRoute, { ...opts, renderToken }, state);
         logger.error({
             action: 'render.request',

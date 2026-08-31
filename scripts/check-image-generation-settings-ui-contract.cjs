@@ -189,6 +189,7 @@ function createRendererDeps() {
         appearance: functions([
             'getLayoutValue',
             'getPhoneSettings',
+            'buildAppearanceAppCatalog',
             'setupBgUpload',
             'setupIconLayoutSettings',
             'setupAppearanceToggles',

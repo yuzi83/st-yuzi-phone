@@ -49,8 +49,14 @@ function main() {
     check(results, 'renderer', 'renderer 行级 patch 不再使用易失效 cursor insertBefore', !has(contents.renderer, 'insertBefore(rowNode, cursor)'));
     check(results, 'renderer', 'renderer 行级 patch 使用实时 children 锚点重排', has(contents.renderer, 'const referenceNode = list.children[targetIndex] || null;'));
     check(results, 'renderer', 'renderer 行级 patch 使用实时锚点 insertBefore', has(contents.renderer, 'list.insertBefore(node, referenceNode);'));
-    check(results, 'renderer', 'renderer 行级 patch 失败时回退到全量内容刷新', has(contents.renderer, 'contentRegion.innerHTML = regionHtml.contentHtml;'));
+    check(results, 'renderer', 'renderer 行级 patch 失败时回退到全量内容刷新', has(contents.renderer, 'contentRegion.innerHTML = regionHtml.getContentHtml();'));
     check(results, 'renderer', 'renderer 行级 patch 失败日志接入 Logger', has(contents.renderer, "Logger.withScope({ scope: 'table-viewer/list-page-renderer'"));
+    check(results, 'renderer', 'renderer 复用行投影缓存', has(contents.renderer, 'function buildRowProjection(')
+        && has(contents.renderer, 'rowProjectionCache.get(row)')
+        && has(contents.renderer, 'rowProjectionCache.set(row, cacheEntry)'));
+    check(results, 'renderer', 'renderer 仅在 fallback 时生成整页 HTML', has(contents.renderer, 'getFullPageHtml()')
+        && has(contents.renderer, 'container.innerHTML = nextRegionHtml.getFullPageHtml();')
+        && !has(contents.renderer, 'rawData: getTableData()'));
     check(results, 'renderer', 'renderer 使用审核 store 单次读取当前表更新集合', has(contents.renderer, 'getUpdatedRowsForSheet(sheetKey)') && !has(contents.renderer, 'hasReviewUpdatesForRow(sheetKey'));
     check(results, 'renderer', 'renderer 在搜索前应用只看本楼更新过滤', has(contents.renderer, 'const reviewFilteredRows = onlyShowReviewUpdates') && contents.renderer.indexOf('const reviewFilteredRows = onlyShowReviewUpdates') < contents.renderer.indexOf('const filteredRows = searchQueryLower'));
     check(results, 'renderer', 'renderer 审核过滤优先 rowId 并仅在无 rowId 时回退 rowIndex', has(contents.renderer, 'const normalizedReviewRowId = String(reviewRowId || \'\').trim();') && has(contents.renderer, 'const reviewUpdated = normalizedReviewRowId') && has(contents.renderer, '? reviewRowIds.has(normalizedReviewRowId)') && has(contents.renderer, ': reviewRowIndexes.has(Number(rowIndex));'));
@@ -74,6 +80,10 @@ function main() {
     check(results, 'runtime', 'runtime 已将 onlyShowReviewUpdates 纳入局部刷新键', has(contents.runtime, "'onlyShowReviewUpdates'"));
     check(results, 'runtime', 'runtime 继续在 list 模式下派发订阅刷新', has(contents.runtime, "if (state.mode !== 'list') return;"));
     check(results, 'runtime', 'runtime 继续通过 activeListRefreshHandler 驱动局部刷新', has(contents.runtime, 'activeListRefreshHandler(Array.isArray(changedKeys) ? changedKeys : []);'));
+    check(results, 'runtime', 'runtime 使用单个 WeakMap 缓存行投影', has(contents.runtime, 'const listRowProjectionCache = new WeakMap();')
+        && has(contents.runtime, 'rowProjectionCache: listRowProjectionCache,'));
+    check(results, 'runtime', 'runtime 将连续搜索输入合并到下一帧', has(contents.runtime, "safeChangedKeys.includes('listSearchQuery')")
+        && has(contents.runtime, 'viewerRuntime.requestAnimationFrame(() => {'));
 
     const failed = results.filter((item) => !item.ok);
     if (failed.length > 0) {

@@ -63,6 +63,7 @@ function validateSettingsRendererDeps(deps = {}) {
     assertFunctionDeps('appearance', deps.appearance, [
         'getLayoutValue',
         'getPhoneSettings',
+        'buildAppearanceAppCatalog',
         'setupBgUpload',
         'setupIconLayoutSettings',
         'setupAppearanceToggles',

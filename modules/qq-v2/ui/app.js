@@ -3,6 +3,7 @@ import { createPhoneNavIconElement } from '../../phone-core/navigation-ui.js';
 import { isScrollContainerNearBottom } from '../../phone-core/stable-scroll-anchor.js';
 import { createPhoneViewScrollState } from '../../phone-core/view-scroll-state.js';
 import { getPhoneSettings } from '../../settings.js';
+import { createLazyLoader } from '../../utils/observers.js';
 import { createEmojiPanelTemporaryLayerController } from './emoji-panel.js';
 import { createStickerUploadDialog } from './sticker-upload-dialog.js';
 import {
@@ -748,6 +749,40 @@ function createMediaRenderLeaseCoordinator(facade, { cacheLimit = 0 } = {}) {
     });
 }
 
+function createBoundedTaskQueue(limit = 4) {
+    const concurrency = Math.max(1, Math.trunc(Number(limit) || 1));
+    const pending = [];
+    let active = 0;
+    let disposed = false;
+
+    const drain = () => {
+        while (!disposed && active < concurrency && pending.length > 0) {
+            const task = pending.shift();
+            active += 1;
+            Promise.resolve()
+                .then(task)
+                .catch(() => {})
+                .finally(() => {
+                    active -= 1;
+                    drain();
+                });
+        }
+    };
+
+    return Object.freeze({
+        add(task) {
+            if (disposed || typeof task !== 'function') return false;
+            pending.push(task);
+            drain();
+            return true;
+        },
+        dispose() {
+            disposed = true;
+            pending.length = 0;
+        },
+    });
+}
+
 export const __test__ = Object.freeze({
     loadMessageRootModel,
     loadContactsRootModel,
@@ -767,6 +802,7 @@ export const __test__ = Object.freeze({
     replaceMessageInPage,
     normalizeGeneratedImagePath,
     createImageGenerationTaskController,
+    createBoundedTaskQueue,
     needsTimeDivider,
     isNearMessageBottom,
     resolveConversationSwipe,
@@ -810,12 +846,17 @@ export function createQQApp({
     const selectedStickerIds = new Set();
     const imageGenerationTasks = new Map();
     let imageLibrarySelectionMode = false;
+    let imageLibraryLazyLoading = null;
     const enqueueSettingsSave = createSettingsSaveQueue();
 
     const clearImageLibrarySelection = () => {
         selectedImageAssetIds.clear();
         selectedStickerIds.clear();
         imageLibrarySelectionMode = false;
+    };
+    const disposeImageLibraryLazyLoading = () => {
+        imageLibraryLazyLoading?.dispose();
+        imageLibraryLazyLoading = null;
     };
 
     const mediaRenderLeases = createMediaRenderLeaseCoordinator(facade);
@@ -2538,7 +2579,7 @@ export function createQQApp({
             'aria-label': '\u5220\u9664\u5df2\u9009\u8d44\u6e90', title: '\u5220\u9664', 'data-qq-image-library-delete': '1',
         });
         deleteAction.append(createIcon('trash'));
-        const { main, content } = makeSecondaryPage('\u56fe\u7247\u8d44\u6599', {
+        const { main, scroll, content } = makeSecondaryPage('\u56fe\u7247\u8d44\u6599', {
             actions: [packAction, deleteAction],
             className: 'yuzi-qq-settings-view yuzi-qq-image-library-view',
             headerClassName: 'yuzi-qq-image-library-header',
@@ -2560,6 +2601,29 @@ export function createQQApp({
                 ? asArray(store.sticker ? results[index].stickers : results[index].assets)
                 : [],
         }));
+        const mediaSession = leaseSessionFor(token)?.media;
+        const stickerSession = leaseSessionFor(token)?.stickers;
+        const lazyTasks = new WeakMap();
+        const loadQueue = createBoundedTaskQueue(4);
+        const lazyLoader = createLazyLoader((element) => {
+            const task = lazyTasks.get(element);
+            lazyTasks.delete(element);
+            if (task) loadQueue.add(task);
+        }, {
+            root: scroll,
+            rootMargin: '180px 0px',
+            threshold: 0.01,
+        });
+        imageLibraryLazyLoading = {
+            dispose() {
+                lazyLoader.disconnect();
+                loadQueue.dispose();
+            },
+        };
+        const loadWhenVisible = (element, task) => {
+            lazyTasks.set(element, task);
+            lazyLoader.observe(element);
+        };
         const availableAssetIds = new Set(cards
             .filter((store) => !store.sticker)
             .flatMap(({ assets }) => assets.map((asset) => asText(asset.assetId)).filter(Boolean)));
@@ -2627,18 +2691,40 @@ export function createQQApp({
                     syncSelection();
                 });
                 if (sticker) {
-                    item.append(stickerImage(resourceId, asText(asset.description), 'yuzi-qq-image-library-sticker'));
+                    const fallback = asText(asset.description);
+                    const visual = createElement('span', 'yuzi-qq-image-library-sticker');
+                    visual.textContent = fallback || '[\u8868\u60c5]';
+                    const applySticker = (render) => {
+                        if (!render?.url || !isActive(token)) return;
+                        const image = createElement('img');
+                        image.alt = fallback;
+                        image.decoding = 'async';
+                        image.src = render.url;
+                        visual.classList.add('has-image');
+                        visual.replaceChildren(image);
+                    };
+                    const cached = stickerSession?.peek(resourceId);
+                    if (cached?.url) applySticker(cached);
+                    else if (stickerSession) loadWhenVisible(visual, async () => {
+                        if (!isActive(token) || !visual.isConnected) return;
+                        const render = await stickerSession.load(resourceId);
+                        if (!isActive(token) || !visual.isConnected) return;
+                        applySticker(render);
+                    });
+                    item.append(visual);
                 } else {
                     const image = createElement('img');
                     image.alt = '';
+                    image.decoding = 'async';
                     item.append(image);
-                    const mediaSession = leaseSessionFor(token)?.media;
                     const cached = mediaSession?.peek(resourceId);
                     if (cached?.url) image.src = cached.url;
-                    else void mediaSession?.load(resourceId).then((render) => {
+                    else if (mediaSession) loadWhenVisible(image, async () => {
+                        if (!isActive(token) || !image.isConnected) return;
+                        const render = await mediaSession.load(resourceId);
                         if (!render?.url || !isActive(token) || !image.isConnected) return;
                         image.src = render.url;
-                    }).catch(() => {});
+                    });
                 }
                 grid.append(item);
             });
@@ -2902,6 +2988,7 @@ export function createQQApp({
     const render = async ({ preserveEmoji = false, refreshMessages = true } = {}) => {
         const scrollSnapshot = viewScrollState.capture();
         composerAutoHeight.cancel();
+        disposeImageLibraryLazyLoading();
         const token = ++renderEpoch;
         const leaseSessions = {
             media: mediaRenderLeases.begin(),
@@ -3892,6 +3979,7 @@ export function createQQApp({
             messageSelection.clearAll();
             messageSelectionConversationId = '';
             imageGenerationController.clear();
+            disposeImageLibraryLazyLoading();
             viewSnapshotCache.clear();
             conversationSnapshots.clear();
             displayedViewKey = '';

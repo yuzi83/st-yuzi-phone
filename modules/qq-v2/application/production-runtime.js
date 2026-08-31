@@ -386,6 +386,7 @@ export function createQQV2ProductionRuntime(options = {}) {
         : () => safeRead(getDB, null);
     const resources = options.resources || createQQV2ResourceService({
         storage: sharedStorage,
+        readMedia: (key) => stateStore.readMedia(key),
         cryptoApi: options.cryptoApi,
     });
     const primaryBackend = options.backend || createSillyTavernQQV2Backend({
@@ -661,7 +662,16 @@ export function createQQV2ProductionRuntime(options = {}) {
         await repository.initializeWorldbookDefault(scopeId, bookName, { scopeSession });
     };
 
-    const getExistingScope = (scopeId) => repository.getScope(asText(scopeId, 512));
+    const queryExistingScope = async (scopeId, fallback, query) => {
+        const normalizedScopeId = asText(scopeId, 512);
+        if (!normalizedScopeId) return fallback;
+        try {
+            return await query(normalizedScopeId);
+        } catch (error) {
+            if (error?.code === 'scope_not_found') return fallback;
+            throw error;
+        }
+    };
 
     const getPrivateConversation = async (scopeId, conversationId) => {
         const conversation = await repository.getConversation(scopeId, asText(conversationId, 256));
@@ -1390,6 +1400,38 @@ export function createQQV2ProductionRuntime(options = {}) {
         return finalizeHostScopeDeletion(scopeId);
     };
 
+    let snapshotReadPromise = null;
+    const readSnapshot = async () => {
+        const status = lifecycle.getStatus();
+        if (status.phase === 'destroyed') {
+            return { phase: 'destroyed', context: currentContext(host, null), globalSettings: defaultGlobalSettings() };
+        }
+        const scope = lifecycle.getActiveScope();
+        if (!scope?.scopeId) {
+            return { phase: status.phase, context: currentContext(host, null), globalSettings: defaultGlobalSettings() };
+        }
+        const scopeSession = captureScopeSession(scope.scopeId);
+        const saved = await repository.getScope(scope.scopeId);
+        const runtimeSettings = await resolveRuntimeSettings(scope.scopeId, saved, { scopeSession });
+        return {
+            phase: status.phase,
+            context: currentContext(host, scope),
+            globalSettings: cloneGlobalSettings({
+                ...saved?.settings,
+                ...runtimeSettings,
+            }),
+        };
+    };
+    const getSnapshot = () => {
+        if (snapshotReadPromise) return snapshotReadPromise;
+        const current = readSnapshot();
+        snapshotReadPromise = current;
+        queueMicrotask(() => {
+            if (snapshotReadPromise === current) snapshotReadPromise = null;
+        });
+        return current;
+    };
+
     const application = {
         async initialize() {
             try {
@@ -1410,29 +1452,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             return () => subscribers.delete(listener);
         },
         getStatus: () => lifecycle.getStatus(),
-        async getSnapshot() {
-            const status = lifecycle.getStatus();
-            if (status.phase === 'destroyed') {
-                return { phase: 'destroyed', context: currentContext(host, null), globalSettings: defaultGlobalSettings() };
-            }
-            const scope = lifecycle.getActiveScope();
-            if (!scope?.scopeId) {
-                return { phase: status.phase, context: currentContext(host, null), globalSettings: defaultGlobalSettings() };
-            }
-            const scopeSession = captureScopeSession(scope.scopeId);
-            const [saved, runtimeSettings] = await Promise.all([
-                repository.getScope(scope.scopeId),
-                resolveRuntimeSettings(scope.scopeId, null, { scopeSession }),
-            ]);
-            return {
-                phase: status.phase,
-                context: currentContext(host, scope),
-                globalSettings: cloneGlobalSettings({
-                    ...saved?.settings,
-                    ...runtimeSettings,
-                }),
-            };
-        },
+        getSnapshot,
         async listSharedResources() {
             const listImageGenerationPresets = typeof resources.listImageGenerationPresets === 'function'
                 ? resources.listImageGenerationPresets.bind(resources)
@@ -1529,79 +1549,82 @@ export function createQQV2ProductionRuntime(options = {}) {
             });
         },
         async listConversations({ scopeId }) {
-            if (!await getExistingScope(scopeId)) return [];
-            const summaries = await repository.listConversationSummaries(scopeId);
-            return summaries.filter(({ conversation }) => conversation.kind === 'private').map((summary) => ({
-                ...summary.conversation,
-                person: summary.person,
-                group: summary.group,
-                lastMessage: summary.lastMessage,
-                unreadCount: Number(summary.conversation.unreadCount) || 0,
-                request: requestService.getConversationState(scopeId, summary.conversation.conversationId),
-            }));
+            return queryExistingScope(scopeId, [], async (normalizedScopeId) => {
+                const summaries = await repository.listConversationSummaries(normalizedScopeId);
+                return summaries.filter(({ conversation }) => conversation.kind === 'private').map((summary) => ({
+                    ...summary.conversation,
+                    person: summary.person,
+                    group: summary.group,
+                    lastMessage: summary.lastMessage,
+                    unreadCount: Number(summary.conversation.unreadCount) || 0,
+                    request: requestService.getConversationState(normalizedScopeId, summary.conversation.conversationId),
+                }));
+            });
         },
         async getConversation({ scopeId, conversationId }) {
-            if (!await getExistingScope(scopeId)) return null;
-            const summary = await repository.getConversationSummary(scopeId, conversationId);
-            const conversation = summary?.conversation;
-            if (!conversation || conversation.kind !== 'private') return null;
-            return {
-                ...conversation,
-                person: summary.person,
-                group: summary.group,
-                lastMessage: summary.lastMessage,
-                unreadCount: Number(conversation.unreadCount) || 0,
-                request: requestService.getConversationState(scopeId, conversationId),
-            };
+            return queryExistingScope(scopeId, null, async (normalizedScopeId) => {
+                const summary = await repository.getConversationSummary(normalizedScopeId, conversationId);
+                const conversation = summary?.conversation;
+                if (!conversation || conversation.kind !== 'private') return null;
+                return {
+                    ...conversation,
+                    person: summary.person,
+                    group: summary.group,
+                    lastMessage: summary.lastMessage,
+                    unreadCount: Number(conversation.unreadCount) || 0,
+                    request: requestService.getConversationState(normalizedScopeId, conversationId),
+                };
+            });
         },
         async listMessages({ scopeId, conversationId, beforeSequence, limit = 50 }) {
-            if (!await getExistingScope(scopeId)) {
-                return { items: [], hasMore: false, nextBeforeSequence: null };
-            }
-            const conversation = await repository.getConversation(scopeId, conversationId);
-            if (conversation?.kind !== 'private') {
-                return { items: [], hasMore: false, nextBeforeSequence: null };
-            }
-            const all = await repository.listMessages(scopeId, conversationId);
-            const before = Number.isInteger(Number(beforeSequence)) ? Number(beforeSequence) : Number.POSITIVE_INFINITY;
-            const eligible = all.filter((message) => Number(message.sequence) < before);
-            const size = Math.max(1, Math.min(200, Number(limit) || 50));
-            const items = eligible.slice(-size);
-            return {
-                items,
-                hasMore: eligible.length > items.length,
-                nextBeforeSequence: items[0]?.sequence ?? null,
-            };
+            const empty = { items: [], hasMore: false, nextBeforeSequence: null };
+            return queryExistingScope(scopeId, empty, async (normalizedScopeId) => {
+                const conversation = await repository.getConversation(normalizedScopeId, conversationId);
+                if (conversation?.kind !== 'private') return empty;
+                const all = await repository.listMessages(normalizedScopeId, conversationId);
+                const before = Number.isInteger(Number(beforeSequence)) ? Number(beforeSequence) : Number.POSITIVE_INFINITY;
+                const eligible = all.filter((message) => Number(message.sequence) < before);
+                const size = Math.max(1, Math.min(200, Number(limit) || 50));
+                const items = eligible.slice(-size);
+                return {
+                    items,
+                    hasMore: eligible.length > items.length,
+                    nextBeforeSequence: items[0]?.sequence ?? null,
+                };
+            });
         },
         async getPerson({ scopeId, personId }) {
-            if (!await getExistingScope(scopeId)) return null;
-            return repository.getPerson(scopeId, personId);
+            return queryExistingScope(scopeId, null, (normalizedScopeId) => (
+                repository.getPerson(normalizedScopeId, personId)
+            ));
         },
         async getCurrentProfile({ scopeId }) {
-            if (!await getExistingScope(scopeId)) return null;
-            return repository.getCurrentProfile(scopeId);
+            return queryExistingScope(scopeId, null, (normalizedScopeId) => (
+                repository.getCurrentProfile(normalizedScopeId)
+            ));
         },
         async listImageLibraryAssets({ scopeId, library }) {
-            if (!await getExistingScope(scopeId)) return [];
-            return repository.listImageLibraryAssets(scopeId, library);
+            return queryExistingScope(scopeId, [], (normalizedScopeId) => (
+                repository.listImageLibraryAssets(normalizedScopeId, library)
+            ));
         },
         async getMedia({ scopeId, assetId }) {
-            if (!await getExistingScope(scopeId)) return null;
-            return repository.getMediaAsset(scopeId, assetId);
+            return queryExistingScope(scopeId, null, (normalizedScopeId) => (
+                repository.getMediaAsset(normalizedScopeId, assetId)
+            ));
         },
         async acquireMediaRender({ scopeId, assetId }) {
             const normalizedScopeId = asText(scopeId, 512);
-            if (!normalizedScopeId || !await getExistingScope(normalizedScopeId)) return null;
+            if (!normalizedScopeId) return null;
+            const asset = await queryExistingScope(normalizedScopeId, null, (currentScopeId) => (
+                repository.getMediaAsset(currentScopeId, asText(assetId, 256))
+            ));
+            if (!asset?.blob) return null;
             if (!objectUrlApi) {
                 const error = new Error('QQ 媒体渲染地址在当前运行环境不可用');
                 error.code = 'media_render_unavailable';
                 throw error;
             }
-            const asset = await application.getMedia({
-                scopeId: normalizedScopeId,
-                assetId: asText(assetId, 256),
-            });
-            if (!asset?.blob) return null;
 
             let url;
             try {
@@ -1636,26 +1659,28 @@ export function createQQV2ProductionRuntime(options = {}) {
             return revokeMediaRenderLease(normalizedLeaseId);
         },
         async getRequestState({ scopeId, conversationId }) {
-            if (!await getExistingScope(scopeId)) {
-                return { phase: 'idle', pendingUserMessageCount: 0, error: '' };
-            }
-            const conversation = await repository.getConversation(scopeId, conversationId);
-            if (conversation?.kind !== 'private') {
-                return { phase: 'idle', pendingUserMessageCount: 0, error: '' };
-            }
-            return requestService.getConversationState(scopeId, conversationId);
+            const idle = { phase: 'idle', pendingUserMessageCount: 0, error: '' };
+            return queryExistingScope(scopeId, idle, async (normalizedScopeId) => {
+                const conversation = await repository.getConversation(normalizedScopeId, conversationId);
+                if (conversation?.kind !== 'private') return idle;
+                return requestService.getConversationState(normalizedScopeId, conversationId);
+            });
         },
         async getUnreadState({ scopeId }) {
-            if (!await getExistingScope(scopeId)) return { total: 0, byConversationId: {} };
-            const conversations = await repository.listConversations(scopeId);
-            const byConversationId = Object.fromEntries(conversations.filter((conversation) => conversation.kind === 'private').map((conversation) => [
-                conversation.conversationId,
-                Number(conversation.unreadCount) || 0,
-            ]));
-            return {
-                total: Object.values(byConversationId).reduce((sum, count) => sum + count, 0),
-                byConversationId,
-            };
+            const empty = { total: 0, byConversationId: {} };
+            return queryExistingScope(scopeId, empty, async (normalizedScopeId) => {
+                const conversations = await repository.listConversations(normalizedScopeId);
+                const byConversationId = Object.fromEntries(conversations
+                    .filter((conversation) => conversation.kind === 'private')
+                    .map((conversation) => [
+                        conversation.conversationId,
+                        Number(conversation.unreadCount) || 0,
+                    ]));
+                return {
+                    total: Object.values(byConversationId).reduce((sum, count) => sum + count, 0),
+                    byConversationId,
+                };
+            });
         },
         async openConversation({ scopeId, conversationId }) {
             const scopeSession = captureReadyScopeSession(scopeId);

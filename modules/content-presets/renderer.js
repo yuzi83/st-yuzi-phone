@@ -72,7 +72,16 @@ export function __test__createTryRenderContentPreset(overrides = {}) {
 
     let version = 0;
     let initialState;
-    try { initialState = createState(runtimeDeps.getTableData(), target.sheetKey, target.route, version); } catch { return false; }
+    try {
+        initialState = createState(
+            options.initialTableData || runtimeDeps.getTableData(),
+            target.sheetKey,
+            target.route,
+            version,
+        );
+    } catch {
+        return false;
+    }
     if (!initialState) return false;
 
     const root = document.createElement('div');

@@ -26,12 +26,18 @@ import { defaultSettings, getPhoneSettings } from '../settings.js';
 import { escapeHtmlAttr } from '../utils/dom-escape.js';
 import { clampNumber } from '../utils/object.js';
 import { buildHomeScreenViewModel } from './view-model.js';
-import { ensureQQHomeUnreadProjection } from './qq-unread.js';
+import {
+    ensureQQHomeUnreadProjection,
+    formatQQHomeUnreadBadge,
+    normalizeQQHomeUnreadTotal,
+} from './qq-unread.js';
 import { bindHomeDockInteractions, bindHomeGridInteractions } from './interactions.js';
 import { buildHomeShellStyleText, buildHomeShellHtml, buildHomeAppItemHtml, buildDockItemHtml, buildStatusBarHtml } from './templates.js';
 import { ensureHomeInteractionRuntime } from './runtime.js';
 import { resolveStatusBarData } from './status-bar-data.js';
 import { getQQV2Facade } from '../qq-v2/runtime/default-runtime.js';
+import { QQ_APP } from '../qq-v2/app-definition.js';
+import { buildTableNavigationContext } from '../table-navigation/catalog.js';
 
 function resolveHomeAppLabelColorTokens(mode) {
     if (mode === 'black') {
@@ -143,6 +149,33 @@ export function patchHomeDock(dock, dockApps = []) {
     });
 }
 
+export function patchQQHomeUnreadBadge(grid, unreadTotal = 0) {
+    if (!(grid instanceof HTMLElement)) return false;
+    const qqApp = Array.from(grid.querySelectorAll('.phone-app-item'))
+        .find(item => item instanceof HTMLElement && item.dataset.sheetKey === QQ_APP.id);
+    if (!(qqApp instanceof HTMLElement)) return false;
+
+    const iconWrap = qqApp.querySelector('.phone-app-icon');
+    if (!(iconWrap instanceof HTMLElement)) return false;
+
+    const normalizedTotal = normalizeQQHomeUnreadTotal(unreadTotal);
+    const badgeText = formatQQHomeUnreadBadge(normalizedTotal);
+    let badge = iconWrap.querySelector('.phone-table-count-badge');
+    if (!badgeText) {
+        badge?.remove();
+        return true;
+    }
+
+    if (!(badge instanceof HTMLElement)) {
+        badge = document.createElement('div');
+        badge.className = 'phone-table-count-badge';
+        iconWrap.appendChild(badge);
+    }
+    badge.textContent = badgeText;
+    badge.setAttribute('aria-label', `未读消息 ${normalizedTotal}`);
+    return true;
+}
+
 /**
  * 主屏渲染入口。
  * @param {HTMLElement} container
@@ -182,21 +215,22 @@ export function renderHomeScreen(container) {
     }
     const grid = shell.grid;
     const dock = shell.dock;
-    const patchGridForQQUnread = (qqUnreadTotal = 0) => {
-        if (interactionRuntime.isDisposed()) return null;
-        const viewModel = buildHomeScreenViewModel(getTableData(), getPhoneSettings(), { qqUnreadTotal });
-        patchHomeGrid(grid, viewModel.apps);
-        bindHomeGridInteractions(grid, { navigateTo, runtime: interactionRuntime });
-        return viewModel;
-    };
     const unreadProjection = ensureQQHomeUnreadProjection({
         container,
         facade: getQQV2Facade(),
         runtime: interactionRuntime,
-        onChange: patchGridForQQUnread,
+        onChange: (qqUnreadTotal) => {
+            if (interactionRuntime.isDisposed()) return;
+            patchQQHomeUnreadBadge(grid, qqUnreadTotal);
+        },
     });
-    const viewModel = patchGridForQQUnread(unreadProjection?.getTotal() || 0)
-        || buildHomeScreenViewModel(rawData, phoneSettings);
+    const navigationContext = rawData ? buildTableNavigationContext(rawData) : null;
+    const viewModel = buildHomeScreenViewModel(rawData, phoneSettings, {
+        qqUnreadTotal: unreadProjection?.getTotal() || 0,
+        navigationContext,
+    });
+    patchHomeGrid(grid, viewModel.apps);
+    bindHomeGridInteractions(grid, { navigateTo, runtime: interactionRuntime });
 
     const statusBarData = resolveStatusBarData(rawData);
     patchStatusBar(shell.statusBar, statusBarData, shell.root);

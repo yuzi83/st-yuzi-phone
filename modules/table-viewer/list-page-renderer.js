@@ -55,6 +55,55 @@ function normalizeSelectedDeleteRowIndexes(rowIndexes = []) {
         .sort((a, b) => a - b);
 }
 
+function buildRowProjection(options = {}) {
+    const {
+        row,
+        rowIndex,
+        headers,
+        rawHeaders,
+        rowLocked,
+        fieldBindings,
+        rowProjectionCache,
+    } = options;
+    const rowDataSignature = Array.isArray(row)
+        ? row.map((value) => normalizeCellDisplayValue(value)).join('\u001f')
+        : normalizeCellDisplayValue(row);
+    const cacheVersion = `${rowIndex}\u001d${rowDataSignature}`;
+    const cacheKey = rowLocked ? 'locked' : 'unlocked';
+    let cacheEntry = Array.isArray(row) && rowProjectionCache instanceof WeakMap
+        ? rowProjectionCache.get(row)
+        : null;
+
+    if (!cacheEntry || cacheEntry.version !== cacheVersion) {
+        cacheEntry = {
+            version: cacheVersion,
+            reviewRowId: resolveReviewRowId(row, headers, rawHeaders),
+            locked: null,
+            unlocked: null,
+        };
+        if (Array.isArray(row) && rowProjectionCache instanceof WeakMap) {
+            rowProjectionCache.set(row, cacheEntry);
+        }
+    }
+
+    if (!cacheEntry[cacheKey]) {
+        cacheEntry[cacheKey] = buildGenericRowViewModel(
+            row,
+            rowIndex,
+            headers,
+            rawHeaders,
+            rowLocked,
+            fieldBindings,
+        );
+    }
+
+    return {
+        reviewRowId: cacheEntry.reviewRowId,
+        rowDataSignature,
+        rowViewModel: cacheEntry[cacheKey],
+    };
+}
+
 function buildGenericListPageViewModel(options = {}) {
     const {
         state,
@@ -65,6 +114,8 @@ function buildGenericListPageViewModel(options = {}) {
         sheetKey = '',
         navigationSheetKey = sheetKey,
         rawData,
+        navigationContext,
+        rowProjectionCache,
         searchQueryOverride,
     } = options;
 
@@ -84,7 +135,10 @@ function buildGenericListPageViewModel(options = {}) {
     const navigationControlState = buildTableNavigationControlState(
         rawData,
         navigationSheetKey,
-        { blocked: navigationBlocked },
+        {
+            blocked: navigationBlocked,
+            navigationContext,
+        },
     );
     const genericStylePayload = createGenericTemplateStylePayload(genericMatch, 'list');
     const toolbarOptions = genericStylePayload.structureOptions?.toolbar || {};
@@ -106,22 +160,23 @@ function buildGenericListPageViewModel(options = {}) {
     const reviewRowIds = reviewRows.rowIds instanceof Set ? reviewRows.rowIds : new Set();
 
     const rowViewModels = rows.map((row, rowIndex) => {
-        const reviewRowId = resolveReviewRowId(row, headers, rawHeaders);
-        const normalizedReviewRowId = String(reviewRowId || '').trim();
-        const reviewUpdated = normalizedReviewRowId
-            ? reviewRowIds.has(normalizedReviewRowId)
-            : reviewRowIndexes.has(Number(rowIndex));
-        const rowViewModel = buildGenericRowViewModel(
+        const {
+            reviewRowId,
+            rowDataSignature,
+            rowViewModel,
+        } = buildRowProjection({
             row,
             rowIndex,
             headers,
             rawHeaders,
-            lockRows.has(rowIndex),
-            genericStylePayload.fieldBindings,
-        );
-        const rowDataSignature = Array.isArray(row)
-            ? row.map((value) => normalizeCellDisplayValue(value)).join('\u001f')
-            : normalizeCellDisplayValue(row);
+            rowLocked: lockRows.has(rowIndex),
+            fieldBindings: genericStylePayload.fieldBindings,
+            rowProjectionCache,
+        });
+        const normalizedReviewRowId = String(reviewRowId || '').trim();
+        const reviewUpdated = normalizedReviewRowId
+            ? reviewRowIds.has(normalizedReviewRowId)
+            : reviewRowIndexes.has(Number(rowIndex));
         const deleteSelected = selectedDeleteRows.has(rowIndex);
         return {
             ...rowViewModel,
@@ -224,26 +279,54 @@ function buildGenericListPageViewModel(options = {}) {
 }
 
 function buildGenericListRegionHtml(tableName, viewModel) {
+    let fullPageHtml;
+    let navHtml;
+    let toolbarHtml;
+    let toolbarActionsHtml;
+    let toolbarInfoHtml;
+    let contentHtml;
+    let bottomBarHtml;
     return {
-        fullPageHtml: buildGenericListPageHtml({
-            tableName,
-            ...viewModel,
-        }),
-        navHtml: buildGenericListNavHtml({
-            tableName,
-            ...viewModel,
-        }),
-        toolbarHtml: buildGenericListToolbarHtml(viewModel),
         toolbarSearchState: {
             showSearch: viewModel.showSearch,
             searchQuery: viewModel.searchQuery,
             totalRowCount: viewModel.totalRowCount,
         },
-        toolbarActionsHtml: buildGenericListToolbarActionsHtml(viewModel),
-        toolbarInfoHtml: buildGenericListToolbarInfoHtml(viewModel),
-        contentHtml: buildGenericListContentHtml(viewModel),
-        bottomBarHtml: buildGenericListBottomBarHtml(viewModel),
         viewModel,
+        getFullPageHtml() {
+            fullPageHtml ??= buildGenericListPageHtml({
+                tableName,
+                ...viewModel,
+            });
+            return fullPageHtml;
+        },
+        getNavHtml() {
+            navHtml ??= buildGenericListNavHtml({
+                tableName,
+                ...viewModel,
+            });
+            return navHtml;
+        },
+        getToolbarHtml() {
+            toolbarHtml ??= buildGenericListToolbarHtml(viewModel);
+            return toolbarHtml;
+        },
+        getToolbarActionsHtml() {
+            toolbarActionsHtml ??= buildGenericListToolbarActionsHtml(viewModel);
+            return toolbarActionsHtml;
+        },
+        getToolbarInfoHtml() {
+            toolbarInfoHtml ??= buildGenericListToolbarInfoHtml(viewModel);
+            return toolbarInfoHtml;
+        },
+        getContentHtml() {
+            contentHtml ??= buildGenericListContentHtml(viewModel);
+            return contentHtml;
+        },
+        getBottomBarHtml() {
+            bottomBarHtml ??= buildGenericListBottomBarHtml(viewModel);
+            return bottomBarHtml;
+        },
     };
 }
 
@@ -341,17 +424,20 @@ function patchGenericListRowNodes(list, viewModel) {
     return true;
 }
 
-function patchGenericListContentRegion(contentRegion, viewModel, fallbackHtml) {
+function patchGenericListContentRegion(contentRegion, viewModel, getFallbackHtml) {
     if (!(contentRegion instanceof HTMLElement)) return false;
+    const renderFallback = () => {
+        contentRegion.innerHTML = getFallbackHtml();
+    };
     if (!viewModel || Number(viewModel.visibleCount || 0) <= 0) {
-        contentRegion.innerHTML = fallbackHtml;
+        renderFallback();
         return true;
     }
 
     const listPanel = contentRegion.querySelector('.phone-generic-list-panel');
     const list = contentRegion.querySelector('.phone-generic-slot-list');
     if (!(listPanel instanceof HTMLElement) || !(list instanceof HTMLElement)) {
-        contentRegion.innerHTML = fallbackHtml;
+        renderFallback();
         return true;
     }
 
@@ -422,7 +508,7 @@ function patchGenericListRegions(container, regionHtml, options = {}) {
     root.classList.toggle('is-generic-delete-mode', !!regionHtml.viewModel?.deleteManageMode);
 
     if (updateNav) {
-        navRegion.outerHTML = regionHtml.navHtml;
+        navRegion.outerHTML = regionHtml.getNavHtml();
     }
 
     if (preserveToolbarSearch) {
@@ -431,7 +517,7 @@ function patchGenericListRegions(container, regionHtml, options = {}) {
         const existingSearchInput = /** @type {HTMLInputElement | null} */ (toolbarRegion.querySelector('#phone-generic-list-search'));
 
         if (!preserveSearchNode || !(existingSearchInput instanceof HTMLInputElement)) {
-            toolbarRegion.innerHTML = regionHtml.toolbarHtml;
+            toolbarRegion.innerHTML = regionHtml.getToolbarHtml();
         } else {
             if (!(toolbarActionsRegion instanceof HTMLElement)) return false;
             if (!(toolbarInfoRegion instanceof HTMLElement)) return false;
@@ -444,28 +530,32 @@ function patchGenericListRegions(container, regionHtml, options = {}) {
                 existingSearchInput.disabled = nextSearchDisabled;
             }
             if (updateToolbarActions) {
-                toolbarActionsRegion.innerHTML = regionHtml.toolbarActionsHtml;
+                toolbarActionsRegion.innerHTML = regionHtml.getToolbarActionsHtml();
             }
             if (updateToolbarInfo) {
-                toolbarInfoRegion.innerHTML = regionHtml.toolbarInfoHtml;
+                toolbarInfoRegion.innerHTML = regionHtml.getToolbarInfoHtml();
             }
         }
     } else {
-        toolbarRegion.innerHTML = regionHtml.toolbarHtml;
+        toolbarRegion.innerHTML = regionHtml.getToolbarHtml();
     }
     if (updateContent) {
         try {
-            const contentPatched = patchGenericListContentRegion(contentRegion, regionHtml.viewModel, regionHtml.contentHtml);
+            const contentPatched = patchGenericListContentRegion(
+                contentRegion,
+                regionHtml.viewModel,
+                () => regionHtml.getContentHtml(),
+            );
             if (!contentPatched) {
-                contentRegion.innerHTML = regionHtml.contentHtml;
+                contentRegion.innerHTML = regionHtml.getContentHtml();
             }
         } catch (error) {
             logger.warn('列表内容局部刷新失败，已回退到全量内容刷新', error);
-            contentRegion.innerHTML = regionHtml.contentHtml;
+            contentRegion.innerHTML = regionHtml.getContentHtml();
         }
     }
     if (updateBottomBar) {
-        bottomBarRegion.innerHTML = regionHtml.bottomBarHtml;
+        bottomBarRegion.innerHTML = regionHtml.getBottomBarHtml();
     }
     return true;
 }
@@ -481,6 +571,8 @@ export function renderGenericListPage(options = {}) {
         rawHeaders = [],
         rows = [],
         genericMatch,
+        navigationContext,
+        rowProjectionCache,
         ddlFieldMetadata,
         addRowModalId = 'phone-add-row-modal',
         render,
@@ -529,13 +621,14 @@ export function renderGenericListPage(options = {}) {
 
     const getVisibleDeleteRowIndexes = (searchQueryOverride) => buildGenericListPageViewModel({
         state,
-        rawData: getTableData(),
         rows,
         headers,
         rawHeaders,
         genericMatch,
         sheetKey,
         navigationSheetKey,
+        navigationContext,
+        rowProjectionCache,
         searchQueryOverride,
     }).selectableDeleteRowIndexes || [];
 
@@ -543,20 +636,21 @@ export function renderGenericListPage(options = {}) {
         state.syncLockState(getTableLockState(sheetKey));
         const nextViewModel = buildGenericListPageViewModel({
             state,
-            rawData: getTableData(),
             rows,
             headers,
             rawHeaders,
             genericMatch,
             sheetKey,
             navigationSheetKey,
+            navigationContext,
+            rowProjectionCache,
         });
         const nextRegionHtml = buildGenericListRegionHtml(tableName, nextViewModel);
         const patchPlan = resolveGenericListRegionPatchPlan(changedKeys);
         const patched = patchGenericListRegions(container, nextRegionHtml, patchPlan);
 
         if (!patched) {
-            container.innerHTML = nextRegionHtml.fullPageHtml;
+            container.innerHTML = nextRegionHtml.getFullPageHtml();
         }
 
         bindWheelBridge(container);
@@ -590,13 +684,14 @@ export function renderGenericListPage(options = {}) {
 
     const viewModel = buildGenericListPageViewModel({
         state,
-        rawData: getTableData(),
         rows,
         headers,
         rawHeaders,
         genericMatch,
         sheetKey,
         navigationSheetKey,
+        navigationContext,
+        rowProjectionCache,
     });
     const regionHtml = buildGenericListRegionHtml(tableName, viewModel);
     const canPatchExistingList = !!container.querySelector(GENERIC_LIST_ROOT_SELECTOR);
@@ -606,7 +701,7 @@ export function renderGenericListPage(options = {}) {
     })) {
         bindWheelBridge(container);
     } else {
-        container.innerHTML = regionHtml.fullPageHtml;
+        container.innerHTML = regionHtml.getFullPageHtml();
         bindWheelBridge(container);
     }
 

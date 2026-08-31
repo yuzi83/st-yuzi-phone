@@ -184,17 +184,28 @@ function backfillSharedSettings(current, legacy) {
     };
 }
 
+function resolveSettings(state, scopeId) {
+    const sharedResources = asObject(state?.sharedResources);
+    const legacy = legacyScopeSettings(state, scopeId, sharedResources);
+    return Object.hasOwn(sharedResources, STORAGE_KEY)
+        ? normalizeSettings(backfillSharedSettings(sharedResources[STORAGE_KEY], legacy))
+        : normalizeSettings(legacy);
+}
+
+function settingsNeedMigration(state, scopeId) {
+    const sharedResources = asObject(state?.sharedResources);
+    if (!Object.hasOwn(sharedResources, STORAGE_KEY)) return true;
+    if (Object.values(asObject(state?.scopes)).some((scope) => (
+        Object.hasOwn(asObject(scope?.settings), 'proactive')
+    ))) {
+        return true;
+    }
+    return JSON.stringify(sharedResources[STORAGE_KEY]) !== JSON.stringify(resolveSettings(state, scopeId));
+}
+
 function migrateSettings(state, scopeId) {
     const sharedResources = ensureSharedResources(state);
-    const legacy = legacyScopeSettings(state, scopeId, sharedResources);
-    if (!Object.hasOwn(sharedResources, STORAGE_KEY)) {
-        sharedResources[STORAGE_KEY] = normalizeSettings(legacy);
-    } else {
-        sharedResources[STORAGE_KEY] = normalizeSettings(backfillSharedSettings(
-            sharedResources[STORAGE_KEY],
-            legacy,
-        ));
-    }
+    sharedResources[STORAGE_KEY] = resolveSettings(state, scopeId);
     clearLegacyScopeProactiveSettings(state);
     return sharedResources[STORAGE_KEY];
 }
@@ -277,7 +288,7 @@ function applyPatch(current, patch) {
 
 export function createQQV2GlobalRuntimeSettings(options = {}) {
     const stateStore = options.stateStore;
-    if (!stateStore || typeof stateStore.transact !== 'function') {
+    if (!stateStore || typeof stateStore.read !== 'function' || typeof stateStore.transact !== 'function') {
         throw new TypeError('QQ v2 global runtime settings need a state store');
     }
 
@@ -304,6 +315,12 @@ export function createQQV2GlobalRuntimeSettings(options = {}) {
 
     return Object.freeze({
         async get(scopeId = '', operationOptions = {}) {
+            assertScopeMutationCurrent(scopeId, operationOptions);
+            const state = await stateStore.read();
+            assertScopeMutationCurrent(scopeId, operationOptions);
+            if (!settingsNeedMigration(state, scopeId)) {
+                return clone(resolveSettings(state, scopeId));
+            }
             return transactScoped(scopeId, operationOptions, (state) => clone(migrateSettings(state, scopeId)));
         },
         async update(scopeId = '', patch = {}, operationOptions = {}) {

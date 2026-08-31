@@ -1,6 +1,10 @@
 import { getTableData } from '../phone-core/data-api.js';
 import { replaceCurrentRoute } from '../phone-core/routing.js';
-import { resolveAdjacentTableTarget } from './catalog.js';
+import {
+    buildTableNavigationContext,
+    resolveAdjacentTableTarget,
+    resolveAdjacentTableTargetFromCatalog,
+} from './catalog.js';
 
 function normalizeText(value) {
     return String(value ?? '').trim();
@@ -17,8 +21,9 @@ function buildDirectionState(result, blocked) {
 
 export function buildTableNavigationControlState(rawData, currentSheetKey, options = {}) {
     const blocked = options.blocked === true;
-    const previousResult = resolveAdjacentTableTarget(rawData, currentSheetKey, 'previous');
-    const nextResult = resolveAdjacentTableTarget(rawData, currentSheetKey, 'next');
+    const navigationContext = options.navigationContext || buildTableNavigationContext(rawData);
+    const previousResult = resolveAdjacentTableTargetFromCatalog(navigationContext.catalog, currentSheetKey, 'previous');
+    const nextResult = resolveAdjacentTableTargetFromCatalog(navigationContext.catalog, currentSheetKey, 'next');
     return Object.freeze({
         currentSheetKey: normalizeText(currentSheetKey),
         blocked,

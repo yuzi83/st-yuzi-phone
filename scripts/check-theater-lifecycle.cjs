@@ -83,7 +83,7 @@ assertOrdered(renderSceneBody, [
     'container.innerHTML = buildTheaterScenePageHtml(viewModel, uiState);',
     'lifecycle,',
 ], 'renderTheaterScene');
-assert(renderSceneBody.includes('if (!lifecycle.isActive()) return;\n        renderTheaterScene(container, state.sceneId, options);'), 'renderCurrentScene 必须在重渲染前检查 lifecycle');
+assert(renderSceneBody.includes('if (!lifecycle.isActive()) return;\n        renderTheaterScene(container, state.sceneId, nextRenderOptions);'), 'renderCurrentScene 必须在重渲染前检查 lifecycle');
 
 assert(interactions.includes('function isTheaterInteractionActive(container, options = {})'), 'interactions 必须定义 active guard');
 assert(interactions.includes('function requestRenderIfActive(container, options)'), 'interactions 必须定义 render active helper');

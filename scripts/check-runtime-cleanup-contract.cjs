@@ -10,6 +10,9 @@ const FILES = {
     state: 'modules/phone-core/state.js',
     routeRuntime: 'modules/phone-core/route-runtime.js',
     routeRenderer: 'modules/phone-core/route-renderer.js',
+    callbacks: 'modules/phone-core/callbacks.js',
+    shellAppControls: 'modules/phone-core/shell-app-controls.js',
+    tableUpdateReviewService: 'modules/table-update-review/service.js',
     runtimeManager: 'modules/runtime-manager.js',
     eventManager: 'modules/utils/event-manager.js',
     fusionRuntime: 'modules/phone-fusion/runtime.js',
@@ -56,6 +59,10 @@ function main() {
     check(results, 'state', 'phone-core state 新增 shellInteractionTimerId', has(contents.state, 'shellInteractionTimerId: null,'));
     check(results, 'state', 'phone-core state 新增 routeRenderCleanup', has(contents.state, 'routeRenderCleanup: null,'));
     check(results, 'state', 'phone-core state 新增 routeRenderToken', has(contents.state, 'routeRenderToken: 0,'));
+    check(results, 'state', '隐藏期刷新状态集中在 phone-core state', has(contents.state, 'pendingRouteRefresh: false,')
+        && has(contents.state, "pendingRouteRefreshReason: '',")
+        && has(contents.state, 'export function markPhoneRouteRefreshPending(')
+        && has(contents.state, 'export function consumePhoneRouteRefreshPending('));
 
     check(results, 'lifecycle', 'lifecycle 新增 clearStatusClockTimer()', has(contents.lifecycle, 'function clearStatusClockTimer('));
     check(results, 'lifecycle', 'lifecycle 新增 startStatusClock()', has(contents.lifecycle, 'function startStatusClock('));
@@ -69,6 +76,16 @@ function main() {
     check(results, 'lifecycle', 'onPhoneDeactivated() 通过 deactivatePhoneRuntimeState() 收口停用逻辑', has(contents.lifecycle, 'deactivatePhoneRuntimeState(state);'));
     check(results, 'lifecycle', 'destroyPhoneRuntime() 通过 cleanupPhoneRuntimeBindings() 收口清理逻辑', has(contents.lifecycle, 'cleanupPhoneRuntimeBindings(state);'));
     check(results, 'lifecycle', 'UI lifecycle 不再直接拥有派生器启停', !has(contents.lifecycle, 'startSmallCalendarDerivedFieldsInjection') && !has(contents.lifecycle, 'startChronicleTodayRelationInjection'));
+    check(results, 'lifecycle', '重新打开时仅在待刷新或页面缺失时请求 route', has(contents.lifecycle, 'function hasCommittedPhoneRoutePage(')
+        && has(contents.lifecycle, 'const shouldRefreshRoute = consumePhoneRouteRefreshPending(state)')
+        && has(contents.lifecycle, 'activatePhoneRuntimeState(state, { requestRoute: shouldRefreshRoute });'));
+
+    check(results, 'index', '聊天切换在小手机隐藏时标记待刷新', has(contents.index, 'function handlePhoneBackgroundChatChangedAndMarkRoute(')
+        && has(contents.index, "markPhoneRouteRefreshPending('chat-changed');")
+        && has(contents.index, 'onBackgroundChatChanged: handlePhoneBackgroundChatChangedAndMarkRoute'));
+    check(results, 'callbacks', '隐藏期表格更新在 hash 与 UI 事件前提前返回', has(contents.callbacks, "markPhoneRouteRefreshPending('table-update', state);")
+        && contents.callbacks.indexOf('if (state.isPhoneActive === false)') < contents.callbacks.indexOf('const newVersion = computeDataVersion(sheetData);'));
+
     check(results, 'backgroundServices', '后台服务集中拥有两个派生器启停', has(contents.backgroundServices, 'startSmallCalendarDerivedFieldsInjection') && has(contents.backgroundServices, 'stopSmallCalendarDerivedFieldsInjection') && has(contents.backgroundServices, 'startChronicleTodayRelationInjection') && has(contents.backgroundServices, 'stopChronicleTodayRelationInjection'));
     check(results, 'backgroundServices', '后台服务聊天切换屏障固定等待第二次通知、250ms 稳定期和 3.5s fallback', has(contents.backgroundServices, 'TABLE_UPDATE_SIGNAL_TARGET = 2') && has(contents.backgroundServices, 'CHAT_CHANGE_SETTLE_DELAY_MS = 250') && has(contents.backgroundServices, 'CHAT_CHANGE_WAIT_TIMEOUT_MS = 3500'));
 
@@ -81,12 +98,24 @@ function main() {
     check(results, 'routeRuntime', 'route-runtime 统一 route request context 构造', has(contents.routeRuntime, 'function buildRouteRequestContext('));
     check(results, 'routeRuntime', 'route-runtime 为 renderPhoneRoute() 增加 catch 兜底', has(contents.routeRuntime, '}).catch((error) => {'));
 
+    check(results, 'routeRuntime', '隐藏状态 route 请求延后且不触发回滚', has(contents.routeRuntime, "markPhoneRouteRefreshPending(opts.reason || 'route-request', state);")
+        && has(contents.routeRuntime, 'if (result === false && state.isPhoneActive === false)')
+        && has(contents.routeRuntime, 'return Promise.resolve(true);'));
+
     check(results, 'routeRenderer', 'route-renderer 新增 createRouteRenderContext()', has(contents.routeRenderer, 'function createRouteRenderContext('));
     check(results, 'routeRenderer', 'route-renderer 新增 renderResolvedRoutePage()', has(contents.routeRenderer, 'function renderResolvedRoutePage('));
     check(results, 'routeRenderer', 'route-renderer 新增 commitRoutePage()', has(contents.routeRenderer, 'function commitRoutePage('));
     check(results, 'routeRenderer', 'route-renderer 新增 scheduleRouteCommit()', has(contents.routeRenderer, 'function scheduleRouteCommit('));
     check(results, 'routeRenderer', 'route-renderer 对加载失败输出结构化错误日志', has(contents.routeRenderer, "message: '加载 route renderer 失败'"));
     check(results, 'routeRenderer', 'route-renderer 对页面渲染失败输出结构化错误日志', has(contents.routeRenderer, "message: 'route 页面渲染失败'"));
+
+    check(results, 'routeRenderer', '隐藏状态不能继续提交 route 页面', has(contents.routeRenderer, '&& state.isPhoneActive !== false')
+        && has(contents.routeRenderer, 'function deferInactivePhoneRouteRender(')
+        && has(contents.routeRenderer, "markPhoneRouteRefreshPending('route-render-inactive', state);"));
+    check(results, 'shellAppControls', '壳层观察器同帧合并刷新并可取消', has(contents.shellAppControls, 'const scheduleRefresh = () => {')
+        && has(contents.shellAppControls, 'refreshFrameId = requestFrame(() => {')
+        && has(contents.shellAppControls, 'cancelFrame?.(refreshFrameId);'));
+    check(results, 'tableUpdateReviewService', '审核订阅健康巡检降为 30 秒', has(contents.tableUpdateReviewService, 'const SUBSCRIPTION_HEALTH_CHECK_INTERVAL_MS = 30000;'));
 
     check(results, 'runtimeManager', 'runtime-manager 新增 observeManagedDisconnection()', has(contents.runtimeManager, 'const observeManagedDisconnection = (target, callback, options = {}) => {'));
     check(results, 'runtimeManager', 'runtime-manager 暴露 observeDisconnection', has(contents.runtimeManager, 'observeDisconnection: observeManagedDisconnection,'));

@@ -71,8 +71,8 @@ function main() {
     check(results, 'homeViewModel', '首页审核 App 标记为系统 App 并使用审核 route', has(contents.homeViewModel, 'isSystemApp: true')
         && has(contents.homeViewModel, 'route: TABLE_UPDATE_REVIEW_ROUTE'));
 
-    check(results, 'visibilitySettings', '隐藏图标设置导入审核 App 常量', has(contents.visibilitySettings, "from '../../../table-update-review/constants.js'"));
-    check(results, 'visibilitySettings', '隐藏图标设置包含审核 App', has(contents.visibilitySettings, '{ key: TABLE_UPDATE_REVIEW_APP_ID, name: TABLE_UPDATE_REVIEW_APP_NAME }'));
+    check(results, 'visibilitySettings', '隐藏图标设置复用统一图标槽目录', has(contents.visibilitySettings, "from './icon-slots.js'"));
+    check(results, 'visibilitySettings', '隐藏图标设置消费统一目录中的审核 App', has(contents.visibilitySettings, 'collectAppearanceIconSlots(getTableData())'));
     check(results, 'iconSlots', '外观图标槽导入审核 App 常量', has(contents.iconSlots, "from '../../../table-update-review/constants.js'"));
     check(results, 'iconSlots', '外观图标槽包含审核系统 App', has(contents.iconSlots, "{ key: TABLE_UPDATE_REVIEW_APP_ID, name: TABLE_UPDATE_REVIEW_APP_NAME, type: 'system' }"));
 

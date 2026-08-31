@@ -758,7 +758,7 @@ async function checkSubscriptionRecovery(serviceModule) {
     assert.strictEqual(typeof activeTableUpdateCallback, 'function', '恢复后必须持有有效 table-update 订阅');
     assert.deepStrictEqual(
         fakeRuntime.getDelays(),
-        [5000],
+        [30000],
         '绑定成功后必须停止恢复 timer，并只保留 broker 健康检查',
     );
 
@@ -825,8 +825,8 @@ async function checkSubscribedBrokerHealthRebind(serviceModule) {
 
         assert.deepStrictEqual(
             fakeRuntime.getDelays(),
-            [5000],
-            '订阅成功后必须只安排一个 5 秒 broker 健康检查',
+            [30000],
+            '订阅成功后必须只安排一个 30 秒 broker 健康检查',
         );
         assert.deepStrictEqual(
             {
@@ -837,22 +837,22 @@ async function checkSubscribedBrokerHealthRebind(serviceModule) {
             },
             {
                 hasTimer: true,
-                intervalMs: 5000,
+                intervalMs: 30000,
                 count: 0,
                 lastOk: null,
             },
             'broker 健康状态必须可观测',
         );
 
-        fakeRuntime.runNext(5000);
-        assert.strictEqual(ensureAttempts, 1, '首个 5 秒周期必须执行一次 broker ensure');
+        fakeRuntime.runNext(30000);
+        assert.strictEqual(ensureAttempts, 1, '首个 30 秒周期必须执行一次 broker ensure');
         assert.strictEqual(rebindCount, 0, 'API 身份相同时不得重复原生绑定');
         assert.strictEqual(subscribeAttempts, 1, '健康检查不得创建新 subscriber');
         assert.strictEqual(rawSnapshotReads, 0, '健康检查不得读取完整表格快照');
-        assert.deepStrictEqual(fakeRuntime.getDelays(), [5000], '健康检查后必须保持单一 5 秒 timer');
+        assert.deepStrictEqual(fakeRuntime.getDelays(), [30000], '健康检查后必须保持单一 30 秒 timer');
 
         currentApiOwner = 'api-b';
-        fakeRuntime.runNext(5000);
+        fakeRuntime.runNext(30000);
         assert.strictEqual(ensureAttempts, 2);
         assert.strictEqual(rebindCount, 1, 'API A→B 后必须由 broker ensure 迁移原生绑定');
         assert.strictEqual(boundApiOwner, 'api-b');
@@ -868,7 +868,7 @@ async function checkSubscribedBrokerHealthRebind(serviceModule) {
         );
         assert.strictEqual(rebindCount, 2);
         assert.strictEqual(boundApiOwner, 'api-c');
-        assert.deepStrictEqual(fakeRuntime.getDelays(), [5000], '聊天切换后只能重建一个 5 秒健康 timer');
+        assert.deepStrictEqual(fakeRuntime.getDelays(), [30000], '聊天切换后只能重建一个 30 秒健康 timer');
 
         const status = serviceModule.getTableUpdateReviewServiceStatus();
         assert.strictEqual(status.subscriptionHealthCheckCount, 3);

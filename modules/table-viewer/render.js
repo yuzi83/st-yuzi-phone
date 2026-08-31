@@ -8,6 +8,7 @@
 import { Logger } from '../error-handler.js';
 import { navigateBack } from '../phone-core/routing.js';
 import { detectGenericTemplateForTable } from '../phone-beautify-templates/matcher.js';
+import { buildTableNavigationContext } from '../table-navigation/catalog.js';
 import { renderTableViewerLoadError, resolveTableViewerContext } from './context.js';
 import { createViewerRuntime } from './runtime.js';
 import { renderGenericTableViewer } from './generic-viewer.js';
@@ -27,7 +28,11 @@ export function renderTableViewer(container, sheetKey, options = {}) {
     const forceGenericList = options?.forceGenericList === true;
     const navigationSheetKey = String(options?.navigationSheetKey || sheetKey || '').trim();
     const rerenderViewer = (nextContainer, nextSheetKey) => {
-        renderTableViewer(nextContainer, nextSheetKey, options);
+        renderTableViewer(nextContainer, nextSheetKey, {
+            ...options,
+            initialTableData: undefined,
+            initialNavigationContext: undefined,
+        });
     };
 
     const viewerRuntime = createViewerRuntime({
@@ -45,7 +50,9 @@ export function renderTableViewer(container, sheetKey, options = {}) {
         return;
     }
 
-    const viewerContext = resolveTableViewerContext(sheetKey);
+    const viewerContext = resolveTableViewerContext(sheetKey, {
+        initialTableData: options.initialTableData,
+    });
     if (!viewerContext) {
         logger.warn({
             action: 'context.resolve.failed',
@@ -65,11 +72,15 @@ export function renderTableViewer(container, sheetKey, options = {}) {
     viewerRuntime.startViewerSession();
 
     const {
+        rawData,
+        sheet,
         rawHeaders,
         headers,
         rows,
         tableName,
     } = viewerContext;
+    const navigationContext = options.initialNavigationContext
+        || buildTableNavigationContext(rawData);
 
     const genericMatch = detectGenericTemplateForTable({
         sheetKey,
@@ -79,6 +90,9 @@ export function renderTableViewer(container, sheetKey, options = {}) {
 
     renderGenericTableViewer(container, {
         sheetKey,
+        sheet,
+        rawData,
+        navigationContext,
         navigationSheetKey,
         tableName,
         headers,

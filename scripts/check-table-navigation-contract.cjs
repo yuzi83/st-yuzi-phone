@@ -118,8 +118,12 @@ async function main() {
 
     const rendered = [];
     const presetCalls = [];
+    let routeTableReadCount = 0;
     const routeDeps = {
-        getTableData: () => rawData,
+        getTableData: () => {
+            routeTableReadCount += 1;
+            return rawData;
+        },
         resolveTableNavigationTarget: (_data, sheetKey) => ({
             sheetKey,
             sceneId: 'square',
@@ -135,39 +139,58 @@ async function main() {
 
     const genericRenderer = await __test__loadRouteRenderer('table:generic', 11, routeDeps);
     assert.equal(genericRenderer.routeType, 'table-generic-auto');
+    assert.equal(routeTableReadCount, 1);
     await genericRenderer.render({ page: 'generic' });
-    assert.deepEqual(rendered.pop(), {
-        kind: 'viewer',
-        args: [{ page: 'generic' }, 'generic', { forceGenericList: true, navigationSheetKey: 'generic' }],
-    });
+    const genericRenderCall = rendered.pop();
+    assert.equal(genericRenderCall.kind, 'viewer');
+    assert.deepEqual(genericRenderCall.args.slice(0, 2), [{ page: 'generic' }, 'generic']);
+    assert.equal(genericRenderCall.args[2].forceGenericList, true);
+    assert.equal(genericRenderCall.args[2].navigationSheetKey, 'generic');
+    assert.equal(genericRenderCall.args[2].initialTableData, rawData);
+    assert.deepEqual(genericRenderCall.args[2].initialNavigationContext.catalog, catalog);
     assert.equal(presetCalls.length, 1);
+    assert.equal(routeTableReadCount, 1);
 
     const theaterRenderer = await __test__loadRouteRenderer('table:theater', 13, routeDeps);
     assert.equal(theaterRenderer.routeType, 'table-theater');
+    assert.equal(routeTableReadCount, 2);
     await theaterRenderer.render({ page: 'theater' });
-    assert.deepEqual(rendered.pop(), {
-        kind: 'theater',
-        args: [{ page: 'theater' }, 'square', { renderToken: 13, navigationSheetKey: 'theater' }],
-    });
+    const theaterRenderCall = rendered.pop();
+    assert.equal(theaterRenderCall.kind, 'theater');
+    assert.deepEqual(theaterRenderCall.args.slice(0, 2), [{ page: 'theater' }, 'square']);
+    assert.equal(theaterRenderCall.args[2].renderToken, 13);
+    assert.equal(theaterRenderCall.args[2].navigationSheetKey, 'theater');
+    assert.equal(theaterRenderCall.args[2].initialTableData, rawData);
+    assert.deepEqual(theaterRenderCall.args[2].initialNavigationContext.catalog, catalog);
     assert.equal(presetCalls.length, 2);
+    assert.equal(routeTableReadCount, 2);
 
     const appTheaterRenderer = await __test__loadRouteRenderer('app:theater', 14, routeDeps);
     assert.equal(appTheaterRenderer.routeType, 'theater-app-redirect');
+    assert.equal(routeTableReadCount, 3);
     await appTheaterRenderer.render({ page: 'app-theater' });
-    assert.deepEqual(rendered.pop(), {
-        kind: 'theater',
-        args: [{ page: 'app-theater' }, 'square', { renderToken: 14, navigationSheetKey: 'theater' }],
-    });
+    const appTheaterRenderCall = rendered.pop();
+    assert.equal(appTheaterRenderCall.kind, 'theater');
+    assert.deepEqual(appTheaterRenderCall.args.slice(0, 2), [{ page: 'app-theater' }, 'square']);
+    assert.equal(appTheaterRenderCall.args[2].renderToken, 14);
+    assert.equal(appTheaterRenderCall.args[2].navigationSheetKey, 'theater');
+    assert.equal(appTheaterRenderCall.args[2].initialTableData, rawData);
+    assert.deepEqual(appTheaterRenderCall.args[2].initialNavigationContext.catalog, catalog);
     assert.equal(presetCalls.length, 2);
+    assert.equal(routeTableReadCount, 3);
 
     const appGenericRenderer = await __test__loadRouteRenderer('app:generic', 141, routeDeps);
     assert.equal(appGenericRenderer.routeType, 'app');
+    assert.equal(routeTableReadCount, 4);
     await appGenericRenderer.render({ page: 'app-generic' });
-    assert.deepEqual(rendered.pop(), {
-        kind: 'viewer',
-        args: [{ page: 'app-generic' }, 'generic', { navigationSheetKey: 'generic' }],
-    });
+    const appGenericRenderCall = rendered.pop();
+    assert.equal(appGenericRenderCall.kind, 'viewer');
+    assert.deepEqual(appGenericRenderCall.args.slice(0, 2), [{ page: 'app-generic' }, 'generic']);
+    assert.equal(appGenericRenderCall.args[2].navigationSheetKey, 'generic');
+    assert.equal(appGenericRenderCall.args[2].initialTableData, rawData);
+    assert.deepEqual(appGenericRenderCall.args[2].initialNavigationContext.catalog, catalog);
     assert.equal(presetCalls.length, 2);
+    assert.equal(routeTableReadCount, 4);
 
     const forcedGenericRenderer = await __test__loadRouteRenderer('table-generic:generic', 15, routeDeps);
     assert.equal(forcedGenericRenderer.routeType, 'table-generic');
@@ -344,7 +367,9 @@ async function main() {
     const tableRouteIndex = routeRenderer.indexOf('route.startsWith(TABLE_ROUTE_PREFIX)');
     const appRouteIndex = routeRenderer.indexOf("route.startsWith('app:')");
     assert(tableRouteIndex >= 0 && appRouteIndex > tableRouteIndex);
-    assert(routeRenderer.includes('resolveTableNavigationTarget(getTableData(), sheetKey)'));
+    assert.equal((routeRenderer.match(/const initialTableData = getTableData\(\);/g) || []).length, 2);
+    assert(routeRenderer.includes('const navigationContext = buildTableNavigationContext(initialTableData);'));
+    assert(routeRenderer.includes('resolveTableNavigationTarget(initialTableData, sheetKey, { navigationContext })'));
     assert(routeRenderer.includes("routeType: 'table-theater'")
         && routeRenderer.includes('renderTheaterScene(page, target.sceneId, {')
         && routeRenderer.includes('navigationSheetKey: target.sheetKey'));

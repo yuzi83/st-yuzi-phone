@@ -39,6 +39,34 @@ async function main() {
 
     await coordinator.dispose();
 
+    let delayedAcquireCount = 0;
+    const delayedReleased = [];
+    const delayedCoordinator = createRenderLeaseCoordinator({
+        async acquire(key) {
+            delayedAcquireCount += 1;
+            return { leaseId: `delayed-${key}`, url: `blob:${key}` };
+        },
+        async release(render) {
+            delayedReleased.push(render.leaseId);
+        },
+    });
+    const delayed = delayedCoordinator.begin();
+    assert.equal(delayed.peek('lazy-image'), null, 'lazy images reserve their key without acquiring a Blob URL');
+    await delayed.commit();
+    const delayedRender = await delayed.load('lazy-image');
+    assert.equal(delayedRender.url, 'blob:lazy-image', 'a committed visible render may load its reserved key later');
+    assert.equal(delayedAcquireCount, 1);
+    assert.deepEqual(delayedReleased, [], 'the delayed visible lease remains mounted');
+    const delayedEmpty = delayedCoordinator.begin();
+    await delayedEmpty.commit();
+    assert.deepEqual(delayedReleased, ['delayed-lazy-image'], 'the next render releases a delayed lease it no longer uses');
+    const abortedDelayed = delayedCoordinator.begin();
+    abortedDelayed.peek('never-load');
+    await abortedDelayed.abort();
+    assert.equal(await abortedDelayed.load('never-load'), null, 'an aborted render can never acquire delayed media');
+    assert.equal(delayedAcquireCount, 1);
+    await delayedCoordinator.dispose();
+
     acquireCount = 0;
     released.length = 0;
     const cachedCoordinator = createRenderLeaseCoordinator({

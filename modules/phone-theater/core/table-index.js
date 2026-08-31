@@ -12,7 +12,8 @@ function normalizeHeader(header, index) {
     return normalizeText(header) || `列${index + 1}`;
 }
 
-export function buildTheaterTableIndex(rawData) {
+export function buildTheaterTableIndex(rawData, options = {}) {
+    const includeRows = options.includeRows !== false;
     const tableByName = new Map();
     const tableBySheetKey = new Map();
     const sheetKeys = getSheetKeys(rawData);
@@ -26,14 +27,14 @@ export function buildTheaterTableIndex(rawData) {
         const headers = Array.isArray(content[0])
             ? content[0].map(normalizeHeader)
             : [];
-        const rows = content.slice(1).map(cloneRow);
+        const rows = includeRows ? content.slice(1).map(cloneRow) : [];
         const table = {
             sheetKey,
             tableName,
             sheet,
             headers,
             rows,
-            rowCount: rows.length,
+            rowCount: Math.max(0, content.length - 1),
             orderNo: Number.isFinite(sheet?.orderNo) ? Number(sheet.orderNo) : Number.POSITIVE_INFINITY,
         };
 

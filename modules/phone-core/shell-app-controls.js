@@ -84,6 +84,7 @@ export function bindPhoneShellAppControls(root, {
     const screen = root?.querySelector?.('.yuzi-phone-screen') || null;
     const temporaryLayerHost = root?.querySelector?.('[data-yuzi-phone-temporary-layer-host]') || null;
     const unregisterTemporaryLayerHost = registerPhoneTemporaryLayerHost(temporaryLayerHost);
+    const view = root?.ownerDocument?.defaultView || globalThis.window;
 
     const refresh = () => {
         if (!indicator) return;
@@ -103,6 +104,25 @@ export function bindPhoneShellAppControls(root, {
         }
     };
 
+    let refreshFrameId = null;
+    const requestFrame = typeof view?.requestAnimationFrame === 'function'
+        ? view.requestAnimationFrame.bind(view)
+        : null;
+    const cancelFrame = typeof view?.cancelAnimationFrame === 'function'
+        ? view.cancelAnimationFrame.bind(view)
+        : null;
+    const scheduleRefresh = () => {
+        if (!requestFrame) {
+            refresh();
+            return;
+        }
+        if (refreshFrameId !== null) return;
+        refreshFrameId = requestFrame(() => {
+            refreshFrameId = null;
+            refresh();
+        });
+    };
+
     const onIndicatorClick = (event) => {
         event?.preventDefault?.();
         if (isHomeRoute(getCurrentRoute())) return;
@@ -110,11 +130,10 @@ export function bindPhoneShellAppControls(root, {
     };
 
     indicator?.addEventListener?.('click', onIndicatorClick);
-    const view = root?.ownerDocument?.defaultView || globalThis.window;
     const MutationObserverClass = view?.MutationObserver || globalThis.MutationObserver;
     const observer = screen && typeof MutationObserverClass === 'function'
         ? new MutationObserverClass((mutations) => {
-            if (shouldRefreshForMutations(mutations)) refresh();
+            if (shouldRefreshForMutations(mutations)) scheduleRefresh();
         })
         : null;
     observer?.observe?.(screen, {
@@ -129,7 +148,7 @@ export function bindPhoneShellAppControls(root, {
             attributeFilter: ['data-yuzi-phone-theme'],
         });
     }
-    view?.addEventListener?.('resize', refresh);
+    view?.addEventListener?.('resize', scheduleRefresh);
     refresh();
 
     return {
@@ -137,7 +156,11 @@ export function bindPhoneShellAppControls(root, {
         dispose() {
             indicator?.removeEventListener?.('click', onIndicatorClick);
             observer?.disconnect?.();
-            view?.removeEventListener?.('resize', refresh);
+            if (refreshFrameId !== null) {
+                cancelFrame?.(refreshFrameId);
+                refreshFrameId = null;
+            }
+            view?.removeEventListener?.('resize', scheduleRefresh);
             unregisterTemporaryLayerHost();
         },
     };
