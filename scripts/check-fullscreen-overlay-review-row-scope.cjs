@@ -16,6 +16,9 @@ async function main() {
     const { createFullscreenOverlayRuntime } = await importModule(
         'modules/fullscreen-overlay/runtime.js',
     );
+    const { createGenericTableSourceAdapter } = await importModule(
+        'modules/fullscreen-overlay/sources/generic-table.js',
+    );
 
     const snapshot = {
         sheet_live: {
@@ -188,6 +191,102 @@ async function main() {
     );
 
     runtime.stop('review-row-scope-contract-complete');
+
+    const popupSnapshot = {
+        sheet_diary: {
+            name: '小日记表',
+            content: [
+                ['日期', '正文'],
+                ['2026-09-01', '旧行'],
+                ['2026-09-02', '本楼更新行'],
+            ],
+        },
+    };
+    const popupBatches = [];
+    let popupStableSnapshot = null;
+    const popupAdapter = createGenericTableSourceAdapter();
+    const popupRuntime = createFullscreenOverlayRuntime({
+        getSettings: () => ({
+            enabled: true,
+            sourceEnabledBySheetKey: { sheet_diary: true },
+            sourceModelBySheetKey: { sheet_diary: 'table-popup' },
+            models: { 'table-popup': {} },
+        }),
+        normalizeSettings: value => value,
+        readSnapshot: async () => popupSnapshot,
+        registry: {
+            get: sourceId => (sourceId === popupAdapter.id ? popupAdapter : null),
+        },
+        buildSourceCatalog: () => [{
+            sheetKey: 'sheet_diary',
+            tableName: '小日记表',
+            sourceId: popupAdapter.id,
+            modelId: 'table-popup',
+            supported: true,
+            enabled: true,
+        }],
+        createLayerRuntime: () => ({
+            clear() {},
+            dispose() {},
+            getState: () => ({ mounted: true }),
+        }),
+        createRendererRegistry: () => new Map([
+            ['table-popup', {
+                refreshSettings() {},
+                clear() {},
+                dispose() {},
+            }],
+        ]),
+        createScheduler: () => ({
+            replace(batches) {
+                popupBatches.push(batches);
+                return true;
+            },
+            clear() {},
+            dispose() {},
+            getState: () => ({ status: 'idle' }),
+        }),
+        createCoordinator(options) {
+            popupStableSnapshot = options.onStableSnapshot;
+            return coordinator;
+        },
+    });
+
+    popupRuntime.start('generic-popup-review-row-scope');
+    await flushMicrotasks();
+    assert.equal(await popupStableSnapshot(popupSnapshot, {
+        changedSheetKeys: ['sheet_diary'],
+        changedRowsBySheetKey: {
+            sheet_diary: {
+                rowIndexes: [1],
+                rowIds: [],
+            },
+        },
+    }), true);
+    assert.equal(popupBatches.at(-1)?.[0]?.rendererId, 'table-popup');
+    assert.deepEqual(
+        popupBatches.at(-1)?.[0]?.items,
+        [{
+            sourceId: 'generic-table',
+            sheetKey: 'sheet_diary',
+            rowIndex: 1,
+            cells: [
+                { label: '日期', value: '2026-09-02' },
+                { label: '正文', value: '本楼更新行' },
+            ],
+        }],
+        '审核结果必须把普通表格本楼更新行直接组装成 table-popup 批次',
+    );
+
+    const popupManual = await popupRuntime.testSelectedSources(popupSnapshot);
+    assert.equal(popupManual.ok, true);
+    assert.deepEqual(
+        popupBatches.at(-1)?.[0]?.items.map(item => item.rowIndex),
+        [0],
+        '普通表格弹窗手动测试每张表只读取第一条可展示行',
+    );
+    popupRuntime.stop('generic-popup-review-row-scope-complete');
+
     console.log('[fullscreen-overlay-review-row-scope] passed');
 }
 

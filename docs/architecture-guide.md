@@ -700,12 +700,15 @@ Appearance 页面服务统一由 [`appearance-settings.js`](../modules/settings-
 全屏浮层是一条扩展级后台视觉链路，不由设置页 DOM 拥有。当前稳定分层为：
 
 1. [`layer-runtime.js`](../modules/fullscreen-overlay/layer-runtime.js) 只管理宿主 `body` 下唯一的 `.yuzi-phone-fullscreen-overlay-layer`，提供 mount / get / clear / dispose 公共 seam。
-2. 内容源 Adapter 通过 [`source-registry.js`](../modules/fullscreen-overlay/source-registry.js) 注册；[`source-catalog.js`](../modules/fullscreen-overlay/source-catalog.js) 复用 [`buildTableNavigationCatalog()`](../modules/table-navigation/catalog.js) 枚举全部 `sheet_*` 物理表，再合并用户保存的启用状态、顺序与 `sourceModelBySheetKey` 模型绑定。未适配表仍在设置页可见，但 disabled。
-3. 全局模型 registry 按最终模型 ID 复用 renderer；内容源 Adapter 不直接创建 DOM。Adapter 声明默认模型，Catalog/运行时解析来源绑定；事件表现无关。`sourceModelBySheetKey` 覆盖 Adapter 的默认 `modelId`，最终模型在 Catalog 与来源批次组装阶段解析，不写入单条事件。v1 唯一可用模型是 `scrolling-barrage`。弹窗只是可扩展接口，v1 不实现弹窗 renderer，也不承诺任何弹窗布局或动画细节。
+2. 内容源 Adapter 通过 [`source-registry.js`](../modules/fullscreen-overlay/source-registry.js) 注册；[`source-catalog.js`](../modules/fullscreen-overlay/source-catalog.js) 复用 [`buildTableNavigationCatalog()`](../modules/table-navigation/catalog.js) 枚举全部 `sheet_*` 物理表，再合并用户保存的启用状态、顺序与 `sourceModelBySheetKey` 模型绑定。[`sources/generic-table.js`](../modules/fullscreen-overlay/sources/generic-table.js) 让所有用户 `sheet_*` 物理表都可使用普通表格弹窗；格式正确的直播表优先由专用 Adapter 匹配，并额外开放滚动弹幕。
+3. 全局模型 registry 按最终模型 ID 复用 renderer；内容源 Adapter 不直接创建 DOM。Adapter 声明默认模型，Catalog/运行时解析来源绑定；事件表现无关。`sourceModelBySheetKey` 覆盖 Adapter 的默认 `modelId`，但只能从该 Adapter 的 `modelIds` 能力列表中选择；最终模型在 Catalog 与来源批次组装阶段解析，不写入单条事件。当前稳定模型为滚动弹幕 `scrolling-barrage` 与普通表格弹窗 `table-popup`。
 4. [`scheduler.js`](../modules/fullscreen-overlay/scheduler.js) 是严格串行 scheduler。严格来源顺序仍保留；handoff 发生在当前来源完成发射/入口交接时。已发射的视觉元素可在交接后自然离场，不阻塞下一来源。来源间只保留短过渡；`replace()` 让最新楼层替换尚未发射的旧批次，`clear()` 会终止当前来源、清空待播来源并通知 renderer 清理。
-5. 滚动弹幕 renderer 只消费标准事件和全局模型设置，不知道“直播表”字段。直播表 v1 Adapter 位于 [`sources/live-table.js`](../modules/fullscreen-overlay/sources/live-table.js)，按物理行以及“剧情 → 推角 → 对线”的固定字段顺序读取非空分号项；手动测试不传行选择并读取整表，审核自动播放传入本楼变化行选择并只读取这些行，两者都不设置业务条数上限。
+5. 滚动弹幕 renderer 只消费标准事件和全局模型设置，不知道“直播表”字段。直播表 Adapter 位于 [`sources/live-table.js`](../modules/fullscreen-overlay/sources/live-table.js)，按物理行以及“剧情 → 推角 → 对线”的固定字段顺序读取非空分号项；手动测试读取全部弹幕，审核自动播放只读取本楼变化行，两者都不设置业务条数上限。
+6. 普通表格弹窗 renderer 位于 [`renderers/table-popup.js`](../modules/fullscreen-overlay/renderers/table-popup.js)，一条当前行事件生成一张无标题、无边框、无阴影的圆角字段网格。事件保留原表头顺序、空字段和完整字段值；手动测试每表只读取第一条可展示行，审核自动播放只读取本楼 `insert` / `update` 的当前行。弹窗使用 1–6 张全局并发上限、有限次数随机落点和静态矩形避让；不做模板工坊/小剧场识别、页面克隆、逐帧碰撞或永恒循环。
 
-[`result-channel.js`](../modules/table-update-review/result-channel.js) 发布的结构化审核结果是全屏浮层唯一的自动触发 seam。审核服务在完成本楼净变化计算后，必须随结果交付变化表的部分快照（`changedSnapshot`）与对应变化行（`rowSelection`）；浮层不得订阅 `table-fill-start` / `table-update`，不得自行等待 quiet window，也不得在自动路径再次调用数据库读取。审核自动播放与设置页手动测试只负责准备不同输入：自动路径使用审核交付的变化表快照和变化行，手动路径读取当前已勾选来源的整表；两者随后统一进入同一套 Adapter、模型解析、批次组装与 Scheduler。审核结果缺少必需快照时应拒绝本次自动播放，而不是用二次读库或固定延迟猜测数据已经收敛。
+[`result-channel.js`](../modules/table-update-review/result-channel.js) 发布的结构化审核结果是全屏浮层唯一的自动触发 seam。审核服务在完成本楼净变化计算后，必须随结果交付变化表的部分快照（`changedSnapshot`）与对应变化行（`rowSelection`）；浮层不得订阅 `table-fill-start` / `table-update`，不得自行等待 quiet window，也不得在自动路径再次调用数据库读取。审核自动播放与设置页手动测试只负责准备不同输入：自动路径使用审核交付的变化表快照和变化行，手动路径向 Adapter 提供当前已勾选来源快照；滚动弹幕 Adapter 读取全部测试弹幕，普通弹窗 Adapter 只读取第一条测试行。两者随后统一进入同一套 Adapter、模型解析、批次组装与 Scheduler。审核结果缺少必需快照时应拒绝本次自动播放，而不是用二次读库或固定延迟猜测数据已经收敛。
+
+手动测试与自动播放只在输入范围上不同，之后复用同一套 Adapter、模型解析与 Scheduler。
 
 全屏浮层接入扩展的 enabled 生命周期：扩展启用且浮层主开关开启时运行，关闭小手机窗口不停止；扩展 disabled / destroy 时必须取消订阅、队列、timer、动画和宿主节点。`document.hidden` 时 scheduler 暂停发射，CSS 动画同步暂停；后台期间只保留最新待播批次，恢复可见后继续。测试按钮可以绕过主开关，但必须尊重当前已勾选且适配可用的来源；清空不会修改持久设置或当前签名基线。
 
@@ -716,10 +719,13 @@ Appearance 页面服务统一由 [`appearance-settings.js`](../modules/settings-
 - 滚动弹幕密度表示轨道/视觉密度，不等于活动 DOM 数；运行时另设内部 DOM 硬上限。轨道在上一条弹幕离开入口区域后即可复用，不必等待其从屏幕左侧离场；内部硬上限独立保护移动端，不允许通过无限 DOM 保证“全部播放”。
 - 单条弹幕通过 `animationend` 与受控 timeout 兜底清理；来源 handoff 与元素最终清理是两个独立时点。
 - renderer 只在发射下一条时读取最新字号、间隔、时长、透明度和调色板，已经显示的元素不在半路改样式。
+- 普通表格弹窗只在发射时读取一次尺寸并做有限随机落点；极长内容通过整卡 `transform: scale(...)` 缩小到安全视口，不截断文字、不建立可交互滚动区。弹窗只动画 `transform` / `opacity`，并发 DOM 硬上限为 6。
 
-设置持久化只走 [`savePhoneSetting('fullscreenOverlay', ...)`](../modules/settings-app/services/fullscreen-overlay.js)，不建立 localStorage 旁路。设置页列出全部物理表、提供上移/下移排序、测试与清空，并通过 `rerenderFullscreenOverlayKeepScroll` 复用现有防回顶链路。设置样式由 [`16-fullscreen-overlay.css`](../styles/16-fullscreen-overlay.css) 聚合；页面输入框、下拉框和按钮继续消费 `--yuzi-settings-*` 主题变量，避免 SillyTavern 深色美化下出现黑底黑字。
+设置持久化只走 [`savePhoneSetting('fullscreenOverlay', ...)`](../modules/settings-app/services/fullscreen-overlay.js)，不建立 localStorage 旁路。设置页列出全部物理表、提供每表模型选择、上移/下移排序、测试与清空；顶部播放模型下拉只切换对应参数面板。页面通过 `rerenderFullscreenOverlayKeepScroll` 复用现有防回顶链路。设置样式由 [`16-fullscreen-overlay.css`](../styles/16-fullscreen-overlay.css) 聚合；页面输入框、下拉框和按钮继续消费 `--yuzi-settings-*` 主题变量，避免 SillyTavern 深色美化下出现黑底黑字。
 
 滚动弹幕全局调色板默认只有 `#FFFFFF`，允许 1–16 个合法完整 HEX 栏位且允许重复。每条弹幕在发射时按栏位等概率随机，并在存在其他实际颜色时尽量避免连续同色。设置页颜色控件支持原生 color input、HEX 输入、能力检测后的 EyeDropper 吸管及恢复默认；非法 HEX、取消吸管或浏览器不支持吸管时不得破坏最后一个合法值。
+
+普通表格弹窗默认上方 75% 区域、并发 1、停留 4 秒、交接 0.2 秒、2 列、正常大小、20px 圆角、`#FFFFFF` 背景与 0.94 背景透明度。列数固定尊重用户的 1 / 2 / 3 选择；大小档位同步缩放卡片、字号、间距与圆角。背景色复用同一套 color input、HEX 与 EyeDropper 能力，但与弹幕调色板相互独立。
 
 ### 6.4 Beautify 模板系统
 

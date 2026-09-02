@@ -1,9 +1,13 @@
 import { buildFullscreenOverlayPageHtml } from '../layout/page-builders/fullscreen-overlay-builders.js';
 import {
     createFullscreenOverlayColorControl,
+    createFullscreenOverlaySingleColorControl,
     normalizeFullscreenOverlayPalette,
 } from '../ui/color-control.js';
-import { SCROLLING_BARRAGE_MODEL_ID } from '../../fullscreen-overlay/settings.js';
+import {
+    SCROLLING_BARRAGE_MODEL_ID,
+    TABLE_POPUP_MODEL_ID,
+} from '../../fullscreen-overlay/settings.js';
 
 function clone(value) {
     try {
@@ -24,6 +28,7 @@ function createInitialState(service) {
         config: typeof service?.readConfig === 'function' ? service.readConfig() : {},
         tables: [],
         eyeDropperSupported: typeof globalThis?.EyeDropper === 'function',
+        selectedModelId: SCROLLING_BARRAGE_MODEL_ID,
     };
 }
 
@@ -36,16 +41,16 @@ function moveItem(list, item, direction) {
     return next;
 }
 
-function updateBarrageModel(config, patch) {
+function updateModel(config, modelId, patch) {
     const next = clone(config);
     const models = next.models && typeof next.models === 'object' ? next.models : {};
-    const current = models[SCROLLING_BARRAGE_MODEL_ID]
-        && typeof models[SCROLLING_BARRAGE_MODEL_ID] === 'object'
-        ? models[SCROLLING_BARRAGE_MODEL_ID]
+    const current = models[modelId]
+        && typeof models[modelId] === 'object'
+        ? models[modelId]
         : {};
     next.models = {
         ...models,
-        [SCROLLING_BARRAGE_MODEL_ID]: {
+        [modelId]: {
             ...current,
             ...patch,
         },
@@ -55,6 +60,10 @@ function updateBarrageModel(config, patch) {
 
 function getBarrageModel(config) {
     return config?.models?.[SCROLLING_BARRAGE_MODEL_ID] || {};
+}
+
+function getPopupModel(config) {
+    return config?.models?.[TABLE_POPUP_MODEL_ID] || {};
 }
 
 function getActionMessage(code, fallback) {
@@ -114,6 +123,8 @@ export function createFullscreenOverlayPage(ctx) {
                 ...table,
                 enabled: table.availability === 'available'
                     && sourceEnabledBySheetKey[table.sheetKey] === true,
+                modelId: state.config?.sourceModelBySheetKey?.[table.sheetKey]
+                    || table.modelId,
             }))
             .sort((left, right) => (
                 (orderIndex.get(left.sheetKey) ?? Number.MAX_SAFE_INTEGER)
@@ -137,11 +148,11 @@ export function createFullscreenOverlayPage(ctx) {
         return true;
     };
 
-    const bindNumericSetting = (selector, toPatch) => {
+    const bindNumericSetting = (selector, modelId, toPatch) => {
         const input = ctx.container?.querySelector?.(selector);
         bind(input, 'change', () => {
             const patch = toPatch(Number(input.value));
-            void persist(updateBarrageModel(state.config, patch));
+            void persist(updateModel(state.config, modelId, patch));
         });
     };
 
@@ -178,6 +189,24 @@ export function createFullscreenOverlayPage(ctx) {
             });
         });
 
+        const sourceModelInputs = ctx.container?.querySelectorAll?.(
+            '[data-fullscreen-overlay-source-model]',
+        ) || [];
+        sourceModelInputs.forEach((input) => {
+            bind(input, 'change', () => {
+                const sheetKey = asId(input.getAttribute('data-fullscreen-overlay-source-model'));
+                const modelId = asId(input.value);
+                if (!sheetKey || !modelId || input.disabled) return;
+                void persist({
+                    ...clone(state.config),
+                    sourceModelBySheetKey: {
+                        ...(state.config?.sourceModelBySheetKey || {}),
+                        [sheetKey]: modelId,
+                    },
+                });
+            });
+        });
+
         const moveButtons = ctx.container?.querySelectorAll?.('[data-fullscreen-overlay-move]') || [];
         moveButtons.forEach((button) => {
             bind(button, 'click', () => {
@@ -193,48 +222,122 @@ export function createFullscreenOverlayPage(ctx) {
             });
         });
 
+        const playbackModelInput = ctx.container?.querySelector?.(
+            '#phone-fullscreen-overlay-playback-model',
+        );
+        bind(playbackModelInput, 'change', () => {
+            state.selectedModelId = playbackModelInput.value === TABLE_POPUP_MODEL_ID
+                ? TABLE_POPUP_MODEL_ID
+                : SCROLLING_BARRAGE_MODEL_ID;
+            requestRerender();
+        });
+
         const areaInput = ctx.container?.querySelector?.('#phone-fullscreen-overlay-area');
         bind(areaInput, 'change', () => {
-            void persist(updateBarrageModel(state.config, {
+            void persist(updateModel(state.config, SCROLLING_BARRAGE_MODEL_ID, {
                 areaPercent: Number(areaInput.value),
             }));
         });
 
         const eternalInput = ctx.container?.querySelector?.('#phone-fullscreen-overlay-eternal');
         bind(eternalInput, 'change', () => {
-            void persist(updateBarrageModel(state.config, {
+            void persist(updateModel(state.config, SCROLLING_BARRAGE_MODEL_ID, {
                 eternalEnabled: eternalInput.checked === true,
             }));
         });
 
-        bindNumericSetting('#phone-fullscreen-overlay-density', value => ({
+        bindNumericSetting('#phone-fullscreen-overlay-density', SCROLLING_BARRAGE_MODEL_ID, value => ({
             maxConcurrent: value,
         }));
-        bindNumericSetting('#phone-fullscreen-overlay-interval', value => ({
+        bindNumericSetting('#phone-fullscreen-overlay-interval', SCROLLING_BARRAGE_MODEL_ID, value => ({
             intervalMs: value * 1000,
         }));
-        bindNumericSetting('#phone-fullscreen-overlay-duration', value => ({
+        bindNumericSetting('#phone-fullscreen-overlay-duration', SCROLLING_BARRAGE_MODEL_ID, value => ({
             durationMs: value * 1000,
         }));
-        bindNumericSetting('#phone-fullscreen-overlay-font-size', value => ({
+        bindNumericSetting('#phone-fullscreen-overlay-font-size', SCROLLING_BARRAGE_MODEL_ID, value => ({
             fontSizePx: value,
         }));
-        bindNumericSetting('#phone-fullscreen-overlay-opacity', value => ({
+        bindNumericSetting('#phone-fullscreen-overlay-opacity', SCROLLING_BARRAGE_MODEL_ID, value => ({
             opacity: value,
         }));
 
-        colorControl = createFullscreenOverlayColorControl({
-            container: ctx.container,
-            pageRuntime: ctx.pageRuntime,
-            getPalette: () => getBarrageModel(state.config).palette,
-            onPaletteChange: (palette) => {
-                void persist(updateBarrageModel(state.config, {
-                    palette: normalizeFullscreenOverlayPalette(palette),
-                }));
-            },
-            showToast: notify,
-            scope: globalThis,
+        const popupAreaInput = ctx.container?.querySelector?.(
+            '#phone-fullscreen-overlay-popup-area',
+        );
+        bind(popupAreaInput, 'change', () => {
+            void persist(updateModel(state.config, TABLE_POPUP_MODEL_ID, {
+                areaPercent: Number(popupAreaInput.value),
+            }));
         });
+        bindNumericSetting(
+            '#phone-fullscreen-overlay-popup-max-concurrent',
+            TABLE_POPUP_MODEL_ID,
+            value => ({ maxConcurrent: value }),
+        );
+        bindNumericSetting(
+            '#phone-fullscreen-overlay-popup-interval',
+            TABLE_POPUP_MODEL_ID,
+            value => ({ intervalMs: value * 1000 }),
+        );
+        bindNumericSetting(
+            '#phone-fullscreen-overlay-popup-duration',
+            TABLE_POPUP_MODEL_ID,
+            value => ({ durationMs: value * 1000 }),
+        );
+        bindNumericSetting(
+            '#phone-fullscreen-overlay-popup-radius',
+            TABLE_POPUP_MODEL_ID,
+            value => ({ borderRadiusPx: value }),
+        );
+        bindNumericSetting(
+            '#phone-fullscreen-overlay-popup-opacity',
+            TABLE_POPUP_MODEL_ID,
+            value => ({ opacity: value }),
+        );
+
+        const popupColumnInput = ctx.container?.querySelector?.(
+            '#phone-fullscreen-overlay-popup-column-count',
+        );
+        bind(popupColumnInput, 'change', () => {
+            void persist(updateModel(state.config, TABLE_POPUP_MODEL_ID, {
+                columnCount: Number(popupColumnInput.value),
+            }));
+        });
+        const popupSizeInput = ctx.container?.querySelector?.(
+            '#phone-fullscreen-overlay-popup-size',
+        );
+        bind(popupSizeInput, 'change', () => {
+            void persist(updateModel(state.config, TABLE_POPUP_MODEL_ID, {
+                sizePreset: popupSizeInput.value,
+            }));
+        });
+
+        colorControl = state.selectedModelId === TABLE_POPUP_MODEL_ID
+            ? createFullscreenOverlaySingleColorControl({
+                container: ctx.container,
+                pageRuntime: ctx.pageRuntime,
+                getColor: () => getPopupModel(state.config).backgroundColor,
+                onColorChange: (backgroundColor) => {
+                    void persist(updateModel(state.config, TABLE_POPUP_MODEL_ID, {
+                        backgroundColor,
+                    }));
+                },
+                showToast: notify,
+                scope: globalThis,
+            })
+            : createFullscreenOverlayColorControl({
+                container: ctx.container,
+                pageRuntime: ctx.pageRuntime,
+                getPalette: () => getBarrageModel(state.config).palette,
+                onPaletteChange: (palette) => {
+                    void persist(updateModel(state.config, SCROLLING_BARRAGE_MODEL_ID, {
+                        palette: normalizeFullscreenOverlayPalette(palette),
+                    }));
+                },
+                showToast: notify,
+                scope: globalThis,
+            });
 
         const testButton = ctx.container?.querySelector?.('#phone-fullscreen-overlay-test');
         bind(testButton, 'click', async () => {

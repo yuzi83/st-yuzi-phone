@@ -21,6 +21,11 @@ async function testPublicDefaults(mod) {
         'scrolling-barrage',
         '滚动弹幕模型必须拥有稳定的公共 model id',
     );
+    assert.strictEqual(
+        mod.TABLE_POPUP_MODEL_ID,
+        'table-popup',
+        '普通表格弹窗必须拥有稳定的公共 model id',
+    );
     assert.deepStrictEqual(
         mod.FULLSCREEN_OVERLAY_DEFAULTS,
         {
@@ -38,6 +43,17 @@ async function testPublicDefaults(mod) {
                     areaPercent: 75,
                     eternalEnabled: false,
                     palette: ['#FFFFFF'],
+                },
+                'table-popup': {
+                    maxConcurrent: 1,
+                    areaPercent: 75,
+                    intervalMs: 200,
+                    durationMs: 4000,
+                    columnCount: 2,
+                    sizePreset: 'normal',
+                    borderRadiusPx: 20,
+                    backgroundColor: '#FFFFFF',
+                    opacity: 0.94,
                 },
             },
         },
@@ -88,10 +104,65 @@ async function testTopLevelSettingsNormalization(mod) {
     const secondDefaults = mod.normalizeFullscreenOverlaySettings([]);
     firstDefaults.sourceOrder.push('sheet_live');
     firstDefaults.models['scrolling-barrage'].palette.push('#000000');
+    firstDefaults.models['table-popup'].backgroundColor = '#000000';
     assert.deepStrictEqual(
         secondDefaults,
         mod.FULLSCREEN_OVERLAY_DEFAULTS,
         '每次默认归一化必须返回独立副本，调用方修改不得污染公共默认值',
+    );
+}
+
+async function testTablePopupNormalization(mod) {
+    const normalized = mod.normalizeFullscreenOverlaySettings({
+        models: {
+            'table-popup': {
+                maxConcurrent: 99,
+                areaPercent: '50',
+                intervalMs: -1,
+                durationMs: 20000,
+                columnCount: 2.6,
+                sizePreset: 'large',
+                borderRadiusPx: 40,
+                backgroundColor: ' #123abc ',
+                opacity: 0.2,
+            },
+        },
+    });
+    assert.deepStrictEqual(
+        normalized.models['table-popup'],
+        {
+            maxConcurrent: 6,
+            areaPercent: 50,
+            intervalMs: 0,
+            durationMs: 15000,
+            columnCount: 3,
+            sizePreset: 'large',
+            borderRadiusPx: 32,
+            backgroundColor: '#123ABC',
+            opacity: 0.72,
+        },
+        '普通表格弹窗设置必须按已确认的手机安全范围归一化',
+    );
+
+    const invalid = mod.normalizeFullscreenOverlaySettings({
+        models: {
+            'table-popup': {
+                maxConcurrent: 'many',
+                areaPercent: 33,
+                intervalMs: null,
+                durationMs: {},
+                columnCount: false,
+                sizePreset: 'giant',
+                borderRadiusPx: Number.NaN,
+                backgroundColor: '#fff',
+                opacity: Number.POSITIVE_INFINITY,
+            },
+        },
+    });
+    assert.deepStrictEqual(
+        invalid.models['table-popup'],
+        mod.FULLSCREEN_OVERLAY_DEFAULTS.models['table-popup'],
+        '非法弹窗设置必须逐项回落到公共默认值',
     );
 }
 
@@ -315,6 +386,7 @@ async function main() {
     await testPublicDefaults(mod);
     await testTopLevelSettingsNormalization(mod);
     await testScrollingBarrageNumericNormalization(mod);
+    await testTablePopupNormalization(mod);
     await testBarrageAreaNormalization(mod);
     await testEternalBarrageNormalization(mod);
     await testHexAndPaletteNormalization(mod);

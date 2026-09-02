@@ -304,7 +304,7 @@ function testDocumentationContract() {
         '全局模型 registry',
         '严格串行 scheduler',
         'enabled 生命周期',
-        '直播表 v1',
+        '普通表格弹窗',
         'changedSnapshot',
         'rowSelection',
         '调色板',
@@ -331,8 +331,13 @@ function testDocumentationContract() {
 
     assertContains(
         architecture,
-        /弹窗[^。\n]*(可扩展接口|扩展接口)[^。\n]*(不是|并非|不属于|不在)[^。\n]*v1|v1[^。\n]*(不实现|未实现)[^。\n]*弹窗/,
-        '架构文档必须明确弹窗只是可扩展接口，不能写成 v1 已实现能力',
+        /table-popup[^。\n]*普通表格弹窗|普通表格弹窗[^。\n]*table-popup/,
+        '架构文档必须登记普通表格弹窗的稳定模型 ID',
+    );
+    assertContains(
+        architecture,
+        /所有[^。\n]*sheet_\*[^。\n]*普通表格弹窗|普通表格弹窗[^。\n]*所有[^。\n]*sheet_\*/,
+        '架构文档必须登记所有用户物理表都可使用普通表格弹窗',
     );
     assertContains(
         architecture,

@@ -1,9 +1,11 @@
 export const FULLSCREEN_OVERLAY_SETTING_KEY = 'fullscreenOverlay';
 export const SCROLLING_BARRAGE_MODEL_ID = 'scrolling-barrage';
+export const TABLE_POPUP_MODEL_ID = 'table-popup';
 
 const DEFAULT_OVERLAY_COLOR = '#FFFFFF';
 const MAX_OVERLAY_PALETTE_SIZE = 16;
-const SCROLLING_BARRAGE_AREA_PERCENTS = Object.freeze([25, 50, 75, 100]);
+const OVERLAY_AREA_PERCENTS = Object.freeze([25, 50, 75, 100]);
+const TABLE_POPUP_SIZE_PRESETS = Object.freeze(['compact', 'normal', 'large']);
 const OVERLAY_HEX_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
 
 export const FULLSCREEN_OVERLAY_DEFAULTS = Object.freeze({
@@ -22,6 +24,17 @@ export const FULLSCREEN_OVERLAY_DEFAULTS = Object.freeze({
             eternalEnabled: false,
             palette: Object.freeze(['#FFFFFF']),
         }),
+        [TABLE_POPUP_MODEL_ID]: Object.freeze({
+            maxConcurrent: 1,
+            areaPercent: 75,
+            intervalMs: 200,
+            durationMs: 4000,
+            columnCount: 2,
+            sizePreset: 'normal',
+            borderRadiusPx: 20,
+            backgroundColor: '#FFFFFF',
+            opacity: 0.94,
+        }),
     }),
 });
 
@@ -31,6 +44,7 @@ function isRecord(value) {
 
 function cloneDefaults() {
     const barrageDefaults = FULLSCREEN_OVERLAY_DEFAULTS.models[SCROLLING_BARRAGE_MODEL_ID];
+    const popupDefaults = FULLSCREEN_OVERLAY_DEFAULTS.models[TABLE_POPUP_MODEL_ID];
     return {
         enabled: FULLSCREEN_OVERLAY_DEFAULTS.enabled,
         sourceEnabledBySheetKey: {},
@@ -40,6 +54,9 @@ function cloneDefaults() {
             [SCROLLING_BARRAGE_MODEL_ID]: {
                 ...barrageDefaults,
                 palette: [...barrageDefaults.palette],
+            },
+            [TABLE_POPUP_MODEL_ID]: {
+                ...popupDefaults,
             },
         },
     };
@@ -98,9 +115,9 @@ function normalizeBoundedNumber(value, { min, max, fallback, integer = false }) 
     return Math.max(min, Math.min(max, normalized));
 }
 
-function normalizeScrollingBarrageAreaPercent(value, fallback) {
+function normalizeOverlayAreaPercent(value, fallback) {
     const normalized = Number(value);
-    return SCROLLING_BARRAGE_AREA_PERCENTS.includes(normalized)
+    return OVERLAY_AREA_PERCENTS.includes(normalized)
         ? normalized
         : fallback;
 }
@@ -160,7 +177,7 @@ function normalizeScrollingBarrageModel(value) {
             fallback: defaults.maxConcurrent,
             integer: true,
         }),
-        areaPercent: normalizeScrollingBarrageAreaPercent(
+        areaPercent: normalizeOverlayAreaPercent(
             source.areaPercent,
             defaults.areaPercent,
         ),
@@ -192,6 +209,56 @@ function normalizeScrollingBarrageModel(value) {
     };
 }
 
+function normalizeTablePopupModel(value) {
+    const source = isRecord(value) ? value : {};
+    const defaults = FULLSCREEN_OVERLAY_DEFAULTS.models[TABLE_POPUP_MODEL_ID];
+    return {
+        maxConcurrent: normalizeBoundedNumber(source.maxConcurrent, {
+            min: 1,
+            max: 6,
+            fallback: defaults.maxConcurrent,
+            integer: true,
+        }),
+        areaPercent: normalizeOverlayAreaPercent(source.areaPercent, defaults.areaPercent),
+        intervalMs: normalizeBoundedNumber(source.intervalMs, {
+            min: 0,
+            max: 2000,
+            fallback: defaults.intervalMs,
+            integer: true,
+        }),
+        durationMs: normalizeBoundedNumber(source.durationMs, {
+            min: 1000,
+            max: 15000,
+            fallback: defaults.durationMs,
+            integer: true,
+        }),
+        columnCount: normalizeBoundedNumber(source.columnCount, {
+            min: 1,
+            max: 3,
+            fallback: defaults.columnCount,
+            integer: true,
+        }),
+        sizePreset: TABLE_POPUP_SIZE_PRESETS.includes(source.sizePreset)
+            ? source.sizePreset
+            : defaults.sizePreset,
+        borderRadiusPx: normalizeBoundedNumber(source.borderRadiusPx, {
+            min: 8,
+            max: 32,
+            fallback: defaults.borderRadiusPx,
+            integer: true,
+        }),
+        backgroundColor: normalizeOverlayHexColor(
+            source.backgroundColor,
+            defaults.backgroundColor,
+        ),
+        opacity: normalizeBoundedNumber(source.opacity, {
+            min: 0.72,
+            max: 1,
+            fallback: defaults.opacity,
+        }),
+    };
+}
+
 export function normalizeFullscreenOverlaySettings(value) {
     if (!isRecord(value)) return cloneDefaults();
     const models = isRecord(value.models) ? value.models : {};
@@ -203,6 +270,9 @@ export function normalizeFullscreenOverlaySettings(value) {
         models: {
             [SCROLLING_BARRAGE_MODEL_ID]: normalizeScrollingBarrageModel(
                 models[SCROLLING_BARRAGE_MODEL_ID],
+            ),
+            [TABLE_POPUP_MODEL_ID]: normalizeTablePopupModel(
+                models[TABLE_POPUP_MODEL_ID],
             ),
         },
     };

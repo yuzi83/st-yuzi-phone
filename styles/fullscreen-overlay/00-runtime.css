@@ -46,6 +46,63 @@
     animation-play-state: paused;
 }
 
+.yuzi-phone-fullscreen-overlay-table-popup {
+    position: absolute;
+    top: var(--yuzi-phone-fullscreen-overlay-popup-top, 12px);
+    left: var(--yuzi-phone-fullscreen-overlay-popup-left, 12px);
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns:
+        repeat(
+            var(--yuzi-phone-fullscreen-overlay-popup-columns, 2),
+            minmax(0, 1fr)
+        );
+    gap: var(--yuzi-phone-fullscreen-overlay-popup-gap, 8px);
+    width: var(--yuzi-phone-fullscreen-overlay-popup-width, min(88vw, 560px));
+    padding: var(--yuzi-phone-fullscreen-overlay-popup-padding, 14px);
+    border-radius: var(--yuzi-phone-fullscreen-overlay-popup-radius, 20px);
+    background: var(--yuzi-phone-fullscreen-overlay-popup-background, rgba(255, 255, 255, 0.94));
+    color: var(--yuzi-phone-fullscreen-overlay-popup-color, #1f1f1f);
+    pointer-events: none;
+    transform-origin: top left;
+    will-change: transform, opacity;
+    animation-name: yuzi-phone-fullscreen-overlay-popup;
+    animation-duration: var(--yuzi-phone-fullscreen-overlay-popup-duration, 4000ms);
+    animation-timing-function: ease;
+    animation-fill-mode: forwards;
+}
+
+.yuzi-phone-fullscreen-overlay-table-popup-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    padding: 10px;
+    border-radius: calc(var(--yuzi-phone-fullscreen-overlay-popup-radius, 20px) * 0.5);
+    background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.yuzi-phone-fullscreen-overlay-table-popup-label {
+    font-size: var(--yuzi-phone-fullscreen-overlay-popup-label-size, 11px);
+    font-weight: 600;
+    line-height: 1.35;
+    opacity: 0.62;
+}
+
+.yuzi-phone-fullscreen-overlay-table-popup-value {
+    min-width: 0;
+    font-size: var(--yuzi-phone-fullscreen-overlay-popup-value-size, 14px);
+    font-weight: 500;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.yuzi-phone-fullscreen-overlay-layer[data-yuzi-phone-overlay-paused="true"]
+    .yuzi-phone-fullscreen-overlay-table-popup {
+    animation-play-state: paused;
+}
+
 @keyframes yuzi-phone-fullscreen-overlay-scroll {
     0% {
         transform: translate3d(100vw, 0, 0);
@@ -62,6 +119,24 @@
 
     100% {
         transform: translate3d(-110%, 0, 0);
+        opacity: 0;
+    }
+}
+
+@keyframes yuzi-phone-fullscreen-overlay-popup {
+    0% {
+        transform: scale(var(--yuzi-phone-fullscreen-overlay-popup-enter-scale, 0.96));
+        opacity: 0;
+    }
+
+    7%,
+    90% {
+        transform: scale(var(--yuzi-phone-fullscreen-overlay-popup-fit-scale, 1));
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(var(--yuzi-phone-fullscreen-overlay-popup-exit-scale, 0.98));
         opacity: 0;
     }
 }

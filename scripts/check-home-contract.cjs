@@ -18,6 +18,7 @@ const FILES = {
     qqAppDefinition: 'modules/qq-v2/app-definition.js',
     settingsSchema: 'modules/settings/schema.js',
     routeRenderer: 'modules/phone-core/route-renderer.js',
+    dbBridge: 'modules/phone-core/db-bridge.js',
     homeCss: 'styles/phone-base/02-page-home.css',
     tokens: 'styles/phone-base/00-phone-tokens.css',
 };
@@ -75,6 +76,15 @@ function main() {
     check(results, 'render', 'Dock 动态动作保留无障碍名称', has(contents.render, "el.setAttribute('aria-label', String(app.name || ''))"));
     check(results, 'render', '网格间距保留 Figma 小数基线，不走整数钳制', has(contents.render, 'function clampHomeGridGap(value)')
         && has(contents.render, 'const appGridGap = clampHomeGridGap(phoneSettings.appGridGap);'));
+    check(results, 'render', '主页空表首屏只做有限的可见态重试', has(contents.render, 'HOME_TABLE_READY_RETRY_MAX = 6')
+        && has(contents.render, "getCurrentRoute() !== 'home'")
+        && has(contents.render, "classList.contains('visible')")
+        && has(contents.render, 'runtime.setInterval(')
+        && has(contents.render, 'getSheetKeys(getTableData()).length > 0')
+        && !has(contents.render, 'subscribeTableUpdate'));
+    check(results, 'dbBridge', '数据库桥接从顶层同源窗口逐级回退查找 API', has(contents.dbBridge, 'while (cursor && !windows.includes(cursor))')
+        && has(contents.dbBridge, 'for (let index = windows.length - 1; index >= 0; index -= 1)')
+        && has(contents.dbBridge, 'AutoCardUpdaterAPI'));
 
     // runtime.js 暴露主屏交互 runtime 工厂
     check(results, 'runtime', 'runtime 暴露 ensureHomeInteractionRuntime()', has(contents.runtime, 'export function ensureHomeInteractionRuntime(container)'));

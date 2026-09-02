@@ -116,6 +116,36 @@ export function buildFullscreenOverlayColorRowsHtml(palette, options = {}) {
     `).join('');
 }
 
+export function buildFullscreenOverlaySingleColorHtml(value, options = {}) {
+    const color = normalizeHexColor(value) || DEFAULT_FULLSCREEN_OVERLAY_PALETTE[0];
+    const eyeDropperSupported = options.eyeDropperSupported === true;
+    return `
+        <div class="phone-fullscreen-overlay-color-row phone-fullscreen-overlay-single-color-row">
+            <label class="phone-fullscreen-overlay-color-swatch" title="选择背景色">
+                <input type="color"
+                    value="${escapeHtmlAttr(color)}"
+                    data-fullscreen-overlay-single-color-input
+                    aria-label="选择弹窗背景色">
+                <span style="--yuzi-phone-fullscreen-overlay-swatch:${escapeHtmlAttr(color)}"></span>
+            </label>
+            <input type="text"
+                class="phone-settings-input phone-fullscreen-overlay-color-hex"
+                value="${escapeHtmlAttr(color)}"
+                maxlength="7"
+                spellcheck="false"
+                inputmode="text"
+                data-fullscreen-overlay-single-color-hex
+                aria-label="弹窗背景色 HEX">
+            <button type="button"
+                class="phone-settings-btn phone-fullscreen-overlay-icon-btn"
+                data-fullscreen-overlay-single-eyedropper
+                title="${eyeDropperSupported ? '吸取界面颜色' : '当前浏览器不支持吸管取色'}"
+                aria-label="吸取弹窗背景色"
+                ${eyeDropperSupported ? '' : 'disabled'}>◉</button>
+        </div>
+    `;
+}
+
 function createRuntimeBinder(runtime) {
     return (target, type, listener, options) => {
         if (!target || typeof runtime?.addEventListener !== 'function') return () => {};
@@ -222,6 +252,63 @@ export function createFullscreenOverlayColorControl(options = {}) {
             cleanupFns.splice(0).forEach((cleanup) => {
                 if (typeof cleanup === 'function') cleanup();
             });
+        },
+    });
+}
+
+export function createFullscreenOverlaySingleColorControl(options = {}) {
+    const {
+        container,
+        pageRuntime,
+        getColor = () => DEFAULT_FULLSCREEN_OVERLAY_PALETTE[0],
+        onColorChange = () => {},
+        showToast = () => {},
+        scope = globalThis,
+    } = options;
+    const cleanupFns = [];
+    const bindEvent = createRuntimeBinder(pageRuntime);
+    let disposed = false;
+
+    const currentColor = () => (
+        normalizeHexColor(getColor()) || DEFAULT_FULLSCREEN_OVERLAY_PALETTE[0]
+    );
+    const updateColor = (value, input = null) => {
+        const color = normalizeHexColor(value);
+        if (!color) {
+            if (input) input.value = currentColor();
+            showToast('请输入有效的 HEX 颜色，例如 #FFFFFF。', true);
+            return;
+        }
+        if (!disposed) onColorChange(color);
+    };
+
+    const colorInput = container?.querySelector?.('[data-fullscreen-overlay-single-color-input]');
+    cleanupFns.push(bindEvent(colorInput, 'change', () => {
+        updateColor(colorInput.value, colorInput);
+    }));
+
+    const hexInput = container?.querySelector?.('[data-fullscreen-overlay-single-color-hex]');
+    cleanupFns.push(bindEvent(hexInput, 'change', () => {
+        updateColor(hexInput.value, hexInput);
+    }));
+
+    const eyeDropperButton = container?.querySelector?.(
+        '[data-fullscreen-overlay-single-eyedropper]',
+    );
+    cleanupFns.push(bindEvent(eyeDropperButton, 'click', async () => {
+        const result = await requestEyeDropperColor(currentColor(), scope);
+        if (disposed || result.changed !== true) {
+            if (result.reason === 'unsupported') showToast('当前浏览器不支持吸管取色。', true);
+            else if (result.reason === 'failed') showToast('吸管取色失败，请重试。', true);
+            return;
+        }
+        onColorChange(result.color);
+    }));
+
+    return Object.freeze({
+        dispose() {
+            disposed = true;
+            cleanupFns.splice(0).forEach((cleanup) => cleanup?.());
         },
     });
 }

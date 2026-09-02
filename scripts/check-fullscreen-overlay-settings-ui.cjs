@@ -217,12 +217,34 @@ async function testDefaultSourceCatalogKeepsDisplayNameAndDefaultLiveSelection()
         ]),
         [
             ['sheet_live', '直播表', 'available', true],
-            ['sheet_diary', '小日记表', 'unsupported', false],
+            ['sheet_diary', '小日记表', 'available', false],
         ],
-        '默认 source catalog 必须保留物理表显示名，并默认勾选合法直播表',
+        '默认 source catalog 必须让全部物理表可选普通弹窗，并只默认勾选合法直播表',
     );
     assert.strictEqual(viewModel.config.sourceEnabledBySheetKey.sheet_live, true);
     assert.strictEqual(viewModel.config.sourceEnabledBySheetKey.sheet_diary, false);
+    assert.deepStrictEqual(
+        viewModel.tables.find(table => table.sheetKey === 'sheet_live')?.modelIds,
+        ['scrolling-barrage', 'table-popup'],
+        '直播表必须可独立选择弹幕或普通表格弹窗',
+    );
+    assert.deepStrictEqual(
+        viewModel.tables.find(table => table.sheetKey === 'sheet_diary')?.modelIds,
+        ['table-popup'],
+        '普通物理表第一版只提供普通表格弹窗模型',
+    );
+    const rebound = await service.saveConfig({
+        ...viewModel.config,
+        sourceModelBySheetKey: {
+            ...viewModel.config.sourceModelBySheetKey,
+            sheet_live: 'table-popup',
+        },
+    });
+    assert.equal(
+        rebound.tables.find(table => table.sheetKey === 'sheet_live')?.modelId,
+        'table-popup',
+        '保存每表模型绑定后，设置页 view model 必须立即反映新选择',
+    );
     assert.strictEqual(
         Object.prototype.hasOwnProperty.call(viewModel.config, 'enabledSourceSheetKeys'),
         false,
@@ -316,14 +338,28 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
                     eternalEnabled: true,
                     palette: ['#FFFFFF', '#FF0000'],
                 },
+                'table-popup': {
+                    maxConcurrent: 1,
+                    areaPercent: 75,
+                    intervalMs: 200,
+                    durationMs: 4000,
+                    columnCount: 2,
+                    sizePreset: 'normal',
+                    borderRadiusPx: 20,
+                    backgroundColor: '#FFFFFF',
+                    opacity: 0.94,
+                },
             },
         },
+        selectedModelId: 'scrolling-barrage',
         tables: [{
             sheetKey: 'sheet_live',
             tableName: '直播表',
             availability: 'available',
             enabled: true,
             statusLabel: '横向滚动弹幕',
+            modelId: 'scrolling-barrage',
+            modelIds: ['scrolling-barrage', 'table-popup'],
         }, {
             sheetKey: 'sheet_diary',
             tableName: '小日记表',
@@ -341,6 +377,13 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
     assert.match(html, /data-fullscreen-overlay-move="up"/u);
     assert.match(html, /data-fullscreen-overlay-move="down"/u);
     assert.match(html, /class="phone-settings-select"/u);
+    assert.match(html, /data-fullscreen-overlay-source-model="sheet_live"/u);
+    assert.match(html, /value="table-popup">普通表格弹窗<\/option>/u);
+    assert.doesNotMatch(
+        html.match(/id="phone-fullscreen-overlay-playback-model"[^>]*>/u)?.[0] || '',
+        /\bdisabled\b/u,
+        '顶部播放模型下拉必须可切换参数面板',
+    );
     assert.match(html, /id="phone-fullscreen-overlay-area"/u);
     assert.match(html, /option value="25" selected>上方 25%<\/option>/u);
     assert.match(html, /id="phone-fullscreen-overlay-density"/u);
@@ -358,6 +401,68 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
     assert.match(html, /id="phone-fullscreen-overlay-reset-palette"/u);
     assert.match(html, /id="phone-fullscreen-overlay-test"/u);
     assert.match(html, /id="phone-fullscreen-overlay-clear"/u);
+
+    const popupHtml = buildFullscreenOverlayPageHtml({
+        status: 'ready',
+        eyeDropperSupported: true,
+        selectedModelId: 'table-popup',
+        config: {
+            enabled: true,
+            sourceEnabledBySheetKey: { sheet_diary: true },
+            sourceOrder: ['sheet_diary'],
+            sourceModelBySheetKey: { sheet_diary: 'table-popup' },
+            models: {
+                'scrolling-barrage': {
+                    maxConcurrent: 3,
+                    intervalMs: 1600,
+                    durationMs: 8000,
+                    fontSizePx: 14,
+                    opacity: 0.86,
+                    areaPercent: 75,
+                    eternalEnabled: false,
+                    palette: ['#FFFFFF'],
+                },
+                'table-popup': {
+                    maxConcurrent: 4,
+                    areaPercent: 50,
+                    intervalMs: 300,
+                    durationMs: 5000,
+                    columnCount: 3,
+                    sizePreset: 'large',
+                    borderRadiusPx: 24,
+                    backgroundColor: '#123456',
+                    opacity: 0.9,
+                },
+            },
+        },
+        tables: [{
+            sheetKey: 'sheet_diary',
+            tableName: '小日记表',
+            availability: 'available',
+            enabled: true,
+            modelId: 'table-popup',
+            modelIds: ['table-popup'],
+            statusLabel: '普通表格弹窗',
+        }],
+    });
+    assert.match(popupHtml, /id="phone-fullscreen-overlay-playback-model"/u);
+    assert.match(popupHtml, /option value="table-popup" selected/u);
+    assert.match(popupHtml, /id="phone-fullscreen-overlay-popup-area"/u);
+    assert.match(popupHtml, /option value="50" selected>上方 50%<\/option>/u);
+    assert.match(popupHtml, /id="phone-fullscreen-overlay-popup-max-concurrent"[^>]*value="4"/u);
+    assert.match(popupHtml, /id="phone-fullscreen-overlay-popup-interval"[^>]*value="0\.3"/u);
+    assert.match(popupHtml, /id="phone-fullscreen-overlay-popup-duration"[^>]*value="5"/u);
+    assert.match(popupHtml, /id="phone-fullscreen-overlay-popup-column-count"/u);
+    assert.match(popupHtml, /option value="3" selected/u);
+    assert.match(popupHtml, /id="phone-fullscreen-overlay-popup-size"/u);
+    assert.match(popupHtml, /option value="large" selected/u);
+    assert.match(popupHtml, /id="phone-fullscreen-overlay-popup-radius"[^>]*value="24"/u);
+    assert.match(popupHtml, /id="phone-fullscreen-overlay-popup-opacity"[^>]*value="0\.9"/u);
+    assert.match(popupHtml, /data-fullscreen-overlay-single-color-input/u);
+    assert.match(popupHtml, /data-fullscreen-overlay-single-color-hex/u);
+    assert.match(popupHtml, /data-fullscreen-overlay-single-eyedropper/u);
+    assert.doesNotMatch(popupHtml, /phone-fullscreen-overlay-eternal/u);
+    assert.doesNotMatch(popupHtml, /phone-fullscreen-overlay-add-color/u);
 }
 
 async function testPageAndRendererExposeLifecycleAndScrollSafeSeams() {
@@ -373,6 +478,10 @@ async function testPageAndRendererExposeLifecycleAndScrollSafeSeams() {
     assert.match(pageSource, /rerenderFullscreenOverlayKeepScroll/u);
     assert.match(pageSource, /phone-fullscreen-overlay-eternal/u);
     assert.match(pageSource, /phone-fullscreen-overlay-area/u);
+    assert.match(pageSource, /phone-fullscreen-overlay-playback-model/u);
+    assert.match(pageSource, /data-fullscreen-overlay-source-model/u);
+    assert.match(pageSource, /phone-fullscreen-overlay-popup-max-concurrent/u);
+    assert.match(pageSource, /createFullscreenOverlaySingleColorControl/u);
     assert.doesNotMatch(
         pageSource,
         /(?<!pageRuntime\.)addEventListener\s*\(/u,

@@ -73,14 +73,21 @@ export function buildOverlaySourceCatalog(rawData, settings = {}, registry = nul
         const enabled = supported && (typeof explicitEnabled === 'boolean'
             ? explicitEnabled
             : adapter.defaultEnabled === true);
-        const modelId = normalizeModelId(sourceModelBySheetKey[entry.sheetKey])
-            || normalizeModelId(adapter?.modelId);
+        const defaultModelId = normalizeModelId(adapter?.modelId);
+        const modelIds = supported
+            ? normalizeStringList([...(adapter?.modelIds || []), defaultModelId])
+            : [];
+        const requestedModelId = normalizeModelId(sourceModelBySheetKey[entry.sheetKey]);
+        const modelId = modelIds.includes(requestedModelId)
+            ? requestedModelId
+            : defaultModelId;
 
         return Object.freeze({
             ...entry,
             sourceOrderIndex,
             sourceId: normalizeText(adapter?.id),
             modelId,
+            modelIds: Object.freeze(modelIds),
             supported,
             disabled: !supported,
             enabled,

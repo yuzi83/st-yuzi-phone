@@ -78,6 +78,7 @@ async function checkSourceCatalogContract() {
     const liveAdapter = Object.freeze({
         id: 'live-table',
         modelId: 'scrolling-barrage',
+        modelIds: ['scrolling-barrage', 'table-popup'],
         defaultEnabled: true,
         matches: context => context?.tableName === '直播表',
         getSignature: context => context?.tableName || '',
@@ -85,7 +86,8 @@ async function checkSourceCatalogContract() {
     });
     const genericAdapter = Object.freeze({
         id: 'generic-table',
-        modelId: 'popup',
+        modelId: 'table-popup',
+        modelIds: ['table-popup'],
         defaultEnabled: false,
         matches: context => context?.tableName === '通用表',
         getSignature: context => context?.tableName || '',
@@ -118,7 +120,8 @@ async function checkSourceCatalogContract() {
             sheet_generic: true,
         },
         sourceModelBySheetKey: {
-            sheet_live: ' popup ',
+            sheet_live: ' table-popup ',
+            sheet_generic: 'scrolling-barrage',
         },
     }, registry);
 
@@ -134,6 +137,7 @@ async function checkSourceCatalogContract() {
         enabled: item.enabled,
         sourceId: item.sourceId,
         modelId: item.modelId,
+        modelIds: item.modelIds,
     })), [
         {
             sheetKey: 'sheet_live',
@@ -141,7 +145,8 @@ async function checkSourceCatalogContract() {
             disabled: false,
             enabled: false,
             sourceId: 'live-table',
-            modelId: 'popup',
+            modelId: 'table-popup',
+            modelIds: ['scrolling-barrage', 'table-popup'],
         },
         {
             sheetKey: 'sheet_unknown',
@@ -150,6 +155,7 @@ async function checkSourceCatalogContract() {
             enabled: false,
             sourceId: '',
             modelId: '',
+            modelIds: [],
         },
         {
             sheetKey: 'sheet_generic',
@@ -157,7 +163,8 @@ async function checkSourceCatalogContract() {
             disabled: false,
             enabled: true,
             sourceId: 'generic-table',
-            modelId: 'popup',
+            modelId: 'table-popup',
+            modelIds: ['table-popup'],
         },
     ]);
 
@@ -211,6 +218,7 @@ async function checkLiveTableSourceAdapterContract() {
 
     assert.equal(adapter.id, 'live-table');
     assert.equal(adapter.modelId, 'scrolling-barrage');
+    assert.deepEqual(adapter.modelIds, ['scrolling-barrage', 'table-popup']);
     assert.equal(adapter.defaultEnabled, true);
     assert.equal(adapter.matches(context), true);
     assert.equal(adapter.matches({ ...context, tableName: '直播表副本' }), false);
@@ -411,12 +419,150 @@ async function checkLiveTableSourceAdapterContract() {
         tableName: manyBarrages.name,
         sheet: manyBarrages,
     }).length, 40);
+
+    assert.deepEqual(
+        adapter.readEvents({
+            ...context,
+            modelId: 'table-popup',
+            rowSelection: {
+                rowIndexes: [1],
+                rowIds: [],
+            },
+        }),
+        [{
+            sourceId: 'live-table',
+            sheetKey: 'sheet_livestream_rooms',
+            rowIndex: 1,
+            cells: [
+                { label: '推角弹幕串', value: '' },
+                { label: '无关字段', value: '只有无关字段有值' },
+                { label: '剧情弹幕串', value: ' ' },
+                { label: '对线弹幕串', value: '' },
+            ],
+        }],
+        '直播表绑定普通表格弹窗时必须读取当前完整行，而不是三条弹幕串',
+    );
+    assert.notEqual(
+        adapter.getSignature({
+            ...context,
+            modelId: 'table-popup',
+            sheet: irrelevantChange,
+            headers: irrelevantChange.content[0],
+            rows: irrelevantChange.content.slice(1),
+        }),
+        signature,
+        '直播表切到弹窗模型后，无关弹幕字段的普通单元格变化也必须进入签名',
+    );
+}
+
+async function checkGenericTableSourceAdapterContract() {
+    const { createGenericTableSourceAdapter } = await importModule(
+        'modules/fullscreen-overlay/sources/generic-table.js',
+    );
+    const adapter = createGenericTableSourceAdapter();
+    const sheet = {
+        name: '广场表',
+        content: [
+            ['row_id', '标题', '内容', '备注'],
+            ['101', '第一条', '完整正文', ''],
+            ['102', '第二条', '后续正文', '空值也保留'],
+        ],
+    };
+    const context = {
+        sheetKey: 'sheet_square',
+        tableName: sheet.name,
+        sheet,
+        headers: sheet.content[0],
+        rows: sheet.content.slice(1),
+    };
+
+    assert.equal(adapter.id, 'generic-table');
+    assert.equal(adapter.modelId, 'table-popup');
+    assert.deepEqual(adapter.modelIds, ['table-popup']);
+    assert.equal(adapter.defaultEnabled, false);
+    assert.equal(adapter.matches(context), true);
+
+    assert.deepEqual(
+        adapter.readEvents(context),
+        [{
+            sourceId: 'generic-table',
+            sheetKey: 'sheet_square',
+            rowIndex: 0,
+            cells: [
+                { label: 'row_id', value: '101' },
+                { label: '标题', value: '第一条' },
+                { label: '内容', value: '完整正文' },
+                { label: '备注', value: '' },
+            ],
+        }],
+        '手动测试路径只读取第一条当前行，并保留空字段与完整表头顺序',
+    );
+
+    assert.deepEqual(
+        adapter.readEvents({
+            ...context,
+            rowSelection: {
+                rowIndexes: [1],
+                rowIds: [],
+            },
+        }),
+        [{
+            sourceId: 'generic-table',
+            sheetKey: 'sheet_square',
+            rowIndex: 1,
+            cells: [
+                { label: 'row_id', value: '102' },
+                { label: '标题', value: '第二条' },
+                { label: '内容', value: '后续正文' },
+                { label: '备注', value: '空值也保留' },
+            ],
+        }],
+        '自动路径只读取审核交付的当前更新行',
+    );
+
+    assert.deepEqual(
+        adapter.readEvents({
+            ...context,
+            rowSelection: {
+                rowIndexes: [0],
+                rowIds: ['102'],
+            },
+        }).map(event => event.rowIndex),
+        [1],
+        '存在 row_id 时必须优先按稳定 ID 定位当前行',
+    );
+    assert.equal(
+        adapter.readEvents({
+            ...context,
+            rowSelection: { rowIndexes: [], rowIds: [] },
+        }).length,
+        0,
+        '显式空行范围不得回退到第一行',
+    );
+
+    const signature = adapter.getSignature(context);
+    const changedSheet = {
+        ...sheet,
+        content: sheet.content.map(row => [...row]),
+    };
+    changedSheet.content[2][2] = '修改后的完整正文';
+    assert.notEqual(
+        adapter.getSignature({
+            ...context,
+            sheet: changedSheet,
+            headers: changedSheet.content[0],
+            rows: changedSheet.content.slice(1),
+        }),
+        signature,
+        '普通表格签名必须覆盖整张表的当前字段内容',
+    );
 }
 
 async function main() {
     await checkRegistryContract();
     await checkSourceCatalogContract();
     await checkLiveTableSourceAdapterContract();
+    await checkGenericTableSourceAdapterContract();
     console.log('[fullscreen-overlay-sources-contract] passed');
 }
 

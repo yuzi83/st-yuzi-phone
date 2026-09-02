@@ -18,10 +18,11 @@
 
 import {
     getTableData,
+    getSheetKeys,
     openVisualizerWithStatus,
     openDatabaseUiWithStatus,
 } from '../phone-core/data-api.js';
-import { navigateTo } from '../phone-core/routing.js';
+import { getCurrentRoute, navigateTo } from '../phone-core/routing.js';
 import { defaultSettings, getPhoneSettings } from '../settings.js';
 import { escapeHtmlAttr } from '../utils/dom-escape.js';
 import { clampNumber } from '../utils/object.js';
@@ -38,6 +39,10 @@ import { resolveStatusBarData } from './status-bar-data.js';
 import { getQQV2Facade } from '../qq-v2/runtime/default-runtime.js';
 import { QQ_APP } from '../qq-v2/app-definition.js';
 import { buildTableNavigationContext } from '../table-navigation/catalog.js';
+
+const HOME_TABLE_READY_RETRY_DELAY_MS = 500;
+const HOME_TABLE_READY_RETRY_MAX = 6;
+const HOME_TABLE_READY_RETRY_KEY = '__yuziHomeTableReadyRetry';
 
 function resolveHomeAppLabelColorTokens(mode) {
     if (mode === 'black') {
@@ -176,6 +181,56 @@ export function patchQQHomeUnreadBadge(grid, unreadTotal = 0) {
     return true;
 }
 
+function scheduleHomeTableReadyRetry(container, runtime, navigationContext) {
+    const host = /** @type {any} */ (container);
+    const existingStop = host[HOME_TABLE_READY_RETRY_KEY];
+
+    if (navigationContext?.catalog?.length > 0) {
+        if (typeof existingStop === 'function') existingStop();
+        return false;
+    }
+    if (typeof existingStop === 'function') return false;
+
+    let remainingAttempts = HOME_TABLE_READY_RETRY_MAX;
+    let intervalId = null;
+    let unregisterCleanup = () => {};
+
+    const stop = () => {
+        if (intervalId !== null) {
+            runtime.clearInterval(intervalId);
+            intervalId = null;
+        }
+        if (host[HOME_TABLE_READY_RETRY_KEY] === stop) {
+            delete host[HOME_TABLE_READY_RETRY_KEY];
+        }
+        unregisterCleanup();
+        unregisterCleanup = () => {};
+    };
+
+    intervalId = runtime.setInterval(() => {
+        const phoneContainer = container.closest('#yuzi-phone-standalone');
+        if (runtime.isDisposed()
+            || getCurrentRoute() !== 'home'
+            || !phoneContainer?.classList.contains('visible')) {
+            stop();
+            return;
+        }
+
+        remainingAttempts -= 1;
+        if (getSheetKeys(getTableData()).length > 0) {
+            stop();
+            renderHomeScreen(container);
+            return;
+        }
+
+        if (remainingAttempts <= 0) stop();
+    }, HOME_TABLE_READY_RETRY_DELAY_MS);
+
+    host[HOME_TABLE_READY_RETRY_KEY] = stop;
+    unregisterCleanup = runtime.registerCleanup(stop);
+    return true;
+}
+
 /**
  * 主屏渲染入口。
  * @param {HTMLElement} container
@@ -242,6 +297,7 @@ export function renderHomeScreen(container) {
         openDatabaseUiWithStatus,
         runtime: interactionRuntime,
     });
+    scheduleHomeTableReadyRetry(container, interactionRuntime, navigationContext);
 }
 
 

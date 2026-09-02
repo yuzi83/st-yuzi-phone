@@ -3,9 +3,16 @@ import {
     normalizeText,
     splitSemicolonText,
 } from '../../phone-theater/core/table-index.js';
+import {
+    SCROLLING_BARRAGE_MODEL_ID,
+    TABLE_POPUP_MODEL_ID,
+} from '../settings.js';
+import {
+    getGenericTableSignature,
+    readGenericTableEvents,
+} from './generic-table.js';
 
 const SOURCE_ID = 'live-table';
-const MODEL_ID = 'scrolling-barrage';
 const TABLE_NAME = '直播表';
 const BARRAGE_FIELDS = Object.freeze([
     '剧情弹幕串',
@@ -91,6 +98,9 @@ function selectRows(table) {
 }
 
 function getLiveTableSignature(context) {
+    if (context?.modelId === TABLE_POPUP_MODEL_ID) {
+        return getGenericTableSignature(context);
+    }
     const table = resolveTableContext(context);
     if (table.tableName !== TABLE_NAME || !hasRequiredHeaders(table.headers)) return '';
 
@@ -101,6 +111,9 @@ function getLiveTableSignature(context) {
 }
 
 function readLiveTableEvents(context) {
+    if (context?.modelId === TABLE_POPUP_MODEL_ID) {
+        return readGenericTableEvents(context, SOURCE_ID);
+    }
     const table = resolveTableContext(context);
     if (table.tableName !== TABLE_NAME || !hasRequiredHeaders(table.headers)) {
         return Object.freeze([]);
@@ -127,7 +140,11 @@ function readLiveTableEvents(context) {
 export function createLiveTableSourceAdapter() {
     return Object.freeze({
         id: SOURCE_ID,
-        modelId: MODEL_ID,
+        modelId: SCROLLING_BARRAGE_MODEL_ID,
+        modelIds: Object.freeze([
+            SCROLLING_BARRAGE_MODEL_ID,
+            TABLE_POPUP_MODEL_ID,
+        ]),
         defaultEnabled: true,
         requiredHeaders: BARRAGE_FIELDS,
         matches: matchesLiveTable,

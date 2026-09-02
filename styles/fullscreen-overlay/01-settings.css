@@ -109,6 +109,14 @@
     gap: 8px;
 }
 
+.phone-fullscreen-overlay-source-model-select {
+    width: 122px;
+    min-width: 122px;
+    height: 30px;
+    padding: 4px 8px;
+    font-size: 10px;
+}
+
 .phone-fullscreen-overlay-source-status {
     display: inline-flex;
     align-items: center;
@@ -198,6 +206,14 @@
     font-variant-numeric: tabular-nums;
 }
 
+.phone-fullscreen-overlay-parameter-select {
+    width: 104px;
+    min-width: 104px;
+    height: 30px;
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
 .phone-fullscreen-overlay-parameter-unit {
     min-width: 18px;
     color: var(--yuzi-phone-fullscreen-overlay-text-secondary);
@@ -219,6 +235,10 @@
 
 .phone-fullscreen-overlay-color-row:last-child {
     border-bottom: 0;
+}
+
+.phone-fullscreen-overlay-single-color-row {
+    grid-template-columns: 34px minmax(0, 1fr) 30px;
 }
 
 .phone-fullscreen-overlay-color-index {
@@ -333,5 +353,9 @@
     .phone-fullscreen-overlay-color-row {
         grid-template-columns: 20px 32px minmax(0, 1fr) 30px 30px;
         gap: 5px;
+    }
+
+    .phone-fullscreen-overlay-single-color-row {
+        grid-template-columns: 32px minmax(0, 1fr) 30px;
     }
 }

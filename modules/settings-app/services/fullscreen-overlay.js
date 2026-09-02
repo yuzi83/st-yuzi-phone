@@ -8,16 +8,19 @@ import {
     FULLSCREEN_OVERLAY_DEFAULTS,
     FULLSCREEN_OVERLAY_SETTING_KEY,
     SCROLLING_BARRAGE_MODEL_ID,
+    TABLE_POPUP_MODEL_ID,
     normalizeFullscreenOverlaySettings,
 } from '../../fullscreen-overlay/settings.js';
 import { buildOverlaySourceCatalog } from '../../fullscreen-overlay/source-catalog.js';
 import { createOverlaySourceRegistry } from '../../fullscreen-overlay/source-registry.js';
 import { createLiveTableSourceAdapter } from '../../fullscreen-overlay/sources/live-table.js';
+import { createGenericTableSourceAdapter } from '../../fullscreen-overlay/sources/generic-table.js';
 
 export {
     FULLSCREEN_OVERLAY_DEFAULTS,
     FULLSCREEN_OVERLAY_SETTING_KEY,
     SCROLLING_BARRAGE_MODEL_ID,
+    TABLE_POPUP_MODEL_ID,
     normalizeFullscreenOverlaySettings,
 };
 
@@ -141,27 +144,38 @@ function resolveAvailability(entry) {
 function buildStatusLabel(entry, availability) {
     const customLabel = asId(entry?.statusLabel || entry?.label);
     if (customLabel) return customLabel;
-    if (availability === 'available') return '横向滚动弹幕';
+    if (availability === 'available') {
+        return entry?.modelId === TABLE_POPUP_MODEL_ID
+            ? '普通表格弹窗'
+            : '横向滚动弹幕';
+    }
     if (availability === 'format_mismatch') return '格式不匹配';
     return '暂未适配';
 }
 
 function buildTableViewModels(sourceCatalog, normalizedConfig) {
     const sourceEnabledBySheetKey = normalizedConfig.sourceEnabledBySheetKey || {};
+    const sourceModelBySheetKey = normalizedConfig.sourceModelBySheetKey || {};
     return asArray(sourceCatalog).map((entry) => {
         const availability = resolveAvailability(entry);
         const sheetKey = asId(entry?.sheetKey);
         const defaultEnabled = availability === 'available' && entry?.enabled === true;
         const explicitEnabled = sourceEnabledBySheetKey[sheetKey];
+        const modelIds = asArray(entry?.modelIds).map(asId).filter(Boolean);
+        const requestedModelId = asId(sourceModelBySheetKey[sheetKey]);
+        const modelId = modelIds.includes(requestedModelId)
+            ? requestedModelId
+            : asId(entry?.modelId);
+        const resolvedEntry = { ...entry, modelId, modelIds };
         return {
-            ...entry,
+            ...resolvedEntry,
             sheetKey,
             tableName: asId(entry?.tableName) || sheetKey || '未命名表格',
             availability,
             enabled: availability === 'available' && (
                 typeof explicitEnabled === 'boolean' ? explicitEnabled : defaultEnabled
             ),
-            statusLabel: buildStatusLabel(entry, availability),
+            statusLabel: buildStatusLabel(resolvedEntry, availability),
         };
     });
 }
@@ -182,11 +196,11 @@ function reconcileConfigWithCatalog(config, tables, physicalOrder) {
         sourceEnabledBySheetKey[table.sheetKey] = table.availability === 'available'
             && (typeof explicitlyEnabled === 'boolean' ? explicitlyEnabled : table.enabled === true);
         if (table.availability === 'available') {
-            sourceModelBySheetKey[table.sheetKey] = asId(
-                normalized.sourceModelBySheetKey[table.sheetKey]
-                || table.modelId
-                || SCROLLING_BARRAGE_MODEL_ID,
-            ) || SCROLLING_BARRAGE_MODEL_ID;
+            const modelIds = asArray(table.modelIds).map(asId).filter(Boolean);
+            const requestedModelId = asId(normalized.sourceModelBySheetKey[table.sheetKey]);
+            sourceModelBySheetKey[table.sheetKey] = modelIds.includes(requestedModelId)
+                ? requestedModelId
+                : (asId(table.modelId) || modelIds[0] || TABLE_POPUP_MODEL_ID);
         }
     });
 
@@ -232,6 +246,7 @@ export function createFullscreenOverlaySettingsService(options = {}) {
         : getTableDataAsync;
     const registry = options.sourceRegistry || createOverlaySourceRegistry([
         createLiveTableSourceAdapter(),
+        createGenericTableSourceAdapter(),
     ]);
     const sourceCatalog = options.sourceCatalog || null;
     const overlayActions = isPlainObject(options.overlayActions)

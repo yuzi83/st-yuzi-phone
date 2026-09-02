@@ -5,15 +5,18 @@ import { subscribeTableUpdateReviewResults } from '../table-update-review/result
 import {
     FULLSCREEN_OVERLAY_SETTING_KEY,
     SCROLLING_BARRAGE_MODEL_ID,
+    TABLE_POPUP_MODEL_ID,
     normalizeFullscreenOverlaySettings,
 } from './settings.js';
 import { createOverlaySourceRegistry } from './source-registry.js';
 import { buildOverlaySourceCatalog } from './source-catalog.js';
 import { createLiveTableSourceAdapter } from './sources/live-table.js';
+import { createGenericTableSourceAdapter } from './sources/generic-table.js';
 import { createReviewResultCoordinator } from './review-result-coordinator.js';
 import { createFullscreenOverlayLayerRuntime } from './layer-runtime.js';
 import { createFullscreenOverlayScheduler } from './scheduler.js';
 import { createScrollingBarrageRenderer } from './renderers/scrolling-barrage.js';
+import { createTablePopupRenderer } from './renderers/table-popup.js';
 import { createFullscreenOverlayRuntime } from './runtime.js';
 
 const logger = Logger.withScope({
@@ -22,6 +25,7 @@ const logger = Logger.withScope({
 });
 const sourceRegistry = createOverlaySourceRegistry([
     createLiveTableSourceAdapter(),
+    createGenericTableSourceAdapter(),
 ]);
 
 function logRuntimeError(error, context = {}) {
@@ -48,14 +52,21 @@ const fullscreenOverlayRuntime = createFullscreenOverlayRuntime({
         documentRef: globalThis.document,
     }),
     createRendererRegistry: ({ layerRuntime, getSettings, onError }) => {
-        const renderer = createScrollingBarrageRenderer({
+        const barrageRenderer = createScrollingBarrageRenderer({
+            layerRuntime,
+            documentRef: globalThis.document,
+            getSettings: () => getSettings() || {},
+            onError,
+        });
+        const popupRenderer = createTablePopupRenderer({
             layerRuntime,
             documentRef: globalThis.document,
             getSettings: () => getSettings() || {},
             onError,
         });
         return new Map([
-            [SCROLLING_BARRAGE_MODEL_ID, renderer],
+            [SCROLLING_BARRAGE_MODEL_ID, barrageRenderer],
+            [TABLE_POPUP_MODEL_ID, popupRenderer],
         ]);
     },
     createScheduler: ({

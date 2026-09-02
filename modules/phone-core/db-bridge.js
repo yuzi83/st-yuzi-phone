@@ -5,10 +5,29 @@ export const DEFAULT_MUTATION_WATCHDOG_MS = 30000;
 const logger = Logger.withScope({ scope: 'phone-core/db-bridge', feature: 'db-api' });
 
 export function getDB() {
-    const w = window.parent || window;
-    const parentApi = /** @type {any} */ (w).AutoCardUpdaterAPI;
-    const selfApi = /** @type {any} */ (window).AutoCardUpdaterAPI;
-    return parentApi || selfApi || null;
+    const windows = [];
+    let cursor = window;
+
+    try {
+        while (cursor && !windows.includes(cursor)) {
+            windows.push(cursor);
+            if (!cursor.parent || cursor.parent === cursor) break;
+            cursor = cursor.parent;
+        }
+    } catch {
+        // 跨域边界外不可继续向上时，保留已经收集到的同源窗口。
+    }
+
+    for (let index = windows.length - 1; index >= 0; index -= 1) {
+        try {
+            const api = /** @type {any} */ (windows[index]).AutoCardUpdaterAPI;
+            if (api) return api;
+        } catch {
+            // 跳过不可访问的窗口，继续回退到更靠近当前脚本的窗口。
+        }
+    }
+
+    return null;
 }
 
 export function isThenable(result) {
