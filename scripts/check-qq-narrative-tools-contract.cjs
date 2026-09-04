@@ -42,16 +42,49 @@ const path = require('node:path');
     assert.deepEqual(transfer, {
         type: 'transfer',
         content: 'for dinner',
-        transfer: { amount: 'three shells', currency: 'moon coins', note: 'for dinner' },
+        transfer: { amount: 'three shells', currency: 'moon coins', note: 'for dinner', status: 'pending' },
     }, 'transfer values remain free text with no balance or currency coercion');
     assert.equal((await submitTransferMessage({ facade, conversationId: 'private-1', amount: 'three shells', currency: 'moon coins', note: 'for dinner' })).ok, true);
     assert.deepEqual(sent.shift(), { conversationId: 'private-1', message: transfer }, 'transfer sends directly without a second confirmation queue');
+    const directedTransfer = createTransferMessage({
+        amount: '100',
+        currency: '元',
+        note: '群转账',
+        recipientId: 'person-bob',
+    });
+    assert.deepEqual(directedTransfer.transfer, {
+        amount: '100',
+        currency: '元',
+        note: '群转账',
+        status: 'pending',
+        recipientId: 'person-bob',
+    });
+    await submitTransferMessage({
+        facade,
+        conversationId: 'group-1',
+        amount: '100',
+        currency: '元',
+        note: '群转账',
+        recipientId: 'person-bob',
+    });
+    assert.deepEqual(sent.shift(), {
+        conversationId: 'group-1',
+        message: directedTransfer,
+    }, 'group transfers preserve their explicit recipient through the Facade');
 
     assert.equal((await handleIncomingTransfer({ facade, conversationId: 'private-1', messageId: 'message-7', action: 'accept' })).ok, true);
     assert.deepEqual(sent.shift(), { transferAction: { conversationId: 'private-1', messageId: 'message-7', action: 'accept' } },
         'receiving a transfer updates the original transfer through the Facade without sending an AI message');
     assert.equal(transferStatusLabel({ senderType: 'self', transfer: { status: 'pending' } }), '待对方收款');
     assert.equal(transferStatusLabel({ senderType: 'person', transfer: { status: 'pending' } }), '待你收款');
+    assert.equal(transferStatusLabel({
+        senderType: 'person',
+        transfer: { status: 'pending', recipientId: '__self__' },
+    }), '待你收款');
+    assert.equal(transferStatusLabel({
+        senderType: 'person',
+        transfer: { status: 'pending', recipientId: 'person-bob' },
+    }), '待收款');
     assert.equal(transferStatusLabel({ senderType: 'person', transfer: { status: 'accepted' } }), '已收款');
     assert.equal(transferStatusLabel({ senderType: 'person', transfer: { status: 'returned' } }), '已退还');
 

@@ -26,9 +26,16 @@ function main() {
         'render must restore only after the new chat has mounted');
 
     const messageNode = sourceSlice(app, 'const messageNode =', 'const renderMessageStream =');
-    assert.doesNotMatch(messageNode, /message\.quote|yuzi-qq-quote/, 'private message bubbles must not render quotes');
+    assert.match(messageNode, /const groupChat = conversation\.kind === 'group'[\s\S]*if \(groupChat && message\.quote\)/,
+        'quote rendering must stay guarded by the group conversation kind');
+    const messageStream = sourceSlice(app, 'const renderMessageStream =', 'const renderComposer =');
+    assert.match(messageStream, /conversation\.request\?\.phase === 'failed'[\s\S]*yuzi-qq-request-error[\s\S]*错误/,
+        'a failed manual request must render one concise error badge without exposing backend details');
+    assert.doesNotMatch(messageStream, /conversation\.request\?\.error/,
+        'the chat stream must not expose the backend error message');
     const composer = sourceSlice(app, 'const renderComposer =', 'const renderEmojiPanel =');
-    assert.doesNotMatch(composer, /quoteDraft|quote-preview/, 'private composer must not keep quote drafts');
+    assert.match(composer, /if \(chatKind === 'group'\) \{[\s\S]*quoteDrafts\.get\([\s\S]*yuzi-qq-quote-preview/,
+        'quote drafts and previews must stay inside the group composer branch');
     assert.match(composer, /data-qq-stop-generation/, 'queued or running manual requests expose a stop control');
     assert.match(app, /cancelManualRequest\(\{ conversationId: target\.dataset\.qqStopGeneration \}\)/,
         'the stop control must use the manual-request cancellation facade');
@@ -49,6 +56,8 @@ function main() {
     assert.match(app, /jumpLabel\.textContent = formatUnreadBadge\(jumpCount\)/,
         'the jump bubble must render only the dynamic count');
     assert.match(css, /\.yuzi-qq-private-chat-jump-bubble::after/, 'the numeric bubble keeps the Figma tail');
+    assert.match(css, /\.yuzi-qq-request-error\s*\{[\s\S]*border[^}]*var\(--yuzi-qq-danger\)/,
+        'the manual request error badge must use the small red error treatment');
     assert.match(css, /\.yuzi-qq-private-message-stream::\-webkit-scrollbar[\s\S]*display:\s*none/,
         'the private message scrollbar must be visually hidden');
     assert.match(css, /\.yuzi-qq-private-chat-view\.has-chat-background::before/,

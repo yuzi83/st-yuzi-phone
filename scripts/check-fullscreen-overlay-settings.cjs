@@ -29,7 +29,7 @@ async function testPublicDefaults(mod) {
     assert.deepStrictEqual(
         mod.FULLSCREEN_OVERLAY_DEFAULTS,
         {
-            enabled: true,
+            enabled: false,
             sourceEnabledBySheetKey: {},
             sourceOrder: [],
             sourceModelBySheetKey: {},
@@ -51,7 +51,7 @@ async function testPublicDefaults(mod) {
                     intervalMs: 200,
                     durationMs: 4000,
                     columnCount: 2,
-                    sizePreset: 'normal',
+                    sizePreset: 'compact',
                     borderRadiusPx: 20,
                     backgroundColor: '#FFFFFF',
                     opacity: 0.94,

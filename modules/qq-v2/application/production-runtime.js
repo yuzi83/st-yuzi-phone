@@ -11,7 +11,12 @@ import { normalizeQQV2TagName, normalizeQQV2TagNames } from '../domain/story-con
 import { createQQV2ActionService } from '../protocol/action-service.js';
 import { parseQQV2Response, validateQQV2ActionBatch } from '../protocol/xml.js';
 import { createQQV2ProactiveService } from '../proactive/service.js';
-import { buildManualQQV2Request, buildQQV2StoryContext } from '../prompt/materializer.js';
+import {
+    buildManualQQV2Request,
+    buildQQV2GroupMemorySections,
+    buildQQV2PrivateMemorySections,
+    buildQQV2StoryContext,
+} from '../prompt/materializer.js';
 import { buildQQV2StickerCatalog } from '../prompt/sticker-catalog.js';
 import { createQQV2RequestService } from '../request/service.js';
 import { createSillyTavernQQV2Backend } from '../request/backend-proxy.js';
@@ -143,7 +148,7 @@ function defaultGlobalSettings() {
             depth: 999,
             keywords: [],
         },
-        proactive: { enabled: false, everyTurns: 5 },
+        proactive: { enabled: false, everyTurns: 5, privateWeight: 50 },
     };
 }
 
@@ -186,6 +191,11 @@ function cloneGlobalSettings(settings) {
             everyTurns: Number.isInteger(Number(source.proactive?.everyTurns)) && Number(source.proactive.everyTurns) > 0
                 ? Number(source.proactive.everyTurns)
                 : defaults.proactive.everyTurns,
+            privateWeight: Number.isInteger(Number(source.proactive?.privateWeight))
+                && Number(source.proactive.privateWeight) >= 0
+                && Number(source.proactive.privateWeight) <= 100
+                ? Number(source.proactive.privateWeight)
+                : defaults.proactive.privateWeight,
         },
     };
 }
@@ -696,8 +706,12 @@ export function createQQV2ProductionRuntime(options = {}) {
         }
     };
 
+    const getConversation = (scopeId, conversationId) => (
+        repository.getConversation(scopeId, asText(conversationId, 256))
+    );
+
     const getPrivateConversation = async (scopeId, conversationId) => {
-        const conversation = await repository.getConversation(scopeId, asText(conversationId, 256));
+        const conversation = await getConversation(scopeId, conversationId);
         if (conversation && conversation.kind !== 'private') throw privateOnlyError();
         return conversation;
     };
@@ -881,6 +895,66 @@ export function createQQV2ProductionRuntime(options = {}) {
         }
     };
     const listStickers = () => resources.listStickers();
+    const resolveMemoryPeople = async (scopeId, seedPersonIds, messages) => {
+        const personIds = new Set(asArray(seedPersonIds).map((personId) => asText(personId, 256)).filter(Boolean));
+        asArray(messages).forEach((message) => {
+            const senderId = asText(message?.senderId, 256);
+            const recipientId = asText(message?.transfer?.recipientId, 256);
+            if (senderId && senderId !== SELF_ID) personIds.add(senderId);
+            if (recipientId && recipientId !== SELF_ID) personIds.add(recipientId);
+        });
+        const people = await Promise.all([...personIds].map((personId) => repository.getPerson(scopeId, personId)));
+        return Object.fromEntries(people.filter(Boolean).map((person) => [person.personId, person.formalName]));
+    };
+    const resolveGroupMemory = async ({ scopeId, knownByPersonId, historyLimit }) => {
+        const knownBy = knownByPersonId instanceof Map ? knownByPersonId : new Map();
+        const conversations = await repository.listConversations(scopeId);
+        const sections = [];
+        for (const candidate of conversations) {
+            if (candidate.kind !== 'group') continue;
+            const group = await repository.getGroup(scopeId, candidate.groupId);
+            if (!group) continue;
+            const labels = asArray(group.memberIds)
+                .filter((personId) => knownBy.has(personId))
+                .map((personId) => knownBy.get(personId))
+                .filter(Boolean);
+            if (labels.length === 0) continue;
+            const messages = truncateConversationHistory(
+                await repository.listMessages(scopeId, candidate.conversationId),
+                historyLimit,
+            );
+            sections.push({
+                conversationId: candidate.conversationId,
+                name: group.name,
+                knownBy: labels,
+                peopleById: await resolveMemoryPeople(scopeId, group.memberIds, messages),
+                messages,
+            });
+        }
+        return buildQQV2GroupMemorySections(sections);
+    };
+    const resolvePrivateMemory = async ({ scopeId, personIds, historyLimit }) => {
+        const includedPersonIds = personIds instanceof Set ? personIds : new Set(asArray(personIds));
+        const conversations = await repository.listConversations(scopeId);
+        const sections = [];
+        for (const candidate of conversations) {
+            if (candidate.kind !== 'private' || !includedPersonIds.has(candidate.personId)) continue;
+            const person = await repository.getPerson(scopeId, candidate.personId);
+            if (!person) continue;
+            const messages = truncateConversationHistory(
+                await repository.listMessages(scopeId, candidate.conversationId),
+                historyLimit,
+            );
+            sections.push({
+                conversationId: candidate.conversationId,
+                personId: person.personId,
+                personName: person.formalName,
+                peopleById: await resolveMemoryPeople(scopeId, [person.personId], messages),
+                messages,
+            });
+        }
+        return buildQQV2PrivateMemorySections(sections);
+    };
 
     const resolvePromptContext = async ({ scopeId, scopeSession, conversation, history, scope, runtimeSettings = null }) => {
         const settings = runtimeSettings || await resolveRuntimeSettings(scopeId, scope, { scopeSession });
@@ -901,6 +975,20 @@ export function createQQV2ProductionRuntime(options = {}) {
         });
         const stickers = await listStickers();
         const stickerCatalog = buildQQV2StickerCatalog(stickers);
+        const groupMemory = conversation.kind === 'private'
+            ? await resolveGroupMemory({
+                scopeId,
+                historyLimit: settings.conversationHistoryLimit,
+                knownByPersonId: new Map(facts.people.map((person) => [person.personId, person.formalName])),
+            })
+            : '无';
+        const privateMemory = conversation.kind === 'group'
+            ? await resolvePrivateMemory({
+                scopeId,
+                historyLimit: settings.conversationHistoryLimit,
+                personIds: new Set(asArray(facts.group?.memberIds)),
+            })
+            : '无';
         const variables = {
             privatePerson: conversation.kind === 'private'
                 ? buildPrivateIdentity(conversation, facts.people, referenceByPersonId)
@@ -915,6 +1003,8 @@ export function createQQV2ProductionRuntime(options = {}) {
                     facts.peopleById,
                 )).join('\n') || '无'
                 : '无',
+            groupMemory,
+            privateMemory,
             storyContext: buildQQV2StoryContext(storyMessages, settings.hostContextTurns, {
                 extractTag: settings.hostContextExtractTag,
                 excludeTags: settings.hostContextExcludeTags,
@@ -1000,7 +1090,11 @@ export function createQQV2ProductionRuntime(options = {}) {
         for (const conversationId of uniqueConversationIds) {
             if (conversationId === openedConversationId) continue;
             const conversation = await repository.getConversation(scopeId, conversationId);
-            if (conversation?.kind !== 'private') continue;
+            if (!conversation) continue;
+            if (conversation.kind === 'group') {
+                const group = await repository.getGroup(scopeId, conversation.groupId);
+                if (group?.selfExited === true) continue;
+            }
             const messages = await repository.listMessages(scopeId, conversationId);
             const amount = messages.filter((message) => (
                 incomingMessageIds.has(message.messageId) && message.senderType === 'person'
@@ -1053,6 +1147,13 @@ export function createQQV2ProductionRuntime(options = {}) {
         commitManualActions(input) {
             return actionService.execute(input);
         },
+        async afterManualError(input) {
+            if (!input.scopeSession?.isReady?.()) return;
+            await notifySubscribers(input.scopeId, {
+                reason: 'request-failed',
+                conversationId: input.conversationId,
+            });
+        },
         async afterManualMutation(input) {
             const conversationIds = [input.conversationId, ...asArray(input.actionResult?.createdConversationIds)];
             await markIncomingActionMessagesUnread({
@@ -1076,7 +1177,7 @@ export function createQQV2ProductionRuntime(options = {}) {
         requestService,
         captureScopeSession,
         runtimeSettingsResolver: resolveRuntimeSettings,
-        privateOnly: true,
+        privateOnly: false,
         backend,
         apiPresetResolver: resolveApiPreset,
         promptPresetResolver: (presetId) => resources.getPromptPreset(presetId),
@@ -1085,7 +1186,7 @@ export function createQQV2ProductionRuntime(options = {}) {
         getUserName,
         actionService,
         onMessagesCommitted: notifyProactiveMessageSubscribers,
-        async getPromptContext({ scopeId, scopeSession, candidates, runtimeSettings, storyTime }) {
+        async getPromptContext({ scopeId, scopeSession, kind, candidates, runtimeSettings, storyTime }) {
             const people = [...new Set(candidates.flatMap((candidate) => [
                 candidate.title,
                 ...asArray(candidate.members).map((member) => String(member).replace(/^N\d+：/, '')),
@@ -1105,6 +1206,23 @@ export function createQQV2ProductionRuntime(options = {}) {
                 people,
                 conversations: worldbookConversations,
             });
+            const proactiveGroupMemory = kind === 'private'
+                ? await resolveGroupMemory({
+                    scopeId,
+                    historyLimit: runtimeSettings.conversationHistoryLimit,
+                    knownByPersonId: new Map(candidates.map((candidate) => [
+                        candidate.personId,
+                        candidate.referenceId,
+                    ])),
+                })
+                : '无';
+            const proactivePrivateMemory = kind === 'group'
+                ? await resolvePrivateMemory({
+                    scopeId,
+                    historyLimit: runtimeSettings.conversationHistoryLimit,
+                    personIds: new Set(candidates.flatMap((candidate) => asArray(candidate.memberIds))),
+                })
+                : '无';
             return {
                 storyContext: buildQQV2StoryContext(
                     storyMessages,
@@ -1115,6 +1233,8 @@ export function createQQV2ProductionRuntime(options = {}) {
                     },
                 ),
                 worldbookContent,
+                proactiveGroupMemory,
+                proactivePrivateMemory,
                 storyTime,
             };
         },
@@ -1560,6 +1680,8 @@ export function createQQV2ProductionRuntime(options = {}) {
                 'privateProactivePresetId',
                 'groupReplyPresetId',
                 'groupProactivePresetId',
+                'groupReplyPresetId',
+                'groupProactivePresetId',
             ]);
             return true;
         },
@@ -1581,25 +1703,40 @@ export function createQQV2ProductionRuntime(options = {}) {
         async listConversations({ scopeId }) {
             return queryExistingScope(scopeId, [], async (normalizedScopeId) => {
                 const summaries = await repository.listConversationSummaries(normalizedScopeId);
-                return summaries.filter(({ conversation }) => conversation.kind === 'private').map((summary) => ({
+                return Promise.all(summaries.map(async (summary) => ({
                     ...summary.conversation,
                     person: summary.person,
-                    group: summary.group,
+                    group: summary.group
+                        ? {
+                            ...summary.group,
+                            members: await Promise.all(summary.group.memberIds.map((personId) => (
+                                repository.getPerson(normalizedScopeId, personId)
+                            ))),
+                        }
+                        : null,
                     lastMessage: summary.lastMessage,
                     unreadCount: Number(summary.conversation.unreadCount) || 0,
                     request: requestService.getConversationState(normalizedScopeId, summary.conversation.conversationId),
-                }));
+                })));
             });
         },
         async getConversation({ scopeId, conversationId }) {
             return queryExistingScope(scopeId, null, async (normalizedScopeId) => {
                 const summary = await repository.getConversationSummary(normalizedScopeId, conversationId);
                 const conversation = summary?.conversation;
-                if (!conversation || conversation.kind !== 'private') return null;
+                if (!conversation) return null;
+                const group = summary.group
+                    ? {
+                        ...summary.group,
+                        members: await Promise.all(summary.group.memberIds.map((personId) => (
+                            repository.getPerson(normalizedScopeId, personId)
+                        ))),
+                    }
+                    : null;
                 return {
                     ...conversation,
                     person: summary.person,
-                    group: summary.group,
+                    group,
                     lastMessage: summary.lastMessage,
                     unreadCount: Number(conversation.unreadCount) || 0,
                     request: requestService.getConversationState(normalizedScopeId, conversationId),
@@ -1610,7 +1747,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             const empty = { items: [], hasMore: false, nextBeforeSequence: null };
             return queryExistingScope(scopeId, empty, async (normalizedScopeId) => {
                 const conversation = await repository.getConversation(normalizedScopeId, conversationId);
-                if (conversation?.kind !== 'private') return empty;
+                if (!conversation) return empty;
                 const all = await repository.listMessages(normalizedScopeId, conversationId);
                 const before = Number.isInteger(Number(beforeSequence)) ? Number(beforeSequence) : Number.POSITIVE_INFINITY;
                 const eligible = all.filter((message) => Number(message.sequence) < before);
@@ -1692,7 +1829,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             const idle = { phase: 'idle', pendingUserMessageCount: 0, error: '' };
             return queryExistingScope(scopeId, idle, async (normalizedScopeId) => {
                 const conversation = await repository.getConversation(normalizedScopeId, conversationId);
-                if (conversation?.kind !== 'private') return idle;
+                if (!conversation) return idle;
                 return requestService.getConversationState(normalizedScopeId, conversationId);
             });
         },
@@ -1701,7 +1838,6 @@ export function createQQV2ProductionRuntime(options = {}) {
             return queryExistingScope(scopeId, empty, async (normalizedScopeId) => {
                 const conversations = await repository.listConversations(normalizedScopeId);
                 const byConversationId = Object.fromEntries(conversations
-                    .filter((conversation) => conversation.kind === 'private')
                     .map((conversation) => [
                         conversation.conversationId,
                         Number(conversation.unreadCount) || 0,
@@ -1716,7 +1852,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             const scopeSession = captureReadyScopeSession(scopeId);
             const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
             assertConversationWritable(normalizedScopeId, conversationId);
-            await getPrivateConversation(normalizedScopeId, conversationId);
+            await repository.getConversation(normalizedScopeId, asText(conversationId, 256));
             assertReadyScopeSession(scopeSession);
             const result = await repository.openConversation(
                 normalizedScopeId,
@@ -1830,7 +1966,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             const scopeSession = captureReadyScopeSession(scopeId);
             const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
             assertConversationWritable(normalizedScopeId, conversationId);
-            await getPrivateConversation(normalizedScopeId, conversationId);
+            await getConversation(normalizedScopeId, conversationId);
             const result = await repository.handleIncomingTransfer(
                 normalizedScopeId,
                 asText(conversationId, 256),
@@ -1842,11 +1978,58 @@ export function createQQV2ProductionRuntime(options = {}) {
             await notifySubscribers(normalizedScopeId);
             return result;
         },
-        async updateGroupProfile() {
-            throw privateOnlyError();
+        async updateGroupProfile({ scopeId, conversationId, profile = {} }) {
+            const scopeSession = captureReadyScopeSession(scopeId);
+            const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
+            assertConversationWritable(normalizedScopeId, conversationId);
+            const result = await repository.updateGroupProfile(
+                normalizedScopeId,
+                asText(conversationId, 256),
+                asObject(profile),
+                { scopeSession },
+            );
+            const conversation = await application.getConversation({
+                scopeId: normalizedScopeId,
+                conversationId: result.conversation.conversationId,
+            });
+            await revokeMissingMediaRenderLeases(normalizedScopeId);
+            await notifySubscribers(normalizedScopeId);
+            return {
+                group: conversation?.group || result.group,
+                conversation: conversation || result.conversation,
+            };
         },
-        async manageGroup() {
-            throw privateOnlyError();
+        async manageGroup({
+            scopeId,
+            groupId,
+            action,
+            targetPersonId = '',
+            duration = '',
+            value = '',
+            userName = getUserName(),
+            storyTime = getStoryTime(),
+        }) {
+            const scopeSession = captureReadyScopeSession(scopeId);
+            const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
+            const group = await repository.manageGroup(normalizedScopeId, {
+                groupId: asText(groupId, 256),
+                action: asText(action, 64),
+                targetPersonId: asText(targetPersonId, 256),
+                duration: asText(duration, 64),
+                value: asText(value, 256),
+                storyTime: asText(storyTime, 128),
+            }, { scopeSession });
+            if (group?.conversationId) {
+                await syncConversations({
+                    scopeId: normalizedScopeId,
+                    scopeSession,
+                    conversationIds: [group.conversationId],
+                    userName: asText(userName, 256),
+                    storyTime: asText(storyTime, 128),
+                });
+            }
+            await notifySubscribers(normalizedScopeId);
+            return group;
         },
         async listWorldbooks({ scopeId }) {
             const scopeSession = captureScopeSession(scopeId);
@@ -1883,6 +2066,8 @@ export function createQQV2ProductionRuntime(options = {}) {
                 'activeApiPresetId',
                 'privateReplyPresetId',
                 'privateProactivePresetId',
+                'groupReplyPresetId',
+                'groupProactivePresetId',
                 'hostContextTurns',
                 'conversationHistoryLimit',
                 'hostContextExtractTag',
@@ -1897,6 +2082,7 @@ export function createQQV2ProductionRuntime(options = {}) {
                 sharedPatch.proactive = {
                     ...(hasOwn(proactive, 'enabled') ? { enabled: proactive.enabled === true } : {}),
                     ...(hasOwn(proactive, 'everyTurns') ? { everyTurns: proactive.everyTurns } : {}),
+                    ...(hasOwn(proactive, 'privateWeight') ? { privateWeight: proactive.privateWeight } : {}),
                 };
             }
             if (hasOwn(source, 'worldbook')) {
@@ -1927,7 +2113,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             const scopeSession = captureReadyScopeSession(scopeId);
             const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
             assertConversationWritable(normalizedScopeId, conversationId);
-            await getPrivateConversation(normalizedScopeId, conversationId);
+            await getConversation(normalizedScopeId, conversationId);
             requireWorldbookMutationResult(await runActiveWorldbookMutation(normalizedScopeId, (scopeSession) => projectionService.setConversationInjection({
                 scopeId: normalizedScopeId,
                 scopeSession,
@@ -1951,7 +2137,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             const scopeSession = captureReadyScopeSession(scopeId);
             const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
             assertConversationWritable(normalizedScopeId, conversationId);
-            await getPrivateConversation(normalizedScopeId, conversationId);
+            await getConversation(normalizedScopeId, conversationId);
             requireWorldbookMutationResult(await runActiveWorldbookMutation(normalizedScopeId, (scopeSession) => projectionService.setMessageSelected({
                 scopeId: normalizedScopeId,
                 scopeSession,
@@ -1983,7 +2169,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             const scopeSession = captureReadyScopeSession(scopeId);
             const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
             assertConversationWritable(normalizedScopeId, conversationId);
-            await getPrivateConversation(normalizedScopeId, conversationId);
+            await getConversation(normalizedScopeId, conversationId);
             const ids = [...new Set(asArray(messageIds).map((id) => asText(id, 256)).filter(Boolean))];
             requireWorldbookMutationResult(await runActiveWorldbookMutation(normalizedScopeId, (scopeSession) => projectionService.setMessagesSelected({
                 scopeId: normalizedScopeId,
@@ -2040,12 +2226,16 @@ export function createQQV2ProductionRuntime(options = {}) {
             await notifySubscribers(normalizedScopeId);
             return result;
         },
-        createGroupConversation: () => {
-            throw privateOnlyError();
+        async createGroupConversation({ scopeId, ...input }) {
+            const scopeSession = captureReadyScopeSession(scopeId);
+            const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
+            const result = await repository.createGroupConversation(normalizedScopeId, input, { scopeSession });
+            await notifySubscribers(normalizedScopeId);
+            return result;
         },
         async sendManual({ scopeId, conversationId, message }) {
             assertConversationWritable(scopeId, conversationId);
-            const conversation = await getPrivateConversation(scopeId, conversationId);
+            const conversation = await getConversation(scopeId, conversationId);
             const messageWithStoryTime = {
                 ...asObject(message),
                 storyTime: asText(message?.storyTime, 128) || getStoryTime(),
@@ -2055,7 +2245,8 @@ export function createQQV2ProductionRuntime(options = {}) {
                     ...messageWithStoryTime,
                     transfer: {
                         ...(messageWithStoryTime.transfer || {}),
-                        recipientId: asText(message.transfer?.recipientId, 256) || conversation?.personId || '',
+                        recipientId: asText(message.transfer?.recipientId, 256)
+                            || (conversation?.kind === 'private' ? conversation.personId : ''),
                     },
                 }
                 : messageWithStoryTime;
@@ -2078,7 +2269,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             const normalizedConversationId = asText(conversationId, 256);
             const normalizedMessageId = asText(messageId, 256);
             assertConversationWritable(normalizedScopeId, normalizedConversationId);
-            const conversation = await getPrivateConversation(normalizedScopeId, normalizedConversationId);
+            const conversation = await getConversation(normalizedScopeId, normalizedConversationId);
             if (!conversation) throw imageGenerationError('QQ 会话不存在', 'conversation_not_found');
             const messages = await repository.listMessages(normalizedScopeId, normalizedConversationId);
             const message = messages.find((item) => item.messageId === normalizedMessageId);
@@ -2194,7 +2385,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             const scopeSession = captureReadyScopeSession(scopeId);
             const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
             assertConversationWritable(normalizedScopeId, conversationId);
-            await getPrivateConversation(normalizedScopeId, conversationId);
+            await getConversation(normalizedScopeId, conversationId);
             assertReadyScopeSession(scopeSession);
             const result = await requestService.cancelManual({
                 scopeId: normalizedScopeId,
@@ -2214,7 +2405,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
             assertReadyScopeSession(scopeSession);
             assertConversationWritable(normalizedScopeId, conversationId);
-            await getPrivateConversation(normalizedScopeId, conversationId);
+            await getConversation(normalizedScopeId, conversationId);
             assertReadyScopeSession(scopeSession);
             await requestService.cancelConversation({ scopeId: normalizedScopeId, conversationId });
             assertReadyScopeSession(scopeSession);
@@ -2241,7 +2432,7 @@ export function createQQV2ProductionRuntime(options = {}) {
         async deleteConversation({ scopeId, conversationId, userName = getUserName(), storyTime = getStoryTime() }) {
             const scopeSession = captureReadyScopeSession(scopeId);
             const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
-            const conversation = await getPrivateConversation(normalizedScopeId, conversationId);
+            const conversation = await getConversation(normalizedScopeId, conversationId);
             assertReadyScopeSession(scopeSession);
             if (!conversation) return { deleted: false, mode: 'missing' };
             const key = conversationKey(normalizedScopeId, conversationId);

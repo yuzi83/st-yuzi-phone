@@ -113,10 +113,96 @@ async function testScenarioAndReferenceValidation() {
     }), QQV2ProtocolError);
 }
 
+async function testGroupAddByNameParsesTemporaryPersonReference() {
+    const { parseQQV2Response } = await importModule('modules/qq-v2/protocol/xml.js');
+    const root = node('qq', {}, '', [
+        node('group', {
+            conversation: 'G1',
+            action: 'add',
+            actor: 'N1',
+            id: 'N3',
+            name: '沈星河',
+        }),
+    ]);
+
+    const actions = parseQQV2Response('<qq><group /></qq>', {
+        parseDocument: () => documentWith(root),
+    });
+
+    assert.deepEqual(actions, [{
+        type: 'group',
+        conversation: 'G1',
+        action: 'add',
+        actor: 'N1',
+        target: '',
+        value: '',
+        duration: '',
+        id: 'N3',
+        name: '沈星河',
+    }]);
+}
+
+async function testGroupLeaveParsesWithoutTarget() {
+    const { parseQQV2Response } = await importModule('modules/qq-v2/protocol/xml.js');
+    const root = node('qq', {}, '', [
+        node('group', {
+            conversation: 'G1',
+            action: 'leave',
+            actor: 'N1',
+        }),
+    ]);
+
+    const actions = parseQQV2Response('<qq><group /></qq>', {
+        parseDocument: () => documentWith(root),
+    });
+
+    assert.deepEqual(actions, [{
+        type: 'group',
+        conversation: 'G1',
+        action: 'leave',
+        actor: 'N1',
+        target: '',
+        value: '',
+        duration: '',
+    }]);
+}
+
+async function testMuteDurationNormalizesMissingChineseWhitespace() {
+    const { parseQQV2Response } = await importModule('modules/qq-v2/protocol/xml.js');
+    const root = node('qq', {}, '', [
+        node('group', {
+            conversation: 'G1',
+            action: 'mute',
+            actor: 'N1',
+            target: 'N2',
+            duration: '10分钟',
+        }),
+    ]);
+
+    const actions = parseQQV2Response('<qq><group /></qq>', {
+        parseDocument: () => documentWith(root),
+    });
+
+    assert.equal(actions[0].duration, '10 分钟');
+}
+
+async function testManualGroupReplyRejectsAnEmptyActionBatch() {
+    const { validateQQV2ActionBatch, QQV2ProtocolError } = await importModule('modules/qq-v2/protocol/xml.js');
+
+    assert.throws(() => validateQQV2ActionBatch([], {
+        scenario: 'group-reply',
+        conversations: new Map([['G1', { kind: 'group' }]]),
+    }), QQV2ProtocolError);
+}
+
 async function main() {
     await testStrictXmlAndWhitelistedActions();
     await testScenarioAndReferenceValidation();
     await testTransferActionRequiresAVisiblePendingTransfer();
+    await testGroupAddByNameParsesTemporaryPersonReference();
+    await testGroupLeaveParsesWithoutTarget();
+    await testMuteDurationNormalizesMissingChineseWhitespace();
+    await testManualGroupReplyRejectsAnEmptyActionBatch();
     console.log('[qq-v2-protocol-contract] passed');
 }
 

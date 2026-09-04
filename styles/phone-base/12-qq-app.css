@@ -315,6 +315,37 @@
     object-fit: cover;
 }
 
+.yuzi-qq-group-avatar {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    grid-auto-flow: row;
+    gap: 1px;
+    padding: 2px;
+    border-radius: 28%;
+}
+
+.yuzi-qq-group-avatar[data-qq-group-avatar-count='1'] > .yuzi-qq-group-avatar-member {
+    grid-column: 1 / -1;
+    grid-row: 1 / -1;
+}
+
+.yuzi-qq-group-avatar-member {
+    grid-column: span 1;
+    grid-row: span 1;
+    min-inline-size: 0;
+    min-block-size: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    max-inline-size: 100%;
+    max-block-size: 100%;
+    align-self: stretch;
+    justify-self: stretch;
+    flex: none;
+    border-radius: 30%;
+    font-size: 0.52em;
+}
+
 .yuzi-qq-avatar-large {
     flex-basis: var(--yuzi-qq-avatar-large);
     inline-size: var(--yuzi-qq-avatar-large);
@@ -498,6 +529,251 @@
     flex-direction: column;
     max-inline-size: var(--yuzi-qq-message-max-width);
     gap: var(--yuzi-qq-message-gap);
+}
+
+.yuzi-qq-group-message-identity {
+    display: inline-flex;
+    align-items: center;
+    min-inline-size: 0;
+    gap: 0.35em;
+    padding-inline: 0.15em;
+    color: var(--yuzi-qq-muted);
+    font-size: var(--yuzi-qq-caption-size);
+    line-height: 1.25;
+}
+
+.yuzi-qq-group-message-name {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.yuzi-qq-group-role-badge {
+    flex: 0 0 auto;
+    padding: 0.08em 0.42em;
+    border-radius: var(--yuzi-phone-radius-pill);
+    color: var(--yuzi-qq-accent);
+    background: color-mix(in srgb, var(--yuzi-qq-accent) 13%, transparent);
+    font-size: 0.86em;
+    font-weight: var(--yuzi-qq-title-weight);
+}
+
+.yuzi-qq-group-details,
+.yuzi-qq-group-member-editor-card {
+    display: grid;
+    gap: var(--yuzi-qq-section-gap);
+    padding: var(--yuzi-qq-page-padding);
+    border-radius: var(--yuzi-qq-square-radius);
+    background: var(--yuzi-qq-elevated);
+}
+
+.yuzi-qq-group-details-identity,
+.yuzi-qq-group-member-editor-identity {
+    display: flex;
+    align-items: center;
+    min-inline-size: 0;
+    gap: var(--yuzi-qq-row-gap);
+}
+
+.yuzi-qq-group-details-copy,
+.yuzi-qq-group-member-editor-copy {
+    display: grid;
+    min-inline-size: 0;
+    gap: 0.2em;
+}
+
+.yuzi-qq-group-details-name,
+.yuzi-qq-group-member-editor-name {
+    overflow: hidden;
+    color: var(--yuzi-qq-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.yuzi-qq-group-details-status,
+.yuzi-qq-group-member-editor-role,
+.yuzi-qq-group-member-role {
+    color: var(--yuzi-qq-muted);
+    font-size: var(--yuzi-qq-caption-size);
+}
+
+.yuzi-qq-group-members {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(4.5rem, 100%), 1fr));
+    gap: var(--yuzi-qq-row-gap);
+}
+
+.yuzi-qq-group-member-tile {
+    display: grid;
+    min-inline-size: 0;
+    justify-items: center;
+    gap: 0.35em;
+    padding: 0.6em 0.35em;
+    border-radius: var(--yuzi-qq-square-radius);
+    color: var(--yuzi-qq-text);
+    background: color-mix(in srgb, var(--yuzi-qq-muted) 7%, transparent);
+    text-align: center;
+}
+
+.yuzi-qq-group-member-avatar {
+    inline-size: 3em;
+    block-size: 3em;
+}
+
+.yuzi-qq-group-member-name {
+    max-inline-size: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.yuzi-qq-group-member-add {
+    border: 1px dashed var(--yuzi-qq-border);
+    background: transparent;
+}
+
+.yuzi-qq-group-member-editor-actions {
+    display: grid;
+    gap: var(--yuzi-qq-tool-gap);
+}
+
+.yuzi-qq-group-member-editor-action,
+.yuzi-qq-group-lifecycle {
+    inline-size: 100%;
+}
+
+.yuzi-qq-group-picker-list {
+    display: grid;
+    max-block-size: min(45vh, 20rem);
+    gap: 1px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    border-radius: var(--yuzi-qq-square-radius);
+    background: var(--yuzi-qq-border);
+}
+
+.yuzi-qq-group-picker-list::-webkit-scrollbar,
+.yuzi-qq-mention-panel::-webkit-scrollbar {
+    display: none;
+}
+
+.yuzi-qq-group-picker-row {
+    display: flex;
+    align-items: center;
+    min-inline-size: 0;
+    gap: var(--yuzi-qq-row-gap);
+    padding: 0.55em 0.7em;
+    background: var(--yuzi-qq-elevated);
+}
+
+.yuzi-qq-group-picker-checkbox {
+    flex: 0 0 1.1em;
+    inline-size: 1.1em;
+    block-size: 1.1em;
+    margin: 0;
+    padding: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid var(--yuzi-qq-weak);
+    border-radius: 50%;
+    background: var(--yuzi-qq-content-surface);
+}
+
+.yuzi-qq-group-picker-checkbox:checked {
+    border-color: var(--yuzi-qq-accent);
+    background: var(--yuzi-qq-accent);
+    box-shadow: inset 0 0 0 0.22em var(--yuzi-qq-content-surface);
+}
+
+.yuzi-qq-group-picker-name {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.yuzi-qq-message-quote,
+.yuzi-qq-quote-preview {
+    min-inline-size: 0;
+    border-inline-start: 3px solid var(--yuzi-qq-accent);
+    color: var(--yuzi-qq-muted);
+    background: color-mix(in srgb, var(--yuzi-qq-muted) 10%, transparent);
+}
+
+.yuzi-qq-message-quote {
+    max-inline-size: 100%;
+    padding: 0.38em 0.58em;
+    border-radius: 0 var(--yuzi-qq-square-radius) var(--yuzi-qq-square-radius) 0;
+    overflow: hidden;
+    font-size: var(--yuzi-qq-caption-size);
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.yuzi-qq-quote-preview {
+    display: flex;
+    align-items: center;
+    gap: var(--yuzi-qq-tool-gap);
+    padding: 0.48em 0.65em;
+}
+
+.yuzi-qq-quote-preview-text {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.yuzi-qq-quote-preview-close {
+    display: grid;
+    flex: 0 0 auto;
+    inline-size: 1.8em;
+    block-size: 1.8em;
+    place-items: center;
+    padding: 0;
+    border-radius: var(--yuzi-phone-radius-pill);
+    color: var(--yuzi-qq-muted);
+}
+
+.yuzi-qq-mention-panel {
+    display: flex;
+    max-block-size: min(38vh, 16rem);
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    border-block: 1px solid var(--yuzi-qq-border);
+    background: var(--yuzi-qq-elevated);
+}
+
+.yuzi-qq-mention-panel[hidden] {
+    display: none;
+}
+
+.yuzi-qq-mention-option {
+    display: flex;
+    align-items: center;
+    inline-size: 100%;
+    gap: var(--yuzi-qq-row-gap);
+    padding: 0.55em 0.8em;
+    color: var(--yuzi-qq-text);
+    text-align: start;
+}
+
+.yuzi-qq-mention-option + .yuzi-qq-mention-option {
+    border-block-start: 1px solid var(--yuzi-qq-border);
+}
+
+.yuzi-qq-mention-option-name {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .yuzi-qq-message-bubble,
@@ -823,6 +1099,11 @@
 .yuzi-qq-dialog-actions > * {
     flex: 1 1 120px;
     min-inline-size: 0;
+}
+
+.yuzi-qq-message.is-quote-swiping {
+    transform: translateX(var(--yuzi-qq-message-quote-swipe-offset, 0px));
+    transition: none;
 }
 
 .yuzi-qq-dialog-menu {
@@ -1467,6 +1748,18 @@
     block-size: var(--yuzi-qq-root-action-size);
     color: var(--yuzi-qq-danger);
     background: var(--yuzi-qq-composer-surface);
+}
+
+.yuzi-qq-request-error {
+    align-self: center;
+    margin: 0 auto;
+    padding: 2px 8px;
+    border: var(--yuzi-qq-line-width) solid var(--yuzi-qq-danger);
+    border-radius: var(--yuzi-qq-radius-8);
+    color: var(--yuzi-qq-danger);
+    background: var(--yuzi-qq-composer-surface);
+    font-size: var(--yuzi-qq-caption-size);
+    line-height: var(--yuzi-qq-caption-line-height);
 }
 
 .yuzi-qq-composer {
@@ -3170,8 +3463,15 @@
     isolation: isolate;
 }
 
+.yuzi-qq-group-chat-view {
+    position: relative;
+    isolation: isolate;
+}
+
 .yuzi-qq-private-chat-view.has-chat-background::before,
-.yuzi-qq-private-chat-view.has-chat-background::after {
+.yuzi-qq-private-chat-view.has-chat-background::after,
+.yuzi-qq-group-chat-view.has-chat-background::before,
+.yuzi-qq-group-chat-view.has-chat-background::after {
     position: absolute;
     inset-block-start: calc(var(--yuzi-qq-safe-top) + var(--yuzi-qq-secondary-header-height));
     inset-block-end: var(--yuzi-qq-composer-height);
@@ -3185,7 +3485,15 @@
     background: var(--yuzi-qq-chat-background-image) center / cover no-repeat;
 }
 
+.yuzi-qq-group-chat-view.has-chat-background::before {
+    background: var(--yuzi-qq-chat-background-image) center / cover no-repeat;
+}
+
 .yuzi-qq-private-chat-view.has-chat-background::after {
+    background: var(--yuzi-qq-background-overlay);
+}
+
+.yuzi-qq-group-chat-view.has-chat-background::after {
     background: var(--yuzi-qq-background-overlay);
 }
 
@@ -3193,8 +3501,14 @@
     background: transparent;
 }
 
+.yuzi-qq-group-chat-view.has-chat-background .yuzi-qq-message-stream {
+    background: transparent;
+}
+
 .yuzi-qq-private-chat-view.has-chat-background .yuzi-qq-message-stream::before,
-.yuzi-qq-private-chat-view.has-chat-background .yuzi-qq-message-stream::after {
+.yuzi-qq-private-chat-view.has-chat-background .yuzi-qq-message-stream::after,
+.yuzi-qq-group-chat-view.has-chat-background .yuzi-qq-message-stream::before,
+.yuzi-qq-group-chat-view.has-chat-background .yuzi-qq-message-stream::after {
     content: none;
 }
 
@@ -3204,11 +3518,19 @@
 }
 
 .yuzi-qq-private-message-stream::-webkit-scrollbar,
-.yuzi-qq-private-emoji-panel::-webkit-scrollbar {
+.yuzi-qq-private-emoji-panel::-webkit-scrollbar,
+.yuzi-qq-group-message-stream::-webkit-scrollbar,
+.yuzi-qq-group-emoji-panel::-webkit-scrollbar {
     display: none;
 }
 
 .yuzi-qq-private-composer-layer {
+    position: static;
+    flex: 0 0 var(--yuzi-qq-composer-height);
+    min-block-size: var(--yuzi-qq-composer-height);
+}
+
+.yuzi-qq-group-composer-layer {
     position: static;
     flex: 0 0 var(--yuzi-qq-composer-height);
     min-block-size: var(--yuzi-qq-composer-height);
@@ -3224,7 +3546,21 @@
     transition: none;
 }
 
+.yuzi-qq-group-chat-composer {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: var(--yuzi-qq-overlay-z-index);
+    min-block-size: var(--yuzi-qq-composer-height);
+    padding: var(--yuzi-qq-inline-gap) var(--yuzi-qq-composer-padding-inline) 0;
+    transition: none;
+}
+
 .yuzi-qq-private-chat-view.has-emoji-panel .yuzi-qq-private-chat-composer {
+    inset-block-end: var(--yuzi-qq-private-emoji-panel-height);
+}
+
+.yuzi-qq-group-chat-view.has-emoji-panel .yuzi-qq-group-chat-composer {
     inset-block-end: var(--yuzi-qq-private-emoji-panel-height);
 }
 
@@ -3277,6 +3613,29 @@
     display: none;
 }
 
+.yuzi-qq-group-chat-tools {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(var(--yuzi-qq-private-tool-slot-min), 1fr));
+    min-block-size: var(--yuzi-qq-private-tool-hit-size);
+    block-size: var(--yuzi-qq-private-tool-hit-size);
+    justify-content: initial;
+    gap: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.yuzi-qq-group-chat-tool {
+    justify-self: center;
+    inline-size: var(--yuzi-qq-private-tool-hit-size);
+    block-size: var(--yuzi-qq-private-tool-hit-size);
+}
+
+.yuzi-qq-group-chat-tools::-webkit-scrollbar {
+    display: none;
+}
+
 .yuzi-qq-private-emoji-panel {
     position: absolute;
     inset-inline: 0;
@@ -3298,7 +3657,39 @@
     scrollbar-width: none;
 }
 
+.yuzi-qq-group-emoji-panel {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: var(--yuzi-qq-overlay-z-index);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--yuzi-qq-private-emoji-column-min)), 1fr));
+    align-content: start;
+    inline-size: 100%;
+    block-size: var(--yuzi-qq-private-emoji-panel-height);
+    min-block-size: 0;
+    max-block-size: none;
+    padding: var(--yuzi-qq-private-emoji-panel-padding-block) var(--yuzi-qq-composer-padding-inline);
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-block-start: var(--yuzi-qq-line-width) solid var(--yuzi-qq-line);
+    background: var(--yuzi-qq-composer-surface);
+    box-shadow: none;
+    scrollbar-width: none;
+}
+
 .yuzi-qq-private-emoji-panel .yuzi-qq-emoji-item {
+    display: grid;
+    min-inline-size: 0;
+    min-block-size: var(--yuzi-qq-private-emoji-item-size);
+    aspect-ratio: 1;
+    place-items: center;
+    overflow: hidden;
+    border-radius: var(--yuzi-qq-radius-8);
+    background: transparent;
+}
+
+.yuzi-qq-group-emoji-panel .yuzi-qq-emoji-item {
     display: grid;
     min-inline-size: 0;
     min-block-size: var(--yuzi-qq-private-emoji-item-size);
@@ -3422,6 +3813,7 @@
 
 .yuzi-qq-narrative-description,
 .yuzi-qq-transfer-note,
+.yuzi-qq-transfer-recipient,
 .yuzi-qq-transfer-status {
     overflow: hidden;
     color: inherit;
@@ -3668,4 +4060,83 @@
     background: color-mix(in srgb, var(--yuzi-qq-elevated) 24%, transparent);
     cursor: pointer;
     backdrop-filter: blur(var(--yuzi-qq-image-viewer-blur));
+}
+
+.yuzi-qq-quote-card {
+    display: flex;
+    align-items: center;
+    min-inline-size: 0;
+    gap: var(--yuzi-qq-inline-gap);
+    padding: var(--yuzi-qq-bubble-padding-block) var(--yuzi-qq-bubble-padding-inline);
+    border-inline-start: var(--yuzi-qq-line-width) solid var(--yuzi-qq-accent);
+    border-radius: 0 var(--yuzi-qq-radius-8) var(--yuzi-qq-radius-8) 0;
+    color: var(--yuzi-qq-muted);
+    background: color-mix(in srgb, var(--yuzi-qq-muted) 10%, transparent);
+}
+
+.yuzi-qq-quote-card-copy {
+    display: grid;
+    min-inline-size: 0;
+    flex: 1 1 auto;
+    gap: var(--yuzi-qq-inline-gap);
+}
+
+.yuzi-qq-quote-card-meta {
+    display: flex;
+    min-inline-size: 0;
+    align-items: baseline;
+    gap: var(--yuzi-qq-inline-gap);
+    overflow: hidden;
+    font-size: var(--yuzi-qq-caption-size);
+    line-height: 1.2;
+}
+
+.yuzi-qq-quote-card-sender,
+.yuzi-qq-quote-card-time,
+.yuzi-qq-quote-card-content {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.yuzi-qq-quote-card-sender {
+    color: var(--yuzi-qq-text);
+}
+
+.yuzi-qq-quote-card-time {
+    flex: 0 0 auto;
+}
+
+.yuzi-qq-quote-card-content {
+    display: block;
+    font-size: var(--yuzi-qq-caption-size);
+    line-height: 1.35;
+}
+
+.yuzi-qq-quote-card-icon,
+.yuzi-qq-quote-card-close {
+    flex: 0 0 auto;
+    color: var(--yuzi-qq-icon);
+}
+
+.yuzi-qq-quote-card-icon {
+    inline-size: var(--yuzi-qq-tool-size);
+    text-align: center;
+}
+
+.yuzi-qq-quote-card-close {
+    display: grid;
+    inline-size: var(--yuzi-qq-tool-size);
+    block-size: var(--yuzi-qq-tool-size);
+    place-items: center;
+    padding: 0;
+    border-radius: var(--yuzi-phone-radius-pill);
+}
+
+.yuzi-qq-message-quote {
+    max-inline-size: 100%;
+}
+
+.yuzi-qq-quote-preview {
+    inline-size: 100%;
 }

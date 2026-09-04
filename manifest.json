@@ -6,7 +6,7 @@
     "js": "dist/yuzi-phone.bundle.js",
     "css": "dist/yuzi-phone.bundle.css",
     "author": "yuzi83",
-    "version": "2.2.1",
+    "version": "2.2.2",
     "homePage": "https://github.com/yuzi83/st-yuzi-phone",
     "auto_update": true,
     "description": "玉子手机独立扩展，提供小手机主屏与 QQ 独立系统 App，支持自有 API 预设、会话世界书同步及图片、语音、转账等媒体消息。"

@@ -130,6 +130,112 @@ async function testCreateGroupMapsMemberReferencesAndKeepsFriendBoundary() {
     assert.equal((await repository.listConversations('scope-a')).length, 3);
 }
 
+async function testGroupOwnerCanCreateNamedMemberAndUseReferenceInSameBatch() {
+    const { createQQV2ActionService } = await importModule('modules/qq-v2/protocol/action-service.js');
+    const repository = await createRepository();
+    const alice = await repository.createPrivateConversation('scope-a', { name: '林知夏' });
+    const bob = await repository.createPrivateConversation('scope-a', { name: '顾言' });
+    const groupResult = await repository.createGroupConversation('scope-a', {
+        name: '新群',
+        memberIds: [alice.person.personId, bob.person.personId],
+        ownerId: alice.person.personId,
+    });
+    const service = createQQV2ActionService({
+        repository,
+        parseResponse: () => [{
+            type: 'group',
+            conversation: 'G1',
+            action: 'add',
+            actor: 'N1',
+            target: '',
+            value: '',
+            duration: '',
+            id: 'N3',
+            name: '沈星河',
+        }, {
+            type: 'message',
+            conversation: 'G1',
+            sender: 'N3',
+            messageType: 'text',
+            content: '大家好。',
+            mentions: [],
+            mentionAll: false,
+        }],
+    });
+
+    await service.execute({
+        scopeId: 'scope-a',
+        response: '<qq/>',
+        scenario: 'group-proactive',
+        references: { G1: groupResult.conversation.conversationId },
+        personReferences: { N1: alice.person.personId, N2: bob.person.personId },
+        storyTime: '2042-05-01 10:02',
+    });
+
+    const group = await repository.getGroup('scope-a', groupResult.group.groupId);
+    const newcomerId = group.memberIds.find((personId) => ![alice.person.personId, bob.person.personId].includes(personId));
+    assert.ok(newcomerId, '按真名新增的群成员应获得稳定 personId');
+    assert.equal((await repository.getPerson('scope-a', newcomerId)).formalName, '沈星河');
+    assert.equal(
+        (await repository.listConversations('scope-a')).filter((conversation) => conversation.kind === 'private').length,
+        2,
+        'NPC 拉入陌生成员不应伪造私聊会话',
+    );
+    const messages = await repository.listMessages('scope-a', groupResult.conversation.conversationId);
+    assert.equal(messages.at(-1).senderId, newcomerId);
+    assert.equal(messages.at(-1).content, '大家好。');
+}
+
+async function testNpcCanLeaveGroupThroughActionService() {
+    const { createQQV2ActionService } = await importModule('modules/qq-v2/protocol/action-service.js');
+    const repository = await createRepository();
+    const alice = await repository.createPrivateConversation('scope-a', { name: '林知夏' });
+    const bob = await repository.createPrivateConversation('scope-a', { name: '顾言' });
+    const groupResult = await repository.createGroupConversation('scope-a', {
+        name: 'NPC 退群测试',
+        memberIds: [alice.person.personId, bob.person.personId],
+        ownerId: alice.person.personId,
+    });
+    const [pendingTransfer] = await repository.appendMessages('scope-a', groupResult.conversation.conversationId, [{
+        senderId: alice.person.personId,
+        senderType: 'person',
+        type: 'transfer',
+        content: '给顾言的转账',
+        storyTime: '2026-09-04 11:00',
+        transfer: { amount: '18', recipientId: bob.person.personId, status: 'pending' },
+    }]);
+    const service = createQQV2ActionService({
+        repository,
+        parseResponse: () => [{
+            type: 'group',
+            conversation: 'G1',
+            action: 'leave',
+            actor: 'N2',
+            target: '',
+            value: '',
+            duration: '',
+        }],
+    });
+
+    await service.execute({
+        scopeId: 'scope-a',
+        response: '<qq/>',
+        scenario: 'group-proactive',
+        references: { G1: groupResult.conversation.conversationId },
+        personReferences: { N1: alice.person.personId, N2: bob.person.personId },
+        storyTime: '2026-09-04 11:01',
+    });
+
+    const group = await repository.getGroup('scope-a', groupResult.group.groupId);
+    const messages = await repository.listMessages('scope-a', groupResult.conversation.conversationId);
+    assert.equal(group.memberIds.includes(bob.person.personId), false);
+    assert.equal(
+        messages.find((message) => message.messageId === pendingTransfer.messageId).transfer.status,
+        'returned',
+    );
+    assert.equal(messages.at(-1).content, '顾言退出了群聊');
+}
+
 async function testCancelledActionBatchNeverStartsItsRepositoryTransaction() {
     const { createQQV2ActionService } = await importModule('modules/qq-v2/protocol/action-service.js');
     const repository = await createRepository();
@@ -227,6 +333,8 @@ async function testStickerShortReferenceMapsToStoredResourceId() {
 async function main() {
     await testActionServiceAppliesPendingTransferAtomically();
     await testCreateGroupMapsMemberReferencesAndKeepsFriendBoundary();
+    await testGroupOwnerCanCreateNamedMemberAndUseReferenceInSameBatch();
+    await testNpcCanLeaveGroupThroughActionService();
     await testCancelledActionBatchNeverStartsItsRepositoryTransaction();
     await testPrivateProactiveMessageCannotQuoteAnotherConversation();
     await testStickerShortReferenceMapsToStoredResourceId();

@@ -17,15 +17,34 @@ async function main() {
                         { conversationId: 'contact-only', kind: 'private', status: 'contact', formalName: '无聊天好友' },
                         { conversationId: 'active-chat', kind: 'private', status: 'active', formalName: '有聊天好友', title: '聊天备注' },
                         { conversationId: 'readonly-history', kind: 'private', status: 'readonly', formalName: '非好友' },
-                        { conversationId: 'hidden-group', kind: 'group', status: 'active', formalName: '群成员' },
+                        {
+                            conversationId: 'study-group',
+                            kind: 'group',
+                            status: 'active',
+                            title: '学习群',
+                            group: { selfExited: false },
+                        },
+                        {
+                            conversationId: 'left-group',
+                            kind: 'group',
+                            status: 'exited',
+                            title: '已退出群',
+                            group: { selfExited: true },
+                        },
                     ],
                 };
             },
         },
     });
-    assert.deepEqual(contactsModel.contacts.map((contact) => contact.conversationId), ['contact-only', 'active-chat'],
-        'contacts must follow the Facade order and only the independent friend relation');
+    assert.deepEqual(contactsModel.contacts.map((contact) => contact.conversationId), [
+        'contact-only',
+        'active-chat',
+        'study-group',
+        'left-group',
+    ], 'contacts must mix private friends, joined groups and left read-only groups in Facade order');
     assert.equal(contactsModel.contacts[1].formalName, '有聊天好友', 'contacts must use the person name, not a chat remark');
+    assert.equal(contactsModel.contacts[2].formalName, '学习群');
+    assert.equal(contactsModel.contacts[3].formalName, '已退出群');
 
     const friendProfile = __test__.profileViewModel({ status: 'active', formalName: '有聊天好友' });
     assert.deepEqual(friendProfile.actions, ['remove-friend', 'edit-profile', 'message']);

@@ -39,11 +39,14 @@ async function main() {
     assert.match(projection, /senderName\(message[\s\S]*formatQQV2MessageSemantic\(message/,
         'worldbook projection must use the same readable semantics');
     assert.match(projection, /data\.conversation\?\.kind === 'group'[\s\S]*message\.quoteMessageId/,
-        'quote projection must remain reserved for future group chat only');
-    assert.match(runtime, /recipientId:\s*asText\(message\.transfer\?\.recipientId[\s\S]*conversation\?\.personId/,
-        'manual transfers must persist the current private-chat recipient');
-    assert.match(resources, /当前默认预设不得输出 quote 属性/,
-        'the built-in private prompt must explicitly forbid quote output');
+        'quote projection is emitted only for group conversations');
+    assert.match(runtime,
+        /recipientId:\s*asText\(message\.transfer\?\.recipientId,\s*256\)[\s\S]*conversation\?\.kind === 'private'[\s\S]*conversation\.personId\s*:\s*''/,
+        'private transfers may default to the current person while group transfers require an explicit recipient');
+    assert.ok((resources.match(/私聊消息不得添加 quote、mentions 或 all 属性/g) || []).length >= 2,
+        'both built-in private prompts must explicitly forbid group-only message attributes');
+    assert.match(resources, /quote 只能引用同一群聊中本次实际提供的消息/,
+        'the built-in group prompts must allow only visible same-group quote references');
 
     console.log('[qq-v2-message-semantics-contract] passed');
 }

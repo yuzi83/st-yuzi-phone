@@ -21,16 +21,18 @@ function toUnitRandom(random) {
 function toSourceEvent(conversation) {
     const conversationId = normalizeText(conversation?.conversationId);
     const senderName = normalizeText(conversation?.title || conversation?.formalName);
+    const conversationKind = conversation?.kind === 'group' ? 'group' : 'private';
     if (!conversationId
         || !senderName
-        || conversation?.kind === 'group'
-        || (conversation?.status && conversation.status !== 'active')) {
+        || (conversation?.status && conversation.status !== 'active')
+        || (conversationKind === 'group' && conversation?.group?.selfExited === true)) {
         return null;
     }
     return Object.freeze({
         conversationId,
+        conversationKind,
         senderName,
-        avatarAssetId: normalizeText(conversation?.avatarAssetId),
+        avatarAssetId: conversationKind === 'group' ? '' : normalizeText(conversation?.avatarAssetId),
     });
 }
 
@@ -67,13 +69,14 @@ export function createQQFullscreenOverlaySourceAdapter(options = {}) {
                     const identity = normalizeText(event?.conversationId) || senderName;
                     if (!senderName || !identity || seen.has(identity)) return null;
                     seen.add(identity);
+                    const group = event?.conversationKind === 'group';
                     return Object.freeze({
                         kind: 'message-notification',
                         sourceId: QQ_FULLSCREEN_OVERLAY_SOURCE_ID,
                         sheetKey: QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
                         senderName,
                         avatarAssetId: normalizeText(event?.avatarAssetId),
-                        text: `${senderName}给你发了1条消息`,
+                        text: `${senderName}${group ? '发送了' : '给你发了'}1条消息`,
                     });
                 })
                 .filter(Boolean));

@@ -86,10 +86,29 @@ function proactiveSender(message) {
 function proactivePersonName(conversation, personId) {
     if (personId === '__self__') return '用户';
     const peopleById = conversation?.peopleById;
-    if (peopleById instanceof Map) return asText(peopleById.get(personId));
-    if (peopleById && typeof peopleById === 'object') return asText(peopleById[personId]);
+    const person = peopleById instanceof Map ? peopleById.get(personId) : peopleById?.[personId];
+    if (typeof person === 'string') return asText(person);
+    if (person && typeof person === 'object') return asText(person.formalName ?? person.name);
     if (conversation?.personId === personId) return asText(conversation?.title ?? conversation?.name);
     return '';
+}
+
+function memoryMessages(section) {
+    return (Array.isArray(section?.messages) ? section.messages : [])
+        .filter(isVisibleMessage)
+        .map((message) => {
+            const sender = message?.senderType === 'system'
+                ? '系统'
+                : message?.senderId === '__self__' || message?.senderType === 'self'
+                    ? '用户'
+                    : proactivePersonName(section, message?.senderId) || '成员';
+            return `<message sender="${escapeXml(sender)}" type="${escapeXml(qqV2MessageType(message))}">${escapeXml(
+                formatQQV2MessageSemantic(message, {
+                    resolvePersonName: (personId) => proactivePersonName(section, personId),
+                }),
+            )}</message>`;
+        })
+        .join('');
 }
 
 /**
@@ -168,6 +187,27 @@ export function buildQQV2ProactiveSections({ kind, conversations = [] } = {}) {
             .join('');
         return `<${tag} ${attributes.join(' ')}>${messages}</${tag}>`;
     }).join('\n') || '无';
+}
+
+export function buildQQV2GroupMemorySections(groups = []) {
+    return (Array.isArray(groups) ? groups : []).map((group) => {
+        const knownBy = Array.isArray(group?.knownBy)
+            ? group.knownBy.map(asText).filter(Boolean).join(',')
+            : asText(group?.knownBy);
+        const attributes = [
+            `conversation="${escapeXml(group?.conversationId)}"`,
+            `name="${escapeXml(group?.name)}"`,
+            ...(knownBy ? [`known-by="${escapeXml(knownBy)}"`] : []),
+        ];
+        return `<group-memory ${attributes.join(' ')}>${memoryMessages(group)}</group-memory>`;
+    }).join('\n') || '无';
+}
+
+export function buildQQV2PrivateMemorySections(conversations = []) {
+    return (Array.isArray(conversations) ? conversations : []).map((conversation) => (
+        `<private-memory person="${escapeXml(conversation?.personName)}" conversation="${escapeXml(conversation?.conversationId)}">`
+        + `${memoryMessages(conversation)}</private-memory>`
+    )).join('\n') || '无';
 }
 
 export { QQ_V2_PROMPT_PLACEHOLDERS };

@@ -24,8 +24,9 @@ export function createNarrativeMessage(type, content) {
     return Object.freeze({ type: normalizedType, content: asText(content) });
 }
 
-export function createTransferMessage({ amount, currency, note } = {}) {
+export function createTransferMessage({ amount, currency, note, recipientId } = {}) {
     const normalizedNote = asText(note);
+    const normalizedRecipientId = asText(recipientId);
     return Object.freeze({
         type: 'transfer',
         content: normalizedNote,
@@ -33,6 +34,8 @@ export function createTransferMessage({ amount, currency, note } = {}) {
             amount: asText(amount),
             currency: asText(currency),
             note: normalizedNote,
+            status: 'pending',
+            ...(normalizedRecipientId ? { recipientId: normalizedRecipientId } : {}),
         }),
     });
 }
@@ -42,7 +45,9 @@ export function transferStatusLabel(message) {
     if (status === 'accepted') return '已收款';
     if (status === 'rejected') return '已拒收';
     if (status === 'returned') return '已退还';
-    return message?.senderType === 'self' ? '待对方收款' : '待你收款';
+    if (message?.senderType === 'self') return '待对方收款';
+    const recipientId = asText(message?.transfer?.recipientId);
+    return recipientId && recipientId !== '__self__' ? '待收款' : '待你收款';
 }
 
 export async function submitNarrativeMessage({ facade, conversationId, type, content } = {}) {
@@ -53,11 +58,11 @@ export async function submitNarrativeMessage({ facade, conversationId, type, con
     });
 }
 
-export async function submitTransferMessage({ facade, conversationId, amount, currency, note } = {}) {
+export async function submitTransferMessage({ facade, conversationId, amount, currency, note, recipientId } = {}) {
     if (typeof facade?.intent?.sendMessage !== 'function') return unavailable('sendMessage');
     return facade.intent.sendMessage({
         conversationId: asText(conversationId),
-        message: createTransferMessage({ amount, currency, note }),
+        message: createTransferMessage({ amount, currency, note, recipientId }),
     });
 }
 

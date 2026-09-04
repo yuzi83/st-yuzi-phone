@@ -51,12 +51,16 @@ async function testMessagesKeepStoryTimeAndDeletedQuotesDoNotLeakOriginalContent
     assert.equal(first.storyTime, '');
     assert.equal(first.sequence, 1);
     assert.equal(reply.sequence, 2);
+    const beforeDeletion = await repository.listMessages('scope-a', conversation.conversationId);
+    assert.equal(beforeDeletion.at(-1).quote.senderName, '用户');
+    assert.equal(beforeDeletion.at(-1).quote.storyTime, '');
     const deletion = await repository.deleteMessages('scope-a', conversation.conversationId, [first.messageId, 'missing-message']);
     assert.deepEqual(deletion.deletedMessageIds, [first.messageId]);
     const messages = await repository.listMessages('scope-a', conversation.conversationId);
     assert.equal(messages.length, 1);
     assert.equal(messages[0].quote.status, 'deleted');
     assert.equal(messages[0].quote.content, '');
+
 }
 
 async function testGroupPermissionsMuteExitAndReinvite() {
@@ -70,6 +74,12 @@ async function testGroupPermissionsMuteExitAndReinvite() {
     });
 
     await repository.appointAdministrator('scope-a', group.group.groupId, alice.person.personId, bob.person.personId, '2042-05-01 10:00');
+    const managementMessages = await repository.listMessages('scope-a', group.conversation.conversationId);
+    assert.equal(
+        managementMessages.at(-1).content,
+        'Bob已被设为管理员',
+        'group management system messages must show the member real name instead of the internal person id',
+    );
     await repository.muteGroupMember('scope-a', group.group.groupId, bob.person.personId, '__self__', '1 小时', '2042-05-01 10:00');
     await assert.rejects(() => repository.appendMessages('scope-a', group.conversation.conversationId, [{
         senderId: '__self__',
@@ -85,6 +95,106 @@ async function testGroupPermissionsMuteExitAndReinvite() {
     assert.equal((await repository.getConversation('scope-a', group.conversation.conversationId)).status, 'active');
     const groupAfterInvite = await repository.getGroup('scope-a', group.group.groupId);
     assert.equal(groupAfterInvite.selfRole, 'member');
+}
+
+async function testNpcGroupMessagesContinueAfterCurrentUserExits() {
+    const repository = await createRepository();
+    const alice = await repository.createPrivateConversation('scope-a', { name: 'Alice' });
+    const bob = await repository.createPrivateConversation('scope-a', { name: 'Bob' });
+    const group = await repository.createGroupConversation('scope-a', {
+        name: '后台继续聊天群',
+        memberIds: [alice.person.personId, bob.person.personId],
+        ownerId: alice.person.personId,
+    });
+
+    await repository.kickGroupMember(
+        'scope-a',
+        group.group.groupId,
+        alice.person.personId,
+        '__self__',
+        '2026-09-04 10:00',
+    );
+    const [message] = await repository.appendMessages('scope-a', group.conversation.conversationId, [{
+        senderId: bob.person.personId,
+        senderType: 'person',
+        type: 'text',
+        content: '她退群之后我们继续聊。',
+        storyTime: '2026-09-04 10:01',
+    }]);
+
+    assert.equal(message.content, '她退群之后我们继续聊。');
+    await assert.rejects(() => repository.appendMessages('scope-a', group.conversation.conversationId, [{
+        senderId: '__self__',
+        senderType: 'self',
+        type: 'text',
+        content: '退出后不能发言',
+        storyTime: '2026-09-04 10:02',
+    }]), /已退出|只读|不在当前群聊/);
+}
+
+async function testCurrentUserCanLeaveGroupButOwnerMustTransferFirst() {
+    const repository = await createRepository();
+    const alice = await repository.createPrivateConversation('scope-a', { name: 'Alice' });
+    const bob = await repository.createPrivateConversation('scope-a', { name: 'Bob' });
+    const memberGroup = await repository.createGroupConversation('scope-a', {
+        name: '成员退群测试',
+        memberIds: [alice.person.personId, bob.person.personId],
+        ownerId: alice.person.personId,
+    });
+    const [pendingTransfer] = await repository.appendMessages('scope-a', memberGroup.conversation.conversationId, [{
+        senderId: alice.person.personId,
+        senderType: 'person',
+        type: 'transfer',
+        content: '退群前给你的转账',
+        storyTime: '2026-09-04 10:00',
+        transfer: { amount: '100', recipientId: '__self__', status: 'pending' },
+    }]);
+
+    await repository.manageGroup('scope-a', {
+        groupId: memberGroup.group.groupId,
+        action: 'leave',
+        storyTime: '2026-09-04 10:01',
+    });
+
+    const leftGroup = await repository.getGroup('scope-a', memberGroup.group.groupId);
+    const leftConversation = await repository.getConversation('scope-a', memberGroup.conversation.conversationId);
+    const messages = await repository.listMessages('scope-a', memberGroup.conversation.conversationId);
+    assert.equal(leftGroup.selfExited, true);
+    assert.equal(leftGroup.selfRole, 'member');
+    assert.equal(leftConversation.status, 'exited');
+    assert.equal(
+        messages.find((message) => message.messageId === pendingTransfer.messageId).transfer.status,
+        'returned',
+    );
+    assert.equal(messages.at(-1).content, '用户退出了群聊');
+    await assert.rejects(() => repository.appendMessages('scope-a', memberGroup.conversation.conversationId, [{
+        senderId: '__self__',
+        senderType: 'self',
+        type: 'text',
+        content: '退出后不能再发言',
+        storyTime: '2026-09-04 10:02',
+    }]), (error) => error?.code === 'group_read_only');
+    assert.equal((await repository.appendMessages('scope-a', memberGroup.conversation.conversationId, [{
+        senderId: bob.person.personId,
+        senderType: 'person',
+        type: 'text',
+        content: 'NPC 继续聊天',
+        storyTime: '2026-09-04 10:03',
+    }]))[0].content, 'NPC 继续聊天');
+
+    const ownerGroup = await repository.createGroupConversation('scope-a', {
+        name: '群主退群测试',
+        memberIds: [alice.person.personId, bob.person.personId],
+    });
+    await assert.rejects(() => repository.manageGroup('scope-a', {
+        groupId: ownerGroup.group.groupId,
+        action: 'leave',
+        storyTime: '2026-09-04 10:04',
+    }), (error) => error?.code === 'group_owner_must_transfer');
+    assert.equal((await repository.getConversation(
+        'scope-a',
+        ownerGroup.conversation.conversationId,
+    )).status, 'active');
 }
 
 async function testConversationDeletionCleansOwnedAssetsButRetainsPersonUsedByGroup() {
@@ -118,14 +228,25 @@ async function testConversationDeletionReportsItsUserFacingDisposition() {
         name: 'Owned group',
         memberIds: [alice.person.personId, bob.person.personId],
     });
-    assert.equal((await repository.deleteConversation('scope-a', ownedGroup.conversation.conversationId)).mode, 'dissolved');
+    await repository.appendMessages('scope-a', ownedGroup.conversation.conversationId, [{
+        senderId: '__self__',
+        senderType: 'self',
+        type: 'text',
+        content: '清空前的群消息',
+        storyTime: '2026-09-04 11:00',
+    }]);
+    assert.equal((await repository.deleteConversation('scope-a', ownedGroup.conversation.conversationId)).mode, 'group-history');
+    assert.ok(await repository.getGroup('scope-a', ownedGroup.group.groupId));
+    assert.ok(await repository.getConversation('scope-a', ownedGroup.conversation.conversationId));
+    assert.deepEqual(await repository.listMessages('scope-a', ownedGroup.conversation.conversationId), []);
 
     const joinedGroup = await repository.createGroupConversation('scope-a', {
         name: 'Joined group',
         memberIds: [alice.person.personId, bob.person.personId],
         ownerId: alice.person.personId,
     });
-    assert.equal((await repository.deleteConversation('scope-a', joinedGroup.conversation.conversationId)).mode, 'exited');
+    assert.equal((await repository.deleteConversation('scope-a', joinedGroup.conversation.conversationId)).mode, 'group-history');
+    assert.ok(await repository.getGroup('scope-a', joinedGroup.group.groupId));
 }
 
 async function testDeletingPrivateConversationRetainsItsFriendAvatar() {
@@ -245,6 +366,70 @@ async function testHandlingIncomingTransferChangesOnlyItsPersistedState() {
         'return',
         '2042-05-01 10:06',
     ), (error) => error?.code === 'transfer_not_pending');
+}
+
+async function testGroupTransfersRespectRecipientsAndReturnWhenTheyLeave() {
+    const repository = await createRepository();
+    const alice = await repository.createPrivateConversation('scope-a', { name: 'Alice' });
+    const bob = await repository.createPrivateConversation('scope-a', { name: 'Bob' });
+    const group = await repository.createGroupConversation('scope-a', {
+        name: 'Transfer group',
+        memberIds: [alice.person.personId, bob.person.personId],
+    });
+    const conversationId = group.conversation.conversationId;
+    const [incoming] = await repository.appendMessages('scope-a', conversationId, [{
+        senderId: alice.person.personId,
+        senderType: 'person',
+        type: 'transfer',
+        content: '给你',
+        storyTime: '2026-09-04 10:00',
+        transfer: { amount: '100', recipientId: '__self__', status: 'pending' },
+    }]);
+    assert.equal((await repository.handleIncomingTransfer(
+        'scope-a',
+        conversationId,
+        incoming.messageId,
+        'accept',
+        '2026-09-04 10:01',
+    )).transfer.status, 'accepted');
+
+    const [npcTransfer] = await repository.appendMessages('scope-a', conversationId, [{
+        senderId: alice.person.personId,
+        senderType: 'person',
+        type: 'transfer',
+        content: '给 Bob',
+        storyTime: '2026-09-04 10:02',
+        transfer: { amount: '8', recipientId: bob.person.personId, status: 'pending' },
+    }]);
+    await repository.applyAIActions('scope-a', [{
+        type: 'transfer',
+        conversation: 'G1',
+        message: npcTransfer.messageId,
+        actor: bob.person.personId,
+        action: 'accept',
+    }], {
+        references: { G1: conversationId },
+        storyTime: '2026-09-04 10:03',
+    });
+    assert.equal((await repository.listMessages('scope-a', conversationId))
+        .find((message) => message.messageId === npcTransfer.messageId).transfer.status, 'accepted');
+
+    const [pendingForAlice] = await repository.appendMessages('scope-a', conversationId, [{
+        senderId: '__self__',
+        senderType: 'self',
+        type: 'transfer',
+        content: '待退回',
+        storyTime: '2026-09-04 10:04',
+        transfer: { amount: '20', recipientId: alice.person.personId, status: 'pending' },
+    }]);
+    await repository.manageGroup('scope-a', {
+        groupId: group.group.groupId,
+        action: 'kick',
+        targetPersonId: alice.person.personId,
+        storyTime: '2026-09-04 10:05',
+    });
+    assert.equal((await repository.listMessages('scope-a', conversationId))
+        .find((message) => message.messageId === pendingForAlice.messageId).transfer.status, 'returned');
 }
 
 async function testPrivateProfileUsesOnlyScopedMediaAndPreservesPersonIdentity() {
@@ -546,12 +731,15 @@ async function main() {
     await testScopeIsolationAndStablePeople();
     await testMessagesKeepStoryTimeAndDeletedQuotesDoNotLeakOriginalContent();
     await testGroupPermissionsMuteExitAndReinvite();
+    await testNpcGroupMessagesContinueAfterCurrentUserExits();
+    await testCurrentUserCanLeaveGroupButOwnerMustTransferFirst();
     await testConversationDeletionCleansOwnedAssetsButRetainsPersonUsedByGroup();
     await testConversationDeletionReportsItsUserFacingDisposition();
     await testDeletingPrivateConversationRetainsItsFriendAvatar();
     await testHistoricalNpcMessagesKeepTheirSenderSnapshot();
     await testDeletingConversationReleasesHistoricalAvatarSnapshots();
     await testHandlingIncomingTransferChangesOnlyItsPersistedState();
+    await testGroupTransfersRespectRecipientsAndReturnWhenTheyLeave();
     await testPrivateProfileUsesOnlyScopedMediaAndPreservesPersonIdentity();
     await testGroupProfileOnlyOwnsLocalBackground();
     await testOpeningConversationClearsItsUnreadCounter();

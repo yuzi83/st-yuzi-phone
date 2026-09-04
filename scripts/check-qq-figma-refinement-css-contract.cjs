@@ -85,6 +85,10 @@ function main() {
         'profile editor values and media actions must not inherit the old chevron-only geometry',
     );
     expectRule(refinement, '.yuzi-qq-profile-edit-view', 'background: var(--yuzi-qq-deep-page)');
+    expectRule(source, '.yuzi-qq-group-avatar', 'grid-template-columns: repeat(3, minmax(0, 1fr))');
+    expectRule(source, '.yuzi-qq-group-avatar', 'grid-template-rows: repeat(3, minmax(0, 1fr))');
+    expectRule(source, '.yuzi-qq-group-avatar-member', 'grid-column: span 1');
+    expectRule(source, '.yuzi-qq-group-avatar-member', 'grid-row: span 1');
     expectRule(refinement, '.yuzi-qq-profile-edit-card', 'background: var(--yuzi-qq-content-surface)');
     expectRule(refinement, '.yuzi-qq-image-library-view.is-selection-mode .yuzi-qq-image-library-delete-action', 'display: inline-grid');
     expectRule(refinement, '.yuzi-qq-settings-root-title', 'margin: 0');

@@ -30,22 +30,26 @@ async function testPlaceholdersHaveOneStableMeaningAndKeepUnknownText() {
     );
     const blocks = [{
         role: 'system',
-        content: '{{私聊人物}}|{{私聊主动人物}}|{{群聊成员}}|{{私聊主动记录}}|{{群聊记录}}|{{正文上下文}}|{{世界书内容}}|{{故事时间}}|{{可用表情}}|{{天气}}',
+        content: '{{私聊人物}}|{{私聊主动人物}}|{{群聊成员}}|{{群聊记忆}}|{{主动群聊记忆}}|{{私聊记忆}}|{{主动私聊记忆}}|{{私聊主动记录}}|{{群聊记录}}|{{正文上下文}}|{{世界书内容}}|{{故事时间}}|{{可用表情}}|{{天气}}',
     }];
     const result = materializeQQV2PromptBlocks(blocks, {
         privatePerson: '林知夏',
         privateProactivePeople: 'P1：林知夏\nP2：顾言',
         groupMembers: '',
+        groupMemory: '当前人物参加的群聊',
+        proactiveGroupMemory: '主动私聊人物参加的群聊',
+        privateMemory: '当前群成员各自的私聊',
+        proactivePrivateMemory: '主动群成员各自的私聊',
         privateProactiveHistory: '全部私聊分区历史',
         groupHistory: '群聊历史',
         storyContext: '正文',
         worldbookContent: '世界书',
-        storyTime: '2042-05-01 10:00',
+        storyTime: '2026-09-04 10:00',
         availableStickers: 'S1｜开心',
     });
     assert.deepEqual(result, [{
         role: 'system',
-        content: '林知夏|P1：林知夏\nP2：顾言|无|全部私聊分区历史|群聊历史|正文|世界书|2042-05-01 10:00|S1｜开心|{{天气}}',
+        content: '林知夏|P1：林知夏\nP2：顾言|无|当前人物参加的群聊|主动私聊人物参加的群聊|当前群成员各自的私聊|主动群成员各自的私聊|全部私聊分区历史|群聊历史|正文|世界书|2026-09-04 10:00|S1｜开心|{{天气}}',
     }]);
     assert.equal(QQ_V2_PROMPT_PLACEHOLDERS.includes('{{私聊记录}}'), false);
 }
@@ -106,6 +110,8 @@ async function testStickerCatalogUsesShortReferencesAndRemovesImageCode() {
 
 async function testPromptHelpersKeepSuccessfulStoryRepliesAndEscapeProactiveSections() {
     const {
+        buildQQV2GroupMemorySections,
+        buildQQV2PrivateMemorySections,
         buildQQV2StoryContext,
         buildQQV2ProactiveSections,
     } = await importModule('modules/qq-v2/prompt/materializer.js');
@@ -162,6 +168,38 @@ async function testPromptHelpersKeepSuccessfulStoryRepliesAndEscapeProactiveSect
         sections,
         '<private id="P1" name="林&lt;知夏"><message id="P1-M1" sender="user" type="text">你好 &amp; 再见</message><message id="P1-M2" sender="npc" type="voice">语音：今晚见</message><message id="P1-M3" sender="user" type="image">图片：海边的照片</message><message id="P1-M4" sender="npc" type="video">视频：烟花</message><message id="P1-M5" sender="user" type="sticker">表情：开心挥手</message><message id="P1-M6" sender="user" type="transfer">转账，金额：88 金币，收款人：林&lt;知夏，状态：待收款，备注：晚饭</message></private>',
     );
+
+    assert.equal(buildQQV2GroupMemorySections([{
+        conversationId: 'group<&1',
+        name: '周末群',
+        knownBy: ['P1', 'P3'],
+        peopleById: { 'person-1': '林知夏' },
+        messages: [
+            { senderId: 'person-1', senderType: 'person', type: 'voice', content: '今晚见 & 别迟到' },
+            { senderId: '__self__', senderType: 'self', type: 'text', content: '好' },
+        ],
+    }]), [
+        '<group-memory conversation="group&lt;&amp;1" name="周末群" known-by="P1,P3">',
+        '<message sender="林知夏" type="voice">语音：今晚见 &amp; 别迟到</message>',
+        '<message sender="用户" type="text">好</message>',
+        '</group-memory>',
+    ].join(''));
+
+    assert.equal(buildQQV2PrivateMemorySections([{
+        conversationId: 'private-1',
+        personId: 'person-1',
+        personName: '林<知夏',
+        peopleById: { 'person-1': '林<知夏' },
+        messages: [
+            { senderId: '__self__', senderType: 'self', type: 'image', content: '海边 & 落日' },
+            { senderId: 'person-1', senderType: 'person', type: 'text', content: '看到了' },
+        ],
+    }]), [
+        '<private-memory person="林&lt;知夏" conversation="private-1">',
+        '<message sender="用户" type="image">图片：海边 &amp; 落日</message>',
+        '<message sender="林&lt;知夏" type="text">看到了</message>',
+        '</private-memory>',
+    ].join(''));
 }
 
 async function main() {

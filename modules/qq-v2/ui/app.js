@@ -10,6 +10,7 @@ import {
     bindConversationSwipeGesture,
     resolveConversationSwipe,
 } from './conversation-swipe.js';
+import { bindMessageQuoteSwipeGesture } from './message-swipe.js';
 import {
     createComposerAutoHeightController,
     normalizeComposerSubmission,
@@ -17,7 +18,10 @@ import {
 } from './composer.js';
 import {
     copyMessageText,
+    createQuoteDrafts,
     createMessageMenuController,
+    quotePreviewText,
+    submitQuotedTextMessage,
 } from './message-menu.js';
 import {
     createMessageSelection,
@@ -117,6 +121,8 @@ function cloneQQSettingsForUi(settings) {
         activeApiPresetId: asText(source.activeApiPresetId),
         privateReplyPresetId: asText(source.privateReplyPresetId),
         privateProactivePresetId: asText(source.privateProactivePresetId),
+        groupReplyPresetId: asText(source.groupReplyPresetId),
+        groupProactivePresetId: asText(source.groupProactivePresetId),
         hostContextTurns: asInteger(source.hostContextTurns),
         conversationHistoryLimit: asInteger(source.conversationHistoryLimit),
         hostContextExtractTag: hasExtractTag
@@ -128,6 +134,7 @@ function cloneQQSettingsForUi(settings) {
         proactive: Object.freeze({
             enabled: proactive.enabled === true,
             everyTurns: asInteger(proactive.everyTurns, 5),
+            privateWeight: Math.max(0, Math.min(100, asInteger(proactive.privateWeight, 50))),
         }),
         worldbook: Object.freeze({
             enabled: worldbook.enabled === true,
@@ -157,16 +164,22 @@ function qqSettingsPatch(kind, values = {}, field = '') {
         if (field === 'activeApiPresetId') return { activeApiPresetId: asText(source.activeApiPresetId) };
         if (field === 'privateReplyPresetId') return { privateReplyPresetId: asText(source.privateReplyPresetId) };
         if (field === 'privateProactivePresetId') return { privateProactivePresetId: asText(source.privateProactivePresetId) };
+        if (field === 'groupReplyPresetId') return { groupReplyPresetId: asText(source.groupReplyPresetId) };
+        if (field === 'groupProactivePresetId') return { groupProactivePresetId: asText(source.groupProactivePresetId) };
         if (field === 'enabled') return { proactive: { enabled: source.enabled === true } };
         if (field === 'everyTurns') return { proactive: { everyTurns: asInteger(source.everyTurns, 0) } };
+        if (field === 'privateWeight') return { proactive: { privateWeight: asInteger(source.privateWeight, 50) } };
         if (field) return null;
         return {
             activeApiPresetId: asText(source.activeApiPresetId),
             privateReplyPresetId: asText(source.privateReplyPresetId),
             privateProactivePresetId: asText(source.privateProactivePresetId),
+            groupReplyPresetId: asText(source.groupReplyPresetId),
+            groupProactivePresetId: asText(source.groupProactivePresetId),
             proactive: {
                 enabled: source.enabled === true,
                 everyTurns: asInteger(source.everyTurns, 0),
+                privateWeight: asInteger(source.privateWeight, 50),
             },
         };
     }
@@ -393,6 +406,122 @@ function chatTitle(conversation) {
         || '?';
 }
 
+function groupRoleLabel(group, personId) {
+    const id = asText(personId);
+    if (!id) return '';
+    if (asText(group?.ownerId) === id) return '群主';
+    return asArray(group?.adminIds).includes(id) ? '管理员' : '';
+}
+
+function chatStatusText(conversation) {
+    if (conversation?.kind !== 'group') return '在线';
+    const group = asObject(conversation.group);
+    const memberCount = asArray(group.memberIds).length + (group.selfExited === true ? 0 : 1);
+    return `${group.selfExited === true ? '已退出 · ' : ''}${memberCount}名成员`;
+}
+
+function groupTransferRecipients(conversation) {
+    if (conversation?.kind !== 'group') return [];
+    return asArray(conversation?.group?.members).filter((member) => (
+        asText(member?.personId) && member.personId !== '__self__'
+    ));
+}
+
+function transferRecipientName(conversation, message) {
+    const recipientId = asText(message?.transfer?.recipientId);
+    if (!recipientId) return '';
+    if (recipientId === '__self__') return '你';
+    const person = groupTransferRecipients(conversation)
+        .find((member) => member.personId === recipientId);
+    return asText(person?.formalName) || recipientId;
+}
+
+function canCurrentUserHandleTransfer(conversation, message) {
+    if (message?.senderType === 'self' || message?.transfer?.status !== 'pending') return false;
+    if (conversation?.kind !== 'group') return true;
+    return asText(message?.transfer?.recipientId) === '__self__';
+}
+
+function groupMemberManagementActions(group, personId) {
+    const source = asObject(group);
+    const targetId = asText(personId);
+    if (!targetId || source.status !== 'active' || source.selfExited === true) return [];
+    const targetRole = groupRoleLabel(source, targetId) || 'member';
+    if (targetRole === '群主') return [];
+    const muted = Boolean(asObject(source.mutes)[targetId]);
+    if (source.selfRole === 'owner') {
+        return [
+            targetRole === '管理员' ? 'revoke-admin' : 'appoint-admin',
+            muted ? 'unmute' : 'mute',
+            'kick',
+            'transfer-owner',
+        ];
+    }
+    if (source.selfRole === 'admin' && targetRole === 'member') {
+        return [muted ? 'unmute' : 'mute', 'kick'];
+    }
+    return [];
+}
+
+function groupLifecycleAction(group) {
+    const source = asObject(group);
+    if (source.status !== 'active' || source.selfExited === true) return '';
+    if (source.selfRole === 'owner') return 'dissolve';
+    return source.selfRole === 'admin' || source.selfRole === 'member' ? 'leave' : '';
+}
+
+function groupFriendCandidates(conversations, excludedPersonIds = []) {
+    const excluded = new Set(asArray(excludedPersonIds).map(asText).filter(Boolean));
+    return asArray(conversations).filter((conversation) => (
+        conversation?.kind === 'private'
+        && ['active', 'contact'].includes(conversation.status)
+        && asText(conversation.personId)
+        && !excluded.has(conversation.personId)
+    ));
+}
+
+function canCreateUserGroup(name, memberIds) {
+    return Boolean(asText(name) && new Set(asArray(memberIds).map(asText).filter(Boolean)).size >= 2);
+}
+
+function shouldRenameGroup(group, nextName) {
+    const source = asObject(group);
+    const name = asText(nextName);
+    return Boolean(
+        name
+        && source.status === 'active'
+        && source.selfExited !== true
+        && ['owner', 'admin'].includes(source.selfRole)
+        && name !== asText(source.name),
+    );
+}
+
+function conversationDeletionCopy(conversation) {
+    const activeGroup = conversation?.kind === 'group'
+        && conversation.status === 'active'
+        && conversation.group?.status === 'active'
+        && conversation.group?.selfExited !== true;
+    if (activeGroup) {
+        return Object.freeze({
+            title: '清空聊天记录',
+            message: '只会清空当前群聊历史并从消息页隐藏，群联系人仍会保留。',
+            confirmLabel: '清空',
+        });
+    }
+    if (conversation?.kind === 'group') {
+        return Object.freeze({
+            title: '删除群聊',
+            message: '将永久删除该群聊及本地历史，删除后不可恢复。',
+            confirmLabel: '删除',
+        });
+    }
+    return Object.freeze({
+        title: '删除会话',
+        message: '确定删除该会话吗？删除后不可恢复',
+        confirmLabel: '删除',
+    });
+}
+
 function mergeMessagePage(previous = EMPTY_PAGE, next = EMPTY_PAGE, { prepend = false } = {}) {
     const previousItems = asArray(previous?.items);
     const nextItems = asArray(next?.items);
@@ -524,6 +653,7 @@ function isNearMessageBottom({ scrollTop = 0, clientHeight = 0, scrollHeight = 0
 }
 
 function isVisibleConversation(conversation) {
+    if (conversation?.kind === 'group') return conversation.hiddenFromMessages !== true;
     return conversation?.kind === 'private' && conversation.status !== 'contact';
 }
 
@@ -546,12 +676,18 @@ function hasRealMessage(conversation) {
 }
 
 function createMessageRootRow(conversation, index, currentStoryTime) {
+    const preview = messagePreview(conversation?.lastMessage);
+    const senderName = conversation?.lastMessage?.senderType === 'self'
+        ? '我'
+        : asText(conversation?.lastMessage?.senderName);
     return Object.freeze({
         conversation,
         index,
         hasMessage: hasRealMessage(conversation),
         activityTimestamp: parseStoryTime(conversation?.lastMessage?.storyTime) ?? Number.NEGATIVE_INFINITY,
-        preview: messagePreview(conversation?.lastMessage),
+        preview: conversation?.kind === 'group' && senderName && preview
+            ? `${senderName}：${preview}`
+            : preview,
         time: formatListTime(conversation?.lastMessage?.storyTime, currentStoryTime),
         unreadLabel: formatUnreadBadge(conversation?.unreadCount),
     });
@@ -653,8 +789,10 @@ function scheduleConversationListAnchorRestore({
 }
 
 function isContact(conversation) {
-    return conversation?.kind === 'private'
-        && (conversation.status === 'active' || conversation.status === 'contact');
+    if (conversation?.kind === 'group') {
+        return conversation.status !== 'dissolved' && conversation.group?.status !== 'dissolved';
+    }
+    return conversation?.kind === 'private' && (conversation.status === 'active' || conversation.status === 'contact');
 }
 
 function contactFormalName(conversation) {
@@ -798,6 +936,17 @@ export const __test__ = Object.freeze({
     normalizeContactName,
     countGraphemes,
     chatTitle,
+    chatStatusText,
+    groupRoleLabel,
+    groupTransferRecipients,
+    transferRecipientName,
+    canCurrentUserHandleTransfer,
+    groupMemberManagementActions,
+    groupLifecycleAction,
+    groupFriendCandidates,
+    canCreateUserGroup,
+    shouldRenameGroup,
+    conversationDeletionCopy,
     mergeMessagePage,
     replaceMessageInPage,
     normalizeGeneratedImagePath,
@@ -835,6 +984,8 @@ export function createQQApp({
     let emojiOpen = false;
     let displayedViewKey = '';
     const drafts = new Map();
+    const quoteDrafts = createQuoteDrafts();
+    const mentionDrafts = new Map();
     const composerAutoHeight = createComposerAutoHeightController();
     const messageSelection = createMessageSelection();
     let messageSelectionConversationId = '';
@@ -1026,6 +1177,68 @@ export function createQQApp({
             }
         }
         return element;
+    };
+
+    const groupAvatar = (conversation, className = 'yuzi-qq-avatar', {
+        interactive = false,
+        attributes = {},
+    } = {}) => {
+        const element = interactive
+            ? createButton('', `${className} yuzi-qq-group-avatar`, attributes)
+            : createElement('span', `${className} yuzi-qq-group-avatar`);
+        if (!interactive) element.setAttribute('aria-hidden', 'true');
+        const members = asArray(conversation?.group?.members).filter(Boolean).slice(0, 9);
+        element.dataset.qqGroupAvatarCount = String(members.length);
+        if (members.length === 0) {
+            element.textContent = initial(chatTitle(conversation));
+            return element;
+        }
+        element.replaceChildren(...members.map((member) => (
+            avatar(member, 'yuzi-qq-avatar yuzi-qq-group-avatar-member')
+        )));
+        return element;
+    };
+
+    const conversationAvatar = (conversation, className = 'yuzi-qq-avatar', options = {}) => (
+        conversation?.kind === 'group'
+            ? groupAvatar(conversation, className, options)
+            : avatar(conversation, className, options)
+    );
+
+    const renderQuoteCard = (quote, { className = '', onClose = null } = {}) => {
+        const card = createElement('div', `yuzi-qq-quote-card${className ? ` ${className}` : ''}`);
+        const copy = createElement('div', 'yuzi-qq-quote-card-copy');
+        const meta = createElement('div', 'yuzi-qq-quote-card-meta');
+        const sender = createElement('strong', 'yuzi-qq-quote-card-sender');
+        sender.textContent = asText(quote?.senderName) || '群成员';
+        meta.append(sender);
+        const storyTime = asText(quote?.storyTime);
+        if (storyTime) {
+            const time = createElement('time', 'yuzi-qq-quote-card-time');
+            time.dateTime = storyTime;
+            time.textContent = storyTime;
+            meta.append(time);
+        }
+        const content = createElement('span', 'yuzi-qq-quote-card-content');
+        content.textContent = quotePreviewText(quote);
+        copy.append(meta, content);
+        card.append(copy);
+        if (typeof onClose === 'function') {
+            const close = createButton('', 'yuzi-qq-quote-card-close', {
+                'aria-label': '取消引用',
+                title: '取消引用',
+            });
+            close.append(createIcon('xmark'));
+            close.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onClose();
+            });
+            card.append(close);
+        } else {
+            card.append(createIcon('arrow-turn-up', 'yuzi-qq-quote-card-icon'));
+        }
+        return card;
     };
 
     const stickerImage = (stickerId, fallback, className = 'yuzi-qq-sticker-image') => {
@@ -1284,7 +1497,8 @@ export function createQQApp({
     };
 
     const makeChatHeader = (conversation) => {
-        const header = createElement('header', 'phone-nav-bar is-embedded yuzi-qq-chat-header yuzi-qq-private-chat-header is-left-aligned');
+        const chatKind = conversation?.kind === 'group' ? 'group' : 'private';
+        const header = createElement('header', `phone-nav-bar is-embedded yuzi-qq-chat-header yuzi-qq-${chatKind}-chat-header is-left-aligned`);
         const leading = createElement('div', 'phone-nav-leading');
         const backButton = createButton('', 'phone-nav-icon-button phone-nav-back yuzi-qq-icon-button yuzi-qq-chat-back-button yuzi-qq-private-chat-back-button', {
             'aria-label': '\u8fd4\u56de', 'data-qq-back': '1', title: '\u8fd4\u56de',
@@ -1292,18 +1506,21 @@ export function createQQApp({
         backButton.append(createPhoneNavIconElement('back'));
         leading.append(backButton);
         const center = createElement('div', 'phone-nav-center');
-        const copy = createElement('div', 'yuzi-qq-chat-heading-copy yuzi-qq-private-chat-heading-copy');
-        const heading = createElement('h1', 'phone-nav-title yuzi-qq-chat-title yuzi-qq-private-chat-title');
+        const copy = createElement('div', `yuzi-qq-chat-heading-copy yuzi-qq-${chatKind}-chat-heading-copy`);
+        const heading = createElement('h1', `phone-nav-title yuzi-qq-chat-title yuzi-qq-${chatKind}-chat-title`);
         heading.textContent = chatTitle(conversation);
-        const status = createElement('span', 'yuzi-qq-chat-status yuzi-qq-private-chat-status');
-        const dot = createElement('span', 'yuzi-qq-chat-status-dot');
-        dot.setAttribute('aria-hidden', 'true');
+        const status = createElement('span', `yuzi-qq-chat-status yuzi-qq-${chatKind}-chat-status`);
         const label = createElement('span');
-        label.textContent = '\u5728\u7ebf';
-        status.append(dot, label);
+        label.textContent = chatStatusText(conversation);
+        if (chatKind === 'private') {
+            const dot = createElement('span', 'yuzi-qq-chat-status-dot');
+            dot.setAttribute('aria-hidden', 'true');
+            status.append(dot);
+        }
+        status.append(label);
         copy.append(heading, status);
         center.append(copy);
-        const actions = createElement('div', 'phone-nav-trailing yuzi-qq-chat-header-actions yuzi-qq-private-chat-header-actions');
+        const actions = createElement('div', `phone-nav-trailing yuzi-qq-chat-header-actions yuzi-qq-${chatKind}-chat-header-actions`);
         const detail = createButton('', 'phone-nav-icon-button yuzi-qq-icon-button yuzi-qq-chat-overflow-button', {
             'aria-label': '\u4f1a\u8bdd\u8be6\u60c5', title: '\u4f1a\u8bdd\u8be6\u60c5', 'data-qq-conversation-detail': conversation.conversationId,
         });
@@ -1484,7 +1701,7 @@ export function createQQApp({
         const shell = createElement('div', `yuzi-qq-swipe-row yuzi-qq-message-conversation-swipe-row${openSwipeConversationId === conversation.conversationId ? ' is-swiped' : ''}`);
         shell.dataset.qqConversationId = conversation.conversationId;
         const row = createButton('', 'yuzi-qq-conversation-row yuzi-qq-message-conversation-row', { 'data-qq-chat': conversation.conversationId });
-        row.append(avatar(conversation, 'yuzi-qq-avatar yuzi-qq-conversation-avatar'));
+        row.append(conversationAvatar(conversation, 'yuzi-qq-avatar yuzi-qq-conversation-avatar'));
         const main = createElement('span', 'yuzi-qq-row-main');
         const name = createElement('span', 'yuzi-qq-row-title');
         name.textContent = conversation.title;
@@ -1603,13 +1820,16 @@ export function createQQApp({
             const rows = createElement('div', 'yuzi-qq-contact-section-list');
             contacts.forEach(({ conversation, formalName }) => {
                 conversationSnapshots.set(conversation.conversationId, conversation);
-                const row = createButton('', 'yuzi-qq-contact-row yuzi-qq-contact-root-row', { 'data-qq-profile': conversation.conversationId });
-                row.append(avatar(conversation, 'yuzi-qq-avatar yuzi-qq-contact-avatar'));
+                const rowAttributes = conversation.kind === 'group'
+                    ? { 'data-qq-chat': conversation.conversationId }
+                    : { 'data-qq-profile': conversation.conversationId };
+                const row = createButton('', 'yuzi-qq-contact-row yuzi-qq-contact-root-row', rowAttributes);
+                row.append(conversationAvatar(conversation, 'yuzi-qq-avatar yuzi-qq-contact-avatar'));
                 const copy = createElement('span', 'yuzi-qq-contact-copy');
                 const name = createElement('span', 'yuzi-qq-contact-name');
                 name.textContent = formalName;
                 const presence = createElement('span', 'yuzi-qq-contact-presence');
-                presence.textContent = 'Wi-Fi 在线';
+                presence.textContent = conversation.kind === 'group' ? chatStatusText(conversation) : 'Wi-Fi 在线';
                 copy.append(name, presence);
                 row.append(copy);
                 rows.append(row);
@@ -1717,6 +1937,76 @@ export function createQQApp({
             backgroundAssetId: asText(conversation.profileBackgroundAssetId),
             actions,
         });
+    };
+
+    const renderGroupMemberProfile = async (token) => {
+        const conversation = await getConversation(page.conversationId);
+        const person = asArray(conversation?.group?.members)
+            .find((member) => member?.personId === page.personId);
+        if (!conversation || conversation.kind !== 'group' || !person || !isActive(token)) {
+            return makeSecondaryPage('群成员资料').main;
+        }
+        const actions = createElement('div', 'yuzi-qq-profile-actions yuzi-qq-profile-action-bar yuzi-qq-profile-footer-actions');
+        actions.setAttribute('data-phone-bottom-bar', '');
+        if (groupMemberManagementActions(conversation.group, person.personId).length > 0) {
+            actions.append(createButton('编辑资料', 'yuzi-qq-primary-button yuzi-qq-profile-action', {
+                'data-qq-group-member-edit': person.personId,
+                'data-qq-group-conversation': conversation.conversationId,
+            }));
+        }
+        const role = groupRoleLabel(conversation.group, person.personId);
+        return renderProfileSurface({
+            token,
+            person,
+            statusText: role,
+            backgroundAssetId: asText(person.profileBackgroundAssetId),
+            actions,
+            className: 'yuzi-qq-group-member-profile-view',
+        });
+    };
+
+    const renderGroupMemberEditor = async (token) => {
+        const conversation = await getConversation(page.conversationId);
+        const person = asArray(conversation?.group?.members)
+            .find((member) => member?.personId === page.personId);
+        const { main, content } = makeSecondaryPage('编辑资料', {
+            className: 'yuzi-qq-group-member-editor-view',
+        });
+        if (!conversation || conversation.kind !== 'group' || !person || !isActive(token)) return main;
+        const actions = groupMemberManagementActions(conversation.group, person.personId);
+        const card = createElement('section', 'yuzi-qq-group-member-editor-card');
+        const identity = createElement('div', 'yuzi-qq-group-member-editor-identity');
+        identity.append(avatar(person, 'yuzi-qq-avatar yuzi-qq-avatar-large'));
+        const copy = createElement('div', 'yuzi-qq-group-member-editor-copy');
+        const name = createElement('strong', 'yuzi-qq-group-member-editor-name');
+        name.textContent = asText(person.formalName) || '未命名';
+        const role = createElement('span', 'yuzi-qq-group-member-editor-role');
+        role.textContent = groupRoleLabel(conversation.group, person.personId) || '普通成员';
+        copy.append(name, role);
+        identity.append(copy);
+        const list = createElement('div', 'yuzi-qq-group-member-editor-actions');
+        const labels = {
+            'appoint-admin': '任命管理员',
+            'revoke-admin': '取消管理员',
+            mute: '禁言',
+            unmute: '解除禁言',
+            kick: '移出群聊',
+            'transfer-owner': '转让群主',
+        };
+        actions.forEach((action) => {
+            const button = createButton(labels[action] || action, [
+                'yuzi-qq-group-member-editor-action',
+                action === 'kick' || action === 'transfer-owner' ? 'yuzi-qq-danger-button' : 'yuzi-qq-secondary-button',
+            ].join(' '), {
+                'data-qq-group-member-action': action,
+                'data-qq-group-conversation': conversation.conversationId,
+                'data-qq-group-person': person.personId,
+            });
+            list.append(button);
+        });
+        card.append(identity, list);
+        content.append(card);
+        return main;
     };
 
     const renderCurrentProfile = async (token) => {
@@ -1863,7 +2153,90 @@ export function createQQApp({
         });
     };
 
-    const bindSelectableMessage = (item, message, conversationId) => {
+    const getMentionDraft = (conversationId) => {
+        const id = asText(conversationId);
+        if (!mentionDrafts.has(id)) mentionDrafts.set(id, new Map());
+        return mentionDrafts.get(id);
+    };
+
+    const mentionMessageFields = (conversationId, content) => {
+        const text = String(content ?? '');
+        const selections = mentionDrafts.get(asText(conversationId));
+        if (!(selections instanceof Map)) return {};
+        const mentionIds = [];
+        let mentionAll = false;
+        selections.forEach((selection, key) => {
+            if (!text.includes(`@${selection.label}`)) return;
+            if (key === '__all__') mentionAll = true;
+            else mentionIds.push(key);
+        });
+        return {
+            ...(mentionIds.length ? { mentionIds } : {}),
+            ...(mentionAll ? { mentionAll: true } : {}),
+        };
+    };
+
+    const insertGroupMention = (conversationId, personId, personName, { all = false } = {}) => {
+        const input = viewport?.querySelector(`[data-qq-composer="${conversationId}"] .yuzi-qq-composer-input`);
+        const label = asText(personName);
+        if (!(input instanceof HTMLTextAreaElement) || !label) return false;
+        const cursor = Number.isInteger(input.selectionStart) ? input.selectionStart : input.value.length;
+        const before = input.value.slice(0, cursor);
+        const token = before.match(/@[^\s@]*$/u)?.[0] || '';
+        const start = cursor - token.length;
+        const inserted = `@${label} `;
+        input.value = `${input.value.slice(0, start)}${inserted}${input.value.slice(cursor)}`;
+        const nextCursor = start + inserted.length;
+        input.setSelectionRange(nextCursor, nextCursor);
+        drafts.set(conversationId, input.value);
+        getMentionDraft(conversationId).set(all ? '__all__' : asText(personId), { label });
+        input.closest('.yuzi-qq-composer')?.querySelector('.yuzi-qq-mention-panel')?.setAttribute('hidden', '');
+        composerAutoHeight.schedule(input);
+        input.focus();
+        return true;
+    };
+
+    const bindGroupMemberMention = (element, conversationId, person) => {
+        if (!element || !person?.personId) return;
+        let timer = null;
+        let startX = 0;
+        let startY = 0;
+        let suppressClick = false;
+        const clearTimer = () => {
+            if (timer !== null) clearTimeout(timer);
+            timer = null;
+        };
+        element.addEventListener('pointerdown', (event) => {
+            if (event.isPrimary === false) return;
+            event.stopPropagation();
+            startX = Number(event.clientX) || 0;
+            startY = Number(event.clientY) || 0;
+            clearTimer();
+            timer = setTimeout(() => {
+                suppressClick = insertGroupMention(conversationId, person.personId, person.formalName);
+                timer = null;
+            }, 500);
+        });
+        element.addEventListener('pointermove', (event) => {
+            if (Math.hypot((Number(event.clientX) || 0) - startX, (Number(event.clientY) || 0) - startY) > 8) {
+                clearTimer();
+            }
+        });
+        ['pointerup', 'pointercancel'].forEach((eventName) => {
+            element.addEventListener(eventName, (event) => {
+                event.stopPropagation();
+                clearTimer();
+            });
+        });
+        element.addEventListener('click', (event) => {
+            if (!suppressClick) return;
+            suppressClick = false;
+            event.preventDefault();
+            event.stopPropagation();
+        });
+    };
+
+    const bindSelectableMessage = (item, message, conversationId, conversation = null) => {
         const selectedForDeletion = messageSelection.has(conversationId, message.messageId);
         item.dataset.qqMessage = message.messageId;
         item.setAttribute('aria-selected', String(selectedForDeletion));
@@ -1891,6 +2264,18 @@ export function createQQApp({
             }
             messageMenu.handleContextMenu(event, menuPayload);
         });
+        if (!isMessageSelectionMode(conversationId)
+            && conversation?.kind === 'group'
+            && message.senderType !== 'system'
+            && message.type !== 'system') {
+            bindMessageQuoteSwipeGesture({
+                row: item,
+                onQuote: () => {
+                    quoteDrafts.select(conversationId, message);
+                    void render();
+                },
+            });
+        }
         return item;
     };
 
@@ -1922,10 +2307,17 @@ export function createQQApp({
             const system = createElement('p', 'yuzi-qq-system-message');
             system.textContent = message.content;
             item.append(system);
-            return bindSelectableMessage(item, message, conversationId);
+            return bindSelectableMessage(item, message, conversationId, conversation);
         }
         const own = message.senderType === 'self';
-        const item = createElement('article', `yuzi-qq-message yuzi-qq-private-message${own ? ' is-self' : ''}`);
+        const groupChat = conversation.kind === 'group';
+        const groupMember = groupChat
+            ? asArray(conversation.group?.members).find((person) => person?.personId === message.senderId)
+            : null;
+        const item = createElement(
+            'article',
+            `yuzi-qq-message yuzi-qq-${groupChat ? 'group' : 'private'}-message${own ? ' is-self' : ''}`,
+        );
         const sender = own
             ? {
                 formalName: asText(message.senderName) || currentIdentity.formalName,
@@ -1934,21 +2326,52 @@ export function createQQApp({
             }
             : {
                 formalName: asText(message.senderName) || contactFormalName(conversation),
-                avatarAssetId: asText(message.senderAvatarAssetId) || conversation.avatarAssetId,
+                avatarAssetId: asText(message.senderAvatarAssetId)
+                    || asText(groupMember?.avatarAssetId)
+                    || conversation.avatarAssetId,
             };
         const senderAvatar = avatar(
             sender,
-            `yuzi-qq-avatar yuzi-qq-message-avatar yuzi-qq-private-message-avatar${own ? '' : ' yuzi-qq-avatar-button'}`,
+            `yuzi-qq-avatar yuzi-qq-message-avatar yuzi-qq-${groupChat ? 'group' : 'private'}-message-avatar${own ? '' : ' yuzi-qq-avatar-button'}`,
             {
                 interactive: !own,
-                attributes: own ? {} : {
-                    'aria-label': `打开${asText(sender.formalName) || '对方'}的用户资料`,
-                    title: '打开用户资料',
-                    'data-qq-profile': conversationId,
-                },
+                attributes: own
+                    ? {}
+                    : groupChat
+                        ? {
+                            'aria-label': `打开${asText(sender.formalName) || '群成员'}的用户资料`,
+                            title: '打开群成员资料',
+                            'data-qq-group-member-profile': asText(message.senderId),
+                            'data-qq-group-member-mention': asText(message.senderId),
+                            'data-qq-group-conversation': conversationId,
+                        }
+                        : {
+                            'aria-label': `打开${asText(sender.formalName) || '对方'}的用户资料`,
+                            title: '打开用户资料',
+                            'data-qq-profile': conversationId,
+                        },
             },
         );
-        const stack = createElement('div', 'yuzi-qq-message-stack yuzi-qq-private-message-stack');
+        if (groupChat && !own && groupMember) {
+            bindGroupMemberMention(senderAvatar, conversationId, groupMember);
+        }
+        const stack = createElement('div', `yuzi-qq-message-stack yuzi-qq-${groupChat ? 'group' : 'private'}-message-stack`);
+        if (groupChat && !own) {
+            const identity = createElement('span', 'yuzi-qq-group-message-identity');
+            const name = createElement('span', 'yuzi-qq-group-message-name');
+            name.textContent = asText(sender.formalName) || '群成员';
+            identity.append(name);
+            const role = groupRoleLabel(conversation.group, message.senderId);
+            if (role) {
+                const badge = createElement('span', 'yuzi-qq-group-role-badge');
+                badge.textContent = role;
+                identity.append(badge);
+            }
+            stack.append(identity);
+        }
+        if (groupChat && message.quote) {
+            stack.append(renderQuoteCard(message.quote, { className: 'yuzi-qq-message-quote' }));
+        }
         let body;
         if (message.type === 'voice') {
             body = createElement('button', 'yuzi-qq-voice-message');
@@ -2031,7 +2454,9 @@ export function createQQApp({
         } else if (message.type === 'transfer') {
             body = createElement('button', 'yuzi-qq-transfer-card');
             body.type = 'button';
-            body.dataset.qqTransfer = message.messageId;
+            if (canCurrentUserHandleTransfer(conversation, message)) {
+                body.dataset.qqTransfer = message.messageId;
+            }
             const transferIcon = createElement('span', 'yuzi-qq-transfer-icon');
             transferIcon.append(createIcon('wallet'));
             const copy = createElement('span', 'yuzi-qq-transfer-copy');
@@ -2041,7 +2466,14 @@ export function createQQApp({
             note.textContent = asText(message.transfer?.note) || '转账';
             const state = createElement('small', 'yuzi-qq-transfer-status');
             state.textContent = transferStatusLabel(message);
-            copy.append(amount, note, state);
+            copy.append(amount, note);
+            const recipientName = transferRecipientName(conversation, message);
+            if (conversation.kind === 'group' && recipientName) {
+                const recipient = createElement('span', 'yuzi-qq-transfer-recipient');
+                recipient.textContent = `转给：${recipientName}`;
+                copy.append(recipient);
+            }
+            copy.append(state);
             body.append(transferIcon, copy);
         } else if (message.type === 'sticker') {
             body = stickerImage(message.stickerId, message.content || '[\u8868\u60c5]', 'yuzi-qq-sticker-message yuzi-qq-sticker-image');
@@ -2063,11 +2495,12 @@ export function createQQApp({
             stack.append(unanswered);
         }
         item.append(senderAvatar, stack);
-        return bindSelectableMessage(item, message, conversationId);
+        return bindSelectableMessage(item, message, conversationId, conversation);
     };
 
     const renderMessageStream = (conversation, currentStoryTime, currentIdentity) => {
-        const stream = createElement('section', 'yuzi-qq-message-stream yuzi-qq-private-message-stream');
+        const chatKind = conversation?.kind === 'group' ? 'group' : 'private';
+        const stream = createElement('section', `yuzi-qq-message-stream yuzi-qq-${chatKind}-message-stream`);
         stream.dataset.qqMessageStream = conversation.conversationId;
         const data = getMessageState(conversation.conversationId);
         let previous = null;
@@ -2083,6 +2516,11 @@ export function createQQApp({
             stream.append(node);
             previous = message;
         });
+        if (conversation.request?.phase === 'failed') {
+            const error = createElement('p', 'yuzi-qq-request-error');
+            error.textContent = '错误';
+            stream.append(error);
+        }
         stream.addEventListener('scroll', () => {
             if (isScrollContainerNearBottom(stream) && jumpCounts.has(conversation.conversationId)) {
                 jumpCounts.delete(conversation.conversationId);
@@ -2103,13 +2541,14 @@ export function createQQApp({
     };
 
     const renderComposer = (conversation) => {
-        const form = createElement('form', 'yuzi-qq-composer yuzi-qq-private-composer yuzi-qq-private-chat-composer');
+        const chatKind = conversation?.kind === 'group' ? 'group' : 'private';
+        const form = createElement('form', `yuzi-qq-composer yuzi-qq-${chatKind}-composer yuzi-qq-${chatKind}-chat-composer`);
         form.dataset.qqComposer = conversation.conversationId;
         form.setAttribute('data-phone-bottom-bar', '');
-        const toolBar = createElement('div', 'yuzi-qq-tool-bar yuzi-qq-private-composer-tools yuzi-qq-private-chat-tools');
+        const toolBar = createElement('div', `yuzi-qq-tool-bar yuzi-qq-${chatKind}-composer-tools yuzi-qq-${chatKind}-chat-tools`);
         ['voice', 'image', 'video', 'transfer', 'emoji', 'plus'].forEach((type) => {
             const meta = TOOL_META[type];
-            const button = createButton('', 'yuzi-qq-tool-button yuzi-qq-private-composer-tool yuzi-qq-private-chat-tool', {
+            const button = createButton('', `yuzi-qq-tool-button yuzi-qq-${chatKind}-composer-tool yuzi-qq-${chatKind}-chat-tool`, {
                 'aria-label': meta.label,
                 title: meta.label,
                 'data-qq-tool': type,
@@ -2118,16 +2557,61 @@ export function createQQApp({
             if (!conversation.canSend || type === 'plus') button.disabled = !conversation.canSend || type === 'plus';
             toolBar.append(button);
         });
-        const input = createElement('textarea', 'yuzi-qq-composer-input yuzi-qq-private-composer-input yuzi-qq-private-chat-composer-input');
+        const input = createElement('textarea', `yuzi-qq-composer-input yuzi-qq-${chatKind}-composer-input yuzi-qq-${chatKind}-chat-composer-input`);
         input.name = 'message';
         input.rows = 1;
         input.value = drafts.get(conversation.conversationId) || '';
         input.placeholder = conversation.canSend ? '发消息' : '该会话已只读';
         input.disabled = !conversation.canSend;
         input.setAttribute('aria-label', '消息输入框');
+        const mentionPanel = chatKind === 'group'
+            ? createElement('div', 'yuzi-qq-mention-panel')
+            : null;
+        if (mentionPanel) mentionPanel.hidden = true;
+        const syncMentionPanel = () => {
+            if (!mentionPanel) return;
+            const cursor = Number.isInteger(input.selectionStart) ? input.selectionStart : input.value.length;
+            const match = input.value.slice(0, cursor).match(/@([^\s@]*)$/u);
+            if (!match) {
+                mentionPanel.hidden = true;
+                mentionPanel.replaceChildren();
+                return;
+            }
+            const query = match[1].toLocaleLowerCase();
+            const options = asArray(conversation.group?.members)
+                .filter((member) => asText(member?.formalName).toLocaleLowerCase().includes(query))
+                .map((member) => ({
+                    id: member.personId,
+                    label: member.formalName,
+                    member,
+                    all: false,
+                }));
+            if (['owner', 'admin'].includes(asText(conversation.group?.selfRole))
+                && '全体成员'.includes(match[1])) {
+                options.push({ id: '', label: '全体成员', member: null, all: true });
+            }
+            mentionPanel.replaceChildren(...options.map((option) => {
+                const button = createButton('', 'yuzi-qq-mention-option');
+                const label = createElement('span', 'yuzi-qq-mention-option-name');
+                label.textContent = `@${option.label}`;
+                button.append(label);
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    insertGroupMention(
+                        conversation.conversationId,
+                        option.id,
+                        option.label,
+                        { all: option.all },
+                    );
+                });
+                return button;
+            }));
+            mentionPanel.hidden = options.length === 0;
+        };
         input.addEventListener('input', () => {
             drafts.set(conversation.conversationId, input.value);
             composerAutoHeight.schedule(input);
+            syncMentionPanel();
         });
         input.addEventListener('focus', () => closeEmojiPanel());
         input.addEventListener('keydown', (event) => {
@@ -2135,7 +2619,7 @@ export function createQQApp({
             event.preventDefault();
             void submitComposer(conversation.conversationId, input.value);
         });
-        const inputRow = createElement('div', 'yuzi-qq-composer-input-row yuzi-qq-private-composer-input-row');
+        const inputRow = createElement('div', `yuzi-qq-composer-input-row yuzi-qq-${chatKind}-composer-input-row`);
         inputRow.append(input);
         if (conversation.request?.phase === 'queued' || conversation.request?.phase === 'running') {
             const stop = createButton('', 'yuzi-qq-stop-generation-button', {
@@ -2145,6 +2629,19 @@ export function createQQApp({
             });
             stop.append(createIcon('stop'));
             inputRow.append(stop);
+        }
+        if (chatKind === 'group') {
+            const quote = quoteDrafts.get(conversation.conversationId);
+            if (quote) {
+                form.append(renderQuoteCard(quote, {
+                    className: 'yuzi-qq-quote-preview',
+                    onClose: () => {
+                        quoteDrafts.clear(conversation.conversationId);
+                        void render();
+                    },
+                }));
+            }
+            form.append(mentionPanel);
         }
         form.append(inputRow, toolBar);
         return form;
@@ -2224,9 +2721,9 @@ export function createQQApp({
         return bar;
     };
 
-    const renderEmojiPanel = async (token) => {
+    const renderEmojiPanel = async (token, chatKind) => {
         if (!emojiOpen) return null;
-        const panel = createElement('section', 'yuzi-qq-emoji-panel yuzi-qq-private-emoji-panel');
+        const panel = createElement('section', `yuzi-qq-emoji-panel yuzi-qq-${chatKind}-emoji-panel`);
         panel.setAttribute('aria-label', '表情面板');
         const resources = await facade.query.sharedResources();
         if (!isActive(token)) return panel;
@@ -2267,7 +2764,8 @@ export function createQQApp({
             selectionMode ? facade.query.globalSettings?.() : Promise.resolve(null),
             refreshMessages ? loadMessages(conversationId) : Promise.resolve(previousState),
         ]);
-        const main = createElement('main', 'yuzi-qq-view yuzi-qq-chat-view yuzi-qq-private-chat-view');
+        const chatKind = conversation?.kind === 'group' ? 'group' : 'private';
+        const main = createElement('main', `yuzi-qq-view yuzi-qq-chat-view yuzi-qq-${chatKind}-chat-view`);
         if (!conversation || !isActive(token)) return main;
         if (selectionMode) main.classList.add('is-message-selection-mode');
         const nextState = getMessageState(conversationId);
@@ -2300,9 +2798,9 @@ export function createQQApp({
                 globalWorldbookEnabled: globalSettingsResult?.settings?.worldbook?.enabled === true,
             })
             : renderComposer(conversation);
-        const composerLayer = createElement('div', 'yuzi-qq-private-composer-layer');
+        const composerLayer = createElement('div', `yuzi-qq-composer-layer yuzi-qq-${chatKind}-composer-layer`);
         composerLayer.append(composer);
-        const panel = selectionMode ? null : await renderEmojiPanel(token);
+        const panel = selectionMode ? null : await renderEmojiPanel(token, chatKind);
         if (panel) {
             main.classList.add('has-emoji-panel');
             composerLayer.append(panel);
@@ -2362,7 +2860,8 @@ export function createQQApp({
             getConversation(page.conversationId),
             facade.query.globalSettings(),
         ]);
-        const { main, content } = makeSecondaryPage('\u804a\u5929\u8bbe\u7f6e', {
+        const isGroup = conversation?.kind === 'group';
+        const { main, content } = makeSecondaryPage(isGroup ? '群聊设置' : '\u804a\u5929\u8bbe\u7f6e', {
             className: 'yuzi-qq-conversation-settings-view',
             headerClassName: 'yuzi-qq-conversation-settings-header',
             titleClassName: 'yuzi-qq-conversation-settings-title',
@@ -2373,8 +2872,88 @@ export function createQQApp({
         const injection = asObject(conversation.injection);
         const form = createElement('form', 'yuzi-qq-form yuzi-qq-conversation-settings-form');
         form.dataset.qqConversationSettingsForm = conversation.conversationId;
+        if (isGroup) {
+            const group = asObject(conversation.group);
+            const [profileResult, context] = await Promise.all([
+                facade.query.currentProfile(),
+                getCurrentContext(),
+            ]);
+            if (!isActive(token)) return main;
+            const membersCard = createElement('section', 'yuzi-qq-group-details');
+            const identity = createElement('div', 'yuzi-qq-group-details-identity');
+            identity.append(groupAvatar(conversation, 'yuzi-qq-avatar yuzi-qq-avatar-large yuzi-qq-group-details-avatar'));
+            const identityCopy = createElement('div', 'yuzi-qq-group-details-copy');
+            const groupName = createElement('strong', 'yuzi-qq-group-details-name');
+            groupName.textContent = chatTitle(conversation);
+            const groupStatus = createElement('span', 'yuzi-qq-group-details-status');
+            groupStatus.textContent = chatStatusText(conversation);
+            identityCopy.append(groupName, groupStatus);
+            identity.append(identityCopy);
+            const members = createElement('div', 'yuzi-qq-group-members');
+            members.setAttribute('data-qq-group-members', conversation.conversationId);
+            if (group.selfExited !== true) {
+                const self = {
+                    formalName: currentProfileName(context),
+                    avatarAssetId: profileResult?.profile?.avatarAssetId,
+                    avatarUrl: context?.user?.avatar,
+                };
+                const item = createElement('div', 'yuzi-qq-group-member-tile is-self');
+                item.append(identityAvatar(context, self, '当前用户资料', token));
+                const name = createElement('span', 'yuzi-qq-group-member-name');
+                name.textContent = self.formalName;
+                const role = createElement('small', 'yuzi-qq-group-member-role');
+                role.textContent = group.selfRole === 'owner' ? '群主' : group.selfRole === 'admin' ? '管理员' : '';
+                item.append(name);
+                if (role.textContent) item.append(role);
+                members.append(item);
+            }
+            asArray(group.members).forEach((person) => {
+                const item = createButton('', 'yuzi-qq-group-member-tile', {
+                    'data-qq-group-member-profile': person.personId,
+                    'data-qq-group-conversation': conversation.conversationId,
+                });
+                item.append(avatar(person, 'yuzi-qq-avatar yuzi-qq-group-member-avatar'));
+                const name = createElement('span', 'yuzi-qq-group-member-name');
+                name.textContent = asText(person.formalName) || '未命名';
+                const role = createElement('small', 'yuzi-qq-group-member-role');
+                role.textContent = groupRoleLabel(group, person.personId);
+                item.append(name);
+                if (role.textContent) item.append(role);
+                members.append(item);
+            });
+            if (
+                group.status === 'active'
+                && group.selfExited !== true
+                && (group.selfRole === 'owner' || group.selfRole === 'admin')
+            ) {
+                const add = createButton('', 'yuzi-qq-group-member-tile yuzi-qq-group-member-add', {
+                    'data-qq-add-group-member': conversation.conversationId,
+                });
+                add.append(createIcon('plus'));
+                const label = createElement('span', 'yuzi-qq-group-member-name');
+                label.textContent = '添加成员';
+                add.append(label);
+                members.append(add);
+            }
+            membersCard.append(identity, members);
+            content.append(membersCard);
+        }
         const profileCard = createElement('div', 'yuzi-qq-conversation-settings-fields yuzi-qq-conversation-settings-profile-group');
-        const remark = settingField('\u5907\u6ce8', 'remark', conversation.remark || '');
+        const identityField = settingField(
+            isGroup ? '群名称' : '\u5907\u6ce8',
+            isGroup ? 'groupName' : 'remark',
+            isGroup ? conversation.group?.name : conversation.remark || '',
+        );
+        if (
+            isGroup
+            && (
+                conversation.group?.status !== 'active'
+                || conversation.group?.selfExited === true
+                || !['owner', 'admin'].includes(conversation.group?.selfRole)
+            )
+        ) {
+            identityField.querySelector('input').disabled = true;
+        }
         const backgroundRow = createElement('div', 'yuzi-qq-field yuzi-qq-field-row yuzi-qq-field-group yuzi-qq-conversation-background-preview');
         const backgroundLabel = createElement('span', 'yuzi-qq-field-label yuzi-qq-conversation-background-label');
         backgroundLabel.textContent = '\u804a\u5929\u80cc\u666f';
@@ -2395,7 +2974,7 @@ export function createQQApp({
         const injectionEnabled = settingField('\u542f\u7528\u4f1a\u8bdd\u4e16\u754c\u4e66\u6ce8\u5165', 'enabled', injection.enabled, 'checkbox');
         const enabledInput = injectionEnabled.querySelector('input');
         enabledInput.disabled = globalWorldbook.enabled !== true;
-        profileCard.append(remark, backgroundRow, injectionEnabled);
+        profileCard.append(identityField, backgroundRow, injectionEnabled);
 
         const injectionCard = createElement('div', 'yuzi-qq-conversation-settings-fields yuzi-qq-conversation-settings-injection-group');
         const useConversationLight = settingField('\u4f7f\u7528\u672c\u4f1a\u8bdd\u8bbe\u7f6e\uff08\u706f\u8272\uff09', 'useConversationLight', injection.useConversationLight === true, 'checkbox');
@@ -2426,10 +3005,27 @@ export function createQQApp({
                 status.textContent = '\u6df1\u5ea6\u5fc5\u987b\u662f 0 \u6216\u66f4\u5927\u7684\u6574\u6570';
                 return;
             }
-            const profileResult = await facade.intent.updatePrivateProfile({
-                conversationId: conversation.conversationId,
-                profile: { remark: asText(remark.querySelector('input')?.value) },
-            });
+            let profileResult = { ok: true };
+            if (isGroup) {
+                const nameInput = identityField.querySelector('input');
+                const nextName = asText(nameInput?.value);
+                if (!nameInput?.disabled && !nextName) {
+                    status.textContent = '群名称不能为空';
+                    return;
+                }
+                if (shouldRenameGroup(conversation.group, nextName)) {
+                    profileResult = await facade.intent.manageGroup({
+                        groupId: conversation.group.groupId,
+                        action: 'rename',
+                        value: nextName,
+                    });
+                }
+            } else {
+                profileResult = await facade.intent.updatePrivateProfile({
+                    conversationId: conversation.conversationId,
+                    profile: { remark: asText(identityField.querySelector('input')?.value) },
+                });
+            }
             if (!profileResult?.ok) {
                 status.textContent = profileResult?.error?.message || '\u4fdd\u5b58\u5931\u8d25';
                 return;
@@ -2455,6 +3051,18 @@ export function createQQApp({
         injectionCard.append(useConversationLight, light, useConversationDepth, depth, keywords);
         form.append(profileCard, injectionCard, status);
         content.append(form);
+        const lifecycleAction = isGroup ? groupLifecycleAction(conversation.group) : '';
+        if (lifecycleAction) {
+            const lifecycle = createButton(
+                lifecycleAction === 'dissolve' ? '解散群聊' : '退出群聊',
+                'yuzi-qq-danger-button yuzi-qq-group-lifecycle',
+                {
+                    'data-qq-group-lifecycle': lifecycleAction,
+                    'data-qq-group-conversation': conversation.conversationId,
+                },
+            );
+            content.append(lifecycle);
+        }
         return main;
     };
 
@@ -2796,7 +3404,24 @@ export function createQQApp({
             proactiveFields.append(
                 everyTurns,
                 settingSelect('\u79c1\u804a\u4e3b\u52a8\u9884\u8bbe', 'privateProactivePresetId', settings.privateProactivePresetId, promptOptions),
+                settingSelect('群聊主动预设', 'groupProactivePresetId', settings.groupProactivePresetId, promptOptions),
             );
+            const privateWeight = settingField(
+                `主动类型占比：私聊 ${settings.proactive.privateWeight}% / 群聊 ${100 - settings.proactive.privateWeight}%`,
+                'privateWeight',
+                settings.proactive.privateWeight,
+                'range',
+            );
+            const privateWeightInput = privateWeight.querySelector('input');
+            privateWeightInput?.setAttribute('min', '0');
+            privateWeightInput?.setAttribute('max', '100');
+            privateWeightInput?.setAttribute('step', '1');
+            privateWeightInput?.addEventListener('input', () => {
+                const value = Math.max(0, Math.min(100, asInteger(privateWeightInput.value, 50)));
+                const label = privateWeight.querySelector('.yuzi-qq-field-label');
+                if (label) label.textContent = `主动类型占比：私聊 ${value}% / 群聊 ${100 - value}%`;
+            });
+            proactiveFields.append(privateWeight);
             const syncProactiveFields = () => {
                 proactiveFields.hidden = proactiveToggle.querySelector('input')?.checked !== true;
             };
@@ -2805,6 +3430,7 @@ export function createQQApp({
             form.append(
                 settingSelect('API \u9884\u8bbe', 'activeApiPresetId', settings.activeApiPresetId, apiOptions),
                 settingSelect('\u79c1\u804a\u56de\u590d\u9884\u8bbe', 'privateReplyPresetId', settings.privateReplyPresetId, promptOptions),
+                settingSelect('群聊回复预设', 'groupReplyPresetId', settings.groupReplyPresetId, promptOptions),
                 proactiveToggle,
                 proactiveFields,
             );
@@ -2817,7 +3443,7 @@ export function createQQApp({
                 settings.hostContextExcludeTags.join('\u3001'),
                 'text',
             );
-            const privateHistory = settingField('\u79c1\u804a\u5386\u53f2\u6761\u6570', 'conversationHistoryLimit', settings.conversationHistoryLimit, 'number');
+            const privateHistory = settingField('聊天历史条数', 'conversationHistoryLimit', settings.conversationHistoryLimit, 'number');
             hostContext.querySelector('input')?.setAttribute('min', '0');
             privateHistory.querySelector('input')?.setAttribute('min', '0');
             extractTag.querySelector('input')?.setAttribute('placeholder', 'content');
@@ -2897,6 +3523,8 @@ export function createQQApp({
         if (page?.type === 'chat') return renderChat(token, { refreshMessages });
         if (page?.type === 'conversation-settings') return renderConversationSettings(token);
         if (page?.type === 'profile') return renderProfile(token);
+        if (page?.type === 'group-member-profile') return renderGroupMemberProfile(token);
+        if (page?.type === 'group-member-edit') return renderGroupMemberEditor(token);
         if (page?.type === 'profile-edit') return renderProfileEditor(token);
         if (page?.type === 'current-profile') return renderCurrentProfile(token);
         if (page?.type === 'current-profile-edit') return renderCurrentProfileEditor(token);
@@ -3053,15 +3681,26 @@ export function createQQApp({
     const submitComposer = async (conversationId, value) => {
         const submission = normalizeComposerSubmission(value);
         if (!submission.ok) return;
-        const result = await facade.intent.sendMessage({
-            conversationId,
-            message: { type: 'text', content: submission.content },
-        });
+        const conversation = conversationSnapshots.get(asText(conversationId))
+            || await getConversation(conversationId);
+        const result = conversation?.kind === 'group'
+            ? await submitQuotedTextMessage({
+                facade,
+                conversationId,
+                content: submission.content,
+                quotes: quoteDrafts,
+                messageFields: mentionMessageFields(conversationId, submission.content),
+            })
+            : await facade.intent.sendMessage({
+                conversationId,
+                message: { type: 'text', content: submission.content },
+            });
         if (!result?.ok) {
             report(new Error(result?.error?.message || '发送失败'));
             return;
         }
         drafts.delete(conversationId);
+        mentionDrafts.delete(asText(conversationId));
         await loadMessages(conversationId);
         await render();
     };
@@ -3106,6 +3745,204 @@ export function createQQApp({
         input.focus();
     };
 
+    const openCreateGroupDialog = async () => {
+        const result = await facade.query.conversations();
+        const candidates = groupFriendCandidates(result?.ok ? result.conversations : []);
+        const content = createElement('div', 'yuzi-qq-dialog-form yuzi-qq-create-group-form');
+        const name = createElement('input', 'yuzi-qq-create-group-name');
+        name.placeholder = '群名称';
+        name.maxLength = 120;
+        name.setAttribute('aria-label', '群名称');
+        const members = createElement('div', 'yuzi-qq-group-picker-list');
+        candidates.forEach((conversation) => {
+            const row = createElement('label', 'yuzi-qq-group-picker-row');
+            const checkbox = createElement('input', 'yuzi-qq-group-picker-checkbox');
+            checkbox.type = 'checkbox';
+            checkbox.value = conversation.personId;
+            checkbox.dataset.qqGroupMemberChoice = conversation.personId;
+            const label = createElement('span', 'yuzi-qq-group-picker-name');
+            label.textContent = contactFormalName(conversation);
+            row.append(checkbox, label);
+            members.append(row);
+        });
+        const error = createElement('p', 'yuzi-qq-form-error');
+        const cancel = createButton('取消', 'yuzi-qq-secondary-button');
+        cancel.addEventListener('click', clearOverlay);
+        const confirm = createButton('创建群聊', 'yuzi-qq-primary-button');
+        const selectedIds = () => [...members.querySelectorAll('input:checked')].map((input) => input.value);
+        const toggle = () => {
+            confirm.disabled = !canCreateUserGroup(name.value, selectedIds());
+        };
+        name.addEventListener('input', toggle);
+        members.addEventListener('change', toggle);
+        confirm.addEventListener('click', async () => {
+            confirm.disabled = true;
+            const created = await facade.intent.createGroupConversation({
+                name: name.value,
+                memberIds: selectedIds(),
+            });
+            if (!created?.ok) {
+                error.textContent = created?.error?.message || '创建群聊失败';
+                toggle();
+                return;
+            }
+            clearOverlay();
+            tab = 'messages';
+            page = null;
+            await openChat(created.result.conversation);
+        });
+        if (candidates.length < 2) error.textContent = '至少需要两名已有 QQ 好友';
+        content.append(name, members, error);
+        showDialog({ title: '创建群聊', content, actions: [cancel, confirm], className: 'yuzi-qq-create-group-dialog' });
+        toggle();
+        name.focus();
+    };
+
+    const openAddGroupMemberDialog = async (conversationId) => {
+        const [conversation, result] = await Promise.all([
+            getConversation(conversationId),
+            facade.query.conversations(),
+        ]);
+        if (!conversation || conversation.kind !== 'group') return;
+        const candidates = groupFriendCandidates(
+            result?.ok ? result.conversations : [],
+            conversation.group?.memberIds,
+        );
+        const content = createElement('div', 'yuzi-qq-dialog-form yuzi-qq-add-group-member-form');
+        const select = createElement('select', 'yuzi-qq-add-group-member-select');
+        select.setAttribute('aria-label', '选择群成员');
+        const placeholder = createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = '选择已有 QQ 好友';
+        select.append(placeholder, ...candidates.map((candidate) => {
+            const option = createElement('option');
+            option.value = candidate.personId;
+            option.textContent = contactFormalName(candidate);
+            return option;
+        }));
+        const error = createElement('p', 'yuzi-qq-form-error');
+        const cancel = createButton('取消', 'yuzi-qq-secondary-button');
+        cancel.addEventListener('click', clearOverlay);
+        const confirm = createButton('添加成员', 'yuzi-qq-primary-button');
+        confirm.disabled = true;
+        select.addEventListener('change', () => { confirm.disabled = !asText(select.value); });
+        confirm.addEventListener('click', async () => {
+            confirm.disabled = true;
+            const added = await facade.intent.manageGroup({
+                groupId: conversation.group.groupId,
+                action: 'add',
+                targetPersonId: select.value,
+            });
+            if (!added?.ok) {
+                error.textContent = added?.error?.message || '添加成员失败';
+                confirm.disabled = !asText(select.value);
+                return;
+            }
+            clearOverlay();
+            await render();
+        });
+        if (candidates.length === 0) error.textContent = '没有可添加的现有 QQ 好友';
+        content.append(select, error);
+        showDialog({ title: '添加成员', content, actions: [cancel, confirm], className: 'yuzi-qq-add-group-member-dialog' });
+        select.focus();
+    };
+
+    const confirmGroupLifecycle = async (conversationId, action) => {
+        const conversation = await getConversation(conversationId);
+        if (!conversation || conversation.kind !== 'group') return;
+        const label = action === 'dissolve' ? '解散群聊' : '退出群聊';
+        const content = createElement('div', 'yuzi-qq-confirm-copy');
+        const text = createElement('p');
+        text.textContent = action === 'dissolve'
+            ? '解散后所有成员都不能继续发言，历史消息会保留。'
+            : '退出后你不能继续发言，但仍可旁观群内后续消息。';
+        const error = createElement('p', 'yuzi-qq-form-error');
+        content.append(text, error);
+        const cancel = createButton('取消', 'yuzi-qq-secondary-button');
+        cancel.addEventListener('click', clearOverlay);
+        const confirm = createButton(label, 'yuzi-qq-danger-button');
+        confirm.addEventListener('click', async () => {
+            confirm.disabled = true;
+            const result = await facade.intent.manageGroup({
+                groupId: conversation.group.groupId,
+                action,
+            });
+            if (!result?.ok) {
+                error.textContent = result?.error?.message || `${label}失败`;
+                confirm.disabled = false;
+                return;
+            }
+            clearOverlay();
+            conversationSnapshots.delete(conversationId);
+            page = page?.returnTo || null;
+            await render();
+        });
+        showDialog({ title: label, content, actions: [cancel, confirm] });
+    };
+
+    const openGroupMemberActionDialog = async (conversationId, personId, action) => {
+        const conversation = await getConversation(conversationId);
+        const person = asArray(conversation?.group?.members).find((member) => member.personId === personId);
+        if (!conversation || conversation.kind !== 'group' || !person) return;
+        const labels = {
+            'appoint-admin': '任命管理员',
+            'revoke-admin': '取消管理员',
+            mute: '禁言',
+            unmute: '解除禁言',
+            kick: '移出群聊',
+            'transfer-owner': '转让群主',
+        };
+        const label = labels[action] || action;
+        const content = createElement('div', 'yuzi-qq-dialog-form');
+        const text = createElement('p');
+        text.textContent = `${label}：${asText(person.formalName) || '未命名'}`;
+        let duration = null;
+        if (action === 'mute') {
+            duration = createElement('select', 'yuzi-qq-group-mute-duration');
+            duration.setAttribute('aria-label', '禁言时长');
+            ['10 分钟', '1 小时', '1 天', '7 天', '永久'].forEach((value) => {
+                const option = createElement('option');
+                option.value = value;
+                option.textContent = value;
+                duration.append(option);
+            });
+        }
+        const error = createElement('p', 'yuzi-qq-form-error');
+        content.append(text);
+        if (duration) content.append(duration);
+        content.append(error);
+        const cancel = createButton('取消', 'yuzi-qq-secondary-button');
+        cancel.addEventListener('click', clearOverlay);
+        const confirm = createButton(label, action === 'kick' || action === 'transfer-owner'
+            ? 'yuzi-qq-danger-button'
+            : 'yuzi-qq-primary-button');
+        confirm.addEventListener('click', async () => {
+            confirm.disabled = true;
+            const result = await facade.intent.manageGroup({
+                groupId: conversation.group.groupId,
+                action,
+                targetPersonId: personId,
+                ...(duration ? { duration: duration.value } : {}),
+            });
+            if (!result?.ok) {
+                error.textContent = result?.error?.message || `${label}失败`;
+                confirm.disabled = false;
+                return;
+            }
+            clearOverlay();
+            conversationSnapshots.delete(conversationId);
+            if (action === 'kick') {
+                page = {
+                    type: 'conversation-settings',
+                    conversationId,
+                    returnTo: page?.returnTo?.returnTo || null,
+                };
+            }
+            await render();
+        });
+        showDialog({ title: label, content, actions: [cancel, confirm] });
+    };
+
     const openAddContact = (anchor) => {
         const menu = createElement('div', 'yuzi-qq-dialog-menu yuzi-qq-message-add-menu');
         const rows = [
@@ -3114,16 +3951,19 @@ export function createQQApp({
             ['加好友/群', 'user-plus'],
         ];
         rows.forEach(([label, iconName], index) => {
+            const isGroupAction = index === 0;
             const isContactAction = index === rows.length - 1;
-            const item = isContactAction
+            const isAction = isGroupAction || isContactAction;
+            const item = isAction
                 ? createButton('', 'yuzi-qq-dialog-menu-item yuzi-qq-message-add-menu-item yuzi-qq-message-add-contact-action', {
-                    'data-qq-add-contact-menu': '1',
+                    ...(isGroupAction ? { 'data-qq-create-group': '1' } : { 'data-qq-add-contact-menu': '1' }),
                 })
                 : createElement('div', 'yuzi-qq-dialog-menu-item yuzi-qq-message-add-menu-item yuzi-qq-message-add-visual');
             const labelNode = createElement('span', 'yuzi-qq-message-add-menu-label');
             labelNode.textContent = label;
             item.append(createIcon(iconName, 'yuzi-qq-message-add-menu-icon'), labelNode);
-            if (isContactAction) item.addEventListener('click', openAddContactForm);
+            if (isGroupAction) item.addEventListener('click', () => { void openCreateGroupDialog(); });
+            else if (isContactAction) item.addEventListener('click', openAddContactForm);
             else item.setAttribute('aria-hidden', 'true');
             menu.append(item);
         });
@@ -3156,16 +3996,19 @@ export function createQQApp({
         showDialog({ title: '删除好友', content, actions: [cancel, confirm], className: 'yuzi-qq-confirm-dialog yuzi-qq-remove-friend-dialog' });
     };
 
-    const confirmConversationDeletion = (conversationId) => {
+    const confirmConversationDeletion = async (conversationId) => {
+        const conversation = conversationSnapshots.get(asText(conversationId))
+            || await getConversation(conversationId);
+        const dialogCopy = conversationDeletionCopy(conversation);
         const content = createElement('div', 'yuzi-qq-confirm-copy yuzi-qq-delete-conversation-copy');
         const illustration = createElement('span', 'yuzi-qq-dialog-illustration');
         illustration.textContent = '!';
         const copy = createElement('p');
-        copy.textContent = '确定删除该会话吗？删除后不可恢复';
+        copy.textContent = dialogCopy.message;
         content.append(illustration, copy);
         const cancel = createButton('取消', 'yuzi-qq-secondary-button');
         cancel.addEventListener('click', clearOverlay);
-        const confirm = createButton('删除', 'yuzi-qq-danger-button');
+        const confirm = createButton(dialogCopy.confirmLabel, 'yuzi-qq-danger-button');
         let deleting = false;
         confirm.addEventListener('click', async () => {
             if (deleting) return;
@@ -3178,7 +4021,7 @@ export function createQQApp({
                 deleting = false;
                 cancel.disabled = false;
                 confirm.disabled = false;
-                confirm.textContent = '删除';
+                confirm.textContent = dialogCopy.confirmLabel;
                 copy.textContent = '删除失败，请重试';
                 return;
             }
@@ -3189,7 +4032,7 @@ export function createQQApp({
             await render();
         });
         showDialog({
-            title: '删除会话', content, actions: [cancel, confirm], dismissible: false, className: 'yuzi-qq-confirm-dialog yuzi-qq-delete-conversation-dialog',
+            title: dialogCopy.title, content, actions: [cancel, confirm], dismissible: false, className: 'yuzi-qq-confirm-dialog yuzi-qq-delete-conversation-dialog',
         });
     };
 
@@ -3235,8 +4078,26 @@ export function createQQApp({
         input.focus();
     };
 
-    const openTransferDialog = (conversationId) => {
+    const openTransferDialog = async (conversationId) => {
+        const conversation = conversationSnapshots.get(asText(conversationId))
+            || await getConversation(conversationId);
+        if (!conversation) return;
         const content = createElement('div', 'yuzi-qq-dialog-form');
+        let recipient = null;
+        if (conversation.kind === 'group') {
+            recipient = createElement('select', 'yuzi-qq-transfer-recipient-select');
+            recipient.dataset.qqTransferRecipient = '1';
+            recipient.setAttribute('aria-label', '收款人');
+            const placeholder = createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '选择收款人';
+            recipient.append(placeholder, ...groupTransferRecipients(conversation).map((member) => {
+                const option = createElement('option');
+                option.value = member.personId;
+                option.textContent = asText(member.formalName) || member.personId;
+                return option;
+            }));
+        }
         const amount = createElement('input');
         amount.placeholder = '金额';
         amount.setAttribute('aria-label', '金额');
@@ -3252,9 +4113,14 @@ export function createQQApp({
         cancel.addEventListener('click', clearOverlay);
         const confirm = createButton('转账', 'yuzi-qq-primary-button');
         confirm.disabled = true;
-        const toggle = () => { confirm.disabled = !asText(amount.value) || !asText(currency.value); };
+        const toggle = () => {
+            confirm.disabled = !asText(amount.value)
+                || !asText(currency.value)
+                || (conversation.kind === 'group' && !asText(recipient?.value));
+        };
         amount.addEventListener('input', toggle);
         currency.addEventListener('input', toggle);
+        recipient?.addEventListener('change', toggle);
         confirm.addEventListener('click', async () => {
             confirm.disabled = true;
             const result = await submitTransferMessage({
@@ -3263,6 +4129,7 @@ export function createQQApp({
                 amount: amount.value,
                 currency: currency.value,
                 note: note.value,
+                recipientId: recipient?.value,
             });
             if (!result?.ok) {
                 error.textContent = result?.error?.message || '转账发送失败，请重试';
@@ -3273,6 +4140,7 @@ export function createQQApp({
             await loadMessages(conversationId);
             await render();
         });
+        if (recipient) content.append(recipient);
         content.append(amount, currency, note, error);
         showDialog({ title: '转账', content, actions: [cancel, confirm] });
         amount.focus();
@@ -3326,7 +4194,17 @@ export function createQQApp({
         selectForDeletion.addEventListener('click', () => {
             enterMessageSelection(conversationId, message.messageId);
         });
-        menu.append(copy, selectForDeletion);
+        menu.append(copy);
+        if (conversationSnapshots.get(asText(conversationId))?.kind === 'group') {
+            const quote = createButton('引用', 'yuzi-qq-dialog-menu-item');
+            quote.addEventListener('click', () => {
+                quoteDrafts.select(conversationId, message);
+                clearOverlay();
+                void render();
+            });
+            menu.append(quote);
+        }
+        menu.append(selectForDeletion);
         const cancel = createButton('取消', 'yuzi-qq-secondary-button');
         cancel.addEventListener('click', clearOverlay);
         showDialog({ title: '', content: menu, actions: [cancel], className: 'yuzi-qq-message-action-menu-dialog' });
@@ -3353,7 +4231,8 @@ export function createQQApp({
 
     const openTransferAction = (conversationId, messageId) => {
         const message = getMessageState(conversationId).items.find((item) => item.messageId === messageId);
-        if (!message?.transfer || message.senderType === 'self' || message.transfer.status !== 'pending') return;
+        const conversation = conversationSnapshots.get(asText(conversationId));
+        if (!message?.transfer || !canCurrentUserHandleTransfer(conversation, message)) return;
         const content = createElement('p');
         content.textContent = messageContent(message);
         const returnButton = createButton('退还', 'yuzi-qq-secondary-button');
@@ -3404,6 +4283,45 @@ export function createQQApp({
     const clearPrivateProfileAsset = async (conversationId, fieldName) => {
         const result = await facade.intent.updatePrivateProfile({ conversationId, profile: { [fieldName]: '' } });
         if (!result?.ok) throw new Error(result?.error?.message || '\u8d44\u6599\u66f4\u65b0\u5931\u8d25');
+        await render();
+    };
+
+    const updateConversationBackgroundAsset = (conversationId) => {
+        pickImageFiles(async ([selected]) => {
+            const blob = selected.file;
+            const saved = await facade.intent.saveMedia({
+                media: {
+                    kind: 'background',
+                    conversationId,
+                    mimeType: blob.type || 'image/png',
+                    blob,
+                },
+            });
+            if (!saved?.ok) throw new Error(saved?.error?.message || '图片保存失败');
+            const conversation = await getConversation(conversationId);
+            const update = conversation?.kind === 'group'
+                ? facade.intent.updateGroupProfile
+                : facade.intent.updatePrivateProfile;
+            const updated = await update({
+                conversationId,
+                profile: { backgroundAssetId: saved.media.assetId },
+            });
+            if (!updated?.ok) throw new Error(updated?.error?.message || '聊天背景更新失败');
+            await render();
+        }, {
+            multiple: false,
+            maxSizeMB: 8,
+            onError: (message) => report(new Error(message)),
+        });
+    };
+
+    const clearConversationBackgroundAsset = async (conversationId) => {
+        const conversation = await getConversation(conversationId);
+        const update = conversation?.kind === 'group'
+            ? facade.intent.updateGroupProfile
+            : facade.intent.updatePrivateProfile;
+        const result = await update({ conversationId, profile: { backgroundAssetId: '' } });
+        if (!result?.ok) throw new Error(result?.error?.message || '聊天背景更新失败');
         await render();
     };
 
@@ -3618,6 +4536,9 @@ export function createQQApp({
             activeApiPresetId: value('activeApiPresetId'),
             privateReplyPresetId: value('privateReplyPresetId'),
             privateProactivePresetId: value('privateProactivePresetId'),
+            groupReplyPresetId: value('groupReplyPresetId'),
+            groupProactivePresetId: value('groupProactivePresetId'),
+            privateWeight: value('privateWeight'),
             enabled: form.elements.enabled?.checked === true,
             bookName: value('bookName'),
             timeWindowMode: value('timeWindowMode'),
@@ -3639,6 +4560,11 @@ export function createQQApp({
                 const everyTurns = positiveInteger('everyTurns');
                 if (values.enabled && everyTurns === null) return reject('\u4e3b\u52a8\u6d88\u606f\u95f4\u9694\u5fc5\u987b\u662f\u6b63\u6574\u6570');
                 values.everyTurns = everyTurns ?? 5;
+            }
+            if (!field || field === 'privateWeight') {
+                const privateWeight = nonNegativeInteger('privateWeight');
+                if (privateWeight === null || privateWeight > 100) return reject('主动类型占比必须是 0 到 100 的整数');
+                values.privateWeight = privateWeight;
             }
         }
         if (kind === 'context') {
@@ -3799,6 +4725,36 @@ export function createQQApp({
             return;
         }
         if (target.dataset.qqDeleteConversation) return confirmConversationDeletion(target.dataset.qqDeleteConversation);
+        if (target.dataset.qqGroupMemberProfile) {
+            return go({
+                type: 'group-member-profile',
+                conversationId: target.dataset.qqGroupConversation,
+                personId: target.dataset.qqGroupMemberProfile,
+            });
+        }
+        if (target.dataset.qqGroupMemberEdit) {
+            return go({
+                type: 'group-member-edit',
+                conversationId: target.dataset.qqGroupConversation,
+                personId: target.dataset.qqGroupMemberEdit,
+            });
+        }
+        if (target.dataset.qqAddGroupMember) {
+            return openAddGroupMemberDialog(target.dataset.qqAddGroupMember);
+        }
+        if (target.dataset.qqGroupLifecycle) {
+            return confirmGroupLifecycle(
+                target.dataset.qqGroupConversation,
+                target.dataset.qqGroupLifecycle,
+            );
+        }
+        if (target.dataset.qqGroupMemberAction) {
+            return openGroupMemberActionDialog(
+                target.dataset.qqGroupConversation,
+                target.dataset.qqGroupPerson,
+                target.dataset.qqGroupMemberAction,
+            );
+        }
         if (target.dataset.qqProfile) return go({ type: 'profile', conversationId: target.dataset.qqProfile });
         if (target.dataset.qqEditProfile) return go({ type: 'profile-edit', conversationId: target.dataset.qqEditProfile });
         if (target.dataset.qqRemoveFriend) return confirmFriendRemoval(target.dataset.qqRemoveFriend);
@@ -3815,15 +4771,10 @@ export function createQQApp({
             return;
         }
         if (target.dataset.qqPickAvatar) return updatePrivateProfileAsset(target.dataset.qqPickAvatar, 'avatarAssetId', 'avatar', 'icon');
-        if (target.dataset.qqPickBackground) return updatePrivateProfileAsset(target.dataset.qqPickBackground, 'backgroundAssetId', 'background', 'background');
+        if (target.dataset.qqPickBackground) return updateConversationBackgroundAsset(target.dataset.qqPickBackground);
         if (target.dataset.qqConversationDetail) return go({ type: 'conversation-settings', conversationId: target.dataset.qqConversationDetail });
         if (target.dataset.qqClearChatBackground) {
-            const result = await facade.intent.updatePrivateProfile({
-                conversationId: target.dataset.qqClearChatBackground,
-                profile: { backgroundAssetId: '' },
-            });
-            if (!result?.ok) report(new Error(result?.error?.message || 'Unable to update chat background'));
-            return render();
+            return clearConversationBackgroundAsset(target.dataset.qqClearChatBackground).catch(report);
         }
         if (target.dataset.qqConversationInjection) {
             const conversation = await getConversation(target.dataset.qqConversationInjection);
@@ -3961,6 +4912,8 @@ export function createQQApp({
             openSwipeConversationId = '';
             closeEmojiPanel();
             drafts.clear();
+            quoteDrafts.clearAll();
+            mentionDrafts.clear();
             messageSelection.clearAll();
             messageSelectionConversationId = '';
             imageGenerationController.clear();
@@ -3976,6 +4929,8 @@ export function createQQApp({
             renderEpoch += 1;
             composerAutoHeight.dispose();
             closeTransientUi();
+            quoteDrafts.clearAll();
+            mentionDrafts.clear();
             messageSelection.clearAll();
             messageSelectionConversationId = '';
             imageGenerationController.clear();

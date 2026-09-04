@@ -316,6 +316,12 @@ function getPerson(scope, personId) {
     return person;
 }
 
+function groupMemberDisplayName(scope, personId) {
+    const id = asText(personId, 256);
+    if (id === SELF_ID) return '用户';
+    return asText(scope.people?.[id]?.formalName, 120) || '群成员';
+}
+
 function getConversation(scope, conversationId) {
     const conversation = scope.conversations[asText(conversationId, 256)];
     if (!conversation) throw new QQV2DomainError('QQ 会话不存在', 'conversation_not_found');
@@ -334,11 +340,19 @@ function getGroupConversation(scope, group) {
 
 function messageWithQuote(scope, message) {
     if (!message) return null;
+    const quotedMessage = message.quoteMessageId ? scope.messages[message.quoteMessageId] : null;
     return {
         ...copy(message),
         quote: message.quoteMessageId
-            ? scope.messages[message.quoteMessageId]
-                ? { status: 'available', messageId: message.quoteMessageId, content: scope.messages[message.quoteMessageId].content }
+            ? quotedMessage
+                ? {
+                    status: 'available',
+                    messageId: message.quoteMessageId,
+                    content: quotedMessage.content,
+                    senderName: asText(quotedMessage.senderName, 120)
+                        || groupMemberDisplayName(scope, quotedMessage.senderId),
+                    storyTime: quotedMessage.storyTime,
+                }
                 : { status: 'deleted', messageId: message.quoteMessageId, content: '' }
             : null,
     };
@@ -563,8 +577,11 @@ function appendOneMessage(scope, conversation, input, options = {}) {
 
     if (!options.skipSenderValidation && conversation.kind === 'group') {
         const group = getGroup(scope, conversation.groupId);
-        if (group.status !== 'active' || conversation.status !== 'active') {
-            throw new QQV2DomainError('已退出或已解散群聊不能发送消息', 'group_read_only');
+        if (group.status !== 'active') {
+            throw new QQV2DomainError('已解散群聊不能发送消息', 'group_read_only');
+        }
+        if (senderId === SELF_ID && (group.selfExited || conversation.status !== 'active')) {
+            throw new QQV2DomainError('已退出群聊不能发送消息', 'group_read_only');
         }
         if (!groupParticipantIds(group).includes(senderId)) {
             throw new QQV2DomainError('发送者不在当前群聊中', 'group_member_not_found');
@@ -575,6 +592,23 @@ function appendOneMessage(scope, conversation, input, options = {}) {
     }
     if (!options.skipSenderValidation && conversation.kind === 'private' && senderId !== SELF_ID && senderId !== conversation.personId) {
         throw new QQV2DomainError('私聊发送者与会话人物不一致', 'private_sender_invalid');
+    }
+    let transfer = input?.transfer ? copy(input.transfer) : null;
+    if (type === 'transfer') {
+        if (!transfer) throw new QQV2DomainError('转账内容不能为空', 'transfer_invalid');
+        const recipientId = asText(transfer.recipientId, 256)
+            || (conversation.kind === 'private'
+                ? (senderId === SELF_ID ? conversation.personId : SELF_ID)
+                : '');
+        if (!recipientId) throw new QQV2DomainError('群转账必须指定收款人', 'transfer_recipient_required');
+        if (recipientId === senderId) throw new QQV2DomainError('不能给自己转账', 'transfer_recipient_invalid');
+        const participantIds = conversation.kind === 'group'
+            ? groupParticipantIds(getGroup(scope, conversation.groupId))
+            : [SELF_ID, conversation.personId];
+        if (!participantIds.includes(recipientId)) {
+            throw new QQV2DomainError('转账收款人不在当前会话中', 'transfer_recipient_invalid');
+        }
+        transfer = { ...transfer, recipientId, status: asText(transfer.status, 32) || 'pending' };
     }
 
     const quoteMessageId = asText(input?.quoteMessageId, 256);
@@ -612,7 +646,7 @@ function appendOneMessage(scope, conversation, input, options = {}) {
         quoteMessageId,
         mentionIds,
         mentionAll: input?.mentionAll === true,
-        transfer: input?.transfer ? copy(input.transfer) : null,
+        transfer,
         stickerId: asText(input?.stickerId, 256),
         assetId: asText(input?.assetId, 256),
         generatedImagePath: asText(input?.generatedImagePath, 2048),
@@ -622,6 +656,7 @@ function appendOneMessage(scope, conversation, input, options = {}) {
         selectedForInjection: input?.selectedForInjection === true,
     };
     scope.messages[message.messageId] = message;
+    conversation.hiddenFromMessages = false;
     conversation.nextSequence = sequence + 1;
     conversation.lastSequence = sequence;
     conversation.lastMessageId = message.messageId;
@@ -681,6 +716,20 @@ function removeAssetIfUnreferenced(scope, assetId) {
     }
 }
 
+function returnPendingGroupTransfers(scope, conversationId, recipientIds, storyTime) {
+    const recipients = recipientIds ? new Set(recipientIds) : null;
+    Object.values(scope.messages).forEach((message) => {
+        if (message.conversationId !== conversationId
+            || message.type !== 'transfer'
+            || message.transfer?.status !== 'pending'
+            || (recipients && !recipients.has(message.transfer.recipientId))) {
+            return;
+        }
+        message.transfer.status = 'returned';
+        message.transfer.handledStoryTime = storyTime;
+    });
+}
+
 function applyGroupManagement(scope, input = {}) {
     const group = getGroup(scope, input.groupId);
     const conversation = getGroupConversation(scope, group);
@@ -689,6 +738,8 @@ function applyGroupManagement(scope, input = {}) {
     const targetId = asText(input.targetPersonId, 256);
     const storyTime = asText(input.storyTime, 128);
     const value = input.value;
+    const actorName = groupMemberDisplayName(scope, actorId);
+    const targetName = groupMemberDisplayName(scope, targetId);
 
     if (group.status === 'dissolved' || conversation.status === 'dissolved') {
         throw new QQV2DomainError('已解散群聊不能再管理', 'group_dissolved');
@@ -698,21 +749,22 @@ function applyGroupManagement(scope, input = {}) {
     case 'rename':
         requireGroupManager(group, actorId);
         group.name = requireText(value, '群名称', 120);
-        appendSystemMessage(scope, conversation, `${actorId}修改了群名称`, storyTime);
+        appendSystemMessage(scope, conversation, `${actorName}修改了群名称`, storyTime);
         break;
     case 'add':
         requireGroupManager(group, actorId);
         if (targetId === SELF_ID) throw new QQV2DomainError('当前用户已经在群聊中', 'group_member_invalid');
         getPerson(scope, targetId);
-        if (!isPrivateFriend(scope, targetId) || group.memberIds.includes(targetId)) {
+        if ((!input.allowNonFriend && !isPrivateFriend(scope, targetId)) || group.memberIds.includes(targetId)) {
             throw new QQV2DomainError('不能添加该群成员', 'group_member_invalid');
         }
         group.memberIds.push(targetId);
-        appendSystemMessage(scope, conversation, `${targetId}加入了群聊`, storyTime);
+        appendSystemMessage(scope, conversation, `${targetName}加入了群聊`, storyTime);
         break;
     case 'remove':
     case 'kick':
         requireGroupManager(group, actorId, targetId);
+        returnPendingGroupTransfers(scope, conversation.conversationId, [targetId], storyTime);
         if (targetId === SELF_ID) {
             group.selfExited = true;
             group.selfRole = 'member';
@@ -722,7 +774,7 @@ function applyGroupManagement(scope, input = {}) {
             group.adminIds = group.adminIds.filter((id) => id !== targetId);
             delete group.mutes[targetId];
         }
-        appendSystemMessage(scope, conversation, `${targetId}已被移出群聊`, storyTime);
+        appendSystemMessage(scope, conversation, `${targetName}已被移出群聊`, storyTime);
         break;
     case 'appoint-admin':
         requireOwner(group, actorId);
@@ -731,7 +783,7 @@ function applyGroupManagement(scope, input = {}) {
         }
         group.adminIds.push(targetId);
         if (targetId === SELF_ID) group.selfRole = 'admin';
-        appendSystemMessage(scope, conversation, `${targetId}已被设为管理员`, storyTime);
+        appendSystemMessage(scope, conversation, `${targetName}已被设为管理员`, storyTime);
         break;
     case 'revoke-admin':
         requireOwner(group, actorId);
@@ -740,18 +792,37 @@ function applyGroupManagement(scope, input = {}) {
         }
         group.adminIds = group.adminIds.filter((id) => id !== targetId);
         if (targetId === SELF_ID) group.selfRole = 'member';
-        appendSystemMessage(scope, conversation, `${targetId}不再是管理员`, storyTime);
+        appendSystemMessage(scope, conversation, `${targetName}不再是管理员`, storyTime);
         break;
     case 'mute':
         requireGroupManager(group, actorId, targetId);
         group.mutes[targetId] = normalizeMuteUntil(asText(input.duration, 64), storyTime);
-        appendSystemMessage(scope, conversation, `${targetId}已被禁言${asText(input.duration, 64)}`, storyTime);
+        appendSystemMessage(scope, conversation, `${targetName}已被禁言${asText(input.duration, 64)}`, storyTime);
         break;
     case 'unmute':
         requireGroupManager(group, actorId, targetId);
         delete group.mutes[targetId];
-        appendSystemMessage(scope, conversation, `${targetId}已解除禁言`, storyTime);
+        appendSystemMessage(scope, conversation, `${targetName}已解除禁言`, storyTime);
         break;
+    case 'leave': {
+        const role = participantRole(group, actorId);
+        if (!role) throw new QQV2DomainError('退群人物不在当前群聊中', 'group_member_not_found');
+        if (role === 'owner') {
+            throw new QQV2DomainError('群主必须先转让群主或解散群聊', 'group_owner_must_transfer');
+        }
+        returnPendingGroupTransfers(scope, conversation.conversationId, [actorId], storyTime);
+        group.adminIds = group.adminIds.filter((id) => id !== actorId);
+        delete group.mutes[actorId];
+        if (actorId === SELF_ID) {
+            group.selfExited = true;
+            group.selfRole = 'member';
+            conversation.status = 'exited';
+        } else {
+            group.memberIds = group.memberIds.filter((id) => id !== actorId);
+        }
+        appendSystemMessage(scope, conversation, `${actorName}退出了群聊`, storyTime);
+        break;
+    }
     case 'reinvite':
         requireGroupManager(group, actorId);
         if (targetId !== SELF_ID || !group.selfExited) {
@@ -760,7 +831,7 @@ function applyGroupManagement(scope, input = {}) {
         group.selfExited = false;
         group.selfRole = 'member';
         conversation.status = 'active';
-        appendSystemMessage(scope, conversation, `${actorId}邀请你重新加入群聊`, storyTime);
+        appendSystemMessage(scope, conversation, `${actorName}邀请你重新加入群聊`, storyTime);
         break;
     case 'transfer-owner':
         requireOwner(group, actorId);
@@ -771,13 +842,14 @@ function applyGroupManagement(scope, input = {}) {
         group.adminIds = group.adminIds.filter((id) => id !== actorId && id !== targetId);
         if (targetId === SELF_ID) group.selfRole = 'owner';
         else if (actorId === SELF_ID) group.selfRole = 'member';
-        appendSystemMessage(scope, conversation, `${targetId}已成为群主`, storyTime);
+        appendSystemMessage(scope, conversation, `${targetName}已成为群主`, storyTime);
         break;
     case 'dissolve':
         requireOwner(group, actorId);
+        returnPendingGroupTransfers(scope, conversation.conversationId, null, storyTime);
         group.status = 'dissolved';
         conversation.status = 'dissolved';
-        appendSystemMessage(scope, conversation, `${actorId}解散了群聊`, storyTime);
+        appendSystemMessage(scope, conversation, `${actorName}解散了群聊`, storyTime);
         break;
     default:
         throw new QQV2DomainError('不支持的群管理动作', 'group_action_invalid');
@@ -1333,9 +1405,6 @@ export function createQQV2Repository(options = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
-                if (conversation.kind !== 'private') {
-                    throw new QQV2DomainError('Only private transfers can be handled', 'private_conversation_required');
-                }
                 if (!['accept', 'return'].includes(action)) {
                     throw new QQV2DomainError('Transfer action is invalid', 'transfer_action_invalid');
                 }
@@ -1346,8 +1415,13 @@ export function createQQV2Repository(options = {}) {
                 if (message.type !== 'transfer' || !message.transfer) {
                     throw new QQV2DomainError('Message is not a transfer', 'transfer_invalid');
                 }
-                if (message.senderId !== conversation.personId || message.transfer.status !== 'pending') {
+                const recipientId = asText(message.transfer.recipientId, 256)
+                    || (conversation.kind === 'private' ? SELF_ID : '');
+                if (message.senderId === SELF_ID || message.transfer.status !== 'pending') {
                     throw new QQV2DomainError('Transfer is no longer pending', 'transfer_not_pending');
+                }
+                if (recipientId !== SELF_ID) {
+                    throw new QQV2DomainError('Only the recipient can handle this transfer', 'transfer_recipient_invalid');
                 }
                 message.transfer.status = action === 'accept' ? 'accepted' : 'returned';
                 message.transfer.handledStoryTime = asText(storyTime, 128);
@@ -1390,7 +1464,7 @@ export function createQQV2Repository(options = {}) {
                     personId: '',
                     groupId,
                     status: 'active',
-                    backgroundAssetId: '',
+                    backgroundAssetId: chooseImageLibraryAssetId(state, 'chat-background', random),
                     unreadCount: 0,
                     nextSequence: 1,
                     lastSequence: 0,
@@ -1635,11 +1709,17 @@ export function createQQV2Repository(options = {}) {
                 const group = conversation.kind === 'group' ? getGroup(scope, conversation.groupId) : null;
                 const retainPrivateContact = conversation.kind === 'private'
                     && isPrivateFriend(scope, conversation.personId);
+                const retainActiveGroup = conversation.kind === 'group'
+                    && conversation.status === 'active'
+                    && group.status === 'active'
+                    && group.selfExited !== true;
                 const mode = conversation.kind === 'private'
                     ? 'private'
-                    : group.ownerId === SELF_ID
-                        ? 'dissolved'
-                        : 'exited';
+                    : retainActiveGroup
+                        ? 'group-history'
+                        : group.ownerId === SELF_ID
+                            ? 'dissolved'
+                            : 'exited';
                 const affectedPersonIds = conversation.kind === 'private'
                     ? [conversation.personId]
                     : [...new Set([...group.memberIds, group.ownerId])];
@@ -1654,8 +1734,12 @@ export function createQQV2Repository(options = {}) {
                     .filter(Boolean))];
                 deletedMessages.forEach((message) => delete scope.messages[message.messageId]);
                 Object.values(scope.assets).filter((asset) => asset.conversationId === conversationId).forEach((asset) => delete scope.assets[asset.assetId]);
-                if (retainPrivateContact) {
+                if (retainPrivateContact || retainActiveGroup) {
                     conversation.status = 'contact';
+                    if (retainActiveGroup) {
+                        conversation.status = 'active';
+                        conversation.hiddenFromMessages = true;
+                    }
                     conversation.backgroundAssetId = '';
                     conversation.unreadCount = 0;
                     conversation.nextSequence = 1;
@@ -1665,8 +1749,8 @@ export function createQQV2Repository(options = {}) {
                 } else {
                     delete scope.conversations[conversationId];
                 }
-                if (conversation.kind === 'group') delete scope.groups[conversation.groupId];
-                if (!retainPrivateContact) {
+                if (conversation.kind === 'group' && !retainActiveGroup) delete scope.groups[conversation.groupId];
+                if (!retainPrivateContact && !retainActiveGroup) {
                     affectedPersonIds.forEach((personId) => {
                         if (personStillReferenced(scope, personId)) return;
                         const person = scope.people[personId];
@@ -1736,7 +1820,7 @@ export function createQQV2Repository(options = {}) {
                     const conversationId = createId('group-conversation');
                     const group = { groupId, scopeId: scope.scopeId, conversationId, name: requireText(action.name, '群名称', 120), ownerId, adminIds: [], memberIds, selfRole: 'member', selfExited: false, status: 'active', mutes: {} };
                     const conversation = {
-                        conversationId, scopeId: scope.scopeId, kind: 'group', personId: '', groupId, status: 'active', backgroundAssetId: '', unreadCount: 0, nextSequence: 1, lastSequence: 0, lastMessageId: '',
+                        conversationId, scopeId: scope.scopeId, kind: 'group', personId: '', groupId, status: 'active', backgroundAssetId: chooseImageLibraryAssetId(state, 'chat-background', random), unreadCount: 0, nextSequence: 1, lastSequence: 0, lastMessageId: '',
                         injection: createDefaultInjection(),
                     };
                     scope.groups[groupId] = group;
@@ -1749,14 +1833,31 @@ export function createQQV2Repository(options = {}) {
                 const runGroupAction = (action) => {
                     const conversation = resolveConversation(action.conversation);
                     if (conversation.kind !== 'group') throw new QQV2DomainError('群管理动作目标必须是群聊', 'group_action_target');
+                    let targetPersonId = resolvePerson(action.target);
+                    let allowNonFriend = false;
+                    if (action.action === 'add' && action.name) {
+                        if (!action.id || personReferences.has(action.id)) {
+                            throw new QQV2DomainError('新增群成员引用缺失或重复', 'action_reference_duplicate');
+                        }
+                        const formalName = exactContactFormalName(action.name);
+                        let person = Object.values(scope.people).find((candidate) => candidate.formalName === formalName) || null;
+                        if (!person) {
+                            person = createPrivatePerson(state, scope, formalName, random);
+                            scope.people[person.personId] = person;
+                        }
+                        personReferences.set(action.id, person.personId);
+                        targetPersonId = person.personId;
+                        allowNonFriend = true;
+                    }
                     return applyGroupManagement(scope, {
                         groupId: conversation.groupId,
                         action: action.action,
                         actorId: resolvePerson(action.actor),
-                        targetPersonId: resolvePerson(action.target),
+                        targetPersonId,
                         value: action.value,
                         duration: action.duration,
                         storyTime,
+                        allowNonFriend,
                     });
                 };
                 const runTransferAction = (action) => {
@@ -1768,11 +1869,11 @@ export function createQQV2Repository(options = {}) {
                     if (transferMessage.type !== 'transfer' || !transferMessage.transfer) {
                         throw new QQV2DomainError('目标消息不是转账', 'transfer_invalid');
                     }
-                    if (transferMessage.senderId !== SELF_ID || transferMessage.transfer.status !== 'pending') {
+                    if (transferMessage.transfer.status !== 'pending') {
                         throw new QQV2DomainError('该转账当前不能由 AI 处理', 'transfer_not_pending');
                     }
                     const actorId = resolvePerson(action.actor);
-                    if (transferMessage.transfer.recipientId !== actorId) {
+                    if (transferMessage.senderId === actorId || transferMessage.transfer.recipientId !== actorId) {
                         throw new QQV2DomainError('转账处理人不是指定收款人', 'transfer_recipient_invalid');
                     }
                     transferMessage.transfer.status = action.action === 'accept' ? 'accepted' : 'rejected';
@@ -1836,7 +1937,11 @@ export function createQQV2Repository(options = {}) {
                     }
                     if (action.type === 'group') {
                         runGroupAction(action);
-                        applied.push({ type: action.type, action: action.action });
+                        applied.push({
+                            type: action.type,
+                            action: action.action,
+                            ...(action.id ? { reference: action.id } : {}),
+                        });
                         return;
                     }
                     throw new QQV2DomainError('不支持的 AI 动作', 'action_invalid');

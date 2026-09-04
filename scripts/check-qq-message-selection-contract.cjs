@@ -138,7 +138,7 @@ async function main() {
     assert.match(appSource, /data-qq-update-selected-injection/, 'selection mode exposes the batch injection command');
     assert.match(selectionSource, /facade\.intent\.setMessagesInjection\(/, 'manual worldbook injection crosses the Facade once per batch');
     assert.match(appSource, /selectableMessages[\s\S]*asText\(message\?\.messageId\)/, 'all persisted messages, including system messages, are selectable');
-    assert.match(appSource, /yuzi-qq-system-message-row[\s\S]*bindSelectableMessage\(item, message, conversationId\)/, 'system messages use the shared selection bindings');
+    assert.match(appSource, /yuzi-qq-system-message-row[\s\S]*bindSelectableMessage\(item, message, conversationId(?:, conversation)?\)/, 'system messages use the shared selection bindings');
     assert.match(appSource, /yuzi-qq-time-divider[\s\S]*stream\.append\(divider\)/, 'time dividers stay separate from selectable message nodes');
     assert.match(appSource, /createButton\('', `yuzi-qq-message-selection-action[\s\S]*'aria-label': label[\s\S]*button\.append\(createIcon\(iconName\)\)/, 'selection actions are icon-only and remain accessible');
 

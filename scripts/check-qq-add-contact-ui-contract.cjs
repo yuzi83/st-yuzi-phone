@@ -25,6 +25,9 @@ function matchesSelector(element, selector) {
     const excludesDisabled = value.includes(':not([disabled])');
     value = value.replace(':not([disabled])', '');
     if (excludesDisabled && (element.disabled || element.hasAttribute('disabled'))) return false;
+    const requiresChecked = value.includes(':checked');
+    value = value.replace(':checked', '');
+    if (requiresChecked && element.checked !== true) return false;
 
     const attributes = [...value.matchAll(/\[([^\]]+)\]/g)].map((match) => match[1]);
     value = value.replace(/\[[^\]]+\]/g, '');
@@ -247,6 +250,17 @@ function installFakeDom() {
     };
     global.document = document;
     global.window = createFakeWindow();
+    global.requestAnimationFrame = (callback) => {
+        queueMicrotask(() => callback(Date.now()));
+        return 1;
+    };
+    global.cancelAnimationFrame = () => {};
+    global.getComputedStyle = () => ({
+        minHeight: '40px',
+        maxHeight: '120px',
+        height: '40px',
+        overflowY: 'hidden',
+    });
     return document;
 }
 
@@ -263,19 +277,25 @@ function privateConversation(name, id) {
         conversationId: id,
         kind: 'private',
         status: 'active',
+        personId: `person-${id}`,
         title: name,
         formalName: name,
         unreadCount: 0,
     };
 }
 
-function createFakeFacade({ outcome, errorMessage = '联系人创建失败' } = {}) {
+function createFakeFacade({
+    outcome,
+    errorMessage = '联系人创建失败',
+    initialConversations = [],
+} = {}) {
     const calls = {
         createPrivateConversation: [],
+        createGroupConversation: [],
         aiRequests: 0,
         queryConversations: 0,
     };
-    let conversations = [];
+    let conversations = [...initialConversations];
     const facade = {
         query: {
             async conversations() {
@@ -283,8 +303,17 @@ function createFakeFacade({ outcome, errorMessage = '联系人创建失败' } = 
                 return { ok: true, conversations };
             },
             async currentContext() {
-                return { ok: true, context: { scopeId: 'scope-add-contact-ui', storyTime: '2042-05-20 09:30' } };
+                return {
+                    ok: true,
+                    context: {
+                        scopeId: 'scope-add-contact-ui',
+                        storyTime: '2026-09-04 09:30',
+                        user: { name: '用户', avatar: '' },
+                    },
+                };
             },
+            async currentProfile() { return { ok: true, profile: {} }; },
+            async globalSettings() { return { ok: true, settings: { worldbook: { enabled: false } } }; },
             async conversation({ conversationId } = {}) {
                 const conversation = conversations.find((candidate) => candidate.conversationId === conversationId);
                 return conversation
@@ -312,8 +341,43 @@ function createFakeFacade({ outcome, errorMessage = '联系人创建失败' } = 
                     },
                 };
             },
+            async createGroupConversation(input) {
+                calls.createGroupConversation.push({
+                    name: input.name,
+                    memberIds: [...input.memberIds],
+                });
+                const members = input.memberIds.map((personId) => {
+                    const friend = conversations.find((conversation) => conversation.personId === personId);
+                    return { personId, formalName: friend?.formalName || personId };
+                });
+                const conversation = {
+                    conversationId: 'group-created',
+                    kind: 'group',
+                    status: 'active',
+                    title: input.name,
+                    groupId: 'group-created',
+                    group: {
+                        groupId: 'group-created',
+                        name: input.name,
+                        status: 'active',
+                        ownerId: '__self__',
+                        selfRole: 'owner',
+                        selfExited: false,
+                        memberIds: [...input.memberIds],
+                        members,
+                        adminIds: [],
+                        mutes: {},
+                    },
+                    canSend: true,
+                    request: { phase: 'idle' },
+                    injection: {},
+                };
+                conversations.push(conversation);
+                return { ok: true, status: 'accepted', result: { conversation, group: conversation.group } };
+            },
             async sendMessage() { calls.aiRequests += 1; throw new Error('add contact must not send a message'); },
             async retryRequest() { calls.aiRequests += 1; throw new Error('add contact must not request AI'); },
+            async openConversation() { return { ok: true, status: 'accepted', unreadCount: 0 }; },
             async releaseMediaRender() { return { ok: true }; },
             async closeConversation() { return { ok: true }; },
         },
@@ -357,10 +421,10 @@ async function openContactNameDialog(fixture) {
     const menuActions = fixture.root.querySelectorAll('.yuzi-qq-dialog-menu-item');
     const menuLabels = menuActions.map((item) => item.querySelector('.yuzi-qq-message-add-menu-label')?.textContent);
     assert.deepEqual(menuLabels, ['\u521b\u5efa\u7fa4\u804a', '\u521b\u5efa\u9891\u9053', '\u52a0\u597d\u53cb/\u7fa4'], 'Figma \u52a0\u53f7\u83dc\u5355\u4fdd\u7559\u4e09\u884c\u89c6\u89c9\u7ed3\u6784');
-    assert.equal(menuActions[0].getAttribute('aria-hidden'), 'true', '\u521b\u5efa\u7fa4\u804a\u53ea\u4f5c\u89c6\u89c9\u5c55\u793a');
+    assert.ok(fixture.root.querySelector('[data-qq-create-group]'), '\u521b\u5efa\u7fa4\u804a\u5fc5\u987b\u8fdb\u5165\u771f\u5b9e\u5efa\u7fa4\u6d41\u7a0b');
     assert.equal(menuActions[1].getAttribute('aria-hidden'), 'true', '\u521b\u5efa\u9891\u9053\u53ea\u4f5c\u89c6\u89c9\u5c55\u793a');
     const menuAction = fixture.root.querySelector('[data-qq-add-contact-menu]');
-    assert.ok(menuAction, '\u53ea\u6709\u52a0\u597d\u53cb/\u7fa4\u5217\u53ef\u8fdb\u5165\u771f\u5b9e\u6dfb\u52a0\u8054\u7cfb\u4eba\u6d41\u7a0b');
+    assert.ok(menuAction, '\u52a0\u597d\u53cb/\u7fa4\u5217\u7ee7\u7eed\u8fdb\u5165\u6dfb\u52a0\u8054\u7cfb\u4eba\u6d41\u7a0b');
     await menuAction.click();
     const input = fixture.root.querySelector('input');
     const confirm = findButton(fixture.root, '创建联系人');
@@ -448,6 +512,47 @@ async function testFailedAddPreservesDraft(createQQApp) {
     }
 }
 
+async function testCreateGroupUsesTwoExistingFriends(createQQApp) {
+    const alice = privateConversation('Alice', 'alice');
+    const bob = privateConversation('Bob', 'bob');
+    const fixture = await mountFixture(createQQApp, {
+        initialConversations: [alice, bob],
+        outcome: { name: 'unused', conversationId: 'unused', created: true, restored: false },
+    });
+    try {
+        const addContact = fixture.root.querySelector('[data-qq-add-contact]');
+        await fixture.viewport.dispatch('click', { target: addContact });
+        await flushUi();
+        await fixture.root.querySelector('[data-qq-create-group]').click();
+        await flushUi();
+
+        const name = fixture.root.querySelector('.yuzi-qq-create-group-name');
+        const picker = fixture.root.querySelector('.yuzi-qq-group-picker-list');
+        const choices = fixture.root.querySelectorAll('[data-qq-group-member-choice]');
+        const confirm = findButton(fixture.root, '创建群聊');
+        assert.ok(name && picker && confirm, '创建群聊必须打开群名和好友选择表单');
+        assert.equal(choices.length, 2, '建群候选只能来自当前已有私聊好友');
+
+        name.value = '周末群';
+        choices.forEach((choice) => { choice.checked = true; });
+        await name.dispatch('input', { target: name });
+        await picker.dispatch('change', { target: choices[0] });
+        assert.equal(confirm.disabled, false, '群名和两名好友齐全后允许创建');
+        await confirm.click();
+        await flushUi();
+
+        assert.deepEqual(fixture.calls.createGroupConversation, [{
+            name: '周末群',
+            memberIds: [alice.personId, bob.personId],
+        }]);
+        assert.ok(fixture.root.querySelector('.yuzi-qq-group-chat-view'),
+            '创建成功后必须直接进入新群聊天页');
+        assert.equal(fixture.calls.aiRequests, 0, '用户手动建群本身不能触发 AI');
+    } finally {
+        fixture.app.destroy();
+    }
+}
+
 async function main() {
     const originalGlobals = {
         document: global.document,
@@ -455,6 +560,9 @@ async function main() {
         HTMLElement: global.HTMLElement,
         Element: global.Element,
         HTMLFormElement: global.HTMLFormElement,
+        requestAnimationFrame: global.requestAnimationFrame,
+        cancelAnimationFrame: global.cancelAnimationFrame,
+        getComputedStyle: global.getComputedStyle,
     };
     global.HTMLElement = FakeElement;
     global.Element = FakeElement;
@@ -476,6 +584,7 @@ async function main() {
             '锚定菜单必须暴露稳定的 DOM 样式挂点');
 
         const { createQQApp } = await import(pathToFileURL(path.join(ROOT, 'modules/qq-v2/ui/app.js')).href);
+        await testCreateGroupUsesTwoExistingFriends(createQQApp);
         await testSuccessfulAddContactResult(createQQApp, {
             label: 'new contact',
             submittedName: '  New Contact  ',
@@ -522,6 +631,12 @@ async function main() {
         else global.Element = originalGlobals.Element;
         if (originalGlobals.HTMLFormElement === undefined) delete global.HTMLFormElement;
         else global.HTMLFormElement = originalGlobals.HTMLFormElement;
+        if (originalGlobals.requestAnimationFrame === undefined) delete global.requestAnimationFrame;
+        else global.requestAnimationFrame = originalGlobals.requestAnimationFrame;
+        if (originalGlobals.cancelAnimationFrame === undefined) delete global.cancelAnimationFrame;
+        else global.cancelAnimationFrame = originalGlobals.cancelAnimationFrame;
+        if (originalGlobals.getComputedStyle === undefined) delete global.getComputedStyle;
+        else global.getComputedStyle = originalGlobals.getComputedStyle;
     }
 }
 

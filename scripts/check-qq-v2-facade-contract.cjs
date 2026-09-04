@@ -17,7 +17,11 @@ async function main() {
         conversationId: 'group-1',
         kind: 'group',
         status: 'active',
-        group: { groupId: 'group-1', name: 'Hidden group' },
+        group: {
+            groupId: 'group-1',
+            name: 'Hidden group',
+            mutes: { 'person-1': '永久' },
+        },
         unreadCount: 9,
     };
     const runtime = {
@@ -35,7 +39,7 @@ async function main() {
                     privateProactivePresetId: 'private-proactive',
                     groupReplyPresetId: 'group-reply',
                     groupProactivePresetId: 'group-proactive',
-                    proactive: { enabled: true, everyTurns: 3 },
+                    proactive: { enabled: true, everyTurns: 3, privateWeight: 50 },
                 },
             };
         },
@@ -61,6 +65,17 @@ async function main() {
                     senderType: 'person',
                     type: 'text',
                     content: input.conversationId === 'group-1' ? 'must-not-leak' : 'Hello',
+                    ...(input.conversationId === 'group-1'
+                        ? {
+                            quote: {
+                                status: 'available',
+                                messageId: 'quoted-1',
+                                content: 'quoted content',
+                                senderName: 'Alice',
+                                storyTime: '2042-05-20 09:29',
+                            },
+                        }
+                        : {}),
                 }],
                 hasMore: false,
                 nextBeforeSequence: null,
@@ -77,7 +92,7 @@ async function main() {
         },
         async updateGlobalSettings(input) {
             calls.push(['updateGlobalSettings', input]);
-            return { ...input.settings, groupReplyPresetId: 'group-reply', groupProactivePresetId: 'group-proactive' };
+            return { ...input.settings };
         },
         async sendManual(input) {
             calls.push(['sendManual', input]);
@@ -86,19 +101,57 @@ async function main() {
         async openConversation(input) { calls.push(['openConversation', input]); return { unreadCount: 0 }; },
         async updatePrivateProfile(input) { calls.push(['updatePrivateProfile', input]); return {}; },
         async removePrivateFriend(input) { calls.push(['removePrivateFriend', input]); return {}; },
-        async handleIncomingTransfer(input) { calls.push(['handleIncomingTransfer', input]); return {}; },
-        async setMessageSelectedForInjection(input) { calls.push(['setMessageSelectedForInjection', input]); return {}; },
+        async handleIncomingTransfer(input) {
+            calls.push(['handleIncomingTransfer', input]);
+            return { messageId: input.messageId, type: 'transfer' };
+        },
+        async setMessageSelectedForInjection(input) {
+            calls.push(['setMessageSelectedForInjection', input]);
+            return { message: { messageId: input.messageId }, injection: {} };
+        },
+        async setMessagesSelectedForInjection(input) {
+            calls.push(['setMessagesSelectedForInjection', input]);
+            return { messages: input.messageIds.map((messageId) => ({ messageId })), injection: {} };
+        },
         async setConversationInjection(input) { calls.push(['setConversationInjection', input]); return {}; },
-        async deleteConversation(input) { calls.push(['deleteConversation', input]); return {}; },
-        async deleteMessages(input) { calls.push(['deleteMessages', input]); return {}; },
-        async retryManual(input) { calls.push(['retryManual', input]); return {}; },
+        async deleteConversation(input) {
+            calls.push(['deleteConversation', input]);
+            return { deleted: true, mode: input.conversationId === 'group-1' ? 'group-history' : 'private' };
+        },
+        async generateMessageImage(input) {
+            calls.push(['generateMessageImage', input]);
+            return { message: { messageId: input.messageId, type: 'image' } };
+        },
+        async deleteMessages(input) {
+            calls.push(['deleteMessages', input]);
+            return { deletedMessageIds: input.messageIds };
+        },
+        async retryManual(input) {
+            calls.push(['retryManual', input]);
+            return { queued: true, pendingUserMessageCount: 1 };
+        },
         async cancelManualRequest(input) {
             calls.push(['cancelManualRequest', input]);
             return { cancelled: true, phase: 'failed', pendingUserMessageCount: 2 };
         },
-        async createGroupConversation(input) { calls.push(['createGroupConversation', input]); },
-        async manageGroup(input) { calls.push(['manageGroup', input]); },
-        async updateGroupProfile(input) { calls.push(['updateGroupProfile', input]); },
+        async createGroupConversation(input) {
+            calls.push(['createGroupConversation', input]);
+            return {
+                group: { groupId: 'group-2', name: input.name, ownerId: '__self__', memberIds: ['person-1', 'person-2'] },
+                conversation: { conversationId: 'group-2', kind: 'group', groupId: 'group-2' },
+            };
+        },
+        async manageGroup(input) {
+            calls.push(['manageGroup', input]);
+            return { groupId: input.groupId, name: input.value || 'Hidden group', ownerId: '__self__', memberIds: ['person-1', 'person-2'] };
+        },
+        async updateGroupProfile(input) {
+            calls.push(['updateGroupProfile', input]);
+            return {
+                group: groupConversation.group,
+                conversation: { ...groupConversation, backgroundAssetId: input.profile.backgroundAssetId },
+            };
+        },
     };
     const facade = createQQV2Facade({ runtime });
 
@@ -109,9 +162,9 @@ async function main() {
         user: { name: 'Traveler', avatar: 'user.webp' },
         storyTime: '2042-05-20 09:30',
     });
-    assert.equal(Object.hasOwn(bootstrap.globalSettings, 'groupReplyPresetId'), false);
-    assert.equal(Object.hasOwn(bootstrap.globalSettings, 'groupProactivePresetId'), false);
-    assert.deepEqual(bootstrap.globalSettings.proactive, { enabled: true, everyTurns: 3 });
+    assert.equal(bootstrap.globalSettings.groupReplyPresetId, 'group-reply');
+    assert.equal(bootstrap.globalSettings.groupProactivePresetId, 'group-proactive');
+    assert.deepEqual(bootstrap.globalSettings.proactive, { enabled: true, everyTurns: 3, privateWeight: 50 });
     assert.equal(JSON.stringify(bootstrap).includes('must-not-leak'), false);
 
     calls.length = 0;
@@ -121,33 +174,36 @@ async function main() {
         conversationId: conversation.conversationId,
         kind: conversation.kind,
         title: conversation.title,
-    })), [{ conversationId: 'private-1', kind: 'private', title: 'Ali' }]);
+    })), [
+        { conversationId: 'private-1', kind: 'private', title: 'Ali' },
+        { conversationId: 'group-1', kind: 'group', title: 'Hidden group' },
+    ]);
 
     const privateProfile = await facade.query.conversation({ conversationId: 'private-1' });
     assert.equal(privateProfile.conversation.signature, 'Hello there');
     assert.equal(privateProfile.conversation.gender, 'female');
     assert.equal(privateProfile.conversation.birthday, '2000-01-01');
     calls.length = 0;
-    assert.deepEqual(await facade.query.conversation({ conversationId: 'group-1' }), {
-        ok: false,
-        status: 'not-found',
-        reason: 'conversation-not-found',
-    });
+    const groupProfile = await facade.query.conversation({ conversationId: 'group-1' });
+    assert.equal(groupProfile.conversation.kind, 'group');
+    assert.deepEqual(groupProfile.conversation.group.mutes, { 'person-1': '永久' });
     assert.deepEqual(calls, [['getConversation', { scopeId: 'scope-alpha', conversationId: 'group-1' }]]);
 
     calls.length = 0;
-    assert.deepEqual(await facade.query.messages({ conversationId: 'group-1' }), {
-        ok: false,
-        status: 'not-found',
-        reason: 'conversation-not-found',
-    });
-    assert.deepEqual(calls, [['getConversation', { scopeId: 'scope-alpha', conversationId: 'group-1' }]]);
+    const groupMessages = await facade.query.messages({ conversationId: 'group-1' });
+    assert.equal(groupMessages.page.items[0].content, 'must-not-leak');
+    assert.equal(groupMessages.page.items[0].quote.senderName, 'Alice');
+    assert.equal(groupMessages.page.items[0].quote.storyTime, '2042-05-20 09:29');
+    assert.deepEqual(calls, [
+        ['getConversation', { scopeId: 'scope-alpha', conversationId: 'group-1' }],
+        ['listMessages', { scopeId: 'scope-alpha', conversationId: 'group-1' }],
+    ]);
 
     calls.length = 0;
     assert.deepEqual(await facade.query.unread(), {
         ok: true,
         status: 'ready',
-        unread: { total: 2, display: '2', byConversationId: { 'private-1': 2 } },
+        unread: { total: 11, display: '11', byConversationId: { 'private-1': 2, 'group-1': 9 } },
     });
     assert.deepEqual(calls, [
         ['getUnreadState', { scopeId: 'scope-alpha' }],
@@ -158,55 +214,96 @@ async function main() {
     assert.deepEqual(await facade.query.proactiveState(), {
         ok: true,
         status: 'ready',
-        proactive: { enabled: true, everyTurns: 3 },
+        proactive: { enabled: true, everyTurns: 3, privateWeight: 50 },
     });
     assert.deepEqual(calls, [['getProactiveState', { scopeId: 'scope-alpha' }]]);
 
     calls.length = 0;
-    assert.equal((await facade.intent.createGroupConversation({ name: 'Hidden group' })).status, 'disabled');
-    assert.equal((await facade.intent.manageGroup({ groupId: 'group-1', action: 'rename' })).status, 'disabled');
-    assert.equal((await facade.intent.updateGroupProfile({ conversationId: 'group-1' })).status, 'disabled');
-    assert.deepEqual(calls, []);
+    assert.equal((await facade.intent.createGroupConversation({
+        name: 'New group',
+        memberIds: ['person-1', 'person-2'],
+    })).ok, true);
+    assert.equal((await facade.intent.manageGroup({
+        groupId: 'group-1',
+        action: 'rename',
+        value: 'Renamed group',
+    })).ok, true);
+    assert.equal((await facade.intent.updateGroupProfile({
+        conversationId: 'group-1',
+        profile: { backgroundAssetId: 'background-1' },
+    })).ok, true);
+    assert.deepEqual(calls.map(([name]) => name), [
+        'createGroupConversation',
+        'manageGroup',
+        'getConversation',
+        'updateGroupProfile',
+    ]);
+
+    calls.length = 0;
+    assert.deepEqual(await facade.intent.openConversation({ conversationId: 'group-1' }), {
+        ok: true,
+        status: 'accepted',
+        unreadCount: 0,
+    });
+    assert.deepEqual(calls, [
+        ['getConversation', { scopeId: 'scope-alpha', conversationId: 'group-1' }],
+        ['openConversation', { scopeId: 'scope-alpha', conversationId: 'group-1' }],
+    ]);
 
     calls.length = 0;
     for (const [name, run] of [
-        ['request state', () => facade.query.requestState({ conversationId: 'group-1' })],
-        ['open conversation', () => facade.intent.openConversation({ conversationId: 'group-1' })],
         ['update private profile', () => facade.intent.updatePrivateProfile({ conversationId: 'group-1', profile: {} })],
         ['remove private friend', () => facade.intent.removePrivateFriend({ conversationId: 'group-1' })],
-        ['handle incoming transfer', () => facade.intent.handleIncomingTransfer({ conversationId: 'group-1', messageId: 'message-1', action: 'accept' })],
-        ['set message injection', () => facade.intent.setMessageInjection({ conversationId: 'group-1', messageId: 'message-1', selected: true })],
-        ['set conversation injection', () => facade.intent.setConversationInjection({ conversationId: 'group-1', injection: { enabled: true } })],
-        ['delete conversation', () => facade.intent.deleteConversation({ conversationId: 'group-1' })],
-        ['delete messages', () => facade.intent.deleteMessages({ conversationId: 'group-1', messageIds: ['message-1'] })],
-        ['retry request', () => facade.intent.retryRequest({ conversationId: 'group-1' })],
-        ['cancel manual request', () => facade.intent.cancelManualRequest({ conversationId: 'group-1' })],
-        ['send message', () => facade.intent.sendMessage({ conversationId: 'group-1', message: { type: 'text', content: 'No group messages' } })],
     ]) {
         calls.length = 0;
         assert.deepEqual(await run(), {
             ok: false,
             status: 'not-found',
             reason: 'conversation-not-found',
-        }, `${name} must hide a group conversation from the UI`);
-        assert.deepEqual(calls, [['getConversation', { scopeId: 'scope-alpha', conversationId: 'group-1' }]],
-            `${name} must not forward a group conversation to its runtime action`);
+        }, `${name} must remain private-only`);
+        assert.deepEqual(calls, [['getConversation', { scopeId: 'scope-alpha', conversationId: 'group-1' }]]);
+    }
+
+    for (const [name, runtimeCall, run] of [
+        ['request state', 'getRequestState', () => facade.query.requestState({ conversationId: 'group-1' })],
+        ['handle incoming transfer', 'handleIncomingTransfer', () => facade.intent.handleIncomingTransfer({ conversationId: 'group-1', messageId: 'message-1', action: 'accept' })],
+        ['set message injection', 'setMessageSelectedForInjection', () => facade.intent.setMessageInjection({ conversationId: 'group-1', messageId: 'message-1', selected: true })],
+        ['set messages injection', 'setMessagesSelectedForInjection', () => facade.intent.setMessagesInjection({ conversationId: 'group-1', messageIds: ['message-1'], selected: true })],
+        ['set conversation injection', 'setConversationInjection', () => facade.intent.setConversationInjection({ conversationId: 'group-1', injection: { enabled: true } })],
+        ['delete conversation', 'deleteConversation', () => facade.intent.deleteConversation({ conversationId: 'group-1' })],
+        ['generate message image', 'generateMessageImage', () => facade.intent.generateMessageImage({ conversationId: 'group-1', messageId: 'message-1' })],
+        ['delete messages', 'deleteMessages', () => facade.intent.deleteMessages({ conversationId: 'group-1', messageIds: ['message-1'] })],
+        ['retry request', 'retryManual', () => facade.intent.retryRequest({ conversationId: 'group-1' })],
+        ['cancel manual request', 'cancelManualRequest', () => facade.intent.cancelManualRequest({ conversationId: 'group-1' })],
+        ['send message', 'sendManual', () => facade.intent.sendMessage({ conversationId: 'group-1', message: { type: 'text', content: 'Hello group' } })],
+    ]) {
+        calls.length = 0;
+        assert.equal((await run()).ok, true, `${name} must support group conversations`);
+        assert.equal(calls[0][0], 'getConversation');
+        assert.equal(calls[1][0], runtimeCall);
     }
 
     calls.length = 0;
     const updated = await facade.intent.updateGlobalSettings({
         settings: {
             privateReplyPresetId: 'private-next',
-            groupReplyPresetId: 'must-not-save',
-            groupProactivePresetId: 'must-not-save',
+            groupReplyPresetId: 'group-reply-next',
+            groupProactivePresetId: 'group-proactive-next',
+            proactive: { privateWeight: 10 },
         },
     });
     assert.equal(updated.ok, true);
-    assert.equal(Object.hasOwn(updated.settings, 'groupReplyPresetId'), false);
-    assert.equal(Object.hasOwn(updated.settings, 'groupProactivePresetId'), false);
+    assert.equal(updated.settings.groupReplyPresetId, 'group-reply-next');
+    assert.equal(updated.settings.groupProactivePresetId, 'group-proactive-next');
+    assert.equal(updated.settings.proactive.privateWeight, 10);
     assert.deepEqual(calls, [['updateGlobalSettings', {
         scopeId: 'scope-alpha',
-        settings: { privateReplyPresetId: 'private-next' },
+        settings: {
+            privateReplyPresetId: 'private-next',
+            groupReplyPresetId: 'group-reply-next',
+            groupProactivePresetId: 'group-proactive-next',
+            proactive: { privateWeight: 10 },
+        },
         userName: 'Traveler',
         storyTime: '2042-05-20 09:30',
     }]]);

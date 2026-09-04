@@ -292,7 +292,7 @@ async function testProjectionContentUsesYuziEnvelopeAndPreciseMessageTimes() {
             '[2042-05-01]',
             `[09:00] 玩家：${fixture.conversation.conversationId} 的群消息`,
             '[09:01] 林知夏：图片：群聊照片',
-            '[09:02] 系统：__self__修改了群名称',
+            '[09:02] 系统：用户修改了群名称',
             '</yuzi>',
         ].join('\n'));
     }

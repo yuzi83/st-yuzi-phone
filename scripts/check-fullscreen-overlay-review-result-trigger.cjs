@@ -1997,8 +1997,95 @@ function testProductionIndexUsesReviewResultChannel() {
     );
 }
 
+async function testChronicleTodayRelationOnlyUpdatesAreSilent() {
+    const { createReviewResultCoordinator } = await importModule(
+        'modules/fullscreen-overlay/review-result-coordinator.js',
+    );
+    let reviewCallback = null;
+    const stableCalls = [];
+    const coordinator = createReviewResultCoordinator({
+        subscribeResults(callback) {
+            reviewCallback = callback;
+            return () => {
+                reviewCallback = null;
+            };
+        },
+        async onStableSnapshot(_snapshot, metadata) {
+            stableCalls.push(metadata);
+            return true;
+        },
+    });
+
+    try {
+        coordinator.start();
+        await coordinator.resumeWithBaseline({});
+        reviewCallback({
+            status: 'ready',
+            sessionKey: 'chat-a:floor-chronicle',
+            chatKey: 'chat-a',
+            changedSnapshot: {
+                sheet_chronicle: {
+                    name: '纪要表',
+                    content: [
+                        ['row_id', '与今天的关系', '概览'],
+                        ['1', '昨天', '旧纪要一'],
+                        ['2', '3天前', '旧纪要二'],
+                        ['3', '今天', '真实修改'],
+                        ['4', '今天', '本楼新增'],
+                    ],
+                },
+            },
+            tables: [{
+                sheetKey: 'sheet_chronicle',
+                tableName: '纪要表',
+                changes: [{
+                    type: 'update',
+                    rowKey: '1',
+                    rowId: '1',
+                    rowIndex: 0,
+                    fields: [{ field: '与今天的关系', before: '前天', after: '昨天' }],
+                }, {
+                    type: 'update',
+                    rowKey: '2',
+                    rowId: '2',
+                    rowIndex: 1,
+                    fields: [{ field: 'today_relation', before: '2天前', after: '3天前' }],
+                }, {
+                    type: 'update',
+                    rowKey: '3',
+                    rowId: '3',
+                    rowIndex: 2,
+                    fields: [
+                        { field: '与今天的关系', before: '昨天', after: '今天' },
+                        { field: '概览', before: '旧内容', after: '真实修改' },
+                    ],
+                }, {
+                    type: 'insert',
+                    rowKey: '4',
+                    rowId: '4',
+                    rowIndex: 3,
+                    fields: [{ field: '概览', before: '', after: '本楼新增' }],
+                }],
+            }],
+        });
+        await flushMicrotasks();
+
+        assert.deepEqual(
+            stableCalls[0].changedRowsBySheetKey.sheet_chronicle,
+            {
+                rowIndexes: [2, 3],
+                rowIds: ['3', '4'],
+            },
+            '纪要仅更新“与今天的关系”的旧行必须静默，真实修改与新增仍需播放',
+        );
+    } finally {
+        coordinator.stop();
+    }
+}
+
 async function main() {
     await testReadyResultUsesAuthoritativeChangedSnapshotAndRowScope();
+    await testChronicleTodayRelationOnlyUpdatesAreSilent();
     await testBlockingCoordinatorRegressions();
     await testReviewResultSemanticDeduplication();
     await testSnapshotRetryAndCommitAfterAcceptance();

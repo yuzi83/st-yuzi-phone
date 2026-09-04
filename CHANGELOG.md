@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 外观字体库新增远程字体 CSS URL 导入：用户可保存显示名称、HTTPS 字体 CSS URL 与字体族名 `family`；运行时通过动态 `@import` 引用远程字体 CSS，不下载、不缓存远程 CSS 或字体文件，也不支持任意 CSS 片段粘贴。
 - P2 文档与发布链路 contract 检查，覆盖文档入口、架构相对链接、manifest dist 入口、dist 提交规则和发布命令顺序。
 
+## [2.2.2] - 2026-09-04
+
+### Changed
+
+- 优化体验。
+
 ## [2.2.1] - 2026-09-04
 
 ### Changed

@@ -41,6 +41,8 @@ function cloneGlobalSettings(settings) {
         activeApiPresetId: asText(source.activeApiPresetId, 256),
         privateReplyPresetId: asText(source.privateReplyPresetId, 256),
         privateProactivePresetId: asText(source.privateProactivePresetId, 256),
+        groupReplyPresetId: asText(source.groupReplyPresetId, 256),
+        groupProactivePresetId: asText(source.groupProactivePresetId, 256),
         hostContextTurns: Number.isInteger(Number(source.hostContextTurns)) ? Number(source.hostContextTurns) : 3,
         conversationHistoryLimit: Number.isInteger(Number(source.conversationHistoryLimit))
             ? Number(source.conversationHistoryLimit)
@@ -83,9 +85,13 @@ function cloneWorldbookSettings(settings) {
 function cloneProactiveSettings(settings) {
     const source = asObject(settings);
     const everyTurns = Number(source.everyTurns);
+    const privateWeight = Number(source.privateWeight);
     return Object.freeze({
         enabled: source.enabled === true,
         everyTurns: Number.isInteger(everyTurns) && everyTurns > 0 ? everyTurns : 5,
+        privateWeight: Number.isInteger(privateWeight) && privateWeight >= 0 && privateWeight <= 100
+            ? privateWeight
+            : 50,
     });
 }
 
@@ -105,10 +111,6 @@ function disabled(capability) {
         reason: 'private-only',
         capability,
     });
-}
-
-function groupsAreDisabled() {
-    return true;
 }
 
 function failed(error) {
@@ -267,6 +269,7 @@ function cloneMessagePreview(message) {
         content: String(source.content ?? ''),
         senderId: asText(source.senderId, 256),
         senderType: asText(source.senderType, 32),
+        senderName: asText(source.senderName, 256),
         storyTime: asText(source.storyTime, 128),
     });
 }
@@ -282,9 +285,15 @@ function cloneGroup(group) {
         ownerId: asText(source.ownerId, 256),
         adminIds: Object.freeze(asArray(source.adminIds).map((item) => asText(item, 256)).filter(Boolean)),
         memberIds: Object.freeze(asArray(source.memberIds).map((item) => asText(item, 256)).filter(Boolean)),
+        members: Object.freeze(asArray(source.members).map(clonePerson)),
         selfRole: asText(source.selfRole, 32) || 'member',
         selfExited: source.selfExited === true,
         selfMuted: source.selfMuted === true || Boolean(mutes.__self__),
+        mutes: Object.freeze(Object.fromEntries(
+            Object.entries(mutes)
+                .map(([personId, until]) => [asText(personId, 256), asText(until, 128)])
+                .filter(([personId, until]) => personId && until),
+        )),
     });
 }
 
@@ -313,6 +322,7 @@ function cloneConversation(conversation) {
         gender: kind === 'private' ? asText(source.gender || person.gender, 120) : '',
         birthday: kind === 'private' ? asText(source.birthday || person.birthday, 120) : '',
         unreadCount: Math.max(0, Math.trunc(asNumber(source.unreadCount))),
+        hiddenFromMessages: source.hiddenFromMessages === true,
         canSend: !readOnly && !muted,
         readOnly,
         muted,
@@ -326,10 +336,14 @@ function cloneConversation(conversation) {
 function cloneQuote(quote) {
     if (!quote || typeof quote !== 'object') return null;
     const source = asObject(quote);
+    const senderName = asText(source.senderName, 256);
+    const storyTime = asText(source.storyTime, 128);
     return Object.freeze({
         status: asText(source.status, 32) || 'available',
         messageId: asText(source.messageId, 256),
         content: String(source.content ?? ''),
+        ...(senderName ? { senderName } : {}),
+        ...(storyTime ? { storyTime } : {}),
     });
 }
 
@@ -477,6 +491,10 @@ async function hasPrivateConversation(runtime, scopeId, conversationId) {
     return Boolean(conversation) && conversation.kind !== 'group';
 }
 
+async function hasConversation(runtime, scopeId, conversationId) {
+    return Boolean(await runtime.getConversation({ scopeId, conversationId }));
+}
+
 /**
  * Stable application boundary for the future Figma QQ UI.
  * The runtime is intentionally injected: this module never reaches into IndexedDB,
@@ -576,9 +594,7 @@ export function createQQV2Facade(options = {}) {
                 return Object.freeze({
                     ok: true,
                     status: asText(snapshot.phase, 32) || 'ready',
-                    conversations: Object.freeze(asArray(conversations)
-                        .map(cloneConversation)
-                        .filter((conversation) => conversation.kind === 'private')),
+                    conversations: Object.freeze(asArray(conversations).map(cloneConversation)),
                 });
             },
             async messages(input = {}) {
@@ -595,7 +611,7 @@ export function createQQV2Facade(options = {}) {
                     reason: 'conversation-required',
                 });
                 const conversation = await runtime.getConversation({ scopeId: context.scopeId, conversationId });
-                if (!conversation || conversation.kind === 'group') return conversationNotFound();
+                if (!conversation) return conversationNotFound();
                 const beforeSequence = Number(input.beforeSequence);
                 const limit = Number(input.limit);
                 const page = await runtime.listMessages({
@@ -619,7 +635,7 @@ export function createQQV2Facade(options = {}) {
                 if (!context.scopeId) return unavailable('currentScope');
                 if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
                 const conversation = await runtime.getConversation({ scopeId: context.scopeId, conversationId });
-                if (!conversation || conversation.kind === 'group') return conversationNotFound();
+                if (!conversation) return conversationNotFound();
                 return Object.freeze({
                     ok: true,
                     status: asText(snapshot.phase, 32) || 'ready',
@@ -714,7 +730,7 @@ export function createQQV2Facade(options = {}) {
                     const conversationId = asText(input.conversationId, 256);
                     if (!context.scopeId) return unavailable('currentScope');
                     if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const request = await runtime.getRequestState({ scopeId: context.scopeId, conversationId });
                 return Object.freeze({
                     ok: true,
@@ -733,12 +749,11 @@ export function createQQV2Facade(options = {}) {
                     runtime.getUnreadState({ scopeId: context.scopeId }),
                     runtime.listConversations({ scopeId: context.scopeId }),
                 ]);
-                const privateIds = new Set(asArray(conversations)
-                    .filter((conversation) => conversation?.kind !== 'group')
+                const conversationIds = new Set(asArray(conversations)
                     .map((conversation) => asText(conversation?.conversationId, 256))
                     .filter(Boolean));
                 const byConversationId = Object.fromEntries(Object.entries(asObject(unread).byConversationId || {})
-                    .filter(([conversationId]) => privateIds.has(asText(conversationId, 256))));
+                    .filter(([conversationId]) => conversationIds.has(asText(conversationId, 256))));
                 const total = Object.values(byConversationId)
                     .reduce((sum, count) => sum + Math.max(0, Math.trunc(asNumber(count))), 0);
                 return Object.freeze({
@@ -1016,7 +1031,7 @@ export function createQQV2Facade(options = {}) {
                     const conversationId = asText(input.conversationId, 256);
                     if (!context.scopeId) return unavailable('currentScope');
                     if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const result = asObject(await runtime.openConversation({ scopeId: context.scopeId, conversationId }));
                     return Object.freeze({
                         ok: true,
@@ -1049,8 +1064,34 @@ export function createQQV2Facade(options = {}) {
                     return failed(error);
                 }
             },
-            async updateGroupProfile() {
-                return disabled('updateGroupProfile');
+            async updateGroupProfile(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.getConversation !== 'function') return unavailable('getConversation');
+                if (typeof runtime.updateGroupProfile !== 'function') return unavailable('updateGroupProfile');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    const conversationId = asText(input.conversationId, 256);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
+                    const conversation = await runtime.getConversation({ scopeId: context.scopeId, conversationId });
+                    if (!conversation || conversation.kind !== 'group') return conversationNotFound();
+                    const result = asObject(await runtime.updateGroupProfile({
+                        scopeId: context.scopeId,
+                        conversationId,
+                        profile: asObject(input.profile),
+                    }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        result: Object.freeze({
+                            group: cloneGroup(result.group),
+                            conversation: cloneConversation({ ...asObject(result.conversation), group: result.group }),
+                        }),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
             },
             async updateCurrentProfile(input = {}) {
                 if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
@@ -1208,7 +1249,7 @@ export function createQQV2Facade(options = {}) {
                     if (!['accept', 'return'].includes(action)) {
                         return Object.freeze({ ok: false, status: 'invalid', reason: 'transfer-action-invalid' });
                     }
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const message = await runtime.handleIncomingTransfer({
                         scopeId: context.scopeId,
                         conversationId,
@@ -1264,7 +1305,6 @@ export function createQQV2Facade(options = {}) {
                 }
             },
             async manageGroup(input = {}) {
-                if (groupsAreDisabled()) return disabled('manageGroup');
                 if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
                 if (typeof runtime.manageGroup !== 'function') return unavailable('manageGroup');
                 try {
@@ -1468,7 +1508,7 @@ export function createQQV2Facade(options = {}) {
                     if (!context.scopeId) return unavailable('currentScope');
                     if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
                     if (!messageId) return Object.freeze({ ok: false, status: 'invalid', reason: 'message-required' });
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const result = asObject(await runtime.setMessageSelectedForInjection({
                         scopeId: context.scopeId,
                         conversationId,
@@ -1505,7 +1545,7 @@ export function createQQV2Facade(options = {}) {
                     if (!context.scopeId) return unavailable('currentScope');
                     if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
                     if (messageIds.length === 0) return Object.freeze({ ok: false, status: 'invalid', reason: 'messages-required' });
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const result = asObject(await runtime.setMessagesSelectedForInjection({
                         scopeId: context.scopeId,
                         conversationId,
@@ -1536,7 +1576,7 @@ export function createQQV2Facade(options = {}) {
                     const conversationId = asText(input.conversationId, 256);
                     if (!context.scopeId) return unavailable('currentScope');
                     if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const injection = await runtime.setConversationInjection({
                         scopeId: context.scopeId,
                         conversationId,
@@ -1564,10 +1604,7 @@ export function createQQV2Facade(options = {}) {
                     if (expectedScopeId && expectedScopeId !== context.scopeId) {
                         return Object.freeze({ ok: false, status: 'stale', reason: 'scope-changed' });
                     }
-                    const source = asObject(input.settings);
-                    const settings = { ...source };
-                    delete settings.groupReplyPresetId;
-                    delete settings.groupProactivePresetId;
+                    const settings = { ...asObject(input.settings) };
                     const next = await runtime.updateGlobalSettings({
                         scopeId: context.scopeId,
                         settings,
@@ -1593,7 +1630,7 @@ export function createQQV2Facade(options = {}) {
                     const conversationId = asText(input.conversationId, 256);
                     if (!context.scopeId) return unavailable('currentScope');
                     if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const result = asObject(await runtime.deleteConversation({
                         scopeId: context.scopeId,
                         conversationId,
@@ -1636,7 +1673,7 @@ export function createQQV2Facade(options = {}) {
                     if (!messageId) {
                         return Object.freeze({ ok: false, status: 'invalid', reason: 'message-required' });
                     }
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) {
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) {
                         return conversationNotFound();
                     }
                     const result = asObject(await runtime.generateMessageImage({
@@ -1668,7 +1705,7 @@ export function createQQV2Facade(options = {}) {
                     if (!context.scopeId) return unavailable('currentScope');
                     if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
                     if (messageIds.length === 0) return Object.freeze({ ok: false, status: 'invalid', reason: 'messages-required' });
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const result = asObject(await runtime.deleteMessages({
                         scopeId: context.scopeId,
                         conversationId,
@@ -1698,7 +1735,7 @@ export function createQQV2Facade(options = {}) {
                     const conversationId = asText(input.conversationId, 256);
                     if (!context.scopeId) return unavailable('currentScope');
                     if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const result = asObject(await runtime.retryManual({
                         scopeId: context.scopeId,
                         conversationId,
@@ -1727,7 +1764,7 @@ export function createQQV2Facade(options = {}) {
                     const conversationId = asText(input.conversationId, 256);
                     if (!context.scopeId) return unavailable('currentScope');
                     if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const result = asObject(await runtime.cancelManualRequest({
                         scopeId: context.scopeId,
                         conversationId,
@@ -1746,7 +1783,6 @@ export function createQQV2Facade(options = {}) {
                 }
             },
             async createGroupConversation(input = {}) {
-                if (groupsAreDisabled()) return disabled('createGroupConversation');
                 if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
                 if (typeof runtime.createGroupConversation !== 'function') return unavailable('createGroupConversation');
                 try {
@@ -1815,7 +1851,7 @@ export function createQQV2Facade(options = {}) {
                     const conversationId = asText(input.conversationId, 256);
                     if (!context.scopeId) return unavailable('currentScope');
                     if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
-                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const result = asObject(await runtime.sendManual({
                         scopeId: context.scopeId,
                         conversationId,

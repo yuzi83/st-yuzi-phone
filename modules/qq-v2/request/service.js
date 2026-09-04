@@ -162,6 +162,9 @@ export function createQQV2RequestService(options = {}) {
     const afterManualMutation = typeof options.afterManualMutation === 'function'
         ? options.afterManualMutation
         : async () => {};
+    const afterManualError = typeof options.afterManualError === 'function'
+        ? options.afterManualError
+        : async () => {};
     const runtimeSettingsResolver = typeof options.runtimeSettingsResolver === 'function'
         ? options.runtimeSettingsResolver
         : async (_scopeId, scope) => scope?.settings || {};
@@ -293,6 +296,14 @@ export function createQQV2RequestService(options = {}) {
             await afterManualMutation(input);
         } catch {
             // Worldbook projection and other observers cannot undo a persisted QQ fact.
+        }
+    };
+
+    const notifyManualError = async (input) => {
+        try {
+            await afterManualError(input);
+        } catch {
+            // Failure observers cannot change the retryable request state.
         }
     };
 
@@ -458,6 +469,14 @@ export function createQQV2RequestService(options = {}) {
                     phase: 'failed',
                     pendingUserMessageCount: pendingCount,
                     error: asText(error?.message || 'QQ request failed', 1000),
+                });
+                await notifyManualError({
+                    kind: 'request-failed',
+                    scopeId: entry.scopeId,
+                    conversationId: entry.conversationId,
+                    scopeSession: entry.scopeSession,
+                    error,
+                    state: cloneState(states.get(entry.key)),
                 });
             }
         } finally {
@@ -703,8 +722,8 @@ export function createQQV2RequestService(options = {}) {
             if (!scopeId || !conversationId) throw new QQV2RequestError('QQ scope and conversation are required', 'invalid_request');
             const scopeSession = captureReadyScopeSession(scopeId);
             const conversation = await repository.getConversation(scopeId, conversationId);
-            if (conversation?.kind !== 'private' || conversation?.status !== 'active') {
-                throw new QQV2RequestError('QQ currently supports active private conversations only', 'private_only');
+            if (!['private', 'group'].includes(conversation?.kind) || conversation?.status !== 'active') {
+                throw new QQV2RequestError('QQ conversation is unavailable', 'conversation_unavailable');
             }
             preemptProactiveForManual();
             const key = requestKey(scopeId, conversationId);
@@ -751,8 +770,8 @@ export function createQQV2RequestService(options = {}) {
             const scopeSession = captureReadyScopeSession(scopeId);
             const conversation = await repository.getConversation(scopeId, conversationId);
             if (!conversation) throw new QQV2RequestError('QQ conversation no longer exists', 'conversation_missing');
-            if (conversation.kind !== 'private' || conversation.status !== 'active') {
-                throw new QQV2RequestError('QQ currently supports active private conversations only', 'private_only');
+            if (!['private', 'group'].includes(conversation.kind) || conversation.status !== 'active') {
+                throw new QQV2RequestError('QQ conversation is unavailable', 'conversation_unavailable');
             }
             const messages = await repository.listMessages(scopeId, conversationId);
             const handledSequence = Number(conversation.lastHandledUserSequence) || 0;

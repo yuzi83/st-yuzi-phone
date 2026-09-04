@@ -5,6 +5,7 @@ const source = fs.readFileSync('modules/qq-v2/ui/app.js', 'utf8');
 
 const uploadFunctions = [
     'updatePrivateProfileAsset',
+    'updateConversationBackgroundAsset',
     'updateCurrentProfileAsset',
     'uploadImageLibraryAsset',
 ];
@@ -25,8 +26,8 @@ const profileUploads = source.slice(
     source.indexOf('const updatePrivateProfileAsset ='),
     source.indexOf('const uploadImageLibraryAsset ='),
 );
-assert.equal((profileUploads.match(/multiple:\s*false/g) || []).length, 2,
-    'current-user and NPC profile editors must remain single-file controls');
+assert.equal((profileUploads.match(/multiple:\s*false/g) || []).length, 3,
+    'current-user, NPC profile and conversation background uploads must remain single-file controls');
 
 const libraryUpload = source.slice(
     source.indexOf('const uploadImageLibraryAsset ='),

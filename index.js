@@ -1,7 +1,7 @@
 // index.js
 /**
  * 玉子手机 - 独立扩展入口
- * @version 2.2.1
+ * @version 2.2.2
  * @description 集成 SillyTavern 事件系统、TavernHelper API、Slash 命令、错误处理等
  * @fix P0-001 修复 innerHTML XSS 风险
  * @fix P0-002 修复事件监听器内存泄漏
@@ -72,7 +72,7 @@ import {
 } from './modules/qq-v2/runtime/default-runtime.js';
 
 // 全局事件管理器 - 用于统一管理事件监听器的清理
-const EXTENSION_VERSION = '2.2.1';
+const EXTENSION_VERSION = '2.2.2';
 const globalEventManager = new EventManager();
 const logger = Logger.withScope({ scope: 'index' });
 const INSTANCE_KEY = '__YUZI_PHONE_INSTANCE__';

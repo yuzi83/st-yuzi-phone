@@ -93,7 +93,8 @@ async function runProactiveCycle(options = {}) {
         apiPresetResolver: async (presetId) => ({ presetId }),
         promptPresetResolver: async (presetId) => ({ presetId }),
         buildProactiveSections: () => '最近聊天记录',
-        buildProactiveRequest: async () => [{ role: 'system', content: '主动周期。' }],
+        buildProactiveRequest: options.buildProactiveRequest
+            || (async () => [{ role: 'system', content: '主动周期。' }]),
         backend: {
             async generate() {
                 return { content: options.backendContent || '' };
@@ -111,7 +112,7 @@ async function runProactiveCycle(options = {}) {
         onProjectionError: options.onProjectionError,
     });
 
-    await service.enqueueProactiveCycle({ scopeId: fixture.scopeId, kind: options.kind });
+    await service.enqueueProactiveCycle({ scopeId: fixture.scopeId, kind: options.kind || 'private' });
     const result = await requestService.proactiveEntries[0].execute({
         scopeId: fixture.scopeId,
         signal: new AbortController().signal,
@@ -155,7 +156,7 @@ async function testEnabledPrivateCycleCallsBackendAndCommitsActions() {
         },
     });
 
-    assert.deepEqual(await service.enqueueProactiveCycle({ scopeId }), {
+    assert.deepEqual(await service.enqueueProactiveCycle({ scopeId, kind: 'private' }), {
         triggered: true,
         cycleKind: 'private',
         queued: true,
@@ -472,6 +473,125 @@ async function testCreatedConversationFirstMessageStillSyncsWorldbook() {
     assert.deepEqual(syncCalls[0].conversationIds, ['private-new']);
 }
 
+async function testCreatedGroupFirstMessageSyncsAndNotifies() {
+    const fixture = createRepositoryFixture({
+        conversations: [
+            { conversationId: 'private-alice', kind: 'private', personId: 'person-alice', status: 'active' },
+            { conversationId: 'private-bob', kind: 'private', personId: 'person-bob', status: 'active' },
+        ],
+        people: {
+            'person-alice': { personId: 'person-alice', formalName: '林知夏' },
+            'person-bob': { personId: 'person-bob', formalName: '顾言' },
+        },
+        messages: {
+            'private-alice': [],
+            'private-bob': [],
+        },
+    });
+    const { result, syncCalls, committedMessageCalls } = await runProactiveCycle({
+        fixture,
+        kind: 'group',
+        backendContent: '<create-group id="G2" name="夜宵群" owner="N1" members="N1,N2" />'
+            + '<message conversation="G2" sender="N1" type="text">走，吃夜宵。</message>',
+        commitActions: async () => {
+            fixture.conversations.push({
+                conversationId: 'group-new',
+                kind: 'group',
+                groupId: 'group-new',
+                status: 'active',
+            });
+            fixture.groups['group-new'] = {
+                groupId: 'group-new',
+                conversationId: 'group-new',
+                name: '夜宵群',
+                ownerId: 'person-alice',
+                memberIds: ['person-alice', 'person-bob'],
+                selfExited: false,
+                status: 'active',
+            };
+            fixture.messages['group-new'] = [{
+                messageId: 'group-first-message',
+                senderType: 'person',
+                senderId: 'person-alice',
+                type: 'text',
+                content: '走，吃夜宵。',
+                storyTime: '2026-09-04 12:00',
+            }];
+            return {
+                applied: [
+                    { type: 'create-group', reference: 'G2' },
+                    { type: 'message', messageId: 'group-first-message' },
+                ],
+                createdConversationIds: ['group-new'],
+            };
+        },
+    });
+
+    assert.deepEqual(result, { status: 'succeeded' });
+    assert.deepEqual(syncCalls.map((call) => call.conversationIds), [['group-new']]);
+    assert.deepEqual(committedMessageCalls.map((call) => ({
+        conversationIds: call.conversationIds,
+        messageIds: call.messageIds,
+    })), [{
+        conversationIds: ['group-new'],
+        messageIds: ['group-first-message'],
+    }]);
+}
+
+async function testExitedUserDoesNotBlockNpcGroupConversation() {
+    const fixture = createRepositoryFixture({
+        conversations: [
+            { conversationId: 'private-alice', kind: 'private', personId: 'person-alice', status: 'active' },
+            { conversationId: 'private-bob', kind: 'private', personId: 'person-bob', status: 'active' },
+            { conversationId: 'group-left', kind: 'group', groupId: 'group-left', status: 'exited' },
+        ],
+        people: {
+            'person-alice': { personId: 'person-alice', formalName: '林知夏' },
+            'person-bob': { personId: 'person-bob', formalName: '顾言' },
+        },
+        groups: {
+            'group-left': {
+                groupId: 'group-left',
+                conversationId: 'group-left',
+                name: '用户已退群',
+                ownerId: 'person-alice',
+                adminIds: [],
+                memberIds: ['person-alice', 'person-bob'],
+                selfExited: true,
+                status: 'active',
+            },
+        },
+        messages: {
+            'private-alice': [],
+            'private-bob': [],
+            'group-left': [{
+                messageId: 'left-history',
+                senderType: 'person',
+                senderId: 'person-bob',
+                type: 'text',
+                content: '用户退群后我们继续聊。',
+                storyTime: '2026-09-04 13:00',
+            }],
+        },
+    });
+    let requestInput = null;
+    await runProactiveCycle({
+        fixture,
+        kind: 'group',
+        backendContent: '<none />',
+        actionResult: { applied: [{ type: 'none' }], createdConversationIds: [] },
+        buildProactiveRequest: async (input) => {
+            requestInput = input;
+            return [{ role: 'system', content: '主动周期。' }];
+        },
+    });
+
+    assert.equal(requestInput.candidates.length, 1);
+    assert.equal(requestInput.candidates[0].conversationId, 'group-left');
+    assert.equal(requestInput.candidates[0].reinviteOnly, false);
+    assert.doesNotMatch(requestInput.variables.groupMembers, /只能先重新邀请用户/);
+}
+
 async function testProjectionFailureDoesNotRollbackCommittedActions() {
     const fixture = createRepositoryFixture();
     const projectionErrors = [];
@@ -508,6 +628,26 @@ async function testProjectionFailureDoesNotRollbackCommittedActions() {
     assert.deepEqual(projectionErrors[0].context.conversationIds, ['private-1']);
 }
 
+async function testProactiveCycleChoosesExactlyOneKindByConfiguredWeight() {
+    const { createQQV2ProactiveService } = await importModule('modules/qq-v2/proactive/service.js');
+    const fixture = createRepositoryFixture();
+    const createService = (random) => createQQV2ProactiveService({
+        repository: fixture.repository,
+        requestService: createRequestServiceFixture(),
+        random,
+        runtimeSettingsResolver: async () => ({
+            proactive: { enabled: true, everyTurns: 1, privateWeight: 10 },
+        }),
+    });
+
+    assert.equal((await createService(() => 0.05).enqueueProactiveCycle({
+        scopeId: fixture.scopeId,
+    })).cycleKind, 'private');
+    assert.equal((await createService(() => 0.5).enqueueProactiveCycle({
+        scopeId: fixture.scopeId,
+    })).cycleKind, 'group');
+}
+
 async function main() {
     await testEnabledPrivateCycleCallsBackendAndCommitsActions();
     await testNoneActionSkipsWorldbookSync();
@@ -518,7 +658,10 @@ async function main() {
     await testGroupProjectionActionSyncsOnlyAffectedConversation();
     await testGroupMemberChangeDoesNotSyncUnchangedLaterGroup();
     await testCreatedConversationFirstMessageStillSyncsWorldbook();
+    await testCreatedGroupFirstMessageSyncsAndNotifies();
+    await testExitedUserDoesNotBlockNpcGroupConversation();
     await testProjectionFailureDoesNotRollbackCommittedActions();
+    await testProactiveCycleChoosesExactlyOneKindByConfiguredWeight();
     console.log('[qq-v2-proactive-contract] passed');
 }
 

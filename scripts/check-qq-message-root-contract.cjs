@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 async function main() {
     const { __test__ } = await import('../modules/qq-v2/ui/app.js');
@@ -22,8 +24,15 @@ async function main() {
                             lastMessage: { messageId: 'm-today', type: 'text', content: 'Latest', storyTime: '2042-05-20 09:30' },
                         },
                         {
-                            conversationId: 'group-hidden', kind: 'group', status: 'active', title: 'Must stay hidden',
-                            lastMessage: { messageId: 'm-group', type: 'text', content: 'Must not render', storyTime: '2042-05-20 10:00' },
+                            conversationId: 'group-visible', kind: 'group', status: 'active', title: 'Study group',
+                            lastMessage: {
+                                messageId: 'm-group',
+                                type: 'text',
+                                content: 'Latest group message',
+                                senderType: 'person',
+                                senderName: 'Alice',
+                                storyTime: '2042-05-20 10:00',
+                            },
                         },
                         {
                             conversationId: 'contact-hidden', kind: 'private', status: 'contact', title: 'Contact only',
@@ -61,8 +70,9 @@ async function main() {
     const model = await __test__.loadMessageRootModel(facade);
     assert.deepEqual(new Set(calls), new Set(['conversations', 'currentContext']));
     assert.deepEqual(model.rows.map((row) => row.conversation.conversationId), [
-        'today', 'yesterday', 'same-time-a', 'same-time-b', 'video', 'sticker', 'missing-time', 'empty-first',
+        'group-visible', 'today', 'yesterday', 'same-time-a', 'same-time-b', 'video', 'sticker', 'missing-time', 'empty-first',
     ]);
+    assert.equal(model.rows.find((row) => row.conversation.conversationId === 'group-visible').preview, 'Alice：Latest group message');
     assert.equal(model.rows.find((row) => row.conversation.conversationId === 'today').preview, 'Latest');
     assert.equal(model.rows.find((row) => row.conversation.conversationId === 'yesterday').preview, '[语音]');
     assert.equal(model.rows.find((row) => row.conversation.conversationId === 'same-time-a').preview, '[图片]');
@@ -78,6 +88,136 @@ async function main() {
     assert.equal(model.rows.find((row) => row.conversation.conversationId === 'empty-first').preview, '');
     assert.equal(model.rows.find((row) => row.conversation.conversationId === 'empty-first').time, '');
     assert.equal(model.rows.find((row) => row.conversation.conversationId === 'today').unreadLabel, '99+');
+    assert.equal(__test__.chatStatusText({
+        kind: 'group',
+        group: { memberIds: ['alice', 'bob'], selfExited: false },
+    }), '3名成员');
+    assert.equal(__test__.chatStatusText({
+        kind: 'group',
+        group: { memberIds: ['alice', 'bob'], selfExited: true },
+    }), '已退出 · 2名成员');
+    assert.equal(__test__.groupRoleLabel({ ownerId: 'alice', adminIds: ['bob'] }, 'alice'), '群主');
+    assert.equal(__test__.groupRoleLabel({ ownerId: 'alice', adminIds: ['bob'] }, 'bob'), '管理员');
+    assert.equal(__test__.groupRoleLabel({ ownerId: 'alice', adminIds: ['bob'] }, 'carol'), '');
+    const transferGroup = {
+        kind: 'group',
+        group: {
+            members: [
+                { personId: 'alice', formalName: 'Alice' },
+                { personId: 'bob', formalName: 'Bob' },
+            ],
+        },
+    };
+    assert.deepEqual(__test__.groupTransferRecipients(transferGroup), [
+        { personId: 'alice', formalName: 'Alice' },
+        { personId: 'bob', formalName: 'Bob' },
+    ]);
+    assert.equal(__test__.transferRecipientName(transferGroup, {
+        transfer: { recipientId: 'bob' },
+    }), 'Bob');
+    assert.equal(__test__.transferRecipientName(transferGroup, {
+        transfer: { recipientId: '__self__' },
+    }), '你');
+    assert.equal(__test__.canCurrentUserHandleTransfer(transferGroup, {
+        senderType: 'person',
+        transfer: { recipientId: 'alice', status: 'pending' },
+    }), false);
+    assert.equal(__test__.canCurrentUserHandleTransfer(transferGroup, {
+        senderType: 'person',
+        transfer: { recipientId: '__self__', status: 'pending' },
+    }), true);
+    assert.deepEqual(__test__.groupMemberManagementActions({
+        status: 'active',
+        selfRole: 'owner',
+        selfExited: false,
+        ownerId: '__self__',
+        adminIds: ['alice'],
+        mutes: { alice: '永久' },
+    }, 'alice'), ['revoke-admin', 'unmute', 'kick', 'transfer-owner']);
+    assert.deepEqual(__test__.groupMemberManagementActions({
+        status: 'active',
+        selfRole: 'admin',
+        selfExited: false,
+        ownerId: 'alice',
+        adminIds: ['__self__'],
+        mutes: {},
+    }, 'bob'), ['mute', 'kick']);
+    assert.deepEqual(__test__.groupMemberManagementActions({
+        status: 'active',
+        selfRole: 'admin',
+        selfExited: false,
+        ownerId: 'alice',
+        adminIds: ['__self__', 'bob'],
+        mutes: {},
+    }, 'bob'), []);
+    assert.deepEqual(__test__.groupMemberManagementActions({
+        status: 'active',
+        selfRole: 'member',
+        selfExited: false,
+        ownerId: 'alice',
+        adminIds: [],
+        mutes: {},
+    }, 'bob'), []);
+    assert.equal(__test__.groupLifecycleAction({
+        status: 'active',
+        selfRole: 'owner',
+        selfExited: false,
+    }), 'dissolve');
+    assert.equal(__test__.groupLifecycleAction({
+        status: 'active',
+        selfRole: 'admin',
+        selfExited: false,
+    }), 'leave');
+    assert.equal(__test__.groupLifecycleAction({
+        status: 'active',
+        selfRole: 'member',
+        selfExited: true,
+    }), '');
+    assert.deepEqual(__test__.groupFriendCandidates([
+        { conversationId: 'p1', kind: 'private', status: 'active', personId: 'alice', formalName: 'Alice' },
+        { conversationId: 'p2', kind: 'private', status: 'contact', personId: 'bob', formalName: 'Bob' },
+        { conversationId: 'p3', kind: 'private', status: 'readonly', personId: 'carol', formalName: 'Carol' },
+        { conversationId: 'g1', kind: 'group', status: 'active', groupId: 'group-1', title: '群聊' },
+    ], ['alice']).map((conversation) => conversation.personId), ['bob']);
+    assert.equal(__test__.canCreateUserGroup('新群', ['alice', 'bob']), true);
+    assert.equal(__test__.canCreateUserGroup('新群', ['alice']), false);
+    assert.equal(__test__.canCreateUserGroup('  ', ['alice', 'bob']), false);
+    assert.equal(__test__.shouldRenameGroup({
+        status: 'active',
+        selfExited: false,
+        selfRole: 'owner',
+        name: '旧群名',
+    }, '新群名'), true);
+    assert.equal(__test__.shouldRenameGroup({
+        status: 'active',
+        selfExited: false,
+        selfRole: 'owner',
+        name: '旧群名',
+    }, '旧群名'), false);
+    assert.equal(__test__.shouldRenameGroup({
+        status: 'active',
+        selfExited: false,
+        selfRole: 'member',
+        name: '旧群名',
+    }, '新群名'), false);
+    assert.deepEqual(__test__.conversationDeletionCopy({
+        kind: 'group',
+        status: 'active',
+        group: { status: 'active', selfExited: false },
+    }), {
+        title: '清空聊天记录',
+        message: '只会清空当前群聊历史并从消息页隐藏，群联系人仍会保留。',
+        confirmLabel: '清空',
+    });
+    assert.deepEqual(__test__.conversationDeletionCopy({
+        kind: 'group',
+        status: 'exited',
+        group: { status: 'active', selfExited: true },
+    }), {
+        title: '删除群聊',
+        message: '将永久删除该群聊及本地历史，删除后不可恢复。',
+        confirmLabel: '删除',
+    });
 
     const emptyModel = await __test__.loadMessageRootModel({
         query: {
@@ -155,6 +295,35 @@ async function main() {
     });
     queuedRestore();
     assert.equal(staleRoot.scrollTop, 0, 'a stale render must not change the newest list scroll position');
+
+    const appSource = fs.readFileSync(path.join(process.cwd(), 'modules/qq-v2/ui/app.js'), 'utf8');
+    const cssSource = fs.readFileSync(path.join(process.cwd(), 'styles/phone-base/12-qq-app.css'), 'utf8');
+    assert.match(appSource, /yuzi-qq-group-avatar/, 'group rows use member-composite avatars');
+    assert.match(appSource, /yuzi-qq-group-message-identity/, 'incoming group messages show sender identity');
+    assert.match(appSource, /data-qq-group-member-profile/, 'group message avatars open the sender profile in group context');
+    assert.match(appSource, /conversation\.kind === 'group'[\s\S]*'data-qq-chat'/,
+        'group rows in Contacts open the group conversation directly');
+    assert.match(appSource, /dataset\.qqTransferRecipient/,
+        'group transfer dialog exposes an explicit recipient selector');
+    assert.match(appSource, /转给：/,
+        'group transfer cards show their recipient');
+    assert.match(appSource, /data-qq-group-members/,
+        'group details expose a member grid');
+    assert.match(appSource, /data-qq-add-group-member/,
+        'group managers can add an existing QQ friend from group details');
+    assert.match(appSource, /data-qq-group-lifecycle/,
+        'group details expose leave or dissolve according to the current role');
+    assert.match(appSource, /group-member-edit/,
+        'group-only member management stays inside the group profile edit route');
+    assert.match(appSource, /reset\(\)\s*\{[\s\S]*quoteDrafts\.clearAll\(\);[\s\S]*mentionDrafts\.clear\(\);/,
+        'reset clears group quote and mention drafts');
+    assert.match(appSource, /destroy\(\)\s*\{[\s\S]*quoteDrafts\.clearAll\(\);[\s\S]*mentionDrafts\.clear\(\);/,
+        'destroy clears group quote and mention drafts');
+    assert.match(cssSource, /\.yuzi-qq-group-avatar\b/, 'group avatar composition has scoped QQ styling');
+    assert.match(cssSource, /\.yuzi-qq-group-message-identity\b/, 'group sender name and role badge have scoped QQ styling');
+    assert.match(cssSource, /\.yuzi-qq-group-members\b/, 'group member grid has scoped QQ styling');
+    assert.match(cssSource, /\.yuzi-qq-group-member-editor-actions\b/,
+        'group member management actions remain reachable in the scoped editor');
 }
 
 main().then(() => console.log('[qq-message-root-contract] passed')).catch((error) => {

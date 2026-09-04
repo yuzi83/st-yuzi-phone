@@ -224,7 +224,11 @@ async function testProactiveRequestUsesTypedSemanticsForWorldbookActivation() {
             conversationHistoryLimit: 1,
         },
     });
-    await runtime.configureProactive({ scopeId, settings: { enabled: true, everyTurns: 1 } });
+    await runtime.configureProactive({ scopeId, settings: {
+        enabled: true,
+        everyTurns: 1,
+        privateWeight: 100,
+    } });
     storyMessages = [{
         messageId: 'story-1',
         role: 'assistant',

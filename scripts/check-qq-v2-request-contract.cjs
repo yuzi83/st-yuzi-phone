@@ -506,6 +506,48 @@ async function testManualRequestPersistsUserMessageThenCommitsValidatedActions()
     });
 }
 
+async function testManualGroupRequestUsesTheGroupReplyPipeline() {
+    const { createQQV2RequestService } = await importModule('modules/qq-v2/request/service.js');
+    const fixture = createRepositoryFixture({
+        conversationId: 'group-a',
+        kind: 'group',
+        settings: { groupReplyPresetId: 'prompt-group' },
+        conversation: { groupId: 'group-a' },
+    });
+    const service = createQQV2RequestService({
+        repository: fixture.repository,
+        apiPresetResolver: async (id) => ({ id, endpoint: 'https://example.test/v1', apiKey: 'secret', model: 'model-a' }),
+        promptPresetResolver: async (id) => ({ id, messages: [{ role: 'system', content: 'group rules' }] }),
+        buildManualRequest: async ({ preset, currentMessage }) => {
+            assert.equal(preset.id, 'prompt-group');
+            return [{ role: 'user', content: currentMessage.content }];
+        },
+        backend: { async generate() { return { content: '<qq><message /></qq>' }; } },
+        parseResponse: () => [{
+            type: 'message',
+            conversation: fixture.conversationId,
+            messageType: 'text',
+            sender: 'person-a',
+            content: 'group reply',
+        }],
+        validateActions: (actions, options) => {
+            assert.equal(options.scenario, 'group-reply');
+            return actions;
+        },
+    });
+
+    const sent = await service.sendManual({
+        scopeId: fixture.scopeId,
+        conversationId: fixture.conversationId,
+        message: { type: 'text', content: 'hello group' },
+    });
+    await service.waitForIdle();
+
+    assert.equal(sent.message.content, 'hello group');
+    assert.equal(fixture.applied.length, 1);
+    assert.equal(fixture.applied[0].actions[0].content, 'group reply');
+}
+
 async function testManualFallbackMapsStickerShortReferenceBeforeRepositoryCommit() {
     const { createQQV2RequestService } = await importModule('modules/qq-v2/request/service.js');
     const fixture = createRepositoryFixture();
@@ -766,6 +808,47 @@ async function testFailureKeepsTheRealBatchForRetryWithoutDuplicatingUserMessage
         phase: 'idle',
         pendingUserMessageCount: 0,
         error: '',
+    });
+}
+
+async function testManualFailureNotifiesTheCurrentConversationAfterEnteringFailedState() {
+    const { createQQV2RequestService } = await importModule('modules/qq-v2/request/service.js');
+    const fixture = createRepositoryFixture();
+    const failures = [];
+    const service = createQQV2RequestService({
+        repository: fixture.repository,
+        apiPresetResolver: async () => ({ endpoint: 'https://example.test/v1', apiKey: 'secret', model: 'model-a' }),
+        promptPresetResolver: async () => ({ messages: [] }),
+        buildManualRequest: async () => [{ role: 'user', content: 'manual' }],
+        backend: { async generate() { return { content: '' }; } },
+        parseResponse: () => {
+            throw new Error('QQ XML 格式无效');
+        },
+        validateActions: (actions) => actions,
+        async afterManualError(input) {
+            failures.push({
+                ...input,
+                state: service.getConversationState(input.scopeId, input.conversationId),
+            });
+        },
+    });
+
+    await service.sendManual({
+        scopeId: fixture.scopeId,
+        conversationId: fixture.conversationId,
+        message: { type: 'text', content: '触发错误' },
+    });
+    await service.waitForIdle();
+
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0].kind, 'request-failed');
+    assert.equal(failures[0].scopeId, fixture.scopeId);
+    assert.equal(failures[0].conversationId, fixture.conversationId);
+    assert.equal(failures[0].error.message, 'QQ XML 格式无效');
+    assert.deepEqual(failures[0].state, {
+        phase: 'failed',
+        pendingUserMessageCount: 1,
+        error: 'QQ XML 格式无效',
     });
 }
 
@@ -1383,10 +1466,12 @@ async function main() {
     await testFinalPromptViewerBridgePostsOnlyThePromptSnapshot();
     testProductionRuntimeWiresThePromptObserver();
     await testManualRequestPersistsUserMessageThenCommitsValidatedActions();
+    await testManualGroupRequestUsesTheGroupReplyPipeline();
     await testManualFallbackMapsStickerShortReferenceBeforeRepositoryCommit();
     await testModelLoadingUsesBackendAndClearsStaleCandidatesOnFailure();
     await testSameConversationCancelsLateResultAndKeepsItsQueuePosition();
     await testFailureKeepsTheRealBatchForRetryWithoutDuplicatingUserMessages();
+    await testManualFailureNotifiesTheCurrentConversationAfterEnteringFailedState();
     await testManualCancellationKeepsTheBatchRetryableAndLeavesProactiveAlone();
     await testScopeSwitchCancelsOldWorkAndDropsItsLateResult();
     await testStaleScopeCannotPersistAManualMessageOrQueueProactiveWork();

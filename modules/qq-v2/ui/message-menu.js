@@ -14,10 +14,15 @@ function messageContent(message) {
 
 function cloneQuote(value) {
     if (!value?.messageId) return null;
-    return Object.freeze({
+    const quote = {
         messageId: asText(value.messageId),
         content: String(value.content ?? ''),
-    });
+    };
+    const senderName = asText(value.senderName);
+    const storyTime = asText(value.storyTime);
+    if (senderName) quote.senderName = senderName;
+    if (storyTime) quote.storyTime = storyTime;
+    return Object.freeze(quote);
 }
 
 async function writeToClipboard(value) {
@@ -45,7 +50,12 @@ export function createQuoteDrafts() {
     return Object.freeze({
         select(conversationId, message) {
             const id = asText(conversationId);
-            const quote = cloneQuote({ messageId: message?.messageId, content: messageContent(message) });
+            const quote = cloneQuote({
+                messageId: message?.messageId,
+                content: messageContent(message),
+                senderName: message?.senderName,
+                storyTime: message?.storyTime,
+            });
             if (!id || !quote) return false;
             values.set(id, quote);
             return true;
@@ -69,7 +79,13 @@ export async function copyMessageText(message, { writeText = writeToClipboard } 
     return true;
 }
 
-export async function submitQuotedTextMessage({ facade, conversationId, content, quotes } = {}) {
+export async function submitQuotedTextMessage({
+    facade,
+    conversationId,
+    content,
+    quotes,
+    messageFields = {},
+} = {}) {
     const submission = normalizeComposerSubmission(content);
     if (!submission.ok) return submission;
     if (typeof facade?.intent?.sendMessage !== 'function') {
@@ -79,6 +95,7 @@ export async function submitQuotedTextMessage({ facade, conversationId, content,
     const result = await facade.intent.sendMessage({
         conversationId: asText(conversationId),
         message: {
+            ...messageFields,
             type: 'text',
             content: submission.content,
             ...(quote?.messageId ? { quoteMessageId: quote.messageId } : {}),

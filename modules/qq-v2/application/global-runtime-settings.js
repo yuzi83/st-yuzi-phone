@@ -14,12 +14,15 @@ const GLOBAL_PRESET_DEFAULTS = Object.freeze({
     activeApiPresetId: '',
     privateReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateReply,
     privateProactivePresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateProactive,
+    groupReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.groupReply,
+    groupProactivePresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.groupProactive,
 });
 const GLOBAL_RUNTIME_DEFAULTS = Object.freeze({
     hostContextTurns: 3,
     conversationHistoryLimit: 100,
     hostContextExtractTag: 'content',
     hostContextExcludeTags: Object.freeze([]),
+    proactive: Object.freeze({ enabled: false, everyTurns: 5, privateWeight: 50 }),
     worldbook: Object.freeze({
         enabled: false,
         timeWindow: Object.freeze({ mode: 'relative', value: 1, unit: 'month' }),
@@ -86,6 +89,10 @@ function normalizeSettings(value) {
             || GLOBAL_PRESET_DEFAULTS.privateReplyPresetId,
         privateProactivePresetId: asText(source.privateProactivePresetId, 256)
             || GLOBAL_PRESET_DEFAULTS.privateProactivePresetId,
+        groupReplyPresetId: asText(source.groupReplyPresetId, 256)
+            || GLOBAL_PRESET_DEFAULTS.groupReplyPresetId,
+        groupProactivePresetId: asText(source.groupProactivePresetId, 256)
+            || GLOBAL_PRESET_DEFAULTS.groupProactivePresetId,
         hostContextTurns: normalizeNonNegativeInteger(
             source.hostContextTurns,
             GLOBAL_RUNTIME_DEFAULTS.hostContextTurns,
@@ -118,6 +125,10 @@ function normalizeSettings(value) {
         proactive: {
             enabled: proactive.enabled === true,
             everyTurns: normalizeEveryTurns(proactive.everyTurns),
+            privateWeight: Math.max(0, Math.min(100, normalizeNonNegativeInteger(
+                proactive.privateWeight,
+                GLOBAL_RUNTIME_DEFAULTS.proactive.privateWeight,
+            ))),
         },
     };
 }
@@ -180,6 +191,9 @@ function backfillSharedSettings(current, legacy) {
             ...proactive,
             enabled: Object.hasOwn(proactive, 'enabled') ? proactive.enabled : fallbackProactive.enabled,
             everyTurns: Object.hasOwn(proactive, 'everyTurns') ? proactive.everyTurns : fallbackProactive.everyTurns,
+            privateWeight: Object.hasOwn(proactive, 'privateWeight')
+                ? proactive.privateWeight
+                : fallbackProactive.privateWeight,
         },
     };
 }
@@ -224,7 +238,7 @@ function applyPatch(current, patch) {
     if (Object.hasOwn(source, 'activeApiPresetId')) {
         next.activeApiPresetId = asText(source.activeApiPresetId, 256);
     }
-    for (const key of ['privateReplyPresetId', 'privateProactivePresetId']) {
+    for (const key of ['privateReplyPresetId', 'privateProactivePresetId', 'groupReplyPresetId', 'groupProactivePresetId']) {
         if (Object.hasOwn(source, key)) next[key] = asText(source[key], 256) || GLOBAL_PRESET_DEFAULTS[key];
     }
     for (const key of ['hostContextTurns', 'conversationHistoryLimit']) {
@@ -283,6 +297,13 @@ function applyPatch(current, patch) {
         }
         next.proactive.everyTurns = everyTurns;
     }
+    if (Object.hasOwn(proactive, 'privateWeight')) {
+        const privateWeight = Number(proactive.privateWeight);
+        if (!Number.isInteger(privateWeight) || privateWeight < 0 || privateWeight > 100) {
+            throw new RangeError('私聊主动回复占比必须是 0 到 100 的整数');
+        }
+        next.proactive.privateWeight = privateWeight;
+    }
     return next;
 }
 
@@ -328,7 +349,8 @@ export function createQQV2GlobalRuntimeSettings(options = {}) {
                 const current = migrateSettings(state, scopeId);
                 const next = applyPatch(current, patch);
                 const proactiveChanged = next.proactive.enabled !== current.proactive.enabled
-                    || next.proactive.everyTurns !== current.proactive.everyTurns;
+                    || next.proactive.everyTurns !== current.proactive.everyTurns
+                    || next.proactive.privateWeight !== current.proactive.privateWeight;
                 state.sharedResources[STORAGE_KEY] = next;
                 return { settings: clone(next), proactiveChanged };
             });

@@ -230,6 +230,18 @@ async function checkQQSourceAdapterContract() {
         title: '周予安',
         formalName: '周予安',
         avatarAssetId: 'avatar-2',
+    }, {
+        conversationId: 'group-1',
+        kind: 'group',
+        status: 'active',
+        title: '周末群',
+        group: { selfExited: false },
+    }, {
+        conversationId: 'group-exited',
+        kind: 'group',
+        status: 'exited',
+        title: '已退出群',
+        group: { selfExited: true },
     }];
     const adapter = createQQFullscreenOverlaySourceAdapter({
         getFacade: () => ({
@@ -264,6 +276,16 @@ async function checkQQSourceAdapterContract() {
         }, {
             senderName: '周予安',
             avatarAssetId: '',
+        }, {
+            conversationId: 'group-1',
+            conversationKind: 'group',
+            senderName: '周末群',
+            avatarAssetId: '',
+        }, {
+            conversationId: 'group-1',
+            conversationKind: 'group',
+            senderName: '周末群',
+            avatarAssetId: '',
         }],
     }), [{
         kind: 'message-notification',
@@ -279,27 +301,42 @@ async function checkQQSourceAdapterContract() {
         senderName: '周予安',
         avatarAssetId: '',
         text: '周予安给你发了1条消息',
+    }, {
+        kind: 'message-notification',
+        sourceId: 'qq',
+        sheetKey: QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
+        senderName: '周末群',
+        avatarAssetId: '',
+        text: '周末群发送了1条消息',
     }], '同一主动周期必须按 NPC 去重，并生成固定通知文本');
 
     assert.deepEqual(await adapter.readTestEvents(), [{
-        conversationId: 'conversation-2',
-        senderName: '周予安',
-        avatarAssetId: 'avatar-2',
-    }], '点击测试必须从当前 QQ 私聊中随机选择一个 NPC');
+        conversationId: 'group-1',
+        conversationKind: 'group',
+        senderName: '周末群',
+        avatarAssetId: '',
+    }], '点击测试可以从当前有效私聊或群聊中随机选择一个会话');
 
     const automaticEvents = [];
     const unsubscribe = adapter.subscribe(events => automaticEvents.push(events));
     await proactiveListener({
-        conversationIds: ['conversation-1', 'conversation-1', 'conversation-2'],
+        conversationIds: ['conversation-1', 'conversation-1', 'conversation-2', 'group-1', 'group-1', 'group-exited'],
     });
     assert.deepEqual(automaticEvents, [[{
         conversationId: 'conversation-1',
+        conversationKind: 'private',
         senderName: '林知夏',
         avatarAssetId: 'avatar-1',
     }, {
         conversationId: 'conversation-2',
+        conversationKind: 'private',
         senderName: '周予安',
         avatarAssetId: 'avatar-2',
+    }, {
+        conversationId: 'group-1',
+        conversationKind: 'group',
+        senderName: '周末群',
+        avatarAssetId: '',
     }]], '自动触发只转换本轮真正主动发消息的 NPC');
     unsubscribe();
     assert.equal(proactiveListener, null);

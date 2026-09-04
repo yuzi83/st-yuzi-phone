@@ -105,6 +105,52 @@ async function testProfilesLibrariesAndReferenceFallback() {
     assert.equal(otherPerson.profileBackgroundAssetId, '', 'global library deletion clears cross-chat profile-background references');
 }
 
+async function testGroupsReceiveSharedChatBackgrounds() {
+    const { repository } = await createRepositoryHarness({ random: () => 0 });
+    await repository.ensureScope('scope-a');
+    const chatBackground = await repository.saveImageLibraryAsset('scope-a', {
+        library: 'chat-background',
+        blob: image('group-chat'),
+    });
+    const alice = await repository.createPrivateConversation('scope-a', { name: 'Alice' });
+    const bob = await repository.createPrivateConversation('scope-a', { name: 'Bob' });
+
+    const userCreated = await repository.createGroupConversation('scope-a', {
+        name: '用户群',
+        memberIds: [alice.person.personId, bob.person.personId],
+    });
+    assert.equal(
+        userCreated.conversation.backgroundAssetId,
+        chatBackground.assetId,
+        'user-created groups reuse the shared chat-background library',
+    );
+
+    const npcCreated = await repository.applyAIActions('scope-a', [
+        {
+            type: 'create-group',
+            id: 'G1',
+            name: 'NPC群',
+            owner: alice.person.personId,
+            members: [alice.person.personId, bob.person.personId],
+        },
+        {
+            type: 'message',
+            conversation: 'G1',
+            sender: alice.person.personId,
+            messageType: 'text',
+            content: '欢迎。',
+            mentions: [],
+            mentionAll: false,
+        },
+    ], { references: {}, storyTime: '2042-05-01 10:00' });
+    const npcGroup = await repository.getConversation('scope-a', npcCreated.createdConversationIds[0]);
+    assert.equal(
+        npcGroup.backgroundAssetId,
+        chatBackground.assetId,
+        'NPC-created groups reuse the shared chat-background library',
+    );
+}
+
 async function testImageLibraryBatchPreservesSelectionOrderAndRollsBackInvalidInput() {
     const { repository, stateStore } = await createRepositoryHarness();
     await repository.ensureScope('scope-a');
@@ -282,6 +328,7 @@ async function testFacadeExposesRefinementSeamsWithoutNormalizingNames() {
 async function main() {
     await testRefinementDefaultsAndExactContactRoute();
     await testProfilesLibrariesAndReferenceFallback();
+    await testGroupsReceiveSharedChatBackgrounds();
     await testImageLibraryBatchPreservesSelectionOrderAndRollsBackInvalidInput();
     await testCurrentProfileAvatarDrivesNewSelfMessages();
     await testIndependentConversationInjectionOverrides();

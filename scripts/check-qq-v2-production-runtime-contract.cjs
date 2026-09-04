@@ -122,7 +122,7 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
                 depth: 999,
                 keywords: [],
             },
-            proactive: { enabled: false, everyTurns: 5 },
+            proactive: { enabled: false, everyTurns: 5, privateWeight: 50 },
         },
     });
 
@@ -141,6 +141,8 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
             activeApiPresetId: '',
             privateReplyPresetId: 'builtin-private-reply',
             privateProactivePresetId: 'builtin-private-proactive',
+            groupReplyPresetId: 'builtin-group-reply',
+            groupProactivePresetId: 'builtin-group-proactive',
             hostContextTurns: 3,
             conversationHistoryLimit: 100,
             hostContextExtractTag: 'content',
@@ -154,11 +156,11 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
                 depth: 999,
                 keywords: [],
             },
-            proactive: { enabled: false, everyTurns: 5 },
+            proactive: { enabled: false, everyTurns: 5, privateWeight: 50 },
         },
     });
-    assert.equal(Object.hasOwn(facadeBootstrap.globalSettings, 'groupReplyPresetId'), false);
-    assert.equal(Object.hasOwn(facadeBootstrap.globalSettings, 'groupProactivePresetId'), false);
+    assert.equal(facadeBootstrap.globalSettings.groupReplyPresetId, 'builtin-group-reply');
+    assert.equal(facadeBootstrap.globalSettings.groupProactivePresetId, 'builtin-group-proactive');
 
     assert.equal((await facade.intent.updateGlobalSettings({
         settings: {
@@ -178,7 +180,7 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
                 depth: 8,
                 keywords: ['主线', '秘密'],
             },
-            proactive: { enabled: true, everyTurns: 3 },
+            proactive: { enabled: true, everyTurns: 3, privateWeight: 10 },
         },
     })).ok, true);
 
@@ -199,6 +201,7 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
     assert.deepEqual(scopeASnapshot.globalSettings.proactive, {
         enabled: true,
         everyTurns: 3,
+        privateWeight: 10,
     });
 
     currentScopeId = scopeB;
@@ -224,6 +227,7 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
     assert.deepEqual(scopeBDefaultSnapshot.globalSettings.proactive, {
         enabled: true,
         everyTurns: 3,
+        privateWeight: 10,
     });
     assert.equal((await runtime.listConversations({ scopeId: currentScopeId })).length, 0);
 
@@ -235,6 +239,7 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
     assert.deepEqual(scopeBManualSnapshot.globalSettings.proactive, {
         enabled: true,
         everyTurns: 3,
+        privateWeight: 10,
     });
 
     currentScopeId = scopeA;
@@ -254,6 +259,7 @@ async function testProductionRuntimeOwnsTheCurrentScopeAndFacade() {
     assert.deepEqual(returnedScopeASnapshot.globalSettings.proactive, {
         enabled: true,
         everyTurns: 3,
+        privateWeight: 10,
     });
 
     runtime.destroy();
@@ -1617,12 +1623,13 @@ async function testProductionFacadeBridgesPrivateProfilesMediaAndUnreadState() {
     await runtime.initialize();
     const privateOne = await runtime.createPrivateConversation({ scopeId, name: 'Alice' });
     const privateTwo = await runtime.createPrivateConversation({ scopeId, name: 'Bob' });
-    const group = await repository.createGroupConversation(scopeId, {
-        scopeId,
+    const facade = runtime.getFacade();
+    const createdGroup = await facade.intent.createGroupConversation({
         name: 'Original group',
         memberIds: [privateOne.person.personId, privateTwo.person.personId],
     });
-    const facade = runtime.getFacade();
+    assert.equal(createdGroup.ok, true);
+    const group = createdGroup.result;
 
     const avatar = await facade.intent.saveMedia({
         media: {
@@ -1639,8 +1646,17 @@ async function testProductionFacadeBridgesPrivateProfilesMediaAndUnreadState() {
             blob: new Blob(['private background'], { type: 'image/webp' }),
         },
     });
+    const groupBackground = await facade.intent.saveMedia({
+        media: {
+            conversationId: group.conversation.conversationId,
+            kind: 'background',
+            mimeType: 'image/webp',
+            blob: new Blob(['group background'], { type: 'image/webp' }),
+        },
+    });
     assert.equal(avatar.ok, true);
     assert.equal(privateBackground.ok, true);
+    assert.equal(groupBackground.ok, true);
 
     const privateProfile = await facade.intent.updatePrivateProfile({
         conversationId: privateOne.conversation.conversationId,
@@ -1655,29 +1671,48 @@ async function testProductionFacadeBridgesPrivateProfilesMediaAndUnreadState() {
     assert.equal(privateProfile.result.conversation.title, 'Alicia');
     assert.equal(privateProfile.result.conversation.backgroundAssetId, privateBackground.media.assetId);
 
-    assert.deepEqual(await facade.query.conversation({
+    const groupProfile = await facade.intent.updateGroupProfile({
         conversationId: group.conversation.conversationId,
-    }), {
-        ok: false,
-        status: 'not-found',
-        reason: 'conversation-not-found',
+        profile: { backgroundAssetId: groupBackground.media.assetId },
     });
-    assert.equal((await facade.intent.updateGroupProfile({
-        conversationId: group.conversation.conversationId,
-        profile: { backgroundAssetId: 'hidden-group-background' },
-    })).status, 'disabled');
-    assert.equal((await facade.intent.manageGroup({
+    assert.equal(groupProfile.ok, true);
+    const renamedGroup = await facade.intent.manageGroup({
         groupId: group.group.groupId,
         action: 'rename',
         value: 'Renamed group',
-    })).status, 'disabled');
+    });
+    assert.equal(renamedGroup.ok, true);
+    const visibleGroup = await facade.query.conversation({
+        conversationId: group.conversation.conversationId,
+    });
+    assert.equal(visibleGroup.ok, true);
+    assert.equal(visibleGroup.conversation.kind, 'group');
+    assert.equal(visibleGroup.conversation.title, 'Renamed group');
+    assert.equal(visibleGroup.conversation.backgroundAssetId, groupBackground.media.assetId);
+    const sentToGroup = await facade.intent.sendMessage({
+        conversationId: group.conversation.conversationId,
+        message: { type: 'text', content: 'Hello group' },
+    });
+    assert.equal(sentToGroup.ok, true);
+    assert.equal((await facade.query.messages({
+        conversationId: group.conversation.conversationId,
+    })).page.items.at(-1).content, 'Hello group');
 
     await repository.incrementConversationUnread(scopeId, privateTwo.conversation.conversationId, 2);
+    await repository.incrementConversationUnread(scopeId, group.conversation.conversationId, 3);
     assert.deepEqual((await facade.query.unread()).unread, {
-        total: 2,
-        display: '2',
-        byConversationId: { [privateOne.conversation.conversationId]: 0, [privateTwo.conversation.conversationId]: 2 },
+        total: 5,
+        display: '5',
+        byConversationId: {
+            [privateOne.conversation.conversationId]: 0,
+            [privateTwo.conversation.conversationId]: 2,
+            [group.conversation.conversationId]: 3,
+        },
     });
+    assert.deepEqual(await facade.intent.openConversation({
+        conversationId: group.conversation.conversationId,
+    }), { ok: true, status: 'accepted', unreadCount: 0 });
+    assert.equal((await facade.query.unread()).unread.total, 2);
     assert.deepEqual(await facade.intent.openConversation({
         conversationId: privateTwo.conversation.conversationId,
     }), { ok: true, status: 'accepted', unreadCount: 0 });
@@ -1700,6 +1735,10 @@ async function testProductionRuntimeTracksUnreadOnlyForClosedConversations() {
     const repository = createQQV2Repository({ stateStore });
     const alice = await repository.createPrivateConversation(scopeId, { name: 'Alice' });
     const bob = await repository.createPrivateConversation(scopeId, { name: 'Bob' });
+    const group = await repository.createGroupConversation(scopeId, {
+        name: 'Unread group',
+        memberIds: [alice.person.personId, bob.person.personId],
+    });
     let actionCalls = 0;
     const runtime = createQQV2ProductionRuntime({
         host: {
@@ -1713,7 +1752,7 @@ async function testProductionRuntimeTracksUnreadOnlyForClosedConversations() {
                 };
             },
             readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
-            readStoryTime() { return '2042-05-20 09:30'; },
+            readStoryTime() { return '2026-09-04 09:30'; },
             readStoryMessages() { return []; },
             readRawContext() { return { getRequestHeaders: () => ({}) }; },
         },
@@ -1722,15 +1761,17 @@ async function testProductionRuntimeTracksUnreadOnlyForClosedConversations() {
         cryptoApi: webcrypto,
         actionService: {
             async execute(input) {
-                const conversationId = input.references.P1;
+                const conversationId = input.references.P1 || input.references.G1;
                 const conversation = await repository.getConversation(scopeId, conversationId);
-                const person = await repository.getPerson(scopeId, conversation.personId);
+                const senderId = conversation.kind === 'group'
+                    ? group.group.memberIds[0]
+                    : conversation.personId;
                 const [message] = await repository.appendMessages(scopeId, conversationId, [{
-                    senderId: person.personId,
+                    senderId,
                     senderType: 'person',
                     type: 'text',
                     content: `Reply ${actionCalls + 1}`,
-                    storyTime: '2042-05-20 09:30',
+                    storyTime: '2026-09-04 09:30',
                 }]);
                 actionCalls += 1;
                 return {
@@ -1756,6 +1797,7 @@ async function testProductionRuntimeTracksUnreadOnlyForClosedConversations() {
         settings: {
             activeApiPresetId: apiPreset.id,
             privateReplyPresetId: 'builtin-private-reply',
+            groupReplyPresetId: 'builtin-group-reply',
         },
     });
 
@@ -1771,18 +1813,34 @@ async function testProductionRuntimeTracksUnreadOnlyForClosedConversations() {
     ), 'the closed conversation incoming unread count');
 
     assert.equal((await runtime.getUnreadState({ scopeId })).total, 1);
+    await runtime.sendManual({
+        scopeId,
+        conversationId: group.conversation.conversationId,
+        message: { type: 'text', content: 'Hello from a closed group' },
+    });
+    await waitUntil(async () => (
+        actionCalls === 2
+        && (await runtime.getUnreadState({ scopeId })).byConversationId[group.conversation.conversationId] === 1
+    ), 'the closed group incoming unread count');
+    assert.equal((await runtime.getUnreadState({ scopeId })).total, 2);
+    assert.deepEqual(await runtime.openConversation({ scopeId, conversationId: group.conversation.conversationId }), {
+        conversationId: group.conversation.conversationId,
+        unreadCount: 0,
+    });
+    assert.equal((await runtime.getUnreadState({ scopeId })).total, 1);
     assert.deepEqual(await runtime.openConversation({ scopeId, conversationId: bob.conversation.conversationId }), {
         conversationId: bob.conversation.conversationId,
         unreadCount: 0,
     });
     assert.equal((await runtime.getUnreadState({ scopeId })).total, 0);
 
+    await runtime.openConversation({ scopeId, conversationId: group.conversation.conversationId });
     await runtime.sendManual({
         scopeId,
-        conversationId: bob.conversation.conversationId,
-        message: { type: 'text', content: 'Hello from the open conversation' },
+        conversationId: group.conversation.conversationId,
+        message: { type: 'text', content: 'Hello from the open group' },
     });
-    await waitUntil(async () => actionCalls === 2, 'the open conversation reply');
+    await waitUntil(async () => actionCalls === 3, 'the open group reply');
     assert.equal((await runtime.getUnreadState({ scopeId })).total, 0);
     runtime.destroy();
 }
@@ -2890,7 +2948,7 @@ async function testProactiveWorldbookPendingIsReportedWithoutRollingBackCommitte
         scopeId,
         settings: {
             activeApiPresetId: 'api-1',
-            proactive: { enabled: true, everyTurns: 1 },
+            proactive: { enabled: true, everyTurns: 1, privateWeight: 100 },
         },
     });
     storyMessages = [{
@@ -2909,6 +2967,10 @@ async function testProactiveWorldbookPendingIsReportedWithoutRollingBackCommitte
             .some((message) => message.content === '主动消息已提交'),
         true,
         '世界书投影 pending 不得回滚已经提交的主动 QQ 消息',
+    );
+    await waitUntil(
+        () => warnings.some((entry) => entry?.action === 'worldbook.projection.pending'),
+        'the pending proactive worldbook warning',
     );
     assert.deepEqual(warnings
         .filter((entry) => entry?.action === 'worldbook.projection.pending')
@@ -3000,6 +3062,330 @@ async function testRetryPendingWorldbookIncludesGroupConversations() {
     runtime.destroy();
 }
 
+async function testProductionRuntimeBuildsManualCrossConversationMemories() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeId = 'st:character:alice:chat-cross-memory';
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    const requests = [];
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return {
+                    scopeId,
+                    chatId: 'chat-cross-memory',
+                    chatFile: 'chat-cross-memory',
+                    hostType: 'character',
+                    hostId: 'alice',
+                };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return '2026-09-04 20:00'; },
+            readStoryMessages() { return []; },
+            readRawContext() { return { getRequestHeaders: () => ({}) }; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        backend: {
+            async generate(input) {
+                requests.push(input.messages);
+                return {
+                    content: requests.length === 1
+                        ? '<qq><read conversation="P1" /></qq>'
+                        : '<qq><none /></qq>',
+                };
+            },
+            async loadModels() { return []; },
+        },
+        actionService: {
+            async execute() {
+                return { applied: [], createdConversationIds: [] };
+            },
+        },
+        worldbookGateway: {
+            async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; },
+            async loadBook() { return { entries: {} }; },
+            async saveBook() {},
+        },
+        worldbookContextResolver: { async resolve() { return ''; } },
+    });
+
+    await runtime.initialize();
+    const alice = await runtime.createPrivateConversation({ scopeId, name: 'Alice' });
+    const bob = await runtime.createPrivateConversation({ scopeId, name: 'Bob' });
+    const group = await runtime.createGroupConversation({
+        scopeId,
+        name: '周末群',
+        memberIds: [alice.person.personId, bob.person.personId],
+    });
+    await repository.appendMessages(scopeId, group.conversation.conversationId, [
+        {
+            senderId: bob.person.personId,
+            senderType: 'person',
+            type: 'text',
+            content: '超过历史条数的旧群消息',
+            storyTime: '2026-09-04 19:00',
+        },
+        {
+            senderId: alice.person.personId,
+            senderType: 'person',
+            type: 'voice',
+            content: '今晚见 & 别迟到',
+            storyTime: '2026-09-04 19:30',
+        },
+        {
+            senderId: '__self__',
+            senderType: 'self',
+            type: 'text',
+            content: '好',
+            storyTime: '2026-09-04 19:31',
+        },
+    ]);
+    await repository.appendMessages(scopeId, alice.conversation.conversationId, [{
+        senderId: alice.person.personId,
+        senderType: 'person',
+        type: 'text',
+        content: 'Alice 的私聊记忆',
+        storyTime: '2026-09-04 19:40',
+    }]);
+    await repository.appendMessages(scopeId, bob.conversation.conversationId, [{
+        senderId: bob.person.personId,
+        senderType: 'person',
+        type: 'image',
+        content: 'Bob 发来的照片',
+        storyTime: '2026-09-04 19:41',
+    }]);
+    const apiPreset = await runtime.saveApiPreset({ preset: {
+        name: 'Cross memory API',
+        endpoint: 'https://api.example.test/v1',
+        apiKey: 'cross-memory-secret',
+        model: 'cross-memory-model',
+    } });
+    const promptPreset = await runtime.savePromptPreset({ preset: {
+        name: 'Cross memory prompt',
+        messages: [{
+            id: 'cross-memory-block',
+            name: 'Cross memory',
+            role: 'system',
+            content: 'GROUP={{群聊记忆}}\nPRIVATE={{私聊记忆}}',
+        }],
+    } });
+    await runtime.updateGlobalSettings({
+        scopeId,
+        settings: {
+            activeApiPresetId: apiPreset.id,
+            privateReplyPresetId: promptPreset.id,
+            groupReplyPresetId: promptPreset.id,
+            conversationHistoryLimit: 2,
+        },
+    });
+
+    await runtime.sendManual({
+        scopeId,
+        conversationId: alice.conversation.conversationId,
+        message: { type: 'text', content: '现在私聊' },
+    });
+    await waitUntil(() => requests.length === 1, 'the private cross-memory request');
+    const privatePrompt = requests[0][0].content;
+    assert.match(privatePrompt, new RegExp(`<group-memory conversation="${group.conversation.conversationId}" name="周末群" known-by="Alice">`));
+    assert.match(privatePrompt, /<message sender="Alice" type="voice">语音：今晚见 &amp; 别迟到<\/message>/);
+    assert.match(privatePrompt, /<message sender="用户" type="text">好<\/message>/);
+    assert.doesNotMatch(privatePrompt, /超过历史条数的旧群消息/);
+    assert.match(privatePrompt, /PRIVATE=无/);
+
+    await waitUntil(async () => (
+        (await runtime.getRequestState({
+            scopeId,
+            conversationId: alice.conversation.conversationId,
+        })).phase === 'idle'
+    ), 'the private cross-memory request to settle');
+    await runtime.sendManual({
+        scopeId,
+        conversationId: group.conversation.conversationId,
+        message: { type: 'text', content: '现在群聊' },
+    });
+    await waitUntil(() => requests.length === 2, 'the group cross-memory request');
+    const groupPrompt = requests[1][0].content;
+    assert.match(groupPrompt, /GROUP=无/);
+    assert.match(groupPrompt, new RegExp(`<private-memory person="Alice" conversation="${alice.conversation.conversationId}">`));
+    assert.match(groupPrompt, /Alice 的私聊记忆/);
+    assert.match(groupPrompt, /现在私聊/);
+    assert.match(groupPrompt, new RegExp(`<private-memory person="Bob" conversation="${bob.conversation.conversationId}">`));
+    assert.match(groupPrompt, /图片：Bob 发来的照片/);
+    runtime.destroy();
+}
+
+async function testProductionRuntimeBuildsProactiveCrossConversationMemoriesOnce() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const scopeId = 'st:character:alice:chat-proactive-cross-memory';
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    const requests = [];
+    let storyMessages = [];
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope() {
+                return {
+                    scopeId,
+                    chatId: 'chat-proactive-cross-memory',
+                    chatFile: 'chat-proactive-cross-memory',
+                    hostType: 'character',
+                    hostId: 'alice',
+                };
+            },
+            readUserIdentity() { return { name: 'Traveler', avatar: '' }; },
+            readStoryTime() { return '2026-09-04 21:00'; },
+            readStoryMessages() { return storyMessages; },
+            readRawContext() { return { getRequestHeaders: () => ({}) }; },
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        proactiveStorySettleDelayMs: 0,
+        backend: {
+            async generate(input) {
+                requests.push(input.messages);
+                return { content: '<qq><none /></qq>' };
+            },
+            async loadModels() { return []; },
+        },
+        actionService: {
+            async execute() {
+                return { applied: [{ type: 'none' }], createdConversationIds: [] };
+            },
+        },
+        worldbookGateway: {
+            async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; },
+            async loadBook() { return { entries: {} }; },
+            async saveBook() {},
+        },
+        worldbookContextResolver: { async resolve() { return ''; } },
+    });
+
+    await runtime.initialize();
+    const alice = await runtime.createPrivateConversation({ scopeId, name: 'Alice' });
+    const bob = await runtime.createPrivateConversation({ scopeId, name: 'Bob' });
+    const group = await runtime.createGroupConversation({
+        scopeId,
+        name: '共同群',
+        memberIds: [alice.person.personId, bob.person.personId],
+    });
+    await repository.appendMessages(scopeId, group.conversation.conversationId, [
+        {
+            senderId: alice.person.personId,
+            senderType: 'person',
+            type: 'text',
+            content: '旧群记忆',
+            storyTime: '2026-09-04 20:00',
+        },
+        {
+            senderId: bob.person.personId,
+            senderType: 'person',
+            type: 'text',
+            content: '最新群记忆',
+            storyTime: '2026-09-04 20:10',
+        },
+    ]);
+    await repository.appendMessages(scopeId, alice.conversation.conversationId, [
+        {
+            senderId: alice.person.personId,
+            senderType: 'person',
+            type: 'text',
+            content: 'Alice 旧私聊',
+            storyTime: '2026-09-04 20:20',
+        },
+        {
+            senderId: alice.person.personId,
+            senderType: 'person',
+            type: 'text',
+            content: 'Alice 最新私聊',
+            storyTime: '2026-09-04 20:21',
+        },
+    ]);
+    await repository.appendMessages(scopeId, bob.conversation.conversationId, [{
+        senderId: bob.person.personId,
+        senderType: 'person',
+        type: 'voice',
+        content: 'Bob 最新私聊',
+        storyTime: '2026-09-04 20:22',
+    }]);
+    const apiPreset = await runtime.saveApiPreset({ preset: {
+        name: 'Proactive cross memory API',
+        endpoint: 'https://api.example.test/v1',
+        apiKey: 'proactive-cross-memory-secret',
+        model: 'proactive-cross-memory-model',
+    } });
+    const promptPreset = await runtime.savePromptPreset({ preset: {
+        name: 'Proactive cross memory prompt',
+        messages: [{
+            id: 'proactive-cross-memory-block',
+            name: 'Proactive cross memory',
+            role: 'system',
+            content: 'GROUP={{主动群聊记忆}}\nPRIVATE={{主动私聊记忆}}',
+        }],
+    } });
+    await runtime.updateGlobalSettings({
+        scopeId,
+        settings: {
+            activeApiPresetId: apiPreset.id,
+            privateProactivePresetId: promptPreset.id,
+            groupProactivePresetId: promptPreset.id,
+            conversationHistoryLimit: 1,
+            proactive: { enabled: true, everyTurns: 1, privateWeight: 100 },
+        },
+    });
+
+    storyMessages = [{
+        messageId: 'story-private',
+        role: 'assistant',
+        content: '触发私聊主动',
+        isHidden: false,
+        isSystem: false,
+    }];
+    await runtime.handleMessageReceived('story-private', 'normal');
+    await waitUntil(() => requests.length === 1, 'the private proactive cross-memory request');
+    const privateProactivePrompt = requests[0][0].content;
+    assert.equal((privateProactivePrompt.match(/<group-memory /g) || []).length, 1);
+    assert.match(privateProactivePrompt, new RegExp(`conversation="${group.conversation.conversationId}" name="共同群"`));
+    assert.match(privateProactivePrompt, /known-by="P[12],P[12]"/);
+    assert.match(privateProactivePrompt, /最新群记忆/);
+    assert.doesNotMatch(privateProactivePrompt, /旧群记忆/);
+    assert.match(privateProactivePrompt, /PRIVATE=无/);
+
+    await waitUntil(
+        async () => (await repository.getProactiveProgress(scopeId)).counter === 0,
+        'the private proactive cross-memory cycle to settle',
+    );
+    await runtime.updateGlobalSettings({
+        scopeId,
+        settings: { proactive: { privateWeight: 0 } },
+    });
+    storyMessages = [
+        ...storyMessages,
+        {
+            messageId: 'story-group',
+            role: 'assistant',
+            content: '触发群聊主动',
+            isHidden: false,
+            isSystem: false,
+        },
+    ];
+    await runtime.handleMessageReceived('story-group', 'normal');
+    await waitUntil(() => requests.length === 2, 'the group proactive cross-memory request');
+    const groupProactivePrompt = requests[1][0].content;
+    assert.match(groupProactivePrompt, /GROUP=无/);
+    assert.equal((groupProactivePrompt.match(/<private-memory /g) || []).length, 2);
+    assert.match(groupProactivePrompt, /Alice 最新私聊/);
+    assert.doesNotMatch(groupProactivePrompt, /Alice 旧私聊/);
+    assert.match(groupProactivePrompt, /语音：Bob 最新私聊/);
+    runtime.destroy();
+}
+
 async function main() {
     await testProductionRuntimeOwnsTheCurrentScopeAndFacade();
     await testProductionRuntimeCountsNewStoryRepliesPersistently();
@@ -3035,6 +3421,8 @@ async function main() {
     await testBatchInjectionReportsPendingWorldbookSyncAsFailure();
     await testProactiveWorldbookPendingIsReportedWithoutRollingBackCommittedActions();
     await testRetryPendingWorldbookIncludesGroupConversations();
+    await testProductionRuntimeBuildsManualCrossConversationMemories();
+    await testProductionRuntimeBuildsProactiveCrossConversationMemoriesOnce();
 }
 
 main().catch((error) => {

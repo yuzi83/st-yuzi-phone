@@ -102,6 +102,7 @@ export function createQQV2ProactiveService(options = {}) {
     }
     const configRevisionByScope = new Map();
     const privateOnly = options.privateOnly === true;
+    const random = typeof options.random === 'function' ? options.random : Math.random;
     const ensureScope = typeof repository.ensureScope === 'function' ? repository.ensureScope.bind(repository) : async () => {};
     const captureScopeSession = typeof options.captureScopeSession === 'function'
         ? options.captureScopeSession
@@ -244,11 +245,6 @@ export function createQQV2ProactiveService(options = {}) {
             if (conversation.kind !== 'group') continue;
             const group = await requireFunction(repository.getGroup, 'repository.getGroup')(scopeId, conversation.groupId);
             if (!group || group.status !== 'active') continue;
-            const active = conversation.status === 'active' && group.selfExited !== true;
-            const mayReinvite = conversation.status === 'exited'
-                && group.selfExited === true
-                && [group.ownerId, ...(group.adminIds || [])].some(Boolean);
-            if (!active && !mayReinvite) continue;
             const memberPeople = await Promise.all((group.memberIds || []).map(resolveGroupPerson));
             const labelsById = new Map(memberPeople.filter(Boolean).map((person) => {
                 const reference = assignPersonReference(person);
@@ -271,7 +267,7 @@ export function createQQV2ProactiveService(options = {}) {
                 memberIds: [...(group.memberIds || [])],
                 ownerId: group.ownerId || '',
                 adminIds: [...(group.adminIds || [])],
-                reinviteOnly: mayReinvite,
+                reinviteOnly: false,
                 peopleById: Object.fromEntries(memberPeople.filter(Boolean).map((person) => [person.personId, asText(person.formalName, 120)])),
                 messages,
             });
@@ -513,7 +509,11 @@ export function createQQV2ProactiveService(options = {}) {
             if (runtimeSettings?.proactive?.enabled !== true) {
                 return Object.freeze({ triggered: false, queued: false, skipped: 'disabled' });
             }
-            const cycleKind = privateOnly || input.kind !== 'group' ? 'private' : 'group';
+            const requestedKind = ['private', 'group'].includes(input.kind) ? input.kind : '';
+            const privateWeight = Math.max(0, Math.min(100, Number(runtimeSettings?.proactive?.privateWeight) || 0));
+            const cycleKind = privateOnly
+                ? 'private'
+                : requestedKind || (Number(random()) < privateWeight / 100 ? 'private' : 'group');
             const queued = await requestService.enqueueProactive({
                 scopeId,
                 execute: (request) => executeCycle({

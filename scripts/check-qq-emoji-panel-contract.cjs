@@ -49,6 +49,12 @@ const path = require('node:path');
     const panelStart = source.indexOf('const renderEmojiPanel = async');
     const panelEnd = source.indexOf('const renderChat = async', panelStart);
     const panelSource = source.slice(panelStart, panelEnd);
+    assert.match(panelSource, /renderEmojiPanel = async \(token, chatKind\)/,
+        'the shared emoji renderer must receive the current chat kind');
+    assert.match(panelSource, /yuzi-qq-\$\{chatKind\}-emoji-panel/,
+        'private and group chats must receive their own shared emoji panel class');
+    assert.match(source, /await renderEmojiPanel\(token,\s*chatKind\)/,
+        'group chat rendering must use the same emoji panel path as private chat');
     const stickerImageStart = source.indexOf('const stickerImage =');
     const stickerImageEnd = source.indexOf('const createIcon =', stickerImageStart);
     const stickerImageSource = source.slice(stickerImageStart, stickerImageEnd);
@@ -97,6 +103,10 @@ const path = require('node:path');
         'the production runtime must revoke released sticker object URLs');
     assert.match(css, /\.yuzi-qq-private-emoji-panel\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*var\(--yuzi-qq-private-emoji-column-min\)\),\s*1fr\)\)/s,
         'the private emoji panel must retain empty slots while deriving responsive columns from one track token');
+    assert.match(css, /\.yuzi-qq-group-emoji-panel\s*\{[^}]*position:\s*absolute;[^}]*block-size:\s*var\(--yuzi-qq-private-emoji-panel-height\)/s,
+        'the group emoji grid must reuse the private bottom-panel geometry');
+    assert.match(css, /\.yuzi-qq-group-chat-view\.has-emoji-panel[\s\S]*\.yuzi-qq-group-chat-composer[\s\S]*inset-block-end:\s*var\(--yuzi-qq-private-emoji-panel-height\)/s,
+        'the group composer must rise above the open emoji grid');
     assert.match(tokens, /--yuzi-qq-private-emoji-column-min:\s*63px;/,
         'the track token must yield five baseline columns and naturally collapse to four or three');
     assert.match(source, /from '\.\/emoji-panel\.js'/, 'QQ app uses the emoji temporary-layer event controller');

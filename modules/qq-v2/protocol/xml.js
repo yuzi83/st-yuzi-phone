@@ -2,9 +2,15 @@ const AI_MESSAGE_TYPES = new Set(['text', 'voice', 'image', 'video', 'sticker', 
 const ACTION_NAMES = new Set(['message', 'read', 'none', 'create-private', 'create-group', 'group', 'transfer']);
 const GROUP_ACTIONS = new Set([
     'rename', 'add', 'remove', 'appoint-admin', 'revoke-admin', 'mute', 'unmute',
-    'kick', 'reinvite', 'transfer-owner', 'dissolve',
+    'kick', 'leave', 'reinvite', 'transfer-owner', 'dissolve',
 ]);
 const TRANSFER_ACTIONS = new Set(['accept', 'reject']);
+const MUTE_DURATION_ALIASES = Object.freeze({
+    '10分钟': '10 分钟',
+    '1小时': '1 小时',
+    '1天': '1 天',
+    '7天': '7 天',
+});
 
 function asText(value, maxLength = 0) {
     const text = String(value ?? '').trim();
@@ -122,11 +128,14 @@ function parseCreateGroup(element) {
 }
 
 function parseGroupAction(element) {
-    rejectUnknownAttributes(element, new Set(['conversation', 'action', 'actor', 'target', 'value', 'duration']));
+    rejectUnknownAttributes(element, new Set(['conversation', 'action', 'actor', 'target', 'value', 'duration', 'id', 'name']));
     ensureLeafText(element);
     if (!textIsEmpty(element)) throw new QQV2ProtocolError('group 不允许文本内容');
     const action = requireText(element.getAttribute('action'), '群管理动作', 64);
     if (!GROUP_ACTIONS.has(action)) throw new QQV2ProtocolError('不支持的群管理动作');
+    const id = asText(element.getAttribute('id'), 256);
+    const name = asText(element.getAttribute('name'), 120);
+    const rawDuration = asText(element.getAttribute('duration'), 32);
     return {
         type: 'group',
         conversation: requireText(element.getAttribute('conversation'), '群聊引用', 256),
@@ -134,7 +143,9 @@ function parseGroupAction(element) {
         actor: requireText(element.getAttribute('actor'), '群管理操作者', 256),
         target: asText(element.getAttribute('target'), 256),
         value: asText(element.getAttribute('value'), 2000),
-        duration: asText(element.getAttribute('duration'), 32),
+        duration: MUTE_DURATION_ALIASES[rawDuration] || rawDuration,
+        ...(id ? { id } : {}),
+        ...(name ? { name } : {}),
     };
 }
 
@@ -268,6 +279,9 @@ export function validateQQV2ActionBatch(actions, options = {}) {
         if (action.type === 'group' && kind !== 'group') throw new QQV2ProtocolError('群管理动作必须引用群聊');
     });
 
+    if (['private-reply', 'group-reply'].includes(scenario) && actions.length === 0) {
+        throw new QQV2ProtocolError('回复动作不能为空');
+    }
     if (hasNone && actions.length !== 1) throw new QQV2ProtocolError('none 必须是唯一动作');
     if (scenario === 'private-reply' && (
         (!hasMessage && !hasRead && !hasTransfer)

@@ -1,4 +1,6 @@
 const DEFAULT_RETRY_DELAYS_MS = Object.freeze([1000, 2000, 5000]);
+const CHRONICLE_TABLE_NAMES = new Set(['纪要表', '纪要']);
+const CHRONICLE_TODAY_RELATION_FIELDS = new Set(['与今天的关系', 'today_relation']);
 
 function normalizeText(value) {
     return String(value ?? '').trim();
@@ -135,6 +137,16 @@ function hasCurrentRowChanges(table) {
     });
 }
 
+function isChronicleTodayRelationOnlyUpdate(table, change) {
+    const fields = Array.isArray(change?.fields) ? change.fields : [];
+    return CHRONICLE_TABLE_NAMES.has(normalizeText(table?.tableName))
+        && normalizeText(change?.type) === 'update'
+        && fields.length > 0
+        && fields.every(field => (
+            CHRONICLE_TODAY_RELATION_FIELDS.has(normalizeText(field?.field))
+        ));
+}
+
 function hasConsumableChangedSheet(changedSnapshot, sheetKey) {
     if (!isPlainSnapshot(changedSnapshot)
         || !Object.prototype.hasOwnProperty.call(changedSnapshot, sheetKey)) {
@@ -185,6 +197,7 @@ function buildChangedRowsBySheetKey(tables) {
             }];
         }
         changes.forEach((change) => {
+            if (isChronicleTodayRelationOnlyUpdate(table, change)) return;
             const changeType = normalizeText(change?.type);
             if (changeType !== 'insert' && changeType !== 'update') {
                 return;

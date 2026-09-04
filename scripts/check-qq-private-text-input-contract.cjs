@@ -224,9 +224,12 @@ async function main() {
         'the QQ App must own one composer height scheduler',
     );
     assert.match(
-        source,
-        /input\.addEventListener\('input',\s*\(\)\s*=>\s*\{\s*drafts\.set\([^;]+;\s*composerAutoHeight\.schedule\(input\);\s*\}\);/s,
-        'input events may synchronously update only the draft before scheduling height work',
+        source.slice(
+            source.indexOf('const renderComposer ='),
+            source.indexOf('const renderEmojiPanel ='),
+        ),
+        /input\.addEventListener\('input',\s*\(\)\s*=>\s*\{\s*drafts\.set\([^;]+;\s*composerAutoHeight\.schedule\(input\);\s*syncMentionPanel\(\);\s*\}\);/s,
+        'input events update the draft, schedule height work, then refresh the group mention panel',
     );
     assert.doesNotMatch(source, /input\.style\.height\s*=|input\.scrollHeight|input\.clientHeight\s*\*\s*4/, 'input events must not force synchronous layout');
     assert.match(source, /const render = async[^]*?composerAutoHeight\.cancel\(\);/, 'rerender must clear stale pending height work');

@@ -67,6 +67,8 @@ async function testGlobalRuntimeStorage() {
         activeApiPresetId: 'legacy-api',
         privateReplyPresetId: 'legacy-reply',
         privateProactivePresetId: 'legacy-proactive',
+        groupReplyPresetId: 'builtin-group-reply',
+        groupProactivePresetId: 'builtin-group-proactive',
         hostContextTurns: 0,
         conversationHistoryLimit: 0,
         hostContextExtractTag: 'content',
@@ -79,7 +81,7 @@ async function testGlobalRuntimeStorage() {
             depth: 0,
             keywords: ['Legacy', 'dawn'],
         },
-        proactive: { enabled: true, everyTurns: 4 },
+        proactive: { enabled: true, everyTurns: 4, privateWeight: 50 },
     }, 'the first shared read migrates the current scope without losing selections or explicit zeroes');
     const migratedFromOtherScope = await runtimeSettings.get('scope-b');
     assert.equal(migratedFromOtherScope.activeApiPresetId, 'legacy-api',
@@ -91,6 +93,8 @@ async function testGlobalRuntimeStorage() {
         activeApiPresetId: 'api-global',
         privateReplyPresetId: 'reply-global',
         privateProactivePresetId: 'proactive-global',
+        groupReplyPresetId: 'group-reply-global',
+        groupProactivePresetId: 'group-proactive-global',
         hostContextTurns: 7,
         conversationHistoryLimit: 21,
         worldbook: {
@@ -102,7 +106,7 @@ async function testGlobalRuntimeStorage() {
             depth: 13,
             keywords: ['north', 'North', 'dawn'],
         },
-        proactive: { enabled: true, everyTurns: 2 },
+        proactive: { enabled: true, everyTurns: 2, privateWeight: 10 },
     });
     const scopeASettings = await runtimeSettings.get('scope-a');
     assert.equal(scopeASettings.activeApiPresetId, 'api-global');
@@ -119,8 +123,10 @@ async function testGlobalRuntimeStorage() {
     assert.equal(scopeASettings.worldbook.bookName, undefined,
         'an explicit bookName patch is ignored by shared runtime settings');
     assert.equal((await runtimeSettings.get('scope-b')).privateReplyPresetId, 'reply-global');
-    assert.deepEqual(scopeASettings.proactive, { enabled: true, everyTurns: 2 });
-    assert.deepEqual((await runtimeSettings.get('scope-b')).proactive, { enabled: true, everyTurns: 2 },
+    assert.equal(scopeASettings.groupReplyPresetId, 'group-reply-global');
+    assert.equal(scopeASettings.groupProactivePresetId, 'group-proactive-global');
+    assert.deepEqual(scopeASettings.proactive, { enabled: true, everyTurns: 2, privateWeight: 10 });
+    assert.deepEqual((await runtimeSettings.get('scope-b')).proactive, { enabled: true, everyTurns: 2, privateWeight: 10 },
         '主动消息设置在所有聊天 scope 间共享');
     await runtimeSettings.update('scope-a', { worldbook: { injectionCount: 0 } });
     assert.equal((await runtimeSettings.get('scope-b')).worldbook.injectionCount, 0,
@@ -137,8 +143,8 @@ async function testGlobalRuntimeStorage() {
         '迁移会删除其他聊天 scope 的旧主动消息字段');
 
     await runtimeSettings.update('scope-a', { proactive: { everyTurns: 3 } });
-    assert.deepEqual((await runtimeSettings.get('scope-a')).proactive, { enabled: true, everyTurns: 3 });
-    assert.deepEqual((await runtimeSettings.get('scope-b')).proactive, { enabled: true, everyTurns: 3 });
+    assert.deepEqual((await runtimeSettings.get('scope-a')).proactive, { enabled: true, everyTurns: 3, privateWeight: 10 });
+    assert.deepEqual((await runtimeSettings.get('scope-b')).proactive, { enabled: true, everyTurns: 3, privateWeight: 10 });
     assert.equal(await runtimeSettings.clearPresetReferences('scope-a', 'api-global', ['activeApiPresetId']), 1);
     assert.equal((await runtimeSettings.get('scope-b')).activeApiPresetId, '');
 }
@@ -178,6 +184,8 @@ async function testExistingSharedRuntimeMigration() {
         activeApiPresetId: 'existing-api',
         privateReplyPresetId: 'existing-reply',
         privateProactivePresetId: 'existing-proactive',
+        groupReplyPresetId: 'builtin-group-reply',
+        groupProactivePresetId: 'builtin-group-proactive',
         hostContextTurns: 0,
         conversationHistoryLimit: 0,
         hostContextExtractTag: 'content',
@@ -190,7 +198,7 @@ async function testExistingSharedRuntimeMigration() {
             depth: 0,
             keywords: ['scope-b'],
         },
-        proactive: { enabled: false, everyTurns: 8 },
+        proactive: { enabled: false, everyTurns: 8, privateWeight: 50 },
     }, 'missing fields in an existing shared record migrate from the current scope and legacy enabled key');
     assert.equal(migrated.worldbook.bookName, undefined);
     assert.deepEqual(await runtimeSettings.get('scope-a'), migrated,
@@ -259,11 +267,11 @@ function settings(label) {
         activeApiPresetId: `api-${label}`,
         privateReplyPresetId: `reply-${label}`,
         privateProactivePresetId: `proactive-${label}`,
-        groupReplyPresetId: `hidden-group-reply-${label}`,
-        groupProactivePresetId: `hidden-group-proactive-${label}`,
+        groupReplyPresetId: `group-reply-${label}`,
+        groupProactivePresetId: `group-proactive-${label}`,
         hostContextTurns: 4,
         conversationHistoryLimit: 12,
-        proactive: { enabled: true, everyTurns: 3 },
+        proactive: { enabled: true, everyTurns: 3, privateWeight: 50 },
         worldbook: {
             enabled: true,
             bookName: `book-${label}`,
@@ -295,7 +303,7 @@ async function main() {
             activeApiPresetId: 'api-a',
             privateReplyPresetId: 'reply-a',
             privateProactivePresetId: 'proactive-a',
-            proactive: { enabled: true, everyTurns: 3 },
+            proactive: { enabled: true, everyTurns: 3, privateWeight: 50 },
         }],
     ]);
     const calls = [];
@@ -337,9 +345,10 @@ async function main() {
         { kind: 'worldbook', title: '\u4e16\u754c\u4e66\u6ce8\u5165' },
         { kind: 'image-library', title: '\u56fe\u7247\u8d44\u6599' },
     ]);
-    assert.doesNotMatch(JSON.stringify(initial.groups), /group|theme/i, 'private-only QQ settings hide group and theme controls');
-    assert.equal(initial.settings.groupReplyPresetId, undefined, 'read model never exposes hidden group configuration');
-    assert.equal(initial.settings.groupProactivePresetId, undefined, 'read model never exposes hidden group configuration');
+    assert.doesNotMatch(JSON.stringify(initial.groups), /theme/i, 'QQ settings keep using the global phone theme');
+    assert.equal(initial.settings.groupReplyPresetId, 'group-reply-a', 'read model exposes the group reply preset');
+    assert.equal(initial.settings.groupProactivePresetId, 'group-proactive-a', 'read model exposes the group proactive preset');
+    assert.equal(initial.settings.proactive.privateWeight, 50, 'private/group proactive selection defaults to 50/50');
 
     const uiSource = fs.readFileSync(path.join(process.cwd(), 'modules/qq-v2/ui/app.js'), 'utf8');
     assert.match(uiSource, /const settingTimeWindow =/, 'time range controls share one UI field');
@@ -392,6 +401,17 @@ async function main() {
         scopeId: 'scope-a',
         settings: { activeApiPresetId: 'api-next' },
     }], 'reply changes persist only the field that actually changed');
+
+    await saveQQSettings(facade, {
+        scopeId: initial.scopeId,
+        kind: 'reply',
+        field: 'privateWeight',
+        values: { privateWeight: '10' },
+    });
+    assert.deepEqual(calls.at(-1), ['updateGlobalSettings', {
+        scopeId: 'scope-a',
+        settings: { proactive: { privateWeight: 10 } },
+    }], 'a private weight of 10 represents a 10% private / 90% group proactive split');
 
     await saveQQSettings(facade, {
         scopeId: initial.scopeId,

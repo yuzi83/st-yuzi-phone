@@ -10,7 +10,7 @@ const TABLE_POPUP_PLACEMENT_MODES = Object.freeze(['random', 'center']);
 const OVERLAY_HEX_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
 
 export const FULLSCREEN_OVERLAY_DEFAULTS = Object.freeze({
-    enabled: true,
+    enabled: false,
     sourceEnabledBySheetKey: Object.freeze({}),
     sourceOrder: Object.freeze([]),
     sourceModelBySheetKey: Object.freeze({}),
@@ -32,7 +32,7 @@ export const FULLSCREEN_OVERLAY_DEFAULTS = Object.freeze({
             intervalMs: 200,
             durationMs: 4000,
             columnCount: 2,
-            sizePreset: 'normal',
+            sizePreset: 'compact',
             borderRadiusPx: 20,
             backgroundColor: '#FFFFFF',
             opacity: 0.94,
