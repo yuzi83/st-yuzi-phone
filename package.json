@@ -1,6 +1,6 @@
 {
   "name": "st-yuzi-phone",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "玉子手机 - SillyTavern 扩展",
   "type": "module",
   "private": true,

@@ -75,6 +75,10 @@ async function checkRegistryContract() {
 async function checkSourceCatalogContract() {
     const { createOverlaySourceRegistry } = await importModule('modules/fullscreen-overlay/source-registry.js');
     const { buildOverlaySourceCatalog } = await importModule('modules/fullscreen-overlay/source-catalog.js');
+    const {
+        QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
+        createQQFullscreenOverlaySourceAdapter,
+    } = await importModule('modules/fullscreen-overlay/sources/qq.js');
     const liveAdapter = Object.freeze({
         id: 'live-table',
         modelId: 'scrolling-barrage',
@@ -93,7 +97,11 @@ async function checkSourceCatalogContract() {
         getSignature: context => context?.tableName || '',
         readEvents: () => [],
     });
-    const registry = createOverlaySourceRegistry([liveAdapter, genericAdapter]);
+    const qqAdapter = createQQFullscreenOverlaySourceAdapter({
+        getFacade: () => null,
+        subscribeProactiveMessages: () => () => {},
+    });
+    const registry = createOverlaySourceRegistry([liveAdapter, qqAdapter, genericAdapter]);
     const rawData = {
         metadata: { ignored: true },
         sheet_unknown: {
@@ -114,7 +122,7 @@ async function checkSourceCatalogContract() {
     };
 
     const catalog = buildOverlaySourceCatalog(rawData, {
-        sourceOrder: ['sheet_live', 'missing', 'sheet_unknown', 'sheet_live'],
+        sourceOrder: ['sheet_live', QQ_FULLSCREEN_OVERLAY_SOURCE_KEY, 'missing', 'sheet_unknown', 'sheet_live'],
         sourceEnabledBySheetKey: {
             sheet_live: false,
             sheet_generic: true,
@@ -127,6 +135,7 @@ async function checkSourceCatalogContract() {
 
     assert.deepEqual(catalog.map(item => item.sheetKey), [
         'sheet_live',
+        QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
         'sheet_unknown',
         'sheet_generic',
     ]);
@@ -149,6 +158,15 @@ async function checkSourceCatalogContract() {
             modelIds: ['scrolling-barrage', 'table-popup'],
         },
         {
+            sheetKey: QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
+            supported: true,
+            disabled: false,
+            enabled: true,
+            sourceId: 'qq',
+            modelId: 'table-popup',
+            modelIds: ['table-popup'],
+        },
+        {
             sheetKey: 'sheet_unknown',
             supported: false,
             disabled: true,
@@ -169,6 +187,9 @@ async function checkSourceCatalogContract() {
     ]);
 
     const defaultCatalog = buildOverlaySourceCatalog(rawData, {}, registry);
+    assert.equal(defaultCatalog.at(-1)?.sheetKey, QQ_FULLSCREEN_OVERLAY_SOURCE_KEY);
+    assert.equal(defaultCatalog.at(-1)?.tableName, 'QQ');
+    assert.equal(defaultCatalog.at(-1)?.enabled, true);
     assert.equal(defaultCatalog.find(item => item.sheetKey === 'sheet_live')?.enabled, true);
     assert.equal(defaultCatalog.find(item => item.sheetKey === 'sheet_generic')?.enabled, false);
 
@@ -187,6 +208,101 @@ async function checkSourceCatalogContract() {
     );
     assert(Object.isFrozen(defaultCatalog));
     assert(defaultCatalog.every(Object.isFrozen));
+}
+
+async function checkQQSourceAdapterContract() {
+    const {
+        QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
+        createQQFullscreenOverlaySourceAdapter,
+    } = await importModule('modules/fullscreen-overlay/sources/qq.js');
+    let proactiveListener = null;
+    const conversations = [{
+        conversationId: 'conversation-1',
+        kind: 'private',
+        status: 'active',
+        title: '林知夏',
+        formalName: '林知夏',
+        avatarAssetId: 'avatar-1',
+    }, {
+        conversationId: 'conversation-2',
+        kind: 'private',
+        status: 'active',
+        title: '周予安',
+        formalName: '周予安',
+        avatarAssetId: 'avatar-2',
+    }];
+    const adapter = createQQFullscreenOverlaySourceAdapter({
+        getFacade: () => ({
+            query: {
+                async conversations() {
+                    return { ok: true, conversations };
+                },
+            },
+        }),
+        subscribeProactiveMessages(listener) {
+            proactiveListener = listener;
+            return () => { proactiveListener = null; };
+        },
+        random: () => 0.99,
+    });
+
+    assert.equal(adapter.id, 'qq');
+    assert.equal(adapter.modelId, 'table-popup');
+    assert.deepEqual(adapter.modelIds, ['table-popup']);
+    assert.equal(adapter.defaultEnabled, true);
+    assert.equal(adapter.matches({
+        sheetKey: QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
+        sourceKind: 'qq',
+    }), true);
+    assert.deepEqual(adapter.readEvents({
+        events: [{
+            senderName: '林知夏',
+            avatarAssetId: 'avatar-1',
+        }, {
+            senderName: '林知夏',
+            avatarAssetId: 'avatar-1',
+        }, {
+            senderName: '周予安',
+            avatarAssetId: '',
+        }],
+    }), [{
+        kind: 'message-notification',
+        sourceId: 'qq',
+        sheetKey: QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
+        senderName: '林知夏',
+        avatarAssetId: 'avatar-1',
+        text: '林知夏给你发了1条消息',
+    }, {
+        kind: 'message-notification',
+        sourceId: 'qq',
+        sheetKey: QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
+        senderName: '周予安',
+        avatarAssetId: '',
+        text: '周予安给你发了1条消息',
+    }], '同一主动周期必须按 NPC 去重，并生成固定通知文本');
+
+    assert.deepEqual(await adapter.readTestEvents(), [{
+        conversationId: 'conversation-2',
+        senderName: '周予安',
+        avatarAssetId: 'avatar-2',
+    }], '点击测试必须从当前 QQ 私聊中随机选择一个 NPC');
+
+    const automaticEvents = [];
+    const unsubscribe = adapter.subscribe(events => automaticEvents.push(events));
+    await proactiveListener({
+        conversationIds: ['conversation-1', 'conversation-1', 'conversation-2'],
+    });
+    assert.deepEqual(automaticEvents, [[{
+        conversationId: 'conversation-1',
+        senderName: '林知夏',
+        avatarAssetId: 'avatar-1',
+    }, {
+        conversationId: 'conversation-2',
+        senderName: '周予安',
+        avatarAssetId: 'avatar-2',
+    }]], '自动触发只转换本轮真正主动发消息的 NPC');
+    unsubscribe();
+    assert.equal(proactiveListener, null);
 }
 
 function cloneLiveSheet(sheet) {
@@ -479,7 +595,7 @@ async function checkGenericTableSourceAdapterContract() {
     assert.equal(adapter.id, 'generic-table');
     assert.equal(adapter.modelId, 'table-popup');
     assert.deepEqual(adapter.modelIds, ['table-popup']);
-    assert.equal(adapter.defaultEnabled, false);
+    assert.equal(adapter.defaultEnabled, true);
     assert.equal(adapter.matches(context), true);
 
     assert.deepEqual(
@@ -489,13 +605,12 @@ async function checkGenericTableSourceAdapterContract() {
             sheetKey: 'sheet_square',
             rowIndex: 0,
             cells: [
-                { label: 'row_id', value: '101' },
                 { label: '标题', value: '第一条' },
                 { label: '内容', value: '完整正文' },
                 { label: '备注', value: '' },
             ],
         }],
-        '手动测试路径只读取第一条当前行，并保留空字段与完整表头顺序',
+        '手动测试路径必须隐藏系统 row_id，并保留其他空字段与完整表头顺序',
     );
 
     assert.deepEqual(
@@ -511,7 +626,6 @@ async function checkGenericTableSourceAdapterContract() {
             sheetKey: 'sheet_square',
             rowIndex: 1,
             cells: [
-                { label: 'row_id', value: '102' },
                 { label: '标题', value: '第二条' },
                 { label: '内容', value: '后续正文' },
                 { label: '备注', value: '空值也保留' },
@@ -563,6 +677,7 @@ async function main() {
     await checkSourceCatalogContract();
     await checkLiveTableSourceAdapterContract();
     await checkGenericTableSourceAdapterContract();
+    await checkQQSourceAdapterContract();
     console.log('[fullscreen-overlay-sources-contract] passed');
 }
 

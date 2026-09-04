@@ -79,6 +79,7 @@ async function runProactiveCycle(options = {}) {
     const fixture = options.fixture || createRepositoryFixture();
     const requestService = createRequestServiceFixture();
     const syncCalls = [];
+    const committedMessageCalls = [];
     const service = createQQV2ProactiveService({
         repository: fixture.repository,
         requestService,
@@ -103,6 +104,10 @@ async function runProactiveCycle(options = {}) {
             syncCalls.push(input);
             return options.syncWorldbook?.(input);
         },
+        async onMessagesCommitted(input) {
+            committedMessageCalls.push(input);
+            return options.onMessagesCommitted?.(input);
+        },
         onProjectionError: options.onProjectionError,
     });
 
@@ -111,7 +116,7 @@ async function runProactiveCycle(options = {}) {
         scopeId: fixture.scopeId,
         signal: new AbortController().signal,
     });
-    return { fixture, result, syncCalls };
+    return { fixture, result, syncCalls, committedMessageCalls };
 }
 
 async function testEnabledPrivateCycleCallsBackendAndCommitsActions() {
@@ -169,7 +174,7 @@ async function testEnabledPrivateCycleCallsBackendAndCommitsActions() {
 }
 
 async function testNoneActionSkipsWorldbookSync() {
-    const { result, syncCalls } = await runProactiveCycle({
+    const { result, syncCalls, committedMessageCalls } = await runProactiveCycle({
         backendContent: '<none />',
         actionResult: {
             applied: [{ type: 'none' }],
@@ -179,10 +184,11 @@ async function testNoneActionSkipsWorldbookSync() {
 
     assert.deepEqual(result, { status: 'succeeded' });
     assert.equal(syncCalls.length, 0, 'none 动作不应重写世界书投影');
+    assert.equal(committedMessageCalls.length, 0, 'none 动作不得冒充 NPC 主动消息');
 }
 
 async function testReadActionSkipsWorldbookSync() {
-    const { result, syncCalls } = await runProactiveCycle({
+    const { result, syncCalls, committedMessageCalls } = await runProactiveCycle({
         backendContent: '<read conversation="P1" />',
         actionResult: {
             applied: [{ type: 'read', conversationId: 'private-1' }],
@@ -192,10 +198,11 @@ async function testReadActionSkipsWorldbookSync() {
 
     assert.deepEqual(result, { status: 'succeeded' });
     assert.equal(syncCalls.length, 0, 'read 动作只处理已读边界，不应重写世界书投影');
+    assert.equal(committedMessageCalls.length, 0, '纯已读动作不得触发 QQ 浮层通知');
 }
 
 async function testEmptyAppliedBatchSkipsWorldbookSync() {
-    const { result, syncCalls } = await runProactiveCycle({
+    const { result, syncCalls, committedMessageCalls } = await runProactiveCycle({
         actionResult: {
             applied: [],
             createdConversationIds: [],
@@ -204,6 +211,7 @@ async function testEmptyAppliedBatchSkipsWorldbookSync() {
 
     assert.deepEqual(result, { status: 'succeeded' });
     assert.equal(syncCalls.length, 0, '空动作批次不应重写世界书投影');
+    assert.equal(committedMessageCalls.length, 0);
 }
 
 async function testMessageActionSyncsOnlyAffectedConversation() {
@@ -225,7 +233,7 @@ async function testMessageActionSyncsOnlyAffectedConversation() {
             ],
         },
     });
-    const { result, syncCalls } = await runProactiveCycle({
+    const { result, syncCalls, committedMessageCalls } = await runProactiveCycle({
         fixture,
         backendContent: '<message conversation="P2">新消息</message>',
         commitActions: async () => {
@@ -245,6 +253,12 @@ async function testMessageActionSyncsOnlyAffectedConversation() {
     assert.deepEqual(result, { status: 'succeeded' });
     assert.equal(syncCalls.length, 1);
     assert.deepEqual(syncCalls[0].conversationIds, ['private-2']);
+    assert.equal(committedMessageCalls.length, 1);
+    assert.deepEqual(
+        committedMessageCalls[0].conversationIds,
+        ['private-2'],
+        '主动消息提交观察者必须只收到真正写入 NPC 消息的会话，并按会话去重',
+    );
 }
 
 async function testTransferActionSyncsOnlyAffectedConversation() {

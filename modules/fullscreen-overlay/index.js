@@ -11,6 +11,7 @@ import {
 import { createOverlaySourceRegistry } from './source-registry.js';
 import { buildOverlaySourceCatalog } from './source-catalog.js';
 import { createLiveTableSourceAdapter } from './sources/live-table.js';
+import { createQQFullscreenOverlaySourceAdapter } from './sources/qq.js';
 import { createGenericTableSourceAdapter } from './sources/generic-table.js';
 import { createReviewResultCoordinator } from './review-result-coordinator.js';
 import { createFullscreenOverlayLayerRuntime } from './layer-runtime.js';
@@ -18,6 +19,7 @@ import { createFullscreenOverlayScheduler } from './scheduler.js';
 import { createScrollingBarrageRenderer } from './renderers/scrolling-barrage.js';
 import { createTablePopupRenderer } from './renderers/table-popup.js';
 import { createFullscreenOverlayRuntime } from './runtime.js';
+import { getQQV2Facade } from '../qq-v2/runtime/default-runtime.js';
 
 const logger = Logger.withScope({
     scope: 'fullscreen-overlay/index',
@@ -25,6 +27,7 @@ const logger = Logger.withScope({
 });
 const sourceRegistry = createOverlaySourceRegistry([
     createLiveTableSourceAdapter(),
+    createQQFullscreenOverlaySourceAdapter(),
     createGenericTableSourceAdapter(),
 ]);
 
@@ -39,6 +42,18 @@ function logRuntimeError(error, context = {}) {
     } catch {
         // 浮层日志不可打断扩展主生命周期。
     }
+}
+
+async function acquireQQMediaRender(assetId) {
+    const facade = getQQV2Facade();
+    const result = await facade?.query?.mediaRender?.({ assetId });
+    const leaseId = String(result?.render?.leaseId || '').trim();
+    const url = String(result?.render?.url || '').trim();
+    if (result?.ok !== true || !leaseId || !url) return null;
+    return {
+        url,
+        release: () => facade?.intent?.releaseMediaRender?.({ leaseId }),
+    };
 }
 
 const fullscreenOverlayRuntime = createFullscreenOverlayRuntime({
@@ -62,6 +77,7 @@ const fullscreenOverlayRuntime = createFullscreenOverlayRuntime({
             layerRuntime,
             documentRef: globalThis.document,
             getSettings: () => getSettings() || {},
+            acquireMediaRender: acquireQQMediaRender,
             onError,
         });
         return new Map([

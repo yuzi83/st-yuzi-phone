@@ -617,8 +617,8 @@ async function main() {
         await cleanupScenario();
 
         // 场景 A：同一审核 session 的 ready 是相对楼层前基线的累计结果。
-        // 第一次只有 row_id=1 变化；第二次累计结果包含 row_id=1 的旧变化
-        // 与 row_id=2 的新变化。第二次自动批次只能播放新增差异 row_id=2。
+        // 第一次只有 row_id=1 变化；第二次审核累计结果包含 row_id=1 与 row_id=2。
+        // 浮层按楼层累计来源，同一物理表本楼只排队一次，不得用第二次 ready 替换旧队列。
         const cumulativeBaseline = createRawSnapshot({
             liveRows: [
                 [1, '', '', ''],
@@ -690,21 +690,10 @@ async function main() {
                 ['1', '2'],
                 '第二次审核 ready 必须保持相对楼层前基线的累计差异，确保场景真实',
             );
-            await waitForState(
-                '同一 session 第二次累计 ready 产生第二个自动批次',
-                () => scheduler.getNonEmptyBatches().length === 2,
-            );
-            assert.deepStrictEqual(
-                scheduler.getNonEmptyBatches()[1][0].items.map(item => ({
-                    rowIndex: item.rowIndex,
-                    text: item.text,
-                })),
-                [
-                    { rowIndex: 1, text: '第二批 row2 剧情' },
-                    { rowIndex: 1, text: '第二批 row2 推角' },
-                    { rowIndex: 1, text: '第二批 row2 对线' },
-                ],
-                '同一 session 的累计 ready 只能播放相对上次已接受结果新增的 row_id=2，不得重播 row_id=1',
+            assert.strictEqual(
+                scheduler.getNonEmptyBatches().length,
+                1,
+                '同一 session 的同一物理表不得重复排队或替换本楼尚未播放的其他来源',
             );
         }
         await cleanupScenario();
@@ -872,13 +861,10 @@ async function main() {
             );
 
             await emitAndDebounce(differenceA);
-            await waitForState(
-                '同 session 完全相同差异 A 再次产生直播批次',
-                () => scheduler.getNonEmptyBatches().length === visualCountBeforeEmpty + 1,
-            );
-            assert.deepStrictEqual(
-                scheduler.getNonEmptyBatches()[1][0].items.map(item => item.text),
-                ['差异 A 剧情', '差异 A 推角', '差异 A 对线'],
+            assert.strictEqual(
+                scheduler.getNonEmptyBatches().length,
+                visualCountBeforeEmpty,
+                '同一楼层的播放状态必须跨 empty 保留，完全相同来源不得再次替换队列',
             );
         }
         await cleanupScenario();

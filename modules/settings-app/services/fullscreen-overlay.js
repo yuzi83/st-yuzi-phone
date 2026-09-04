@@ -14,6 +14,7 @@ import {
 import { buildOverlaySourceCatalog } from '../../fullscreen-overlay/source-catalog.js';
 import { createOverlaySourceRegistry } from '../../fullscreen-overlay/source-registry.js';
 import { createLiveTableSourceAdapter } from '../../fullscreen-overlay/sources/live-table.js';
+import { createQQFullscreenOverlaySourceAdapter } from '../../fullscreen-overlay/sources/qq.js';
 import { createGenericTableSourceAdapter } from '../../fullscreen-overlay/sources/generic-table.js';
 
 export {
@@ -76,18 +77,29 @@ function getSourceCatalogBuilder(sourceCatalog) {
 }
 
 function mergeCatalogWithNavigation(navigationCatalog, sourceEntries) {
-    const sourceBySheetKey = new Map(
-        asArray(sourceEntries)
-            .map(entry => [asId(entry?.sheetKey), entry])
-            .filter(([sheetKey]) => !!sheetKey),
+    const navigationBySheetKey = new Map(
+        navigationCatalog.map(entry => [asId(entry?.sheetKey), entry]),
     );
-    return navigationCatalog.map((navigationEntry) => ({
-        ...navigationEntry,
-        ...(sourceBySheetKey.get(navigationEntry.sheetKey) || {}),
-        sheetKey: navigationEntry.sheetKey,
-        tableName: navigationEntry.tableName,
-        orderIndex: navigationEntry.orderIndex,
-    }));
+    const merged = [];
+    const seen = new Set();
+
+    asArray(sourceEntries).forEach((sourceEntry) => {
+        const sheetKey = asId(sourceEntry?.sheetKey);
+        if (!sheetKey || seen.has(sheetKey)) return;
+        const navigationEntry = navigationBySheetKey.get(sheetKey) || {};
+        merged.push({
+            ...navigationEntry,
+            ...sourceEntry,
+            sheetKey,
+            tableName: asId(sourceEntry?.tableName || navigationEntry?.tableName) || sheetKey,
+        });
+        seen.add(sheetKey);
+    });
+    navigationCatalog.forEach((navigationEntry) => {
+        if (seen.has(navigationEntry.sheetKey)) return;
+        merged.push(navigationEntry);
+    });
+    return merged;
 }
 
 async function resolveSourceCatalog({
@@ -246,6 +258,7 @@ export function createFullscreenOverlaySettingsService(options = {}) {
         : getTableDataAsync;
     const registry = options.sourceRegistry || createOverlaySourceRegistry([
         createLiveTableSourceAdapter(),
+        createQQFullscreenOverlaySourceAdapter(),
         createGenericTableSourceAdapter(),
     ]);
     const sourceCatalog = options.sourceCatalog || null;
@@ -285,7 +298,6 @@ export function createFullscreenOverlaySettingsService(options = {}) {
         if (!isPlainObject(rawData)) return buildErrorViewModel(storedConfig, null);
 
         const navigationCatalog = buildTableNavigationCatalog(rawData);
-        const physicalOrder = navigationCatalog.map(table => table.sheetKey);
         const catalog = await resolveSourceCatalog({
             sourceCatalog,
             rawData,
@@ -293,8 +305,9 @@ export function createFullscreenOverlaySettingsService(options = {}) {
             navigationCatalog,
             registry,
         });
+        const sourceOrder = catalog.map(source => source.sheetKey);
         const tables = buildTableViewModels(catalog, storedConfig);
-        const config = reconcileConfigWithCatalog(storedConfig, tables, physicalOrder);
+        const config = reconcileConfigWithCatalog(storedConfig, tables, sourceOrder);
         const reconciledTables = buildTableViewModels(tables, config)
             .sort((left, right) => (
                 config.sourceOrder.indexOf(left.sheetKey)
@@ -302,7 +315,7 @@ export function createFullscreenOverlaySettingsService(options = {}) {
             ));
 
         lastTables = reconciledTables;
-        lastPhysicalOrder = physicalOrder;
+        lastPhysicalOrder = sourceOrder;
         return {
             status: 'ready',
             error: null,

@@ -119,6 +119,9 @@ export function createQQV2RuntimeEntry(options = {}) {
         getFacade() {
             return runtime?.getFacade?.() || null;
         },
+        subscribeProactiveMessages(listener) {
+            return runtime?.subscribeProactiveMessages?.(listener) || (() => {});
+        },
         destroy() {
             const activeRuntime = runtime;
             runtime = null;
@@ -138,4 +141,7 @@ export const handleQQV2CharacterMessageRendered = (...args) => defaultRuntimeEnt
 export const handleQQV2MessageReceived = (...args) => defaultRuntimeEntry.handleMessageReceived(...args);
 export const getQQV2RuntimeStatus = () => defaultRuntimeEntry.getStatus();
 export const getQQV2Facade = () => defaultRuntimeEntry.getFacade();
+export const subscribeQQV2ProactiveMessages = listener => (
+    defaultRuntimeEntry.subscribeProactiveMessages(listener)
+);
 export const destroyQQV2Runtime = () => defaultRuntimeEntry.destroy();

@@ -29,7 +29,7 @@ async function testPublicDefaults(mod) {
     assert.deepStrictEqual(
         mod.FULLSCREEN_OVERLAY_DEFAULTS,
         {
-            enabled: false,
+            enabled: true,
             sourceEnabledBySheetKey: {},
             sourceOrder: [],
             sourceModelBySheetKey: {},
@@ -46,7 +46,8 @@ async function testPublicDefaults(mod) {
                 },
                 'table-popup': {
                     maxConcurrent: 1,
-                    areaPercent: 75,
+                    placementMode: 'center',
+                    areaPercent: 25,
                     intervalMs: 200,
                     durationMs: 4000,
                     columnCount: 2,
@@ -117,6 +118,7 @@ async function testTablePopupNormalization(mod) {
         models: {
             'table-popup': {
                 maxConcurrent: 99,
+                placementMode: 'random',
                 areaPercent: '50',
                 intervalMs: -1,
                 durationMs: 20000,
@@ -132,6 +134,7 @@ async function testTablePopupNormalization(mod) {
         normalized.models['table-popup'],
         {
             maxConcurrent: 6,
+            placementMode: 'random',
             areaPercent: 50,
             intervalMs: 0,
             durationMs: 15000,
@@ -163,6 +166,29 @@ async function testTablePopupNormalization(mod) {
         invalid.models['table-popup'],
         mod.FULLSCREEN_OVERLAY_DEFAULTS.models['table-popup'],
         '非法弹窗设置必须逐项回落到公共默认值',
+    );
+
+    const centered = mod.normalizeFullscreenOverlaySettings({
+        models: {
+            'table-popup': {
+                maxConcurrent: 6,
+                placementMode: 'center',
+                areaPercent: 25,
+            },
+        },
+    });
+    assert.deepStrictEqual(
+        {
+            maxConcurrent: centered.models['table-popup'].maxConcurrent,
+            placementMode: centered.models['table-popup'].placementMode,
+            areaPercent: centered.models['table-popup'].areaPercent,
+        },
+        {
+            maxConcurrent: 1,
+            placementMode: 'center',
+            areaPercent: 25,
+        },
+        '居中弹窗必须保留区域并强制一次只显示一张',
     );
 }
 

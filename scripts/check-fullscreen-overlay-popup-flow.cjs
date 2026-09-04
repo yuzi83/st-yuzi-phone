@@ -38,6 +38,11 @@ class FakeElement {
         return child;
     }
 
+    replaceChildren(...children) {
+        for (const child of [...this.children]) this.removeChild(child);
+        children.forEach(child => this.appendChild(child));
+    }
+
     removeChild(child) {
         const index = this.children.indexOf(child);
         if (index >= 0) {
@@ -137,6 +142,16 @@ async function main() {
     assert.match(indexSource, /createGenericTableSourceAdapter/u);
     assert.match(indexSource, /createTablePopupRenderer/u);
     assert.match(indexSource, /\[TABLE_POPUP_MODEL_ID,\s*popupRenderer\]/u);
+    const popupRendererStart = indexSource.indexOf('const popupRenderer');
+    const popupRendererWiring = indexSource.slice(
+        popupRendererStart,
+        indexSource.indexOf('return new Map', popupRendererStart),
+    );
+    assert.match(
+        popupRendererWiring,
+        /acquireMediaRender:\s*acquireQQMediaRender/u,
+        '生产入口必须把 QQ 头像媒体租约接入弹窗渲染器',
+    );
 
     const css = fs.readFileSync(path.join(
         ROOT,
@@ -146,6 +161,8 @@ async function main() {
     assert.match(css, /grid-template-columns:\s*repeat\(/u);
     assert.match(css, /pointer-events:\s*none/u);
     assert.match(css, /white-space:\s*pre-wrap/u, '完整长文本不得被单行截断');
+    assert.match(css, /\.yuzi-phone-fullscreen-overlay-message-notification/u);
+    assert.match(css, /\.yuzi-phone-fullscreen-overlay-message-notification-avatar/u);
     assert.doesNotMatch(
         css.match(/\.yuzi-phone-fullscreen-overlay-table-popup\s*\{[^}]*\}/su)?.[0] || '',
         /\b(?:border|box-shadow)\s*:/u,
@@ -172,6 +189,7 @@ async function main() {
         },
         getSettings: () => ({
             maxConcurrent: 2,
+            placementMode: 'random',
             areaPercent: 75,
             intervalMs: 200,
             durationMs: 4000,
@@ -269,6 +287,126 @@ async function main() {
     assert.equal(layer.children.length, 0, '清空必须立即移除所有弹窗');
     assert.equal(renderer.getActiveCount(), 0);
     renderer.dispose();
+
+    const centeredLayer = new FakeElement('div');
+    const centeredClock = new FakeClock();
+    const centeredRenderer = createTablePopupRenderer({
+        documentRef,
+        layerRuntime: {
+            mount: () => centeredLayer,
+            getElement: () => centeredLayer,
+        },
+        getSettings: () => ({
+            maxConcurrent: 6,
+            placementMode: 'center',
+            areaPercent: 50,
+            intervalMs: 0,
+            durationMs: 1000,
+            columnCount: 1,
+            sizePreset: 'normal',
+            borderRadiusPx: 20,
+            backgroundColor: '#FFFFFF',
+            opacity: 0.94,
+        }),
+        setTimeoutFn: centeredClock.setTimeout.bind(centeredClock),
+        clearTimeoutFn: centeredClock.clearTimeout.bind(centeredClock),
+    });
+    const centeredPlay = centeredRenderer.play({
+        sourceId: 'generic-table',
+        sheetKey: 'sheet_centered',
+        items: [{
+            cells: [{ label: '标题', value: '第一张' }],
+        }, {
+            cells: [{ label: '标题', value: '第二张' }],
+        }],
+    });
+    await flushMicrotasks();
+
+    assert.equal(centeredLayer.children.length, 1, '居中模式即使旧配置大于 1 也只能显示一张');
+    const centeredCard = centeredLayer.children[0];
+    assert.equal(
+        centeredCard.style.getPropertyValue('--yuzi-phone-fullscreen-overlay-popup-left'),
+        '250px',
+        '居中模式必须位于可视区域宽度正中间',
+    );
+    assert.equal(
+        centeredCard.style.getPropertyValue('--yuzi-phone-fullscreen-overlay-popup-top'),
+        '114px',
+        '居中模式必须位于用户所选上方区域的正中间',
+    );
+    assert.equal(
+        centeredCard.style.getPropertyValue('--yuzi-phone-fullscreen-overlay-popup-transform-origin'),
+        'center center',
+        '居中弹窗缩放时不得从左上角发生视觉偏移',
+    );
+
+    centeredClock.tick(1000);
+    await flushMicrotasks();
+    assert.equal(centeredLayer.children.length, 1, '第一张消失后第二张必须继续居中出现');
+    centeredClock.tick(1180);
+    await flushMicrotasks();
+    assert.deepEqual(
+        await centeredPlay,
+        { status: 'completed', emittedCount: 2 },
+        '居中模式只限制同时数量，不得丢弃后续弹窗内容',
+    );
+    centeredRenderer.dispose();
+
+    const notificationLayer = new FakeElement('div');
+    const notificationClock = new FakeClock();
+    let releasedAvatarCount = 0;
+    const notificationRenderer = createTablePopupRenderer({
+        documentRef,
+        layerRuntime: {
+            mount: () => notificationLayer,
+            getElement: () => notificationLayer,
+        },
+        getSettings: () => ({
+            maxConcurrent: 1,
+            placementMode: 'center',
+            areaPercent: 25,
+            intervalMs: 0,
+            durationMs: 1000,
+            columnCount: 2,
+            sizePreset: 'normal',
+            borderRadiusPx: 20,
+            backgroundColor: '#FFFFFF',
+            opacity: 0.94,
+        }),
+        async acquireMediaRender(assetId) {
+            assert.equal(assetId, 'avatar-1');
+            return {
+                url: 'blob:avatar-1',
+                release() {
+                    releasedAvatarCount += 1;
+                },
+            };
+        },
+        setTimeoutFn: notificationClock.setTimeout.bind(notificationClock),
+        clearTimeoutFn: notificationClock.clearTimeout.bind(notificationClock),
+    });
+    const notificationPlay = notificationRenderer.play({
+        sourceId: 'qq',
+        sheetKey: 'qq',
+        items: [{
+            kind: 'message-notification',
+            senderName: '林知夏',
+            avatarAssetId: 'avatar-1',
+            text: '林知夏给你发了1条消息',
+        }],
+    });
+    await flushMicrotasks();
+
+    assert.equal(notificationLayer.children.length, 1);
+    const notificationCard = notificationLayer.children[0];
+    assert.match(notificationCard.className, /yuzi-phone-fullscreen-overlay-message-notification/u);
+    assert.equal(notificationCard.children[0].children[0].src, 'blob:avatar-1');
+    assert.equal(notificationCard.children[1].textContent, '林知夏给你发了1条消息');
+    notificationClock.tick(1180);
+    await flushMicrotasks();
+    assert.deepEqual(await notificationPlay, { status: 'completed', emittedCount: 1 });
+    assert.equal(releasedAvatarCount, 1, 'QQ 弹窗消失后必须释放头像媒体租约');
+    notificationRenderer.dispose();
 
     console.log('[fullscreen-overlay-popup-flow] passed');
 }

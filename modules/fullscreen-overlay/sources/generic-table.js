@@ -1,5 +1,6 @@
 import { TABLE_POPUP_MODEL_ID } from '../settings.js';
 import { normalizeText } from '../../phone-theater/core/table-index.js';
+import { shouldSkipAutoManagedColumn } from '../../utils/table-column-metadata.js';
 
 const SOURCE_ID = 'generic-table';
 const ROW_ID_HEADERS = Object.freeze(['row_id', 'ROW_ID', '行号']);
@@ -68,10 +69,18 @@ export function readGenericTableEvents(context, sourceId = SOURCE_ID) {
         sourceId,
         sheetKey: table.sheetKey,
         rowIndex,
-        cells: Object.freeze(table.headers.map((header, columnIndex) => Object.freeze({
-            label: normalizeText(header) || `字段 ${columnIndex + 1}`,
-            value: String(row?.[columnIndex] ?? ''),
-        }))),
+        cells: Object.freeze(table.headers
+            .map((header, columnIndex) => ({ header, columnIndex }))
+            .filter(({ columnIndex }) => !shouldSkipAutoManagedColumn({
+                headers: table.headers,
+                rawHeaders: table.headers,
+                colIndex: columnIndex,
+                row,
+            }))
+            .map(({ header, columnIndex }) => Object.freeze({
+                label: normalizeText(header) || `字段 ${columnIndex + 1}`,
+                value: String(row?.[columnIndex] ?? ''),
+            }))),
     }));
     return Object.freeze(events);
 }
@@ -81,7 +90,7 @@ export function createGenericTableSourceAdapter() {
         id: SOURCE_ID,
         modelId: TABLE_POPUP_MODEL_ID,
         modelIds: Object.freeze([TABLE_POPUP_MODEL_ID]),
-        defaultEnabled: false,
+        defaultEnabled: true,
         matches(context) {
             return Boolean(resolveTableContext(context).sheetKey);
         },

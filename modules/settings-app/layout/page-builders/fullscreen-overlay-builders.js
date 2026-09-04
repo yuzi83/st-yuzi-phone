@@ -113,6 +113,7 @@ function buildParameterField({
     step,
     suffix,
     description,
+    isDisabled = false,
 }) {
     return `
         <label class="phone-fullscreen-overlay-parameter-row"
@@ -126,7 +127,7 @@ function buildParameterField({
                     value="${valueAttr(value)}"
                     min="${valueAttr(min)}"
                     max="${valueAttr(max)}"
-                    step="${valueAttr(step)}">
+                    step="${valueAttr(step)}"${disabled(isDisabled)}>
                 ${suffix ? `<span class="phone-fullscreen-overlay-parameter-unit">${escapeHtml(suffix)}</span>` : ''}
             </span>
         </label>
@@ -233,7 +234,16 @@ function buildPopupModelHtml(popup) {
     const areaPercent = [25, 50, 75, 100].includes(Number(popup.areaPercent))
         ? Number(popup.areaPercent)
         : 75;
+    const placementMode = popup.placementMode === 'center' ? 'center' : 'random';
+    const centered = placementMode === 'center';
     return `
+        <label class="phone-settings-field-inline" for="phone-fullscreen-overlay-popup-placement">
+            <span>弹窗位置</span>
+            <select id="phone-fullscreen-overlay-popup-placement" class="phone-settings-select">
+                <option value="random"${selected(placementMode === 'random')}>随机</option>
+                <option value="center"${selected(centered)}>居中</option>
+            </select>
+        </label>
         <label class="phone-settings-field-inline" for="phone-fullscreen-overlay-popup-area">
             <span>弹窗区域</span>
             <select id="phone-fullscreen-overlay-popup-area" class="phone-settings-select">
@@ -247,12 +257,15 @@ function buildPopupModelHtml(popup) {
             ${buildParameterField({
                 id: 'phone-fullscreen-overlay-popup-max-concurrent',
                 label: '同时显示',
-                value: popup.maxConcurrent,
+                value: centered ? 1 : popup.maxConcurrent,
                 min: 1,
                 max: 6,
                 step: 1,
                 suffix: '张',
-                description: '最多同时显示的普通表格弹窗数量（1–6）。',
+                description: centered
+                    ? '居中模式固定一次显示 1 张，后续弹窗仍会依次出现。'
+                    : '最多同时显示的普通表格弹窗数量（1–6）。',
+                isDisabled: centered,
             })}
             ${buildParameterField({
                 id: 'phone-fullscreen-overlay-popup-interval',

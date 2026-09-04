@@ -1,6 +1,6 @@
 /**
  * 玉子手机扩展 - TypeScript 类型定义
- * @version 2.2.0
+ * @version 2.2.1
  * @description 提供完整的类型定义，增强代码类型安全
  */
 

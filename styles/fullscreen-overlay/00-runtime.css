@@ -64,7 +64,7 @@
     background: var(--yuzi-phone-fullscreen-overlay-popup-background, rgba(255, 255, 255, 0.94));
     color: var(--yuzi-phone-fullscreen-overlay-popup-color, #1f1f1f);
     pointer-events: none;
-    transform-origin: top left;
+    transform-origin: var(--yuzi-phone-fullscreen-overlay-popup-transform-origin, top left);
     will-change: transform, opacity;
     animation-name: yuzi-phone-fullscreen-overlay-popup;
     animation-duration: var(--yuzi-phone-fullscreen-overlay-popup-duration, 4000ms);
@@ -96,6 +96,41 @@
     line-height: 1.5;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
+}
+
+.yuzi-phone-fullscreen-overlay-message-notification {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--yuzi-phone-fullscreen-overlay-popup-gap, 8px) * 1.5);
+    min-height: calc(var(--yuzi-phone-fullscreen-overlay-notification-avatar-size, 48px) + 24px);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+}
+
+.yuzi-phone-fullscreen-overlay-message-notification-avatar {
+    display: grid;
+    flex: 0 0 var(--yuzi-phone-fullscreen-overlay-notification-avatar-size, 48px);
+    width: var(--yuzi-phone-fullscreen-overlay-notification-avatar-size, 48px);
+    height: var(--yuzi-phone-fullscreen-overlay-notification-avatar-size, 48px);
+    place-items: center;
+    overflow: hidden;
+    border-radius: 30%;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    font-size: calc(var(--yuzi-phone-fullscreen-overlay-notification-font-size, 15px) * 1.15);
+    font-weight: 700;
+}
+
+.yuzi-phone-fullscreen-overlay-message-notification-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.yuzi-phone-fullscreen-overlay-message-notification-text {
+    min-width: 0;
+    font-size: var(--yuzi-phone-fullscreen-overlay-notification-font-size, 15px);
+    font-weight: 650;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
 .yuzi-phone-fullscreen-overlay-layer[data-yuzi-phone-overlay-paused="true"]

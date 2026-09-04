@@ -217,12 +217,20 @@ async function testDefaultSourceCatalogKeepsDisplayNameAndDefaultLiveSelection()
         ]),
         [
             ['sheet_live', '直播表', 'available', true],
-            ['sheet_diary', '小日记表', 'available', false],
+            ['sheet_diary', '小日记表', 'available', true],
+            ['qq', 'QQ', 'available', true],
         ],
-        '默认 source catalog 必须让全部物理表可选普通弹窗，并只默认勾选合法直播表',
+        '默认 source catalog 必须勾选全部物理表，并把 QQ 默认放在最后',
     );
     assert.strictEqual(viewModel.config.sourceEnabledBySheetKey.sheet_live, true);
-    assert.strictEqual(viewModel.config.sourceEnabledBySheetKey.sheet_diary, false);
+    assert.strictEqual(viewModel.config.sourceEnabledBySheetKey.sheet_diary, true);
+    assert.strictEqual(viewModel.config.sourceEnabledBySheetKey.qq, true);
+    assert.deepStrictEqual(viewModel.config.sourceOrder, ['sheet_live', 'sheet_diary', 'qq']);
+    assert.deepStrictEqual(
+        viewModel.tables.find(table => table.sheetKey === 'qq')?.modelIds,
+        ['table-popup'],
+        'QQ 只能绑定普通表格弹窗模型',
+    );
     assert.deepStrictEqual(
         viewModel.tables.find(table => table.sheetKey === 'sheet_live')?.modelIds,
         ['scrolling-barrage', 'table-popup'],
@@ -424,6 +432,7 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
                 },
                 'table-popup': {
                     maxConcurrent: 4,
+                    placementMode: 'random',
                     areaPercent: 50,
                     intervalMs: 300,
                     durationMs: 5000,
@@ -447,6 +456,8 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
     });
     assert.match(popupHtml, /id="phone-fullscreen-overlay-playback-model"/u);
     assert.match(popupHtml, /option value="table-popup" selected/u);
+    assert.match(popupHtml, /id="phone-fullscreen-overlay-popup-placement"/u);
+    assert.match(popupHtml, /option value="random" selected>随机<\/option>/u);
     assert.match(popupHtml, /id="phone-fullscreen-overlay-popup-area"/u);
     assert.match(popupHtml, /option value="50" selected>上方 50%<\/option>/u);
     assert.match(popupHtml, /id="phone-fullscreen-overlay-popup-max-concurrent"[^>]*value="4"/u);
@@ -463,6 +474,32 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
     assert.match(popupHtml, /data-fullscreen-overlay-single-eyedropper/u);
     assert.doesNotMatch(popupHtml, /phone-fullscreen-overlay-eternal/u);
     assert.doesNotMatch(popupHtml, /phone-fullscreen-overlay-add-color/u);
+
+    const centeredPopupHtml = buildFullscreenOverlayPageHtml({
+        status: 'ready',
+        selectedModelId: 'table-popup',
+        config: {
+            models: {
+                'table-popup': {
+                    maxConcurrent: 4,
+                    placementMode: 'center',
+                    areaPercent: 25,
+                },
+            },
+        },
+        tables: [],
+    });
+    assert.match(centeredPopupHtml, /option value="center" selected>居中<\/option>/u);
+    assert.match(
+        centeredPopupHtml,
+        /id="phone-fullscreen-overlay-popup-max-concurrent"[^>]*value="1"[^>]*disabled/u,
+        '居中模式必须在设置页固定一次显示一张',
+    );
+    assert.doesNotMatch(
+        centeredPopupHtml,
+        /id="phone-fullscreen-overlay-popup-area"[^>]*disabled/u,
+        '居中模式仍需保留弹窗区域选择',
+    );
 }
 
 async function testPageAndRendererExposeLifecycleAndScrollSafeSeams() {
@@ -481,6 +518,7 @@ async function testPageAndRendererExposeLifecycleAndScrollSafeSeams() {
     assert.match(pageSource, /phone-fullscreen-overlay-playback-model/u);
     assert.match(pageSource, /data-fullscreen-overlay-source-model/u);
     assert.match(pageSource, /phone-fullscreen-overlay-popup-max-concurrent/u);
+    assert.match(pageSource, /phone-fullscreen-overlay-popup-placement/u);
     assert.match(pageSource, /createFullscreenOverlaySingleColorControl/u);
     assert.doesNotMatch(
         pageSource,

@@ -249,6 +249,13 @@ export function createFullscreenOverlayScheduler(options = {}) {
         return true;
     };
 
+    const append = (sourceBatches) => {
+        if (disposed) return false;
+        pendingBatches.push(...normalizeBatches(sourceBatches));
+        ensurePump();
+        return true;
+    };
+
     const clear = () => {
         if (disposed) return;
         pendingBatches = [];
@@ -292,6 +299,7 @@ export function createFullscreenOverlayScheduler(options = {}) {
 
     return {
         replace,
+        append,
         clear,
         pause,
         resume,

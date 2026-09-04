@@ -38,15 +38,26 @@ export function normalizeTablePopupRuntimeSettings(value = {}) {
 
 function normalizeItems(batch) {
     return (Array.isArray(batch?.items) ? batch.items : [])
-        .map(item => ({
-            ...(item && typeof item === 'object' ? item : {}),
-            cells: (Array.isArray(item?.cells) ? item.cells : [])
-                .map((cell, index) => ({
-                    label: String(cell?.label ?? '').trim() || `字段 ${index + 1}`,
-                    value: String(cell?.value ?? ''),
-                })),
-        }))
-        .filter(item => item.cells.length > 0);
+        .map((item) => {
+            const source = item && typeof item === 'object' ? item : {};
+            return {
+                ...source,
+                kind: String(source.kind || '').trim(),
+                senderName: String(source.senderName || '').trim(),
+                avatarAssetId: String(source.avatarAssetId || '').trim(),
+                text: String(source.text || '').trim(),
+                cells: (Array.isArray(source.cells) ? source.cells : [])
+                    .map((cell, index) => ({
+                        label: String(cell?.label ?? '').trim() || `字段 ${index + 1}`,
+                        value: String(cell?.value ?? ''),
+                    })),
+            };
+        })
+        .filter(item => (
+            item.kind === 'message-notification'
+                ? Boolean(item.text)
+                : item.cells.length > 0
+        ));
 }
 
 function toUnitRandom(random) {
@@ -98,6 +109,10 @@ export function createTablePopupRenderer(options = {}) {
     const clearTimeoutFn = options.clearTimeoutFn || globalThis.clearTimeout;
     const nowFn = options.nowFn || Date.now;
     const random = options.random || Math.random;
+    const acquireMediaRender = typeof options.acquireMediaRender === 'function'
+        ? options.acquireMediaRender
+        : null;
+    const onError = typeof options.onError === 'function' ? options.onError : () => {};
     const activeRecords = new Set();
     const managedTimers = new Set();
     const stateWaiters = new Set();
@@ -234,8 +249,20 @@ export function createTablePopupRenderer(options = {}) {
             `${8 * sizeScale}px`,
         );
         element.style.setProperty(
+            '--yuzi-phone-fullscreen-overlay-notification-avatar-size',
+            `${48 * sizeScale}px`,
+        );
+        element.style.setProperty(
+            '--yuzi-phone-fullscreen-overlay-notification-font-size',
+            `${15 * sizeScale}px`,
+        );
+        element.style.setProperty(
             '--yuzi-phone-fullscreen-overlay-popup-duration',
             `${settings.durationMs}ms`,
+        );
+        element.style.setProperty(
+            '--yuzi-phone-fullscreen-overlay-popup-transform-origin',
+            settings.placementMode === 'center' ? 'center center' : 'top left',
         );
     };
 
@@ -243,6 +270,23 @@ export function createTablePopupRenderer(options = {}) {
         const element = documentRef.createElement('div');
         element.className = 'yuzi-phone-fullscreen-overlay-table-popup';
         applyCardStyle(element, settings, viewport);
+        if (item.kind === 'message-notification') {
+            const sizeScale = SIZE_SCALES[settings.sizePreset] || 1;
+            element.className += ' yuzi-phone-fullscreen-overlay-message-notification';
+            element.style.setProperty(
+                '--yuzi-phone-fullscreen-overlay-popup-width',
+                `${Math.min(viewport.width * 0.88, 460) * sizeScale}px`,
+            );
+            const avatar = documentRef.createElement('span');
+            avatar.className = 'yuzi-phone-fullscreen-overlay-message-notification-avatar';
+            avatar.textContent = Array.from(item.senderName)[0] || 'Q';
+            const text = documentRef.createElement('span');
+            text.className = 'yuzi-phone-fullscreen-overlay-message-notification-text';
+            text.textContent = item.text;
+            element.appendChild(avatar);
+            element.appendChild(text);
+            return { element, avatar };
+        }
         item.cells.forEach((cell) => {
             const field = documentRef.createElement('div');
             field.className = 'yuzi-phone-fullscreen-overlay-table-popup-cell';
@@ -256,7 +300,7 @@ export function createTablePopupRenderer(options = {}) {
             field.appendChild(value);
             element.appendChild(field);
         });
-        return element;
+        return { element, avatar: null };
     };
 
     const findPlacement = (width, height, settings, viewport) => {
@@ -276,6 +320,33 @@ export function createTablePopupRenderer(options = {}) {
         const maxTop = fitsArea
             ? Math.max(safeTop, Math.min(screenMaxTop, areaBottom - renderedHeight))
             : Math.max(safeTop, Math.min(screenMaxTop, areaBottom - SAFE_MARGIN_PX));
+
+        if (settings.placementMode === 'center') {
+            const left = Math.max(
+                SAFE_MARGIN_PX,
+                Math.min(maxLeft, (viewport.width - renderedWidth) / 2),
+            );
+            const top = settings.areaPercent === 25
+                ? SAFE_MARGIN_PX
+                : Math.max(
+                    safeTop,
+                    Math.min(
+                        screenMaxTop,
+                        safeTop + ((areaBottom - safeTop - renderedHeight) / 2),
+                    ),
+                );
+            return {
+                left,
+                top,
+                fitScale,
+                rect: {
+                    left,
+                    top,
+                    right: left + renderedWidth,
+                    bottom: top + renderedHeight,
+                },
+            };
+        }
 
         for (let attempt = 0; attempt < POSITION_ATTEMPTS; attempt += 1) {
             const left = SAFE_MARGIN_PX + ((maxLeft - SAFE_MARGIN_PX) * toUnitRandom(random));
@@ -298,7 +369,8 @@ export function createTablePopupRenderer(options = {}) {
         const layer = getLayer();
         if (!layer) return null;
         const viewport = readViewport();
-        const element = createCard(item, settings, viewport);
+        const card = createCard(item, settings, viewport);
+        const element = card.element;
         layer.appendChild(element);
         const measured = element.getBoundingClientRect?.() || {};
         const width = Math.max(1, Number(measured.width) || Math.min(viewport.width * 0.88, 560));
@@ -336,11 +408,18 @@ export function createTablePopupRenderer(options = {}) {
             element,
             rect: placement.rect,
             timer: null,
+            releaseMedia: null,
             finished: false,
             finish() {
                 if (record.finished) return;
                 record.finished = true;
                 record.timer?.cancel();
+                if (record.releaseMedia) {
+                    try {
+                        Promise.resolve(record.releaseMedia()).catch(() => {});
+                    } catch {}
+                    record.releaseMedia = null;
+                }
                 element.removeEventListener?.('animationend', record.finish);
                 element.remove();
                 activeRecords.delete(record);
@@ -350,6 +429,26 @@ export function createTablePopupRenderer(options = {}) {
         activeRecords.add(record);
         element.addEventListener?.('animationend', record.finish);
         record.timer = createManagedTimer(record.finish, settings.durationMs);
+        if (card.avatar && item.avatarAssetId && acquireMediaRender) {
+            Promise.resolve(acquireMediaRender(item.avatarAssetId)).then((render) => {
+                if (!render?.url) return;
+                const release = typeof render.release === 'function' ? render.release : null;
+                if (record.finished) {
+                    try {
+                        Promise.resolve(release?.()).catch(() => {});
+                    } catch {}
+                    return;
+                }
+                record.releaseMedia = release;
+                const image = documentRef.createElement('img');
+                image.alt = '';
+                image.src = render.url;
+                card.avatar.replaceChildren?.(image);
+            }).catch((error) => onError(error, {
+                action: 'notification-avatar.load',
+                sourceId: batch?.sourceId,
+            }));
+        }
         return record;
     };
 

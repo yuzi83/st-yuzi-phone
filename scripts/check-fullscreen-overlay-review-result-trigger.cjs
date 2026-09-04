@@ -1691,10 +1691,12 @@ async function testRuntimeBuildsOnlyReviewChangedSources() {
         {
             normalizeFullscreenOverlaySettings,
             SCROLLING_BARRAGE_MODEL_ID,
+            TABLE_POPUP_MODEL_ID,
         },
         { createOverlaySourceRegistry },
         { buildOverlaySourceCatalog },
         { createLiveTableSourceAdapter },
+        { createGenericTableSourceAdapter },
     ] = await Promise.all([
         importModule('modules/fullscreen-overlay/runtime.js'),
         importModule('modules/fullscreen-overlay/review-result-coordinator.js'),
@@ -1702,20 +1704,23 @@ async function testRuntimeBuildsOnlyReviewChangedSources() {
         importModule('modules/fullscreen-overlay/source-registry.js'),
         importModule('modules/fullscreen-overlay/source-catalog.js'),
         importModule('modules/fullscreen-overlay/sources/live-table.js'),
+        importModule('modules/fullscreen-overlay/sources/generic-table.js'),
     ]);
 
     let snapshot = makeRawSnapshot();
     let reviewCallback = null;
     const replacements = [];
+    const appends = [];
     const registry = createOverlaySourceRegistry([
         createLiveTableSourceAdapter(),
+        createGenericTableSourceAdapter(),
     ]);
     let settings = normalizeFullscreenOverlaySettings({
         enabled: true,
         sourceOrder: ['sheet_live', 'sheet_diary'],
         sourceEnabledBySheetKey: {
             sheet_live: true,
-            sheet_diary: true,
+            sheet_diary: false,
         },
     });
 
@@ -1742,10 +1747,21 @@ async function testRuntimeBuildsOnlyReviewChangedSources() {
                 clear() {},
                 dispose() {},
             }],
+            [TABLE_POPUP_MODEL_ID, {
+                refreshSettings() {},
+                pause() {},
+                resume() {},
+                clear() {},
+                dispose() {},
+            }],
         ]),
         createScheduler: () => ({
             async replace(batches) {
                 replacements.push(batches);
+                return true;
+            },
+            async append(batches) {
+                appends.push(batches);
                 return true;
             },
             clear() {},
@@ -1805,7 +1821,28 @@ async function testRuntimeBuildsOnlyReviewChangedSources() {
     assert.equal(
         replacements.length,
         replacementCountBeforeUnsupportedChange,
-        '审核结果仅包含未适配来源时必须确认结果但不得以 replace([]) 打断正在发射的来源',
+        '审核结果仅包含未勾选来源时必须确认结果但不得以 replace([]) 打断正在发射的来源',
+    );
+
+    settings = normalizeFullscreenOverlaySettings({
+        ...settings,
+        sourceEnabledBySheetKey: {
+            ...settings.sourceEnabledBySheetKey,
+            sheet_diary: true,
+        },
+    });
+    runtime.refreshSettings(settings);
+    snapshot = makeRawSnapshot({ diary: '第三版日记' });
+    reviewCallback(createReadyResult({
+        diaryAfter: '第三版日记',
+        createdAt: 1300,
+    }));
+    await flushMicrotasks();
+    assert.equal(appends.length, 1, '同一楼层后来出现的新来源必须累计到现有队列');
+    assert.deepEqual(
+        appends[0].map(batch => batch.sheetKey),
+        ['sheet_diary'],
+        '同楼累计只能追加本次首次出现的来源',
     );
 
     snapshot = makeRawSnapshot({ plot: '第二版剧情', diary: '第二版日记' });
@@ -1817,9 +1854,10 @@ async function testRuntimeBuildsOnlyReviewChangedSources() {
     await flushMicrotasks();
     assert.equal(
         replacements.filter(batches => batches.length > 0).length,
-        nonEmptyCount + 1,
-        '同楼直播表出现新审核差异时必须再次构造直播批次',
+        nonEmptyCount,
+        '同楼已经排入播放状态的直播表不得因派生更新重新替换整条队列',
     );
+    assert.equal(appends.length, 1, '同楼已排入的来源不得重复追加');
 
     const replacementCountBeforeEmptyEvents = replacements.length;
     snapshot = makeRawSnapshot({
@@ -1838,13 +1876,8 @@ async function testRuntimeBuildsOnlyReviewChangedSources() {
     await flushMicrotasks();
     assert.equal(
         replacements.length,
-        replacementCountBeforeEmptyEvents + 1,
-        '本次审核确实命中已勾选且受支持来源时，即使 Adapter 返回空事件也必须触碰 Scheduler',
-    );
-    assert.deepEqual(
-        replacements.at(-1),
-        [],
-        '合法空事件来源必须 replace([])，用于清掉该来源尚未发射的旧批次',
+        replacementCountBeforeEmptyEvents,
+        '同楼已累计来源后续变为空时不得清空其他尚未播放的来源',
     );
 
     const replacementCountBeforeUncheckedChange = replacements.length;
@@ -1853,6 +1886,7 @@ async function testRuntimeBuildsOnlyReviewChangedSources() {
         sourceEnabledBySheetKey: {
             ...settings.sourceEnabledBySheetKey,
             sheet_live: false,
+            sheet_diary: false,
         },
     });
     runtime.refreshSettings(settings);
@@ -1872,6 +1906,36 @@ async function testRuntimeBuildsOnlyReviewChangedSources() {
         '审核结果只命中未勾选来源时必须确认结果但不得触碰 Scheduler',
     );
 
+    settings = normalizeFullscreenOverlaySettings({
+        ...settings,
+        sourceEnabledBySheetKey: {
+            ...settings.sourceEnabledBySheetKey,
+            sheet_live: true,
+        },
+    });
+    runtime.refreshSettings(settings);
+    snapshot = makeRawSnapshot({ plot: '新楼剧情', diary: '第二版日记' });
+    reviewCallback(createReadyResult({
+        sessionKey: 'chat-a:floor-13',
+        livePlot: '新楼剧情',
+        diaryAfter: '第二版日记',
+        createdAt: 2000,
+    }));
+    await flushMicrotasks();
+    assert.equal(
+        replacements.length,
+        replacementCountBeforeUncheckedChange + 1,
+        '换楼层必须重新 replace，不能沿用上一楼的累计播放状态',
+    );
+
+    settings = normalizeFullscreenOverlaySettings({
+        ...settings,
+        sourceEnabledBySheetKey: {
+            ...settings.sourceEnabledBySheetKey,
+            sheet_live: false,
+        },
+    });
+    runtime.refreshSettings(settings);
     const testResult = await runtime.testSelectedSources(snapshot);
     assert.equal(
         testResult.reason,

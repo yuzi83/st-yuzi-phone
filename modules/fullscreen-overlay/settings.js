@@ -6,10 +6,11 @@ const DEFAULT_OVERLAY_COLOR = '#FFFFFF';
 const MAX_OVERLAY_PALETTE_SIZE = 16;
 const OVERLAY_AREA_PERCENTS = Object.freeze([25, 50, 75, 100]);
 const TABLE_POPUP_SIZE_PRESETS = Object.freeze(['compact', 'normal', 'large']);
+const TABLE_POPUP_PLACEMENT_MODES = Object.freeze(['random', 'center']);
 const OVERLAY_HEX_COLOR_PATTERN = /^#[0-9A-F]{6}$/i;
 
 export const FULLSCREEN_OVERLAY_DEFAULTS = Object.freeze({
-    enabled: false,
+    enabled: true,
     sourceEnabledBySheetKey: Object.freeze({}),
     sourceOrder: Object.freeze([]),
     sourceModelBySheetKey: Object.freeze({}),
@@ -26,7 +27,8 @@ export const FULLSCREEN_OVERLAY_DEFAULTS = Object.freeze({
         }),
         [TABLE_POPUP_MODEL_ID]: Object.freeze({
             maxConcurrent: 1,
-            areaPercent: 75,
+            placementMode: 'center',
+            areaPercent: 25,
             intervalMs: 200,
             durationMs: 4000,
             columnCount: 2,
@@ -212,13 +214,19 @@ function normalizeScrollingBarrageModel(value) {
 function normalizeTablePopupModel(value) {
     const source = isRecord(value) ? value : {};
     const defaults = FULLSCREEN_OVERLAY_DEFAULTS.models[TABLE_POPUP_MODEL_ID];
+    const placementMode = TABLE_POPUP_PLACEMENT_MODES.includes(source.placementMode)
+        ? source.placementMode
+        : defaults.placementMode;
     return {
-        maxConcurrent: normalizeBoundedNumber(source.maxConcurrent, {
-            min: 1,
-            max: 6,
-            fallback: defaults.maxConcurrent,
-            integer: true,
-        }),
+        maxConcurrent: placementMode === 'center'
+            ? 1
+            : normalizeBoundedNumber(source.maxConcurrent, {
+                min: 1,
+                max: 6,
+                fallback: defaults.maxConcurrent,
+                integer: true,
+            }),
+        placementMode,
         areaPercent: normalizeOverlayAreaPercent(source.areaPercent, defaults.areaPercent),
         intervalMs: normalizeBoundedNumber(source.intervalMs, {
             min: 0,

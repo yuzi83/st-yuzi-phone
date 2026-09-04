@@ -147,6 +147,9 @@ export function createQQV2ProactiveService(options = {}) {
         ? options.buildProactiveSections
         : buildQQV2ProactiveSections;
     const syncWorldbook = typeof options.syncWorldbook === 'function' ? options.syncWorldbook : async () => {};
+    const onMessagesCommitted = typeof options.onMessagesCommitted === 'function'
+        ? options.onMessagesCommitted
+        : null;
     const onProjectionError = typeof options.onProjectionError === 'function' ? options.onProjectionError : () => {};
 
     const resolveCommitActions = () => {
@@ -388,6 +391,8 @@ export function createQQV2ProactiveService(options = {}) {
             return { status: 'succeeded' };
         }
         const affectedConversationIds = new Set(createdConversationIds);
+        const committedMessageConversationIds = new Set();
+        const committedMessageIds = new Set();
         const appliedMessageIds = new Set(appliedActions
             .filter((action) => ['message', 'transfer'].includes(action?.type))
             .map((action) => asText(action?.messageId, 256))
@@ -403,7 +408,26 @@ export function createQQV2ProactiveService(options = {}) {
                 if (messages.some((message) => appliedMessageIds.has(asText(message?.messageId, 256)))) {
                     affectedConversationIds.add(conversationId);
                 }
+                messages.forEach((message) => {
+                    const messageId = asText(message?.messageId, 256);
+                    if (!appliedMessageIds.has(messageId) || message?.senderType !== 'person') return;
+                    committedMessageConversationIds.add(conversationId);
+                    committedMessageIds.add(messageId);
+                });
             }));
+        }
+        if (onMessagesCommitted && committedMessageConversationIds.size > 0) {
+            try {
+                await onMessagesCommitted({
+                    scopeId,
+                    scopeSession,
+                    conversationIds: [...committedMessageConversationIds],
+                    messageIds: [...committedMessageIds],
+                    storyTime,
+                });
+            } catch {
+                // 浮层等旁路观察者不得把已经提交的 QQ 主动消息变成失败。
+            }
         }
         const hasUnresolvedProjectionAction = appliedActions.some((action) => (
             !['none', 'read', 'message', 'transfer', 'create-private', 'create-group'].includes(action?.type)

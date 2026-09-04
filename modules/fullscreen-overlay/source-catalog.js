@@ -1,4 +1,8 @@
 import { buildTableNavigationCatalog } from '../table-navigation/catalog.js';
+import {
+    QQ_FULLSCREEN_OVERLAY_SOURCE_ID,
+    QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
+} from './sources/qq.js';
 
 function normalizeText(value) {
     return String(value ?? '').trim();
@@ -57,7 +61,18 @@ function buildSourceContext(rawData, entry) {
 
 export function buildOverlaySourceCatalog(rawData, settings = {}, registry = null) {
     const physicalCatalog = buildTableNavigationCatalog(rawData);
-    const orderedCatalog = mergeSourceOrder(physicalCatalog, settings?.sourceOrder);
+    const virtualCatalog = registry?.get?.(QQ_FULLSCREEN_OVERLAY_SOURCE_ID)
+        ? [{
+            sheetKey: QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
+            tableName: 'QQ',
+            sourceKind: QQ_FULLSCREEN_OVERLAY_SOURCE_ID,
+            orderIndex: physicalCatalog.length,
+        }]
+        : [];
+    const orderedCatalog = mergeSourceOrder(
+        [...physicalCatalog, ...virtualCatalog],
+        settings?.sourceOrder,
+    );
     const sourceEnabledBySheetKey = isRecord(settings?.sourceEnabledBySheetKey)
         ? settings.sourceEnabledBySheetKey
         : {};

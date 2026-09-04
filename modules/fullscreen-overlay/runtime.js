@@ -36,6 +36,13 @@ function cloneSourceSignatures(sourceSignatures) {
     return Object.fromEntries(sourceSignatures.entries());
 }
 
+function resolveReviewPlaybackKey(metadata) {
+    const reviewResult = isRecord(metadata?.reviewResult) ? metadata.reviewResult : null;
+    const sessionKey = String(reviewResult?.sessionKey || '').trim();
+    if (!sessionKey) return '';
+    return `${String(reviewResult?.chatKey || '').trim()}\u001f${sessionKey}`;
+}
+
 function resolveOverlaySettingsValue(value, settingKey) {
     if (!isRecord(value)) return value;
     if (Object.prototype.hasOwnProperty.call(value, settingKey)) {
@@ -198,6 +205,14 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     const sourceSignatures = new Map();
     const pendingBatchConfirmations = new Map();
     const failedBatchConfirmations = new Set();
+    const sourceDisposers = new Set();
+    let activeReviewPlaybackKey = '';
+    const scheduledReviewSheetKeys = new Set();
+
+    function resetReviewPlaybackState() {
+        activeReviewPlaybackKey = '';
+        scheduledReviewSheetKeys.clear();
+    }
 
     function getRenderer(rendererId) {
         return rendererRegistry.get(String(rendererId || '').trim()) || null;
@@ -509,6 +524,64 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         };
     }
 
+    async function enqueueExternalSourceEvents(sourceId, events) {
+        if (!started
+            || awaitingExternalChatResume
+            || settings.enabled !== true
+            || !Array.isArray(events)
+            || events.length === 0) {
+            return false;
+        }
+        refreshSettings();
+        if (!started || awaitingExternalChatResume || settings.enabled !== true) return false;
+        const catalogResult = buildCatalog({});
+        if (!catalogResult.ok) return false;
+        const entry = catalogResult.catalog.find(candidate => (
+            candidate?.sourceId === sourceId && candidate?.enabled === true
+        ));
+        if (!entry) return false;
+        const adapterResult = resolveAdapter(entry);
+        if (!adapterResult.ok) return false;
+        const context = {
+            ...createSourceContext({}, entry),
+            events,
+        };
+        const batchResult = createBatch(adapterResult.adapter, entry, context);
+        if (!batchResult.ok || !batchResult.batch) return false;
+        return appendScheduledBatches(
+            [batchResult.batch],
+            'scheduler.append-external-source',
+        );
+    }
+
+    function subscribeExternalSources() {
+        const adapters = safeCall(
+            () => deps.registry?.list?.(),
+            [],
+            onError,
+            { action: 'source-subscriptions.list' },
+        );
+        for (const adapter of Array.isArray(adapters) ? adapters : []) {
+            if (typeof adapter?.subscribe !== 'function') continue;
+            const result = attemptCall(
+                () => adapter.subscribe(events => enqueueExternalSourceEvents(adapter.id, events)),
+                onError,
+                {
+                    action: 'source-subscription.start',
+                    sourceId: adapter.id,
+                },
+            );
+            if (typeof result.value === 'function') sourceDisposers.add(result.value);
+        }
+    }
+
+    function stopExternalSources() {
+        for (const dispose of [...sourceDisposers]) {
+            sourceDisposers.delete(dispose);
+            safeCall(dispose, undefined, onError, { action: 'source-subscription.stop' });
+        }
+    }
+
     function collectSelectedSourceBatches(snapshot, {
         changedOnly = false,
         changedSheetKeys = null,
@@ -516,6 +589,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         includeBatches = true,
         confirmFailures = false,
         stableGeneration = generation,
+        sourceEventsBySheetKey = null,
     } = {}) {
         const hasChangedSheetFilter = changedSheetKeys instanceof Set
             || Array.isArray(changedSheetKeys);
@@ -562,6 +636,10 @@ export function createFullscreenOverlayRuntime(deps = {}) {
                     ? resolveChangedRowSelection(changedRowsBySheetKey, entry.sheetKey)
                     : null,
             );
+            const sourceEvents = sourceEventsBySheetKey instanceof Map
+                ? sourceEventsBySheetKey.get(entry.sheetKey)
+                : sourceEventsBySheetKey?.[entry.sheetKey];
+            if (Array.isArray(sourceEvents)) context.events = sourceEvents;
             const signatureResult = getSourceSignature(adapterResult.adapter, context);
             if (!signatureResult.ok) {
                 if (entry.enabled) {
@@ -639,6 +717,30 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         return result.ok ? result.batches : [];
     }
 
+    async function readTestSourceEvents(snapshot) {
+        const catalogResult = buildCatalog(snapshot);
+        if (!catalogResult.ok) return new Map();
+        const eventsBySheetKey = new Map();
+        for (const entry of catalogResult.catalog) {
+            if (!entry?.enabled) continue;
+            const adapterResult = resolveAdapter(entry);
+            if (!adapterResult.ok || typeof adapterResult.adapter?.readTestEvents !== 'function') continue;
+            try {
+                const events = await adapterResult.adapter.readTestEvents();
+                if (Array.isArray(events) && events.length > 0) {
+                    eventsBySheetKey.set(entry.sheetKey, events);
+                }
+            } catch (error) {
+                onError(error, {
+                    action: 'source.test-events.read',
+                    sheetKey: entry.sheetKey,
+                    sourceId: entry.sourceId,
+                });
+            }
+        }
+        return eventsBySheetKey;
+    }
+
     function clearBatchConfirmations() {
         pendingBatchConfirmations.clear();
         failedBatchConfirmations.clear();
@@ -706,6 +808,10 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         if (currentMatches) {
             sourceSignatures.delete(batch.sheetKey);
         }
+        if (batch?.reviewPlaybackKey
+            && batch.reviewPlaybackKey === activeReviewPlaybackKey) {
+            scheduledReviewSheetKeys.delete(batch.sheetKey);
+        }
         invalidateCoordinatorBaseline(batch, context);
         return true;
     }
@@ -739,6 +845,18 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         }
     }
 
+    async function appendScheduledBatches(batches, action) {
+        try {
+            if (typeof scheduler?.append === 'function') {
+                return await scheduler.append(batches);
+            }
+            return await scheduler?.replace?.(batches);
+        } catch (error) {
+            onError(error, { action });
+            return false;
+        }
+    }
+
     async function handleStableSnapshot(snapshot, metadata = {}) {
         if (!started || suspended) return false;
         const stableGeneration = generation;
@@ -756,6 +874,13 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         )
             ? normalizedMetadata.changedRowsBySheetKey
             : null;
+        const reviewPlaybackKey = hasReviewChangedSheetKeys
+            ? resolveReviewPlaybackKey(normalizedMetadata)
+            : '';
+        const sameReviewFloor = Boolean(
+            reviewPlaybackKey
+            && reviewPlaybackKey === activeReviewPlaybackKey,
+        );
         if (hasReviewChangedSheetKeys
             && !hasExplicitChangedRowSelections(
                 changedRowsBySheetKey,
@@ -790,6 +915,20 @@ export function createFullscreenOverlayRuntime(deps = {}) {
             return true;
         }
 
+        const schedulableBatches = sameReviewFloor
+            ? batches.filter(batch => !scheduledReviewSheetKeys.has(batch.sheetKey))
+            : batches;
+        if (sameReviewFloor && schedulableBatches.length === 0) {
+            commitSourceSignatures(nextSignatures);
+            return true;
+        }
+        const playbackBatches = reviewPlaybackKey
+            ? schedulableBatches.map(batch => ({
+                ...batch,
+                reviewPlaybackKey,
+            }))
+            : schedulableBatches;
+
         if (settings.enabled !== true) {
             const accepted = await replaceScheduledBatches(
                 [],
@@ -805,19 +944,37 @@ export function createFullscreenOverlayRuntime(deps = {}) {
             return true;
         }
 
-        registerBatchConfirmations(batches);
-        const accepted = await replaceScheduledBatches(
-            batches,
-            'scheduler.replace-stable',
-        );
+        registerBatchConfirmations(playbackBatches);
+        const accepted = sameReviewFloor
+            ? await appendScheduledBatches(
+                playbackBatches,
+                'scheduler.append-stable',
+            )
+            : await replaceScheduledBatches(
+                playbackBatches,
+                'scheduler.replace-stable',
+            );
         if (accepted !== true
             || !started
             || suspended
             || stableGeneration !== generation) {
-            releaseBatchConfirmations(batches);
+            releaseBatchConfirmations(playbackBatches);
             return false;
         }
-        return commitAcceptedSourceSignatures(nextSignatures, batches);
+        const committed = commitAcceptedSourceSignatures(
+            nextSignatures,
+            playbackBatches,
+        );
+        if (committed && reviewPlaybackKey) {
+            if (!sameReviewFloor) {
+                activeReviewPlaybackKey = reviewPlaybackKey;
+                scheduledReviewSheetKeys.clear();
+            }
+            playbackBatches.forEach((batch) => {
+                scheduledReviewSheetKeys.add(batch.sheetKey);
+            });
+        }
+        return committed;
     }
 
     function createComponents() {
@@ -858,6 +1015,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
             onError,
             { action: 'coordinator.create' },
         );
+        subscribeExternalSources();
     }
 
     function clearCoordinatorRetryTimer() {
@@ -1082,6 +1240,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
 
     function activateAutomaticRuntime(reason) {
         if (!started || settings.enabled !== true) return false;
+        resetReviewPlaybackState();
         awaitingExternalChatResume = false;
         suspended = true;
         coordinatorBaselineReady = false;
@@ -1104,6 +1263,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         baselinePromise = null;
         sourceSignatures.clear();
         clearBatchConfirmations();
+        resetReviewPlaybackState();
         coordinatorRetryAttempt = 0;
         baselineSyncRetryAttempt = 0;
         stopAllRendererLoops('settings-disabled');
@@ -1143,6 +1303,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         generation += 1;
         sourceSignatures.clear();
         clearBatchConfirmations();
+        resetReviewPlaybackState();
         createComponents();
 
         awaitingExternalChatResume = false;
@@ -1158,6 +1319,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     function suspendForChatChange(chatId = null) {
         if (!started) return false;
         stopAllRendererLoops('chat-change-suspend');
+        resetReviewPlaybackState();
         if (settings.enabled !== true) {
             awaitingExternalChatResume = false;
             suspended = false;
@@ -1215,6 +1377,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
             }
             const batches = buildSelectedSourceBatches(currentSnapshot, {
                 changedOnly: false,
+                sourceEventsBySheetKey: await readTestSourceEvents(currentSnapshot),
             });
             if (batches.length === 0) {
                 return {
@@ -1265,6 +1428,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     function stop(reason = 'disabled') {
         clearCoordinatorRetryTimer();
         clearBaselineSyncRetryTimer();
+        stopExternalSources();
         if (!started && !coordinator && !scheduler && !layerRuntime) return true;
         started = false;
         suspended = false;
@@ -1272,6 +1436,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         generation += 1;
         sourceSignatures.clear();
         clearBatchConfirmations();
+        resetReviewPlaybackState();
         baselinePromise = null;
         stopAllRendererLoops('stop');
 

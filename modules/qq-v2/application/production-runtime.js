@@ -506,6 +506,7 @@ export function createQQV2ProductionRuntime(options = {}) {
     // property of the conversation itself.
     const openedConversationByScope = new Map();
     const subscribers = new Set();
+    const proactiveMessageSubscribers = new Set();
     const deletingConversationKeys = new Set();
     const inactiveProjectionScopeIds = new Set();
     let worldbookMutation = Promise.resolve();
@@ -633,6 +634,28 @@ export function createQQV2ProductionRuntime(options = {}) {
                 await subscriber(event);
             } catch {
                 // A UI subscriber must not interrupt QQ runtime state changes.
+            }
+        }));
+    };
+
+    const notifyProactiveMessageSubscribers = async (details = {}) => {
+        const scopeId = asText(details.scopeId, 512);
+        const conversationIds = [...new Set(asArray(details.conversationIds)
+            .map((conversationId) => asText(conversationId, 256))
+            .filter(Boolean))];
+        if (!scopeId || conversationIds.length === 0) return;
+        const event = Object.freeze({
+            scopeId,
+            conversationIds: Object.freeze(conversationIds),
+            messageIds: Object.freeze([...new Set(asArray(details.messageIds)
+                .map((messageId) => asText(messageId, 256))
+                .filter(Boolean))]),
+        });
+        await Promise.all([...proactiveMessageSubscribers].map(async (subscriber) => {
+            try {
+                await subscriber(event);
+            } catch {
+                // 浮层等旁路订阅者不得影响 QQ 主动消息提交。
             }
         }));
     };
@@ -1061,6 +1084,7 @@ export function createQQV2ProductionRuntime(options = {}) {
         getStoryTime,
         getUserName,
         actionService,
+        onMessagesCommitted: notifyProactiveMessageSubscribers,
         async getPromptContext({ scopeId, scopeSession, candidates, runtimeSettings, storyTime }) {
             const people = [...new Set(candidates.flatMap((candidate) => [
                 candidate.title,
@@ -1326,6 +1350,7 @@ export function createQQV2ProductionRuntime(options = {}) {
             proactiveStoryTasks.clear();
             proactiveRetryTasks.clear();
             openedConversationByScope.clear();
+            proactiveMessageSubscribers.clear();
             inactiveProjectionScopeIds.clear();
             revokeAllMediaRenderLeases();
             revokeAllStickerRenderLeases();
@@ -1450,6 +1475,11 @@ export function createQQV2ProductionRuntime(options = {}) {
             if (typeof listener !== 'function') return () => {};
             subscribers.add(listener);
             return () => subscribers.delete(listener);
+        },
+        subscribeProactiveMessages(listener) {
+            if (typeof listener !== 'function') return () => {};
+            proactiveMessageSubscribers.add(listener);
+            return () => proactiveMessageSubscribers.delete(listener);
         },
         getStatus: () => lifecycle.getStatus(),
         getSnapshot,

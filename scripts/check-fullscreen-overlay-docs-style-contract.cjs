@@ -357,7 +357,9 @@ function testDocumentationContract() {
     const barrageDensityBoundary =
         '滚动弹幕密度表示轨道/视觉密度，不等于活动 DOM 数；运行时另设内部 DOM 硬上限。';
     const reviewResultSeamBoundary =
-        /审核结果自动触发 seam[\s\S]{0,120}全屏浮层唯一的自动播放入口|结构化审核结果[^。\n]*全屏浮层唯一的自动触发 seam/;
+        /审核结果自动触发 seam[\s\S]{0,120}物理表来源唯一的自动播放入口|结构化审核结果[^。\n]*物理表来源唯一的自动触发 seam/;
+    const qqSourceBoundary =
+        /QQ 浮层来源[\s\S]{0,260}主动周期中已经成功提交的 NPC 消息|QQ 来源[^。\n]*主动周期事务成功提交/;
     const noSecondDatabaseReadBoundary =
         /(?:不|不得)[^。\n]*自动路径[^。\n]*(?:二次读取数据库|再次调用数据库读取)|自动路径[^。\n]*(?:不|不得)[^。\n]*(?:二次读取数据库|再次调用数据库读取)/;
     const sharedPlaybackPipelineBoundary =
@@ -367,7 +369,8 @@ function testDocumentationContract() {
         [sourceHandoffBoundary, '来源严格顺序与 handoff 边界'],
         [naturalExitBoundary, '已发视觉元素自然离场边界'],
         [barrageDensityBoundary, '弹幕轨道密度与内部 DOM 硬上限边界'],
-        [reviewResultSeamBoundary, '审核结果作为唯一自动触发 seam 的边界'],
+        [reviewResultSeamBoundary, '审核结果作为物理表唯一自动触发 seam 的边界'],
+        [qqSourceBoundary, 'QQ 主动消息提交来源边界'],
         [noSecondDatabaseReadBoundary, '自动路径不得二次读取数据库的边界'],
         [sharedPlaybackPipelineBoundary, '手动与自动复用播放管线的边界'],
     ].forEach(([boundary, label]) => {

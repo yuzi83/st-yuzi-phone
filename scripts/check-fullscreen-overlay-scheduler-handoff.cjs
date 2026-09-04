@@ -169,6 +169,53 @@ async function testReplaceKeepsOnlyNewestBatch() {
     scheduler.dispose();
 }
 
+async function testAppendKeepsCurrentAndPendingBatches() {
+    const { createFullscreenOverlayScheduler } = await import(
+        moduleUrl('modules/fullscreen-overlay/scheduler.js')
+    );
+    const starts = [];
+    const abortReasons = [];
+    const currentHandoff = createDeferred();
+    const renderer = {
+        play(batch, { signal }) {
+            starts.push(batch.sourceId);
+            signal.addEventListener('abort', () => {
+                abortReasons.push(signal.reason);
+                currentHandoff.resolve();
+            }, { once: true });
+            return batch.sourceId === 'chronicle'
+                ? currentHandoff.promise
+                : Promise.resolve();
+        },
+        clear() {},
+        dispose() {},
+    };
+    const scheduler = createFullscreenOverlayScheduler({
+        resolveRenderer: () => renderer,
+        sourceGapMs: 0,
+    });
+
+    scheduler.replace([
+        { sourceId: 'chronicle', rendererId: 'popup', items: ['纪要'] },
+        { sourceId: 'protagonist', rendererId: 'popup', items: ['主角'] },
+        { sourceId: 'important', rendererId: 'popup', items: ['重要角色'] },
+    ]);
+    await flushAsync();
+    scheduler.append([
+        { sourceId: 'global', rendererId: 'popup', items: ['全局数据'] },
+    ]);
+    currentHandoff.resolve();
+    await scheduler.whenIdle();
+
+    assert.deepEqual(
+        starts,
+        ['chronicle', 'protagonist', 'important', 'global'],
+        'append 必须保留当前来源与原待播来源，只在队尾累计同楼新来源',
+    );
+    assert.deepEqual(abortReasons, [], 'append 不得打断当前正在交接的来源');
+    scheduler.dispose();
+}
+
 async function testClearAbortsQueueAndBecomesIdle() {
     const { createFullscreenOverlayScheduler } = await import(
         moduleUrl('modules/fullscreen-overlay/scheduler.js')
@@ -254,6 +301,7 @@ async function testPauseAndResumeKeepCurrentSchedulingSemantics() {
 async function main() {
     await testRendererResolveHandsOffAfterShortDefaultGap();
     await testReplaceKeepsOnlyNewestBatch();
+    await testAppendKeepsCurrentAndPendingBatches();
     await testClearAbortsQueueAndBecomesIdle();
     await testPauseAndResumeKeepCurrentSchedulingSemantics();
     console.log('fullscreen overlay scheduler handoff checks passed');

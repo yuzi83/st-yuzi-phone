@@ -270,6 +270,14 @@ export function createFullscreenOverlayPage(ctx) {
                 areaPercent: Number(popupAreaInput.value),
             }));
         });
+        const popupPlacementInput = ctx.container?.querySelector?.(
+            '#phone-fullscreen-overlay-popup-placement',
+        );
+        bind(popupPlacementInput, 'change', () => {
+            void persist(updateModel(state.config, TABLE_POPUP_MODEL_ID, {
+                placementMode: popupPlacementInput.value === 'center' ? 'center' : 'random',
+            }));
+        });
         bindNumericSetting(
             '#phone-fullscreen-overlay-popup-max-concurrent',
             TABLE_POPUP_MODEL_ID,
