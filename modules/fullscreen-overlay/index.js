@@ -59,7 +59,7 @@ async function acquireQQMediaRender(assetId) {
 const fullscreenOverlayRuntime = createFullscreenOverlayRuntime({
     settingKey: FULLSCREEN_OVERLAY_SETTING_KEY,
     normalizeSettings: normalizeFullscreenOverlaySettings,
-    getSettings: getPhoneSettings,
+    getSettings: () => getPhoneSettings()?.[FULLSCREEN_OVERLAY_SETTING_KEY],
     readSnapshot: () => getTableData(),
     registry: sourceRegistry,
     buildSourceCatalog: buildOverlaySourceCatalog,

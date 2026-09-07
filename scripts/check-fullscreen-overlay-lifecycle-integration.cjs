@@ -1368,6 +1368,16 @@ function testStaticProductionWiring() {
     assert.match(background, /suspendFullscreenOverlay/u);
     assert.match(background, /resumeFullscreenOverlay/u);
     assert.match(background, /stopFullscreenOverlay/u);
+    assert.match(
+        overlayIndex,
+        /getSettings:\s*\(\)\s*=>\s*getPhoneSettings\(\)\?\.\[FULLSCREEN_OVERLAY_SETTING_KEY\]/u,
+        '生产 Overlay 只能读取 fullscreenOverlay 子配置，不能误把小手机总开关当作浮层开关',
+    );
+    assert.doesNotMatch(
+        overlayIndex,
+        /getSettings:\s*getPhoneSettings\s*,/u,
+        '生产 Overlay 不得把完整小手机设置对象直接交给浮层归一化',
+    );
 
     assert.match(
         rootIndex,
