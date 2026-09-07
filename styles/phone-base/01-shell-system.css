@@ -242,6 +242,67 @@
     opacity: var(--yuzi-phone-form-disabled-opacity);
 }
 
+/* Restore the browser checkbox only for controls that intentionally use one.
+   Do not apply this to custom-drawn switches such as the table replacement toggle. */
+#yuzi-phone-standalone .yuzi-phone-shell :is(
+    input.phone-settings-switch[type="checkbox"],
+    input.phone-worldbook-entry-checkbox[type="checkbox"],
+    input.yuzi-qq-checkbox[type="checkbox"],
+    .phone-toggle-shape-item > input[type="checkbox"]
+) {
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+    -moz-appearance: checkbox !important;
+    display: inline-block !important;
+    background: initial !important;
+    box-shadow: none !important;
+    filter: none !important;
+    transform: none !important;
+    color-scheme: var(--yuzi-phone-native-control-color-scheme) !important;
+}
+
+#yuzi-phone-standalone .yuzi-phone-shell :is(
+    input.phone-settings-switch[type="checkbox"],
+    input.phone-worldbook-entry-checkbox[type="checkbox"],
+    .phone-toggle-shape-item > input[type="checkbox"]
+) {
+    inline-size: 16px !important;
+    block-size: 16px !important;
+    accent-color: var(--yuzi-settings-accent, #5B7A6A) !important;
+}
+
+#yuzi-phone-standalone .yuzi-phone-shell input.yuzi-qq-checkbox[type="checkbox"] {
+    inline-size: var(--yuzi-qq-checkbox-size) !important;
+    block-size: var(--yuzi-qq-checkbox-size) !important;
+    accent-color: var(--yuzi-qq-accent) !important;
+}
+
+#yuzi-phone-standalone .yuzi-phone-shell :is(
+    input.phone-settings-switch[type="checkbox"],
+    input.phone-worldbook-entry-checkbox[type="checkbox"],
+    input.yuzi-qq-checkbox[type="checkbox"],
+    .phone-toggle-shape-item > input[type="checkbox"]
+):focus-visible {
+    outline: var(--yuzi-phone-form-focus-ring-width) solid var(--yuzi-phone-form-focus-ring) !important;
+    outline-offset: var(--yuzi-phone-form-focus-ring-offset) !important;
+}
+
+#yuzi-phone-standalone .yuzi-phone-shell :is(
+    input.phone-settings-switch[type="checkbox"],
+    input.phone-worldbook-entry-checkbox[type="checkbox"],
+    input.yuzi-qq-checkbox[type="checkbox"],
+    .phone-toggle-shape-item > input[type="checkbox"]
+)::before,
+#yuzi-phone-standalone .yuzi-phone-shell :is(
+    input.phone-settings-switch[type="checkbox"],
+    input.phone-worldbook-entry-checkbox[type="checkbox"],
+    input.yuzi-qq-checkbox[type="checkbox"],
+    .phone-toggle-shape-item > input[type="checkbox"]
+)::after {
+    content: none !important;
+    display: none !important;
+}
+
 /* SillyTavern themes may force native controls with !important; keep that override at the shell boundary. */
 #yuzi-phone-standalone .yuzi-phone-shell .yuzi-qq-app :is(
     input:not([type]),

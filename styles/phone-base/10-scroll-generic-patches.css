@@ -52,33 +52,33 @@
     overflow-y: auto;
 }
 
-/* 通用表格模板作用域：基础变量桥接
+/* 通用表格模板作用域：Yuzi token fallback
    完整布局与结构开关在 styles/05-phone-generic-template.css */
 .phone-generic-root.phone-generic-template-scope {
-    --gtCompatTableBg: var(--tableBackgroundColor, var(--yuzi-theme-surface, rgba(245, 243, 239, 0.96)));
-    --gtCompatNavBg: var(--headerBackgroundColor, var(--yuzi-theme-surface-soft, rgba(245, 243, 239, 0.6)));
-    --gtCompatText: var(--textColor, var(--yuzi-theme-text-primary, #3A3731));
-    --gtCompatBorder: var(--borderColor, var(--yuzi-theme-border, rgba(58, 55, 49, 0.08)));
-    --gtCompatRadius: var(--borderRadius, 14px);
-    --gtCompatShadow: var(--boxShadow, none);
-    --gtCompatBackdrop: var(--backdropFilter, none);
+    --yuzi-generic-template-compat-table-bg: var(--yuzi-theme-surface, rgba(245, 243, 239, 0.96));
+    --yuzi-generic-template-compat-nav-bg: var(--yuzi-theme-surface-soft, rgba(245, 243, 239, 0.6));
+    --yuzi-generic-template-compat-text: var(--yuzi-theme-text-primary, #3A3731);
+    --yuzi-generic-template-compat-border: var(--yuzi-theme-border, rgba(58, 55, 49, 0.08));
+    --yuzi-generic-template-compat-radius: 14px;
+    --yuzi-generic-template-compat-shadow: none;
+    --yuzi-generic-template-compat-backdrop: none;
 }
 
 .phone-generic-root.phone-generic-template-scope {
-    color: var(--gtText, var(--gtCompatText, var(--yuzi-theme-text-primary, #3A3731)));
-    background: var(--gtPageBg, transparent);
+    color: var(--yuzi-generic-template-resolved-text, var(--yuzi-theme-text-primary, #3A3731));
+    background: var(--yuzi-generic-template-resolved-page-bg, transparent);
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-nav-bar {
-    background: var(--gtNavBg, var(--gtCompatNavBg));
-    border-bottom-color: var(--gtNavBorderColor, var(--gtCompatBorder));
-    backdrop-filter: var(--gtBackdropFilter, var(--gtCompatBackdrop));
-    -webkit-backdrop-filter: var(--gtBackdropFilter, var(--gtCompatBackdrop));
+    background: var(--yuzi-generic-template-nav-bg, var(--yuzi-generic-template-compat-nav-bg));
+    border-bottom-color: var(--yuzi-generic-template-nav-border-color, var(--yuzi-generic-template-compat-border));
+    backdrop-filter: var(--yuzi-generic-template-backdrop-filter, var(--yuzi-generic-template-compat-backdrop));
+    -webkit-backdrop-filter: var(--yuzi-generic-template-backdrop-filter, var(--yuzi-generic-template-compat-backdrop));
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-app-body.phone-table-body {
-    background: var(--gtBodyBg, transparent);
-    color: var(--gtText, var(--gtCompatText, var(--yuzi-theme-text-primary, #3A3731)));
+    background: var(--yuzi-generic-template-body-bg, transparent);
+    color: var(--yuzi-generic-template-text, var(--yuzi-generic-template-compat-text, var(--yuzi-theme-text-primary, #3A3731)));
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
@@ -256,8 +256,8 @@
     align-items: center;
     gap: 12px;
     padding: 12px 16px;
-    background: var(--gtBodyBg, rgba(30, 30, 35, 0.95));
-    border-top: 1px solid var(--gtListBorder, rgba(255, 255, 255, 0.08));
+    background: var(--yuzi-generic-template-body-bg, rgba(30, 30, 35, 0.95));
+    border-top: 1px solid var(--yuzi-generic-template-list-border, rgba(255, 255, 255, 0.08));
     position: sticky;
     bottom: 0;
     left: 0;
@@ -271,10 +271,10 @@
     justify-content: center;
     min-width: 64px;
     padding: 8px 16px;
-    border-radius: var(--gtRadiusSm, 8px);
-    border: 1px solid var(--gtActionBtnBorder, rgba(255, 255, 255, 0.15));
-    background: var(--gtActionBtnBg, rgba(255, 255, 255, 0.08));
-    color: var(--gtActionBtnText, rgba(255, 255, 255, 0.9));
+    border-radius: var(--yuzi-generic-template-radius-sm, 8px);
+    border: 1px solid var(--yuzi-generic-template-action-btn-border, rgba(255, 255, 255, 0.15));
+    background: var(--yuzi-generic-template-action-btn-bg, rgba(255, 255, 255, 0.08));
+    color: var(--yuzi-generic-template-action-btn-text, rgba(255, 255, 255, 0.9));
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -283,12 +283,12 @@
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-list-bottom-btn:hover {
-    background: var(--gtListItemHoverBg, rgba(255, 255, 255, 0.12));
-    border-color: var(--gtActionBtnBorder, rgba(255, 255, 255, 0.25));
+    background: var(--yuzi-generic-template-list-item-hover-bg, rgba(255, 255, 255, 0.12));
+    border-color: var(--yuzi-generic-template-action-btn-border, rgba(255, 255, 255, 0.25));
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-list-bottom-btn:active {
-    background: var(--gtListItemHoverBg, rgba(255, 255, 255, 0.18));
+    background: var(--yuzi-generic-template-list-item-hover-bg, rgba(255, 255, 255, 0.18));
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-list-bottom-btn.active {
@@ -306,8 +306,8 @@
     align-items: center;
     gap: 12px;
     padding: 12px 16px;
-    background: var(--gtBodyBg, rgba(30, 30, 35, 0.95));
-    border-top: 1px solid var(--gtDetailBorder, rgba(255, 255, 255, 0.08));
+    background: var(--yuzi-generic-template-body-bg, rgba(30, 30, 35, 0.95));
+    border-top: 1px solid var(--yuzi-generic-template-detail-border, rgba(255, 255, 255, 0.08));
     position: sticky;
     bottom: 0;
     left: 0;
@@ -321,10 +321,10 @@
     justify-content: center;
     min-width: 64px;
     padding: 8px 16px;
-    border-radius: var(--gtRadiusSm, 8px);
-    border: 1px solid var(--gtActionBtnBorder, rgba(255, 255, 255, 0.15));
-    background: var(--gtActionBtnBg, rgba(255, 255, 255, 0.08));
-    color: var(--gtActionBtnText, rgba(255, 255, 255, 0.9));
+    border-radius: var(--yuzi-generic-template-radius-sm, 8px);
+    border: 1px solid var(--yuzi-generic-template-action-btn-border, rgba(255, 255, 255, 0.15));
+    background: var(--yuzi-generic-template-action-btn-bg, rgba(255, 255, 255, 0.08));
+    color: var(--yuzi-generic-template-action-btn-text, rgba(255, 255, 255, 0.9));
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -333,12 +333,12 @@
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-detail-bottom-btn:hover {
-    background: var(--gtListItemHoverBg, rgba(255, 255, 255, 0.12));
-    border-color: var(--gtActionBtnBorder, rgba(255, 255, 255, 0.25));
+    background: var(--yuzi-generic-template-list-item-hover-bg, rgba(255, 255, 255, 0.12));
+    border-color: var(--yuzi-generic-template-action-btn-border, rgba(255, 255, 255, 0.25));
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-detail-bottom-btn:active {
-    background: var(--gtListItemHoverBg, rgba(255, 255, 255, 0.18));
+    background: var(--yuzi-generic-template-list-item-hover-bg, rgba(255, 255, 255, 0.18));
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-detail-bottom-btn:disabled {
@@ -379,9 +379,9 @@
 }
 
 .phone-modal-content {
-    background: var(--gtModalPanelBg, rgba(28, 31, 39, 0.985));
-    border-radius: var(--gtRadiusLg, 16px);
-    border: 1px solid var(--gtModalPanelBorder, rgba(255, 255, 255, 0.18));
+    background: var(--yuzi-generic-template-modal-panel-bg, rgba(28, 31, 39, 0.985));
+    border-radius: var(--yuzi-generic-template-radius-lg, 16px);
+    border: 1px solid var(--yuzi-generic-template-modal-panel-border, rgba(255, 255, 255, 0.18));
     box-shadow: 0 18px 38px rgba(0, 0, 0, 0.38);
     width: 90%;
     max-width: 320px;
@@ -391,7 +391,7 @@
     overflow: hidden;
     transform: scale(0.95);
     transition: transform 0.2s ease;
-    color: var(--gtModalPanelText, rgba(255, 255, 255, 0.96));
+    color: var(--yuzi-generic-template-modal-panel-text, rgba(255, 255, 255, 0.96));
 }
 
 .phone-modal-overlay.show .phone-modal-content {
@@ -410,7 +410,7 @@
 .phone-modal-title {
     font-size: 16px;
     font-weight: 600;
-    color: var(--gtModalTitleColor, rgba(248, 250, 255, 0.98));
+    color: var(--yuzi-generic-template-modal-title-color, rgba(248, 250, 255, 0.98));
 }
 
 .phone-modal-close {
@@ -421,7 +421,7 @@
     height: 28px;
     border: none;
     background: transparent;
-    color: var(--gtMutedText, rgba(255, 255, 255, 0.6));
+    color: var(--yuzi-generic-template-muted-text, rgba(255, 255, 255, 0.6));
     font-size: 20px;
     cursor: pointer;
     border-radius: 6px;
@@ -429,8 +429,8 @@
 }
 
 .phone-modal-close:hover {
-    background: var(--gtListItemHoverBg, rgba(255, 255, 255, 0.1));
-    color: var(--gtText, rgba(255, 255, 255, 0.9));
+    background: var(--yuzi-generic-template-list-item-hover-bg, rgba(255, 255, 255, 0.1));
+    color: var(--yuzi-generic-template-text, rgba(255, 255, 255, 0.9));
 }
 
 .phone-modal-body {
@@ -451,16 +451,16 @@
 .phone-modal-field-label {
     font-size: 12px;
     font-weight: 600;
-    color: var(--gtModalLabelColor, rgba(226, 235, 255, 0.88));
+    color: var(--yuzi-generic-template-modal-label-color, rgba(226, 235, 255, 0.88));
 }
 
 .phone-modal-field-input {
     width: 100%;
     padding: 10px 12px;
-    border-radius: var(--gtRadiusSm, 8px);
-    border: 1px solid var(--gtModalFieldBorder, rgba(255, 255, 255, 0.22));
-    background: var(--gtModalFieldBg, rgba(255, 255, 255, 0.08));
-    color: var(--gtModalFieldText, rgba(255, 255, 255, 0.96));
+    border-radius: var(--yuzi-generic-template-radius-sm, 8px);
+    border: 1px solid var(--yuzi-generic-template-modal-field-border, rgba(255, 255, 255, 0.22));
+    background: var(--yuzi-generic-template-modal-field-bg, rgba(255, 255, 255, 0.08));
+    color: var(--yuzi-generic-template-modal-field-text, rgba(255, 255, 255, 0.96));
     font-size: 14px;
     line-height: 1.4;
     resize: none;
@@ -495,7 +495,7 @@
     justify-content: center;
     min-width: 64px;
     padding: 8px 16px;
-    border-radius: var(--gtRadiusSm, 8px);
+    border-radius: var(--yuzi-generic-template-radius-sm, 8px);
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -504,13 +504,13 @@
 }
 
 .phone-modal-btn-cancel {
-    border: 1px solid var(--gtActionBtnBorder, rgba(255, 255, 255, 0.18));
+    border: 1px solid var(--yuzi-generic-template-action-btn-border, rgba(255, 255, 255, 0.18));
     background: rgba(255, 255, 255, 0.04);
-    color: var(--gtActionBtnText, rgba(255, 255, 255, 0.84));
+    color: var(--yuzi-generic-template-action-btn-text, rgba(255, 255, 255, 0.84));
 }
 
 .phone-modal-btn-cancel:hover {
-    background: var(--gtListItemHoverBg, rgba(255, 255, 255, 0.08));
+    background: var(--yuzi-generic-template-list-item-hover-bg, rgba(255, 255, 255, 0.08));
 }
 
 .phone-modal-btn-confirm {
@@ -536,7 +536,7 @@
     flex-direction: column;
     gap: 6px;
     padding: 12px 0;
-    border-bottom: 1px solid var(--gtDetailBorder, rgba(255, 255, 255, 0.06));
+    border-bottom: 1px solid var(--yuzi-generic-template-detail-border, rgba(255, 255, 255, 0.06));
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-row-detail-kv:last-child {
@@ -546,12 +546,12 @@
 .phone-generic-root.phone-generic-template-scope .phone-row-detail-key {
     font-size: calc(12px * var(--yuzi-phone-readable-text-scale, 1));
     font-weight: 500;
-    color: var(--gtDetailKeyText, rgba(255, 255, 255, 0.6));
+    color: var(--yuzi-generic-template-detail-key-text, rgba(255, 255, 255, 0.6));
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-row-detail-value {
     font-size: calc(14px * var(--yuzi-phone-readable-text-scale, 1));
-    color: var(--gtDetailValueText, rgba(255, 255, 255, 0.9));
+    color: var(--yuzi-generic-template-detail-value-text, rgba(255, 255, 255, 0.9));
     word-break: break-word;
     white-space: pre-wrap;
 }
@@ -559,10 +559,10 @@
 .phone-generic-root.phone-generic-template-scope .phone-row-detail-input {
     width: 100%;
     padding: 10px 12px;
-    border-radius: var(--gtRadiusSm, 8px);
-    border: 1px solid var(--gtDetailFieldBorder, rgba(255, 255, 255, 0.15));
-    background: var(--gtDetailFieldBg, rgba(255, 255, 255, 0.06));
-    color: var(--gtDetailValueText, rgba(255, 255, 255, 0.95));
+    border-radius: var(--yuzi-generic-template-radius-sm, 8px);
+    border: 1px solid var(--yuzi-generic-template-detail-field-border, rgba(255, 255, 255, 0.15));
+    background: var(--yuzi-generic-template-detail-field-bg, rgba(255, 255, 255, 0.06));
+    color: var(--yuzi-generic-template-detail-value-text, rgba(255, 255, 255, 0.95));
     font-size: calc(14px * var(--yuzi-phone-readable-text-scale, 1));
     line-height: 1.5;
     resize: none;
@@ -574,7 +574,7 @@
 .phone-generic-root.phone-generic-template-scope .phone-row-detail-input:focus {
     outline: none;
     border-color: rgba(100, 180, 255, 0.5);
-    background: var(--gtListItemHoverBg, rgba(255, 255, 255, 0.08));
+    background: var(--yuzi-generic-template-list-item-hover-bg, rgba(255, 255, 255, 0.08));
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-row-detail-input:disabled {
@@ -603,10 +603,10 @@
     justify-content: center;
     min-width: 44px;
     padding: 4px 10px;
-    border-radius: var(--gtRadiusSm, 6px);
-    border: 1px solid var(--gtActionBtnBorder, rgba(255, 255, 255, 0.15));
-    background: var(--gtActionBtnBg, rgba(255, 255, 255, 0.08));
-    color: var(--gtActionBtnText, rgba(255, 255, 255, 0.8));
+    border-radius: var(--yuzi-generic-template-radius-sm, 6px);
+    border: 1px solid var(--yuzi-generic-template-action-btn-border, rgba(255, 255, 255, 0.15));
+    background: var(--yuzi-generic-template-action-btn-bg, rgba(255, 255, 255, 0.08));
+    color: var(--yuzi-generic-template-action-btn-text, rgba(255, 255, 255, 0.8));
     font-size: 11px;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -614,7 +614,7 @@
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-cell-lock-btn:hover {
-    background: var(--gtListItemHoverBg, rgba(255, 255, 255, 0.12));
+    background: var(--yuzi-generic-template-list-item-hover-bg, rgba(255, 255, 255, 0.12));
 }
 
 .phone-generic-root.phone-generic-template-scope .phone-cell-lock-btn.locked {

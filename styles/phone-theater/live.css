@@ -3,26 +3,26 @@
    ======================================== */
 
 .phone-app-page.phone-theater-page[data-theater-scene="live"] {
-    --live-bg: #fff9f7;
-    --live-bg-rose: #fff0f5;
-    --live-panel: rgba(255, 255, 255, 0.72);
-    --live-panel-strong: rgba(255, 255, 255, 0.92);
-    --live-border: rgba(201, 154, 86, 0.32);
-    --live-border-soft: rgba(255, 255, 255, 0.76);
-    --live-gold: #c89b52;
-    --live-gold-soft: rgba(201, 155, 82, 0.16);
-    --live-rose: #ef7da6;
-    --live-blue: #7fa8e8;
-    --live-violet: #a986e9;
-    --live-mint: #79c7bd;
-    --live-text: #3f2d26;
-    --live-muted: rgba(63, 45, 38, 0.58);
-    --live-shadow: 0 18px 42px rgba(176, 126, 132, 0.18);
+    --yuzi-theater-live-bg: #fff9f7;
+    --yuzi-theater-live-bg-rose: #fff0f5;
+    --yuzi-theater-live-panel: rgba(255, 255, 255, 0.72);
+    --yuzi-theater-live-panel-strong: rgba(255, 255, 255, 0.92);
+    --yuzi-theater-live-border: rgba(201, 154, 86, 0.32);
+    --yuzi-theater-live-border-soft: rgba(255, 255, 255, 0.76);
+    --yuzi-theater-live-gold: #c89b52;
+    --yuzi-theater-live-gold-soft: rgba(201, 155, 82, 0.16);
+    --yuzi-theater-live-rose: #ef7da6;
+    --yuzi-theater-live-blue: #7fa8e8;
+    --yuzi-theater-live-violet: #a986e9;
+    --yuzi-theater-live-mint: #79c7bd;
+    --yuzi-theater-live-text: #3f2d26;
+    --yuzi-theater-live-muted: rgba(63, 45, 38, 0.58);
+    --yuzi-theater-live-shadow: 0 18px 42px rgba(176, 126, 132, 0.18);
     background:
         radial-gradient(circle at 18% 10%, rgba(244, 218, 224, 0.58) 0, rgba(244, 218, 224, 0) 34%),
         radial-gradient(circle at 86% 22%, rgba(218, 224, 242, 0.48) 0, rgba(218, 224, 242, 0) 32%),
         linear-gradient(180deg, #f5f4ef 0%, #f6f0ee 52%, #f3efe7 100%);
-    color: var(--live-text);
+    color: var(--yuzi-theater-live-text);
 }
 
 .phone-app-page.phone-theater-page[data-theater-scene="live"] .phone-theater-body {
@@ -31,7 +31,7 @@
         radial-gradient(circle at 86% 34%, rgba(211, 198, 235, 0.18) 0, rgba(211, 198, 235, 0) 28%),
         radial-gradient(circle at 12% 74%, rgba(235, 205, 213, 0.24) 0, rgba(235, 205, 213, 0) 36%),
         linear-gradient(180deg, rgba(245, 244, 239, 0.98) 0%, rgba(244, 239, 232, 0.96) 100%);
-    color: var(--live-text);
+    color: var(--yuzi-theater-live-text);
     overflow-x: hidden;
 }
 
@@ -53,7 +53,7 @@
     z-index: 2;
     background: #f5f4ef;
     border-bottom: 1px solid rgba(201, 155, 82, 0.16);
-    color: var(--live-text);
+    color: var(--yuzi-theater-live-text);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     box-shadow: 0 8px 24px rgba(178, 136, 144, 0.08);
@@ -61,7 +61,7 @@
 
 .phone-app-page.phone-theater-page[data-theater-scene="live"] .phone-theater-nav .phone-nav-back,
 .phone-app-page.phone-theater-page[data-theater-scene="live"] .phone-theater-nav .phone-nav-title {
-    color: var(--live-text);
+    color: var(--yuzi-theater-live-text);
 }
 
 .phone-theater-page[data-theater-scene="live"] .phone-theater-delete-toggle {
@@ -83,7 +83,7 @@
     margin: 10px 12px;
     background: rgba(255, 255, 255, 0.82);
     border: 1px solid rgba(201, 155, 82, 0.18);
-    box-shadow: var(--live-shadow);
+    box-shadow: var(--yuzi-theater-live-shadow);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
 }
@@ -117,7 +117,7 @@
 .phone-theater-page[data-theater-scene="live"] .phone-theater-empty {
     position: relative;
     z-index: 1;
-    color: var(--live-muted);
+    color: var(--yuzi-theater-live-muted);
 }
 
 .phone-theater-page[data-theater-scene="live"] .phone-theater-live-page {
@@ -230,7 +230,7 @@
     min-height: 0;
     border-radius: 24px;
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 249, 252, 0.72) 100%);
-    border: 1px solid var(--live-border);
+    border: 1px solid var(--yuzi-theater-live-border);
     box-shadow: 0 14px 32px rgba(178, 136, 144, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.68);
 }
 
@@ -495,14 +495,14 @@
 }
 
 .phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item {
-    --indent-step: 6px;
+    --yuzi-theater-live-indent-step: 6px;
     align-self: flex-start;
     display: inline-flex;
     align-items: center;
     gap: 8px;
     width: fit-content;
-    max-width: calc(100% - 4px - var(--indent-step) * var(--live-indent, 0));
-    margin-left: calc(var(--indent-step) * var(--live-indent, 0));
+    max-width: calc(100% - 4px - var(--yuzi-theater-live-indent-step) * var(--yuzi-theater-live-indent, 0));
+    margin-left: calc(var(--yuzi-theater-live-indent-step) * var(--yuzi-theater-live-indent, 0));
     padding: 7px 10px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.66);
@@ -510,14 +510,14 @@
     box-shadow: 0 8px 18px rgba(178, 136, 144, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.4);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    color: var(--live-text);
+    color: var(--yuzi-theater-live-text);
 }
 
-.phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item[data-indent="0"] { --live-indent: 0; }
-.phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item[data-indent="1"] { --live-indent: 1; }
-.phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item[data-indent="2"] { --live-indent: 2; }
-.phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item[data-indent="3"] { --live-indent: 3; }
-.phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item[data-indent="4"] { --live-indent: 4; }
+.phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item[data-indent="0"] { --yuzi-theater-live-indent: 0; }
+.phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item[data-indent="1"] { --yuzi-theater-live-indent: 1; }
+.phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item[data-indent="2"] { --yuzi-theater-live-indent: 2; }
+.phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item[data-indent="3"] { --yuzi-theater-live-indent: 3; }
+.phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item[data-indent="4"] { --yuzi-theater-live-indent: 4; }
 
 .phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item.is-clash {
     background: rgba(255, 249, 244, 0.7);
@@ -647,7 +647,7 @@
 
 @media (max-width: 390px) {
     .phone-theater-page[data-theater-scene="live"] .phone-theater-live-barrage-item {
-        --indent-step: 8px;
+        --yuzi-theater-live-indent-step: 8px;
     }
 }
 

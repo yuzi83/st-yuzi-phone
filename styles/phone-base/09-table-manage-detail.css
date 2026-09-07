@@ -106,7 +106,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    color: var(--textColor, var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.88)));
+    color: var(--yuzi-generic-template-resolved-text, var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.88)));
 }
 
 .phone-row-detail-kv {
@@ -115,11 +115,11 @@
     gap: 6px;
     padding: 10px;
     border-radius: var(--yuzi-phone-radius-lg, 10px);
-    background: var(--tableBackgroundColor, var(--yuzi-phone-bg-surface, rgba(255, 255, 255, 0.03)));
-    border: 1px solid var(--borderColor, var(--yuzi-phone-border-subtle, rgba(255, 255, 255, 0.08)));
-    box-shadow: var(--boxShadow, none);
-    backdrop-filter: var(--backdropFilter, none);
-    -webkit-backdrop-filter: var(--backdropFilter, none);
+    background: var(--yuzi-generic-template-resolved-body-bg, var(--yuzi-phone-bg-surface, rgba(255, 255, 255, 0.03)));
+    border: 1px solid var(--yuzi-generic-template-resolved-detail-border, var(--yuzi-phone-border-subtle, rgba(255, 255, 255, 0.08)));
+    box-shadow: var(--yuzi-generic-template-resolved-shadow-md, none);
+    backdrop-filter: var(--yuzi-generic-template-resolved-backdrop, none);
+    -webkit-backdrop-filter: var(--yuzi-generic-template-resolved-backdrop, none);
 }
 
 .phone-row-detail-kv.is-locked {
@@ -129,12 +129,12 @@
 
 .phone-row-detail-key {
     font-size: 11px;
-    color: var(--textColor, var(--yuzi-phone-color-accent-secondary, rgba(100, 180, 255, 0.78)));
+    color: var(--yuzi-generic-template-resolved-text, var(--yuzi-phone-color-accent-secondary, rgba(100, 180, 255, 0.78)));
 }
 
 .phone-row-detail-value {
     font-size: 13px;
-    color: var(--textColor, var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.88)));
+    color: var(--yuzi-generic-template-resolved-text, var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.88)));
     line-height: 1.45;
     white-space: pre-wrap;
     word-break: break-word;
@@ -145,16 +145,16 @@
     min-height: 52px;
     resize: vertical;
     box-sizing: border-box;
-    border-radius: var(--borderRadius, var(--yuzi-phone-radius-md, 8px));
-    border: 1px solid var(--borderColor, var(--yuzi-phone-border-strong, rgba(255, 255, 255, 0.14)));
-    background: var(--tableBackgroundColor, var(--yuzi-phone-bg-overlay-soft, rgba(0, 0, 0, 0.16)));
-    color: var(--textColor, var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.9)));
+    border-radius: var(--yuzi-generic-template-resolved-radius-md, var(--yuzi-phone-radius-md, 8px));
+    border: 1px solid var(--yuzi-generic-template-resolved-detail-field-border, var(--yuzi-phone-border-strong, rgba(255, 255, 255, 0.14)));
+    background: var(--yuzi-generic-template-resolved-detail-bg, var(--yuzi-phone-bg-overlay-soft, rgba(0, 0, 0, 0.16)));
+    color: var(--yuzi-generic-template-resolved-text, var(--yuzi-phone-color-text-secondary, rgba(255, 255, 255, 0.9)));
     font-size: 12px;
     line-height: 1.45;
     padding: 8px;
-    box-shadow: var(--boxShadow, none);
-    backdrop-filter: var(--backdropFilter, none);
-    -webkit-backdrop-filter: var(--backdropFilter, none);
+    box-shadow: var(--yuzi-generic-template-resolved-shadow-md, none);
+    backdrop-filter: var(--yuzi-generic-template-resolved-backdrop, none);
+    -webkit-backdrop-filter: var(--yuzi-generic-template-resolved-backdrop, none);
 }
 
 .phone-row-detail-input:disabled {
@@ -325,4 +325,3 @@
 .phone-card-expand-btn svg {
     transition: transform 0.3s;
 }
-

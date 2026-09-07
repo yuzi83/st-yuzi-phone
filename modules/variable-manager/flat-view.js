@@ -251,7 +251,7 @@ function buildTreeNodeAttrs(node) {
     const depth = Number.isFinite(Number(node?.depth)) ? Math.max(0, Number(node.depth)) : 0;
     return `
         data-node-depth="${escapeHtmlAttr(String(depth))}"
-        style="--vm-node-indent: ${escapeHtmlAttr(String(depth * 12))}px;"
+        style="--yuzi-variable-manager-node-indent: ${escapeHtmlAttr(String(depth * 12))}px;"
     `;
 }
 

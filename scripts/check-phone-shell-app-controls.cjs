@@ -167,7 +167,7 @@ async function main() {
     assert.match(shellCss, /#yuzi-phone-standalone\s+\.yuzi-phone-shell\[data-yuzi-phone-home-indicator-layout="docked"\]\s+\.yuzi-phone-screen\s*\{[^}]*margin-bottom:/s, '停靠模式在 Yuzi 根范围内缩短当前页面');
     assert.match(shellCss, /#yuzi-phone-standalone\s+\.yuzi-phone-shell\[data-yuzi-phone-home-indicator-layout="docked"\]\s+\.yuzi-phone-home-indicator\s*\{[^}]*background:/s, '停靠模式在 Yuzi 根范围内提供独立 Home 区域背景');
     assert.doesNotMatch(shellCss, /(^|[,{]\s*)\.phone-(?:shell|screen|home-indicator|notch|status-bar|status-time|status-icons|temporary-layer-host)\b/m, 'shell CSS 不再公开旧核心选择器');
-    assert.match(variableCss, /\.vm-footer,\s*\.vm-delete-bar\s*\{[^}]*background:\s*var\(--vm-surface-strong\);/s,
+    assert.match(variableCss, /\.vm-footer,\s*\.vm-delete-bar\s*\{[^}]*background:\s*var\(--yuzi-variable-manager-surface-strong\);/s,
         '变量管理器底栏使用可独立绘制的强表面，复制到 Home 区域后不得透出外壳底色');
 
     const windowListeners = new Map();

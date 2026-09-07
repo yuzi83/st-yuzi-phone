@@ -1206,7 +1206,7 @@ Variable Manager 样式集中在 [`styles/12-variable-manager.css`](../styles/12
 
 样式关键点：
 
-- `.vm-page` 定义底栏高度变量 `--vm-bottom-bar-height`。
+- `.vm-page` 定义底栏高度变量 `--yuzi-variable-manager-bottom-bar-height`。
 - [`syncBottomBarInset()`](../modules/variable-manager/index.js:313) 根据 `.vm-footer` 与 `.vm-delete-bar` 实测高度更新底部留白。
 - `.vm-body.phone-app-body` 使用 `padding-bottom` 和 `scroll-padding-bottom` 避免底栏遮挡内容。
 - `.vm-group-collapsed` 与 `.vm-object-collapsed` 分别控制一级分组和递归对象节点的视图折叠，箭头跟随对应折叠 class 表达当前状态。
@@ -1465,12 +1465,12 @@ graph TD
 
 - 新增通用基础样式放入 [`styles/phone-base/`](../styles/phone-base/README.md:3)，并由 [`styles/01-phone-base.css`](../styles/01-phone-base.css:14) 聚合。
 - 通用模板样式必须以 [`phone-generic-template-scope`](../styles/05-phone-generic-template.css:7) 为根。
-- 通用模板 token 优先级必须保持 `payload inline > --_gt-* > --yuzi-theme-* > fallback`，不要为了“统一”把 `--_gt-*` 抹掉，否则会直接破坏模板内联样式覆盖链。
+- 通用模板 token 优先级必须保持 `payload inline（--yuzi-generic-template-*） > --yuzi-generic-template-resolved-* > --yuzi-theme-* > fallback`；旧 `--gt*` / `--_gt-*` 只在模板导入与自定义 CSS 注入时迁移兼容，新增样式不得重新引入。
 - Theater 样式必须以 [`phone-theater-page`](../styles/phone-theater/00-core.css:7) 和 `data-theater-scene` 为根。
 - QQ v2 页面样式统一保留在 [`styles/phone-base/12-qq-app.css`](../styles/phone-base/12-qq-app.css) 的 `.yuzi-qq-app` 作用域内；route 启动骨架必须复用同一 token 和现有 QQ class，不建立第二套加载主题。
 - 新增页面样式必须先确认作用域根，再决定是否进入 base、template、scene 或 page-specific 层。
 - `!important` 只能用于压制宿主输入控件样式等明确场景；新增前必须确认普通作用域、token 或 import 顺序无法解决。
-- 设置页/变量管理/缝合反馈等基础页面颜色统一走 `--yuzi-settings-*` 或 `--vm-* -> --yuzi-theme-*` 映射链路；允许保留 `--yuzi-phone-*` 仅用于布局语义变量（如安全宽度、radius、文本缩放倍率），不要把布局变量和主题颜色变量混为一谈。
+- 设置页/变量管理/缝合反馈等基础页面颜色统一走 `--yuzi-settings-*` 或 `--yuzi-variable-manager-* -> --yuzi-theme-*` 映射链路；允许保留 `--yuzi-phone-*` 仅用于布局语义变量（如安全宽度、radius、文本缩放倍率），不要把布局变量和主题颜色变量混为一谈。
 - 颜色收口检查必须区分“硬编码颜色入口”与“token fallback”：`var(--token, #hex/rgba)` 属于可接受 fallback，裸 `#hex` / `rgba(...)` 且不经 token 才是需要优先收口的风险入口。
 
 主题调度运行契约：
@@ -1483,7 +1483,7 @@ graph TD
 - 主题模式控件必须放在外观设置页“主题与背景”区，禁止新增独立主题页或单独导航入口。
 - 主题调度目标仅覆盖设置页、通用表、缝合页、变量 app；小剧场（Theater）不纳入该主题调度链路，避免跨域样式污染。
 - 禁止新增并行主题开关约定（如 `data-theme`、`data-phone-theme`、`.dark`、`.theme-dark`），避免多事实源导致主题分裂。
-- 主题 token 分层保持：`--yuzi-theme-*`（语义层）→ `--yuzi-settings-*` / `--vm-*` / `--_gt-*`（页面适配层）；不要在页面层绕过语义层直接扩散硬编码颜色。
+- 主题 token 分层保持：`--yuzi-theme-*`（语义层）→ `--yuzi-settings-*` / `--yuzi-variable-manager-*` / `--yuzi-generic-template-resolved-*`（页面适配层）；不要在页面层绕过语义层直接扩散硬编码颜色。
 - `setupPhoneThemeModeSettings(container)` 必须满足幂等绑定：同一容器重复 setup 不得重复注册 `change` 监听。
 
 ## 9. 新增功能前检查清单

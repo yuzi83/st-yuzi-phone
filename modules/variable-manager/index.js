@@ -327,9 +327,9 @@ function syncBottomBarInset(container) {
     }, 0);
 
     if (bottomBarHeight > 0) {
-        page.style.setProperty('--vm-bottom-bar-height', `${bottomBarHeight}px`);
+        page.style.setProperty('--yuzi-variable-manager-bottom-bar-height', `${bottomBarHeight}px`);
     } else {
-        page.style.removeProperty('--vm-bottom-bar-height');
+        page.style.removeProperty('--yuzi-variable-manager-bottom-bar-height');
     }
 }
 

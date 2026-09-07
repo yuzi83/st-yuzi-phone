@@ -196,7 +196,7 @@ function main() {
     ]));
     check(results, FILES.phoneUiVariables, 'UI 变量文档登记共享底栏与独立 Home 区域契约', hasAll(phoneUiVariables, [
         'data-phone-bottom-bar',
-        '--vm-surface-strong',
+        '--yuzi-variable-manager-surface-strong',
         'backdrop-filter',
         '独立 Home 区域',
     ]));

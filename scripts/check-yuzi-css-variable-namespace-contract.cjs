@@ -7,6 +7,16 @@ const FILES = {
     phoneHomeIcons: 'modules/phone-home/icons.js',
     phoneHomeCss: 'styles/phone-base/02-page-home.css',
     settingsModernCss: 'styles/phone-base/07-settings-modern.css',
+    shellSystemCss: 'styles/phone-base/01-shell-system.css',
+    genericTemplateCss: 'styles/05-phone-generic-template.css',
+    genericPatchCss: 'styles/phone-base/10-scroll-generic-patches.css',
+    tableManageDetailCss: 'styles/phone-base/09-table-manage-detail.css',
+    variableManagerCss: 'styles/12-variable-manager.css',
+    tableUpdateReviewCss: 'styles/phone-base/12-table-update-review.css',
+    theaterCalendarCss: 'styles/phone-theater/calendar.css',
+    theaterDiaryCss: 'styles/phone-theater/diary.css',
+    theaterLiveCss: 'styles/phone-theater/live.css',
+    theaterSquareCss: 'styles/phone-theater/square.css',
     appearanceBuilder: 'modules/settings-app/layout/page-builders/appearance-builders.js',
     buttonStylePage: 'modules/settings-app/pages/button-style.js',
     variableManager: 'modules/variable-manager/index.js',
@@ -20,6 +30,8 @@ const LEGACY_CUSTOM_PROPERTIES = [
     '--phone-dock-text-icon-end',
     '--phone-app-icon-radius',
 ];
+
+const LEGACY_EXTENSION_PROPERTY_PATTERN = /--(?:_gt-|gt(?:[A-Z]|-(?:typo|motion)-)|vm-|tur-|calendar-|diary-|live-|square-|indent-step\b|tableBackgroundColor\b|headerBackgroundColor\b|textColor\b|borderColor\b|borderRadius\b|boxShadow\b|backdropFilter\b)/;
 
 function read(relativePath) {
     return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
@@ -37,6 +49,18 @@ function hasAll(content, snippets) {
     return snippets.every((snippet) => content.includes(snippet));
 }
 
+function findNonYuziCustomProperties(content) {
+    return [...String(content || '').matchAll(/--[A-Za-z_][A-Za-z0-9_-]*/g)]
+        .map((match) => match[0])
+        .filter((property) => !property.startsWith('--yuzi-'));
+}
+
+function listStyleSourceFiles() {
+    return fs.readdirSync(path.join(ROOT, 'styles'), { recursive: true })
+        .filter((entry) => entry.endsWith('.css'))
+        .map((entry) => path.join('styles', entry));
+}
+
 function main() {
     const contents = Object.fromEntries(
         Object.entries(FILES).map(([key, relativePath]) => [key, read(relativePath)]),
@@ -45,11 +69,23 @@ function main() {
         'phoneHomeIcons',
         'phoneHomeCss',
         'settingsModernCss',
+        'genericTemplateCss',
+        'genericPatchCss',
+        'tableManageDetailCss',
+        'variableManagerCss',
+        'tableUpdateReviewCss',
+        'theaterCalendarCss',
+        'theaterDiaryCss',
+        'theaterLiveCss',
+        'theaterSquareCss',
         'appearanceBuilder',
         'buttonStylePage',
         'variableManager',
     ];
     const results = [];
+    const nonYuziStyleReferences = listStyleSourceFiles()
+        .flatMap((relativePath) => findNonYuziCustomProperties(read(relativePath))
+            .map((property) => `${relativePath}: ${property}`));
 
     for (const fileKey of sourceKeys) {
         check(
@@ -57,6 +93,26 @@ function main() {
             fileKey,
             '不再使用无 Yuzi 命名空间的遗留 CSS 自定义变量',
             LEGACY_CUSTOM_PROPERTIES.every((property) => !contents[fileKey].includes(property)),
+        );
+    }
+
+    for (const fileKey of [
+        'genericTemplateCss',
+        'genericPatchCss',
+        'tableManageDetailCss',
+        'variableManagerCss',
+        'tableUpdateReviewCss',
+        'theaterCalendarCss',
+        'theaterDiaryCss',
+        'theaterLiveCss',
+        'theaterSquareCss',
+        'variableManager',
+    ]) {
+        check(
+            results,
+            fileKey,
+            '不再使用无 Yuzi 命名空间的扩展自有 CSS 自定义变量',
+            !LEGACY_EXTENSION_PROPERTY_PATTERN.test(contents[fileKey]),
         );
     }
 
@@ -76,6 +132,14 @@ function main() {
         contents.buttonStylePage.includes('--yuzi-phone-toggle-preview-size'));
     check(results, 'variableManager', '变量管理器图标复用首页 Yuzi 圆角变量',
         contents.variableManager.includes('var(--yuzi-phone-home-app-icon-radius,12px)'));
+    check(results, 'shellSystemCss', '原生 checkbox 在 Yuzi 外壳范围内恢复浏览器勾选态', hasAll(contents.shellSystemCss, [
+        'input.phone-settings-switch[type="checkbox"]',
+        'input.phone-worldbook-entry-checkbox[type="checkbox"]',
+        'input.yuzi-qq-checkbox[type="checkbox"]',
+        '-webkit-appearance: checkbox !important',
+        'color-scheme: var(--yuzi-phone-native-control-color-scheme) !important',
+    ]));
+    check(results, 'styles/', '全部静态 CSS 自定义属性都使用 Yuzi 命名空间', nonYuziStyleReferences.length === 0);
 
     check(results, 'context', '领域文档登记 shell DOM/CSS 命名空间边界', hasAll(contents.context, [
         '.yuzi-phone-screen',

@@ -4,53 +4,53 @@
    ======================================== */
 
 .vm-page {
-    --vm-page-bg: var(--yuzi-theme-page-bg);
-    --vm-surface: var(--yuzi-theme-surface);
-    --vm-surface-soft: var(--yuzi-theme-surface-soft);
-    --vm-surface-strong: var(--yuzi-theme-surface-strong);
-    --vm-text-primary: var(--yuzi-theme-text-primary);
-    --vm-text-secondary: var(--yuzi-theme-text-secondary);
-    --vm-text-faint: var(--yuzi-theme-text-faint);
-    --vm-border: var(--yuzi-theme-border);
-    --vm-border-strong: var(--yuzi-theme-border-strong);
-    --vm-shadow-soft: var(--yuzi-theme-shadow-soft);
-    --vm-shadow-medium: var(--yuzi-theme-shadow-medium);
-    --vm-accent: var(--yuzi-theme-accent);
-    --vm-accent-strong: var(--yuzi-theme-accent-strong);
-    --vm-accent-soft: var(--yuzi-theme-accent-soft);
-    --vm-accent-ring: var(--yuzi-theme-accent-ring);
-    --vm-danger: var(--yuzi-theme-danger);
-    --vm-danger-soft: var(--yuzi-theme-danger-soft);
-    --vm-warning: var(--yuzi-theme-warning);
-    --vm-warning-soft: var(--yuzi-theme-warning-soft);
-    --vm-bottom-bar-height: calc(72px + env(safe-area-inset-bottom, 0px));
-    --vm-bottom-gap: 40px;
+    --yuzi-variable-manager-page-bg: var(--yuzi-theme-page-bg);
+    --yuzi-variable-manager-surface: var(--yuzi-theme-surface);
+    --yuzi-variable-manager-surface-soft: var(--yuzi-theme-surface-soft);
+    --yuzi-variable-manager-surface-strong: var(--yuzi-theme-surface-strong);
+    --yuzi-variable-manager-text-primary: var(--yuzi-theme-text-primary);
+    --yuzi-variable-manager-text-secondary: var(--yuzi-theme-text-secondary);
+    --yuzi-variable-manager-text-faint: var(--yuzi-theme-text-faint);
+    --yuzi-variable-manager-border: var(--yuzi-theme-border);
+    --yuzi-variable-manager-border-strong: var(--yuzi-theme-border-strong);
+    --yuzi-variable-manager-shadow-soft: var(--yuzi-theme-shadow-soft);
+    --yuzi-variable-manager-shadow-medium: var(--yuzi-theme-shadow-medium);
+    --yuzi-variable-manager-accent: var(--yuzi-theme-accent);
+    --yuzi-variable-manager-accent-strong: var(--yuzi-theme-accent-strong);
+    --yuzi-variable-manager-accent-soft: var(--yuzi-theme-accent-soft);
+    --yuzi-variable-manager-accent-ring: var(--yuzi-theme-accent-ring);
+    --yuzi-variable-manager-danger: var(--yuzi-theme-danger);
+    --yuzi-variable-manager-danger-soft: var(--yuzi-theme-danger-soft);
+    --yuzi-variable-manager-warning: var(--yuzi-theme-warning);
+    --yuzi-variable-manager-warning-soft: var(--yuzi-theme-warning-soft);
+    --yuzi-variable-manager-bottom-bar-height: calc(72px + env(safe-area-inset-bottom, 0px));
+    --yuzi-variable-manager-bottom-gap: 40px;
     position: relative;
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    color: var(--vm-text-primary);
-    background: var(--vm-page-bg);
+    color: var(--yuzi-variable-manager-text-primary);
+    background: var(--yuzi-variable-manager-page-bg);
     overflow: hidden;
 }
 
 .vm-navbar.phone-nav-bar {
-    background: var(--vm-surface-soft);
+    background: var(--yuzi-variable-manager-surface-soft);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
-    border-bottom: 1px solid var(--vm-border);
-    box-shadow: var(--vm-shadow-soft);
+    border-bottom: 1px solid var(--yuzi-variable-manager-border);
+    box-shadow: var(--yuzi-variable-manager-shadow-soft);
 }
 
 .vm-navbar .phone-nav-back {
-    color: var(--vm-accent);
+    color: var(--yuzi-variable-manager-accent);
     background: transparent;
 }
 
 .vm-navbar .phone-nav-back:hover,
 .vm-navbar .phone-nav-back:active {
-    background: var(--vm-accent-soft);
+    background: var(--yuzi-variable-manager-accent-soft);
 }
 
 .vm-nav-title.phone-nav-title {
@@ -60,7 +60,7 @@
     min-width: 0;
     max-width: 100%;
     gap: 6px;
-    color: var(--vm-text-primary);
+    color: var(--yuzi-variable-manager-text-primary);
     pointer-events: none;
 }
 
@@ -77,13 +77,13 @@
     justify-content: center;
     padding: 2px 7px;
     border-radius: 999px;
-    background: linear-gradient(135deg, var(--vm-accent), var(--vm-accent-strong));
-    color: var(--vm-surface-strong);
+    background: linear-gradient(135deg, var(--yuzi-variable-manager-accent), var(--yuzi-variable-manager-accent-strong));
+    color: var(--yuzi-variable-manager-surface-strong);
     font-size: 10px;
     font-weight: 700;
     line-height: 1;
     letter-spacing: 0.4px;
-    box-shadow: var(--vm-shadow-soft);
+    box-shadow: var(--yuzi-variable-manager-shadow-soft);
 }
 
 .vm-nav-right-group {
@@ -99,7 +99,7 @@
     display: inline-flex;
     align-items: center;
     max-width: 72px;
-    color: var(--vm-text-secondary);
+    color: var(--yuzi-variable-manager-text-secondary);
     font-size: 12px;
     font-weight: 600;
     line-height: 1.2;
@@ -115,15 +115,15 @@
     padding: 0;
     border: none;
     border-radius: 999px;
-    background: var(--vm-accent-soft);
-    color: var(--vm-accent);
+    background: var(--yuzi-variable-manager-accent-soft);
+    color: var(--yuzi-variable-manager-accent);
     cursor: pointer;
     transition: background 0.16s ease, transform 0.16s ease;
 }
 
 .vm-nav-refresh:hover,
 .vm-nav-refresh:active {
-    background: var(--vm-accent-ring);
+    background: var(--yuzi-variable-manager-accent-ring);
 }
 
 .vm-nav-refresh:active {
@@ -138,9 +138,9 @@
 
 .vm-body.phone-app-body {
     background: transparent;
-    color: var(--vm-text-primary);
-    padding: 12px 12px calc(var(--vm-bottom-bar-height) + var(--vm-bottom-gap) + 72px);
-    scroll-padding-bottom: calc(var(--vm-bottom-bar-height) + var(--vm-bottom-gap) + 72px);
+    color: var(--yuzi-variable-manager-text-primary);
+    padding: 12px 12px calc(var(--yuzi-variable-manager-bottom-bar-height) + var(--yuzi-variable-manager-bottom-gap) + 72px);
+    scroll-padding-bottom: calc(var(--yuzi-variable-manager-bottom-bar-height) + var(--yuzi-variable-manager-bottom-gap) + 72px);
     box-sizing: border-box;
 }
 
@@ -154,7 +154,7 @@
     content: '';
     display: block;
     width: 100%;
-    height: calc(var(--vm-bottom-bar-height) + 120px);
+    height: calc(var(--yuzi-variable-manager-bottom-bar-height) + 120px);
     flex: 0 0 auto;
     pointer-events: none;
 }
@@ -166,9 +166,9 @@
     min-height: 240px;
     padding: 24px;
     border-radius: 18px;
-    border: 1px dashed var(--vm-border-strong);
-    background: var(--vm-surface-soft);
-    color: var(--vm-text-secondary);
+    border: 1px dashed var(--yuzi-variable-manager-border-strong);
+    background: var(--yuzi-variable-manager-surface-soft);
+    color: var(--yuzi-variable-manager-text-secondary);
     font-size: 14px;
     line-height: 1.55;
     text-align: center;
@@ -182,9 +182,9 @@
 }
 
 .vm-state-loading {
-    border-color: color-mix(in srgb, var(--vm-accent) 24%, transparent);
-    background: linear-gradient(135deg, color-mix(in srgb, var(--vm-accent-soft) 64%, transparent), color-mix(in srgb, var(--vm-surface-strong) 74%, transparent));
-    color: var(--vm-accent-strong);
+    border-color: color-mix(in srgb, var(--yuzi-variable-manager-accent) 24%, transparent);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--yuzi-variable-manager-accent-soft) 64%, transparent), color-mix(in srgb, var(--yuzi-variable-manager-surface-strong) 74%, transparent));
+    color: var(--yuzi-variable-manager-accent-strong);
 }
 
 .vm-state-loading::before {
@@ -192,25 +192,25 @@
     width: 22px;
     height: 22px;
     border-radius: 999px;
-    border: 3px solid color-mix(in srgb, var(--vm-accent) 28%, transparent);
-    border-top-color: color-mix(in srgb, var(--vm-accent-strong) 82%, transparent);
+    border: 3px solid color-mix(in srgb, var(--yuzi-variable-manager-accent) 28%, transparent);
+    border-top-color: color-mix(in srgb, var(--yuzi-variable-manager-accent-strong) 82%, transparent);
     animation: vm-state-spin 0.8s linear infinite;
 }
 
 .vm-state-error {
-    border-color: color-mix(in srgb, var(--vm-danger) 32%, transparent);
-    background: color-mix(in srgb, var(--vm-danger-soft) 66%, transparent);
-    color: var(--vm-danger);
+    border-color: color-mix(in srgb, var(--yuzi-variable-manager-danger) 32%, transparent);
+    background: color-mix(in srgb, var(--yuzi-variable-manager-danger-soft) 66%, transparent);
+    color: var(--yuzi-variable-manager-danger);
 }
 
 .vm-state-unavailable {
-    border-color: color-mix(in srgb, var(--vm-warning) 30%, transparent);
-    background: color-mix(in srgb, var(--vm-warning-soft) 68%, transparent);
-    color: var(--vm-warning);
+    border-color: color-mix(in srgb, var(--yuzi-variable-manager-warning) 30%, transparent);
+    background: color-mix(in srgb, var(--yuzi-variable-manager-warning-soft) 68%, transparent);
+    color: var(--yuzi-variable-manager-warning);
 }
 
 .vm-state-empty {
-    color: var(--vm-text-faint);
+    color: var(--yuzi-variable-manager-text-faint);
 }
 
 @keyframes vm-state-spin {
@@ -241,7 +241,7 @@
     align-items: center;
     justify-content: center;
     width: 16px;
-    color: var(--vm-text-faint);
+    color: var(--yuzi-variable-manager-text-faint);
     font-size: 11px;
     line-height: 1;
     transition: transform 0.2s ease;
@@ -251,7 +251,7 @@
 .vm-group-name {
     flex: 1;
     min-width: 0;
-    color: var(--vm-text-secondary);
+    color: var(--yuzi-variable-manager-text-secondary);
     font-size: 12px;
     font-weight: 800;
     letter-spacing: 0.08em;
@@ -268,8 +268,8 @@
     min-width: 20px;
     padding: 2px 7px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--vm-text-faint) 16%, transparent);
-    color: var(--vm-text-faint);
+    background: color-mix(in srgb, var(--yuzi-variable-manager-text-faint) 16%, transparent);
+    color: var(--yuzi-variable-manager-text-faint);
     font-size: 11px;
     font-weight: 700;
     line-height: 1;
@@ -298,7 +298,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-left: var(--vm-node-indent, 0px);
+    margin-left: var(--yuzi-variable-manager-node-indent, 0px);
 }
 
 .vm-tree-leaf {
@@ -312,10 +312,10 @@
     min-height: 24px;
     padding: 10px 12px;
     border-radius: 16px;
-    background: color-mix(in srgb, var(--vm-surface-strong) 74%, transparent);
-    border: 1px solid color-mix(in srgb, var(--vm-border-strong) 55%, transparent);
-    box-shadow: var(--vm-shadow-soft);
-    color: var(--vm-text-secondary);
+    background: color-mix(in srgb, var(--yuzi-variable-manager-surface-strong) 74%, transparent);
+    border: 1px solid color-mix(in srgb, var(--yuzi-variable-manager-border-strong) 55%, transparent);
+    box-shadow: var(--yuzi-variable-manager-shadow-soft);
+    color: var(--yuzi-variable-manager-text-secondary);
     cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
@@ -336,8 +336,8 @@
     min-width: 0;
     padding: 2px 7px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--vm-text-faint) 14%, transparent);
-    color: var(--vm-text-faint);
+    background: color-mix(in srgb, var(--yuzi-variable-manager-text-faint) 14%, transparent);
+    color: var(--yuzi-variable-manager-text-faint);
     font-size: 10px;
     font-weight: 700;
     line-height: 1.25;
@@ -370,9 +370,9 @@
 .vm-object-empty {
     padding: 10px 12px;
     border-radius: 14px;
-    border: 1px dashed color-mix(in srgb, var(--vm-text-faint) 26%, transparent);
-    background: color-mix(in srgb, var(--vm-surface-strong) 56%, transparent);
-    color: var(--vm-text-faint);
+    border: 1px dashed color-mix(in srgb, var(--yuzi-variable-manager-text-faint) 26%, transparent);
+    background: color-mix(in srgb, var(--yuzi-variable-manager-surface-strong) 56%, transparent);
+    color: var(--yuzi-variable-manager-text-faint);
     font-size: 12px;
     line-height: 1.45;
 }
@@ -383,9 +383,9 @@
     gap: 10px;
     padding: 12px 14px;
     border-radius: 16px;
-    background: var(--vm-surface-strong);
-    border: 1px solid color-mix(in srgb, var(--vm-border-strong) 72%, transparent);
-    box-shadow: var(--vm-shadow-soft);
+    background: var(--yuzi-variable-manager-surface-strong);
+    border: 1px solid color-mix(in srgb, var(--yuzi-variable-manager-border-strong) 72%, transparent);
+    box-shadow: var(--yuzi-variable-manager-shadow-soft);
     cursor: pointer;
     transition: transform 0.14s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
 }
@@ -394,8 +394,8 @@
 .vm-card:active,
 .vm-object-title:hover,
 .vm-object-title:active {
-    border-color: color-mix(in srgb, var(--vm-accent) 60%, transparent);
-    box-shadow: var(--vm-shadow-medium);
+    border-color: color-mix(in srgb, var(--yuzi-variable-manager-accent) 60%, transparent);
+    box-shadow: var(--yuzi-variable-manager-shadow-medium);
 }
 
 .vm-card:active,
@@ -413,7 +413,7 @@
 }
 
 .vm-card-key {
-    color: var(--vm-text-secondary);
+    color: var(--yuzi-variable-manager-text-secondary);
     font-size: 13px;
     font-weight: 700;
     line-height: 1.45;
@@ -422,7 +422,7 @@
 }
 
 .vm-card-value {
-    color: var(--vm-text-primary);
+    color: var(--yuzi-variable-manager-text-primary);
     font-size: 13px;
     font-weight: 500;
     line-height: 1.55;
@@ -433,7 +433,7 @@
 }
 
 .vm-card-description-label {
-    color: var(--vm-text-faint);
+    color: var(--yuzi-variable-manager-text-faint);
     font-size: 12px;
     font-weight: 700;
     line-height: 1.45;
@@ -442,7 +442,7 @@
 }
 
 .vm-card-description {
-    color: var(--vm-text-secondary);
+    color: var(--yuzi-variable-manager-text-secondary);
     font-size: 12px;
     font-weight: 500;
     line-height: 1.55;
@@ -452,32 +452,32 @@
 }
 
 .vm-value-number {
-    color: var(--vm-accent);
+    color: var(--yuzi-variable-manager-accent);
 }
 
 .vm-value-string {
-    color: var(--vm-success, var(--vm-accent));
+    color: var(--yuzi-variable-manager-success, var(--yuzi-variable-manager-accent));
 }
 
 .vm-value-boolean {
-    color: var(--vm-warning);
+    color: var(--yuzi-variable-manager-warning);
 }
 
 .vm-value-null {
-    color: var(--vm-text-faint);
+    color: var(--yuzi-variable-manager-text-faint);
     font-style: italic;
 }
 
 .vm-value-array,
 .vm-value-object {
-    color: var(--vm-accent-strong);
+    color: var(--yuzi-variable-manager-accent-strong);
 }
 
 .vm-card-editing {
     cursor: default;
-    border-color: color-mix(in srgb, var(--vm-accent) 36%, transparent);
-    background: linear-gradient(180deg, color-mix(in srgb, var(--vm-surface-strong) 98%, transparent), color-mix(in srgb, var(--vm-accent-soft) 28%, transparent));
-    box-shadow: var(--vm-shadow-medium);
+    border-color: color-mix(in srgb, var(--yuzi-variable-manager-accent) 36%, transparent);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--yuzi-variable-manager-surface-strong) 98%, transparent), color-mix(in srgb, var(--yuzi-variable-manager-accent-soft) 28%, transparent));
+    box-shadow: var(--yuzi-variable-manager-shadow-medium);
 }
 
 .vm-card-editing:active {
@@ -492,7 +492,7 @@
 }
 
 .vm-card-edit-label {
-    color: var(--vm-text-secondary);
+    color: var(--yuzi-variable-manager-text-secondary);
     font-size: 12px;
     font-weight: 700;
     line-height: 1.4;
@@ -507,11 +507,11 @@
     resize: none;
     overflow: hidden;
     border-radius: 12px;
-    border: 1px solid var(--vm-border-strong);
-    background: var(--vm-surface-strong) !important;
-    color: var(--vm-text-primary) !important;
-    caret-color: var(--vm-text-primary) !important;
-    -webkit-text-fill-color: var(--vm-text-primary) !important;
+    border: 1px solid var(--yuzi-variable-manager-border-strong);
+    background: var(--yuzi-variable-manager-surface-strong) !important;
+    color: var(--yuzi-variable-manager-text-primary) !important;
+    caret-color: var(--yuzi-variable-manager-text-primary) !important;
+    -webkit-text-fill-color: var(--yuzi-variable-manager-text-primary) !important;
     font-size: 14px;
     line-height: 1.6;
     font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
@@ -519,20 +519,20 @@
     outline: none;
     white-space: pre-wrap;
     word-break: break-word;
-    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--vm-text-primary) 10%, transparent);
+    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--yuzi-variable-manager-text-primary) 10%, transparent);
 }
 
 .vm-edit-input:focus {
-    border-color: var(--vm-accent);
-    background: var(--vm-surface-strong) !important;
-    color: var(--vm-text-primary) !important;
-    -webkit-text-fill-color: var(--vm-text-primary) !important;
-    box-shadow: 0 0 0 3px var(--vm-accent-soft);
+    border-color: var(--yuzi-variable-manager-accent);
+    background: var(--yuzi-variable-manager-surface-strong) !important;
+    color: var(--yuzi-variable-manager-text-primary) !important;
+    -webkit-text-fill-color: var(--yuzi-variable-manager-text-primary) !important;
+    box-shadow: 0 0 0 3px var(--yuzi-variable-manager-accent-soft);
 }
 
 .vm-edit-input::placeholder {
-    color: var(--vm-text-faint) !important;
-    -webkit-text-fill-color: var(--vm-text-faint) !important;
+    color: var(--yuzi-variable-manager-text-faint) !important;
+    -webkit-text-fill-color: var(--yuzi-variable-manager-text-faint) !important;
 }
 
 .vm-edit-actions {
@@ -562,14 +562,14 @@
 }
 
 .vm-edit-cancel {
-    background: var(--vm-surface-soft);
-    color: var(--vm-text-secondary);
+    background: var(--yuzi-variable-manager-surface-soft);
+    color: var(--yuzi-variable-manager-text-secondary);
 }
 
 .vm-edit-save {
-    background: var(--vm-accent);
-    color: var(--vm-surface-strong);
-    box-shadow: var(--vm-shadow-medium);
+    background: var(--yuzi-variable-manager-accent);
+    color: var(--yuzi-variable-manager-surface-strong);
+    box-shadow: var(--yuzi-variable-manager-shadow-medium);
 }
 
 .vm-edit-cancel:active,
@@ -602,17 +602,17 @@
     width: 18px;
     height: 18px;
     border-radius: 999px;
-    border: 1.8px solid color-mix(in srgb, var(--vm-border-strong) 72%, transparent);
-    background: var(--vm-surface-strong);
+    border: 1.8px solid color-mix(in srgb, var(--yuzi-variable-manager-border-strong) 72%, transparent);
+    background: var(--yuzi-variable-manager-surface-strong);
     box-sizing: border-box;
     transition: all 0.16s ease;
-    box-shadow: inset 0 1px 1px color-mix(in srgb, var(--vm-text-primary) 4%, transparent);
+    box-shadow: inset 0 1px 1px color-mix(in srgb, var(--yuzi-variable-manager-text-primary) 4%, transparent);
 }
 
 .vm-checkbox-checked {
     position: relative;
-    background: var(--vm-danger);
-    border-color: var(--vm-danger);
+    background: var(--yuzi-variable-manager-danger);
+    border-color: var(--yuzi-variable-manager-danger);
 }
 
 .vm-checkbox-checked::after {
@@ -622,8 +622,8 @@
     left: 50%;
     width: 7px;
     height: 4px;
-    border-left: 2px solid var(--vm-surface-strong);
-    border-bottom: 2px solid var(--vm-surface-strong);
+    border-left: 2px solid var(--yuzi-variable-manager-surface-strong);
+    border-bottom: 2px solid var(--yuzi-variable-manager-surface-strong);
     transform: translate(-50%, -60%) rotate(-45deg);
 }
 
@@ -631,18 +631,18 @@
 .vm-delete-selected.vm-card,
 .vm-delete-selected.vm-group-header,
 .vm-delete-selected.vm-object-title {
-    background: color-mix(in srgb, var(--vm-danger-soft) 95%, transparent) !important;
-    border-color: color-mix(in srgb, var(--vm-danger) 42%, transparent) !important;
-    box-shadow: 0 8px 22px color-mix(in srgb, var(--vm-danger) 8%, transparent) !important;
+    background: color-mix(in srgb, var(--yuzi-variable-manager-danger-soft) 95%, transparent) !important;
+    border-color: color-mix(in srgb, var(--yuzi-variable-manager-danger) 42%, transparent) !important;
+    box-shadow: 0 8px 22px color-mix(in srgb, var(--yuzi-variable-manager-danger) 8%, transparent) !important;
 }
 
 .vm-group-header-delete-mode,
 .vm-object-title-delete-mode {
     padding: 10px 12px;
     border-radius: 14px;
-    background: color-mix(in srgb, var(--vm-surface-strong) 70%, transparent);
-    border: 1px solid color-mix(in srgb, var(--vm-border-strong) 54%, transparent);
-    box-shadow: var(--vm-shadow-soft);
+    background: color-mix(in srgb, var(--yuzi-variable-manager-surface-strong) 70%, transparent);
+    border: 1px solid color-mix(in srgb, var(--yuzi-variable-manager-border-strong) 54%, transparent);
+    box-shadow: var(--yuzi-variable-manager-shadow-soft);
 }
 
 .vm-footer,
@@ -656,11 +656,11 @@
     justify-content: space-between;
     gap: 12px;
     padding: 12px 14px max(12px, env(safe-area-inset-bottom));
-    background: var(--vm-surface-strong);
+    background: var(--yuzi-variable-manager-surface-strong);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
-    border-top: 1px solid var(--vm-border);
-    box-shadow: var(--vm-shadow-soft);
+    border-top: 1px solid var(--yuzi-variable-manager-border);
+    box-shadow: var(--yuzi-variable-manager-shadow-soft);
     transition: opacity 0.2s ease, transform 0.2s ease;
     z-index: 20;
 }
@@ -682,17 +682,17 @@
     gap: 6px;
     padding: 10px 18px;
     border-radius: 999px;
-    background: var(--vm-accent-soft);
-    color: var(--vm-accent);
+    background: var(--yuzi-variable-manager-accent-soft);
+    color: var(--yuzi-variable-manager-accent);
     font-size: 14px;
     font-weight: 700;
-    box-shadow: inset 0 0 0 1px var(--vm-accent-ring);
+    box-shadow: inset 0 0 0 1px var(--yuzi-variable-manager-accent-ring);
 }
 
 .vm-delete-cancel-btn {
     padding: 10px 6px;
     background: transparent;
-    color: var(--vm-accent);
+    color: var(--yuzi-variable-manager-accent);
     font-size: 14px;
     font-weight: 700;
 }
@@ -704,11 +704,11 @@
     margin-left: auto;
     padding: 10px 16px;
     border-radius: 999px;
-    background: linear-gradient(135deg, var(--vm-danger), color-mix(in srgb, var(--vm-danger) 82%, var(--vm-text-primary)));
-    color: var(--vm-surface-strong);
+    background: linear-gradient(135deg, var(--yuzi-variable-manager-danger), color-mix(in srgb, var(--yuzi-variable-manager-danger) 82%, var(--yuzi-variable-manager-text-primary)));
+    color: var(--yuzi-variable-manager-surface-strong);
     font-size: 13px;
     font-weight: 700;
-    box-shadow: var(--vm-shadow-medium);
+    box-shadow: var(--yuzi-variable-manager-shadow-medium);
 }
 
 .vm-delete-confirm-btn:disabled {
@@ -724,7 +724,7 @@
     align-items: center;
     justify-content: center;
     padding: 20px;
-    background: color-mix(in srgb, var(--vm-text-primary) 30%, transparent);
+    background: color-mix(in srgb, var(--yuzi-variable-manager-text-primary) 30%, transparent);
     opacity: 0;
     z-index: 50;
     transition: opacity 0.18s ease;
@@ -737,9 +737,9 @@
 .vm-dialog {
     width: min(100%, 320px);
     border-radius: 18px;
-    background: var(--vm-surface-strong);
-    border: 1px solid var(--vm-border-strong);
-    box-shadow: var(--vm-shadow-medium);
+    background: var(--yuzi-variable-manager-surface-strong);
+    border: 1px solid var(--yuzi-variable-manager-border-strong);
+    box-shadow: var(--yuzi-variable-manager-shadow-medium);
     overflow: hidden;
     transform: translateY(8px) scale(0.98);
     transition: transform 0.18s ease;
@@ -751,7 +751,7 @@
 
 .vm-dialog-title {
     padding: 18px 18px 8px;
-    color: var(--vm-text-primary);
+    color: var(--yuzi-variable-manager-text-primary);
     font-size: 16px;
     font-weight: 800;
     text-align: center;
@@ -769,7 +769,7 @@
 .vm-dialog-label {
     display: block;
     margin-bottom: 5px;
-    color: var(--vm-text-secondary);
+    color: var(--yuzi-variable-manager-text-secondary);
     font-size: 12px;
     font-weight: 700;
 }
@@ -779,9 +779,9 @@
     min-height: 42px;
     padding: 10px 12px;
     border-radius: 12px;
-    border: 1px solid var(--vm-border-strong);
-    background: var(--vm-surface-strong);
-    color: var(--vm-text-primary);
+    border: 1px solid var(--yuzi-variable-manager-border-strong);
+    background: var(--yuzi-variable-manager-surface-strong);
+    color: var(--yuzi-variable-manager-text-primary);
     font-size: 14px;
     line-height: 1.45;
     box-sizing: border-box;
@@ -789,46 +789,46 @@
 }
 
 .vm-dialog-input:focus {
-    border-color: var(--vm-accent);
-    box-shadow: 0 0 0 3px var(--vm-accent-soft);
+    border-color: var(--yuzi-variable-manager-accent);
+    box-shadow: 0 0 0 3px var(--yuzi-variable-manager-accent-soft);
 }
 
 .vm-input-error {
-    border-color: color-mix(in srgb, var(--vm-danger) 65%, transparent) !important;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--vm-danger) 8%, transparent) !important;
+    border-color: color-mix(in srgb, var(--yuzi-variable-manager-danger) 65%, transparent) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--yuzi-variable-manager-danger) 8%, transparent) !important;
 }
 
 .vm-dialog-hint {
     margin-top: 4px;
-    color: var(--vm-text-faint);
+    color: var(--yuzi-variable-manager-text-faint);
     font-size: 11px;
     line-height: 1.45;
 }
 
 .vm-dialog-buttons {
     display: flex;
-    border-top: 1px solid var(--vm-border);
+    border-top: 1px solid var(--yuzi-variable-manager-border);
 }
 
 .vm-dialog-btn {
     flex: 1;
     padding: 14px 16px;
     background: transparent;
-    color: var(--vm-accent);
+    color: var(--yuzi-variable-manager-accent);
     font-size: 15px;
     font-weight: 700;
 }
 
 .vm-dialog-btn + .vm-dialog-btn {
-    border-left: 1px solid var(--vm-border);
+    border-left: 1px solid var(--yuzi-variable-manager-border);
 }
 
 .vm-dialog-cancel {
-    color: var(--vm-text-secondary);
+    color: var(--yuzi-variable-manager-text-secondary);
 }
 
 .vm-dialog-confirm-danger {
-    color: var(--vm-danger);
+    color: var(--yuzi-variable-manager-danger);
 }
 
 .vm-confirm-detail {
@@ -852,14 +852,14 @@
 }
 
 .vm-confirm-label {
-    color: var(--vm-text-secondary);
+    color: var(--yuzi-variable-manager-text-secondary);
     font-size: 12px;
     font-weight: 700;
     line-height: 1.4;
 }
 
 .vm-confirm-value {
-    color: var(--vm-text-primary);
+    color: var(--yuzi-variable-manager-text-primary);
     font-family: 'SF Mono', 'Menlo', monospace;
     font-size: 12px;
     line-height: 1.55;
@@ -881,9 +881,9 @@
     gap: 4px 8px;
     padding: 10px 12px;
     border-radius: 12px;
-    background: var(--vm-surface-soft);
-    border: 1px solid var(--vm-border);
-    color: var(--vm-text-secondary);
+    background: var(--yuzi-variable-manager-surface-soft);
+    border: 1px solid var(--yuzi-variable-manager-border);
+    color: var(--yuzi-variable-manager-text-secondary);
     font-size: 12px;
     line-height: 1.55;
 }
@@ -893,8 +893,8 @@
     align-self: start;
     padding: 1px 6px;
     border-radius: 999px;
-    background: var(--vm-danger-soft);
-    color: var(--vm-danger);
+    background: var(--yuzi-variable-manager-danger-soft);
+    color: var(--yuzi-variable-manager-danger);
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.04em;
@@ -902,7 +902,7 @@
 
 .vm-confirm-delete-value {
     grid-column: 2;
-    color: var(--vm-text-primary);
+    color: var(--yuzi-variable-manager-text-primary);
     font-weight: 700;
     white-space: pre-wrap;
     word-break: break-word;
@@ -917,15 +917,15 @@
 }
 
 .vm-confirm-delete-path {
-    color: var(--vm-text-secondary);
+    color: var(--yuzi-variable-manager-text-secondary);
 }
 
 .vm-confirm-delete-meta {
-    color: var(--vm-warning);
+    color: var(--yuzi-variable-manager-warning);
 }
 
 .vm-confirm-warning {
-    color: var(--vm-warning);
+    color: var(--yuzi-variable-manager-warning);
     font-size: 12px;
     font-weight: 700;
     line-height: 1.45;
@@ -934,7 +934,7 @@
 .vm-toast {
     position: absolute;
     left: 50%;
-    bottom: calc(var(--vm-bottom-bar-height) + 14px);
+    bottom: calc(var(--yuzi-variable-manager-bottom-bar-height) + 14px);
     transform: translateX(-50%) translateY(10px);
     display: inline-flex;
     align-items: center;
@@ -942,7 +942,7 @@
     max-width: calc(100% - 32px);
     padding: 10px 16px;
     border-radius: 999px;
-    color: var(--vm-surface-strong);
+    color: var(--yuzi-variable-manager-surface-strong);
     font-size: 13px;
     font-weight: 700;
     line-height: 1.35;
@@ -950,7 +950,7 @@
     white-space: normal;
     word-break: break-word;
     opacity: 0;
-    box-shadow: var(--vm-shadow-medium);
+    box-shadow: var(--yuzi-variable-manager-shadow-medium);
     transition: opacity 0.18s ease, transform 0.18s ease;
     z-index: 60;
     pointer-events: none;
@@ -962,9 +962,9 @@
 }
 
 .vm-toast-success {
-    background: color-mix(in srgb, var(--vm-text-primary) 88%, transparent);
+    background: color-mix(in srgb, var(--yuzi-variable-manager-text-primary) 88%, transparent);
 }
 
 .vm-toast-error {
-    background: color-mix(in srgb, var(--vm-danger) 92%, transparent);
+    background: color-mix(in srgb, var(--yuzi-variable-manager-danger) 92%, transparent);
 }

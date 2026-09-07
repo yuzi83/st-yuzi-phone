@@ -128,7 +128,7 @@ async function main() {
     assertIncludes(html, 'data-delete-kind="group"', '顶层分组必须暴露 group 删除语义');
     assertIncludes(html, 'data-delete-label="微型苍拳"', '删除态必须暴露对象显示名称');
     assertIncludes(html, 'data-delete-leaf-count="2"', '删除态必须暴露对象子叶子数量');
-    assertIncludes(html, 'style="--vm-node-indent: 12px;"', '树状渲染必须输出缩进变量而不是继续并排拼接路径 badge');
+    assertIncludes(html, 'style="--yuzi-variable-manager-node-indent: 12px;"', '树状渲染必须输出缩进变量而不是继续并排拼接路径 badge');
 
     assertIncludes(interactionsSource, "const SELECTABLE_DELETE_SELECTOR = '.vm-card[data-delete-path], .vm-group-header[data-delete-path], .vm-object-title[data-delete-path]'", '删除选择器必须显式区分对象标题');
     assertIncludes(interactionsSource, "const COLLAPSIBLE_TRIGGER_SELECTOR = '.vm-group-header, .vm-object-title'", '分组与对象标题必须复用同一折叠触发器选择器');

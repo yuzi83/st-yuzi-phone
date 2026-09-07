@@ -1,12 +1,12 @@
 .phone-app-page.phone-theater-page[data-theater-scene="diary"] {
-    --diary-paper: #fbf3df;
-    --diary-paper-deep: #f2dfb8;
-    --diary-ink: #5d412a;
-    --diary-muted: #9a7754;
-    --diary-accent: #b98042;
-    --diary-rose: #c87869;
-    --diary-shadow: rgba(96, 61, 32, 0.18);
-    color: var(--diary-ink);
+    --yuzi-theater-diary-paper: #fbf3df;
+    --yuzi-theater-diary-paper-deep: #f2dfb8;
+    --yuzi-theater-diary-ink: #5d412a;
+    --yuzi-theater-diary-muted: #9a7754;
+    --yuzi-theater-diary-accent: #b98042;
+    --yuzi-theater-diary-rose: #c87869;
+    --yuzi-theater-diary-shadow: rgba(96, 61, 32, 0.18);
+    color: var(--yuzi-theater-diary-ink);
     background:
         radial-gradient(circle at 18% 8%, rgba(255, 255, 255, 0.72), transparent 26%),
         radial-gradient(circle at 82% 18%, rgba(222, 171, 103, 0.18), transparent 30%),
@@ -22,7 +22,7 @@
 }
 
 .phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-nav {
-    color: var(--diary-ink);
+    color: var(--yuzi-theater-diary-ink);
     background: linear-gradient(180deg, rgba(255, 250, 238, 0.96), rgba(248, 233, 204, 0.9));
     border-bottom: 1px solid rgba(162, 109, 56, 0.14);
     box-shadow: none;
@@ -125,7 +125,7 @@
         linear-gradient(180deg, rgba(164, 115, 69, 0.05) 1px, transparent 1px),
         linear-gradient(180deg, rgba(255, 253, 246, 0.98), rgba(248, 235, 207, 0.96));
     background-size: 20px 20px, 20px 20px, auto;
-    box-shadow: 0 14px 28px var(--diary-shadow);
+    box-shadow: 0 14px 28px var(--yuzi-theater-diary-shadow);
     transform-origin: 50% 0;
     transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
@@ -280,7 +280,7 @@
 
 .phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-signature {
     margin-top: 3px;
-    color: var(--diary-muted);
+    color: var(--yuzi-theater-diary-muted);
     font-size: 11px;
     letter-spacing: 0.06em;
 }
@@ -379,7 +379,7 @@
 }
 
 .phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-empty-kicker {
-    color: var(--diary-accent);
+    color: var(--yuzi-theater-diary-accent);
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.14em;
@@ -395,7 +395,7 @@
 .phone-app-page.phone-theater-page[data-theater-scene="diary"] .phone-theater-diary-empty-text {
     max-width: 240px;
     margin: 8px auto 0;
-    color: var(--diary-muted);
+    color: var(--yuzi-theater-diary-muted);
     font-size: 13px;
     line-height: 1.7;
 }

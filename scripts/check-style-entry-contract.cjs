@@ -130,7 +130,7 @@ function main() {
         && has(contents.tableUpdateReview, 'grid-template-columns: minmax(0, .8fr) minmax(0, 2fr);'));
     check(results, 'tableUpdateReview', '审核页样式层不再保留刷新按钮选择器', !has(contents.tableUpdateReview, '.tur-refresh-btn'));
     check(results, 'tableUpdateReview', '审核页白天模式标题栏使用审核页文本色保证可读', has(contents.tableUpdateReview, '.tur-nav .phone-nav-title')
-        && has(contents.tableUpdateReview, 'color: var(--tur-text);'));
+        && has(contents.tableUpdateReview, 'color: var(--yuzi-table-review-text);'));
     check(results, 'tableUpdateReview', '审核页包含 details/summary 折叠态样式', has(contents.tableUpdateReview, '.tur-table-card[open]')
         && has(contents.tableUpdateReview, '.tur-table-summary'));
     check(results, 'tableUpdateReview', '审核页删除态样式包含红线、轻红底和不可点击视觉', has(contents.tableUpdateReview, '.tur-change-item.is-delete')
@@ -201,8 +201,8 @@ function main() {
         && has(settingsNavBlock, '--yuzi-phone-nav-action-color:')
         && has(settingsNavBlock, '--yuzi-phone-nav-title-color:')
         && !/(?:^|;)\s*(?:padding|height|min-height|grid-template-columns|font-size)\s*:/m.test(settingsNavBlock));
-    check(results, 'genericTemplate', 'generic nav only supplies its template theme roles', has(genericNavBlock, 'background: var(--_gt-nav-bg);')
-        && has(genericNavBlock, 'border-bottom: 1px solid var(--_gt-nav-border);')
+    check(results, 'genericTemplate', 'generic nav only supplies its template theme roles', has(genericNavBlock, 'background: var(--yuzi-generic-template-resolved-nav-bg);')
+        && has(genericNavBlock, 'border-bottom: 1px solid var(--yuzi-generic-template-resolved-nav-border);')
         && !/(?:^|;)\s*(?:padding|height|min-height|grid-template-columns|font-size)\s*:/m.test(genericNavBlock));
     check(results, 'contentPresets', '完整页面预设根节点可伸缩并负责纵向滚动', has(contentPresetRootBlock, 'flex: 1 1 auto;')
         && has(contentPresetRootBlock, 'min-height: 0;')

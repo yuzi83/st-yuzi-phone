@@ -69,8 +69,24 @@ export function resolveTemplateWithDraftForViewer(template) {
     return next;
 }
 
+function toKebabCase(value) {
+    return String(value || '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+        .replace(/_/g, '-')
+        .toLowerCase();
+}
+
+function migrateLegacyGenericTemplateVariables(css) {
+    return String(css || '')
+        .replace(/--_gt-([a-z0-9-]+)/gi, '--yuzi-generic-template-resolved-$1')
+        .replace(/--gt-(typo|motion)-([a-z0-9-]+)/gi, '--yuzi-generic-template-$1-$2')
+        .replace(/--gt([A-Z][A-Za-z0-9]*)/g, (_match, suffix) => (
+            `--yuzi-generic-template-${toKebabCase(suffix)}`
+        ));
+}
+
 export function buildScopedCustomCss(customCssText, scopeSelector) {
-    const css = sanitizeCSS(String(customCssText || '').trim());
+    const css = sanitizeCSS(migrateLegacyGenericTemplateVariables(String(customCssText || '').trim()));
     const scope = String(scopeSelector || '').trim();
     if (!css || !scope) return '';
 
@@ -308,4 +324,3 @@ export function bindTemplateDraftPreviewForViewer(container, sheetKey, renderTab
 
     host.__yuziDraftPreviewCleanup = cleanupDraftPreview;
 }
-

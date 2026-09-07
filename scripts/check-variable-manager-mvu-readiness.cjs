@@ -221,7 +221,7 @@ assertIncludes(flatView, 'function buildTreeNodeAttrs(node) {', 'flat-view 必�
 assertIncludes(flatView, 'data-var-type="${escapeHtmlAttr(item.valueType)}"', 'data-var-type 必须基于归一化后的真实值类型');
 assertIncludes(flatView, 'vm-card-description', 'flat-view 必须渲染 tuple 说明');
 assertIncludes(flatView, 'data-delete-kind="${escapeHtmlAttr(kind)}"', 'flat-view 必须输出结构化删除类型');
-assertIncludes(flatView, 'style="--vm-node-indent: ${escapeHtmlAttr(String(depth * 12))}px;"', 'flat-view 必须输出树节点缩进变量');
+assertIncludes(flatView, 'style="--yuzi-variable-manager-node-indent: ${escapeHtmlAttr(String(depth * 12))}px;"', 'flat-view 必须输出树节点缩进变量');
 assertIncludes(flatView, 'class="vm-object-title', 'flat-view 必须渲染对象标题节点');
 assertNotIncludes(flatView, 'extractSubGroups', 'flat-view 不能继续依赖旧的临时二级分组恢复逻辑');
 assertNotIncludes(flatView, 'vm-sub-group-path', 'flat-view 不能继续渲染旧的中间路径 badge');

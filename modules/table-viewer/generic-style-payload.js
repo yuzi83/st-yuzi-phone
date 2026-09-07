@@ -1,4 +1,5 @@
 import { escapeHtmlAttr } from '../utils/dom-escape.js';
+import { normalizeGenericStyleTokens } from '../phone-beautify-templates/normalize.js';
 import { resolveTemplateWithDraftForViewer, buildScopedCustomCss } from './template-runtime.js';
 import { normalizeGenericFieldBindingsForViewer } from './row-view-model.js';
 
@@ -43,6 +44,24 @@ function toVarName(key) {
         .trim()
         .replace(/[^a-zA-Z0-9_-]/g, '')
         .replace(/^([^a-zA-Z_])/, '_$1');
+}
+
+function toKebabCase(value) {
+    return String(value || '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+        .replace(/_/g, '-')
+        .toLowerCase();
+}
+
+function toCssVarName(key) {
+    const varName = toVarName(key);
+    const prefix = 'yuziGenericTemplate';
+
+    if (varName.startsWith(prefix) && varName.length > prefix.length) {
+        return `--yuzi-generic-template-${toKebabCase(varName.slice(prefix.length))}`;
+    }
+
+    return `--${varName}`;
 }
 
 function normalizeEnum(value, allowed, fallback) {
@@ -111,9 +130,7 @@ export function createGenericTemplateStylePayload(genericMatch, viewMode = 'list
         };
     }
 
-    const styleTokens = template.render?.styleTokens && typeof template.render.styleTokens === 'object'
-        ? template.render.styleTokens
-        : {};
+    const styleTokens = normalizeGenericStyleTokens(template.render?.styleTokens);
     const fieldBindings = normalizeGenericFieldBindingsForViewer(template.render?.fieldBindings);
     const structureOptions = template.render?.structureOptions && typeof template.render.structureOptions === 'object'
         ? template.render.structureOptions
@@ -131,20 +148,20 @@ export function createGenericTemplateStylePayload(genericMatch, viewMode = 'list
             const value = String(rawValue ?? '').trim();
             if (!varName || !value) return null;
             if (/[<>]/.test(value)) return null;
-            return [`--${varName}`, value];
+            return [toCssVarName(varName), value];
         })
         .filter(Boolean);
 
     const extraCssVarEntries = [
-        ['--gt-typo-nav-title-size', normalizeCssVarValue(typographyOptions.navTitleFontSize)],
-        ['--gt-typo-list-title-size', normalizeCssVarValue(typographyOptions.listTitleFontSize)],
-        ['--gt-typo-list-preview-size', normalizeCssVarValue(typographyOptions.listPreviewFontSize)],
-        ['--gt-typo-detail-key-size', normalizeCssVarValue(typographyOptions.detailKeyFontSize)],
-        ['--gt-typo-detail-value-size', normalizeCssVarValue(typographyOptions.detailValueFontSize)],
-        ['--gt-typo-button-size', normalizeCssVarValue(typographyOptions.buttonFontSize)],
-        ['--gt-typo-chip-size', normalizeCssVarValue(typographyOptions.chipFontSize)],
-        ['--gt-motion-fast', normalizeCssVarValue(motionOptions.fastDuration)],
-        ['--gt-motion-normal', normalizeCssVarValue(motionOptions.normalDuration)],
+        ['--yuzi-generic-template-typo-nav-title-size', normalizeCssVarValue(typographyOptions.navTitleFontSize)],
+        ['--yuzi-generic-template-typo-list-title-size', normalizeCssVarValue(typographyOptions.listTitleFontSize)],
+        ['--yuzi-generic-template-typo-list-preview-size', normalizeCssVarValue(typographyOptions.listPreviewFontSize)],
+        ['--yuzi-generic-template-typo-detail-key-size', normalizeCssVarValue(typographyOptions.detailKeyFontSize)],
+        ['--yuzi-generic-template-typo-detail-value-size', normalizeCssVarValue(typographyOptions.detailValueFontSize)],
+        ['--yuzi-generic-template-typo-button-size', normalizeCssVarValue(typographyOptions.buttonFontSize)],
+        ['--yuzi-generic-template-typo-chip-size', normalizeCssVarValue(typographyOptions.chipFontSize)],
+        ['--yuzi-generic-template-motion-fast', normalizeCssVarValue(motionOptions.fastDuration)],
+        ['--yuzi-generic-template-motion-normal', normalizeCssVarValue(motionOptions.normalDuration)],
     ].filter(([, value]) => !!value);
 
     const styleAttr = [...safeVarEntries, ...extraCssVarEntries]

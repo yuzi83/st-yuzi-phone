@@ -3,23 +3,23 @@
    ======================================== */
 
 .phone-app-page.phone-theater-page[data-theater-scene="calendar"] {
-    --calendar-red: #ff3b30;
-    --calendar-orange: #ff9500;
-    --calendar-text: #241f1f;
-    --calendar-muted: rgba(36, 31, 31, 0.48);
-    --calendar-border: rgba(255, 59, 48, 0.12);
-    --calendar-panel: rgba(255, 255, 255, 0.82);
+    --yuzi-theater-calendar-red: #ff3b30;
+    --yuzi-theater-calendar-orange: #ff9500;
+    --yuzi-theater-calendar-text: #241f1f;
+    --yuzi-theater-calendar-muted: rgba(36, 31, 31, 0.48);
+    --yuzi-theater-calendar-border: rgba(255, 59, 48, 0.12);
+    --yuzi-theater-calendar-panel: rgba(255, 255, 255, 0.82);
     background:
         radial-gradient(circle at 20% 12%, rgba(255, 149, 0, 0.16) 0, rgba(255, 149, 0, 0) 30%),
         radial-gradient(circle at 80% 20%, rgba(255, 59, 48, 0.13) 0, rgba(255, 59, 48, 0) 28%),
         linear-gradient(180deg, #fff8f4 0%, #fff6f2 46%, #fffaf7 100%);
-    color: var(--calendar-text);
+    color: var(--yuzi-theater-calendar-text);
 }
 
 .phone-app-page.phone-theater-page[data-theater-scene="calendar"] .phone-theater-nav {
     background: rgba(255, 248, 244, 0.92);
     border-bottom: 1px solid rgba(255, 59, 48, 0.1);
-    color: var(--calendar-text);
+    color: var(--yuzi-theater-calendar-text);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
 }
@@ -27,18 +27,18 @@
 .phone-app-page.phone-theater-page[data-theater-scene="calendar"] .phone-theater-nav .phone-nav-title,
 .phone-app-page.phone-theater-page[data-theater-scene="calendar"] .phone-theater-nav .phone-nav-back,
 .phone-app-page.phone-theater-page[data-theater-scene="calendar"] .phone-theater-nav .phone-nav-back span {
-    color: var(--calendar-text);
+    color: var(--yuzi-theater-calendar-text);
 }
 
 .phone-app-page.phone-theater-page[data-theater-scene="calendar"] .phone-theater-nav .phone-nav-back svg {
-    color: var(--calendar-text);
+    color: var(--yuzi-theater-calendar-text);
     fill: currentColor;
     stroke: currentColor;
 }
 
 .phone-app-page.phone-theater-page[data-theater-scene="calendar"] .phone-theater-body {
     background: transparent;
-    color: var(--calendar-text);
+    color: var(--yuzi-theater-calendar-text);
 }
 
 .phone-theater-page[data-theater-scene="calendar"] .phone-theater-calendar-page {
@@ -53,9 +53,9 @@
     gap: 8px;
     align-items: center;
     padding: 10px;
-    border: 1px solid var(--calendar-border);
+    border: 1px solid var(--yuzi-theater-calendar-border);
     border-radius: 18px;
-    background: var(--calendar-panel);
+    background: var(--yuzi-theater-calendar-panel);
     box-shadow: 0 12px 28px rgba(255, 107, 82, 0.1);
 }
 
@@ -65,7 +65,7 @@
     border: 0;
     border-radius: 50%;
     background: rgba(255, 59, 48, 0.1);
-    color: var(--calendar-red);
+    color: var(--yuzi-theater-calendar-red);
     font-size: 24px;
     line-height: 1;
     cursor: pointer;
@@ -101,7 +101,7 @@
     border: 1px solid rgba(255, 59, 48, 0.18);
     border-radius: 999px;
     background: #fffaf7;
-    color: var(--calendar-text);
+    color: var(--yuzi-theater-calendar-text);
     font-size: 11px;
     line-height: 1.35;
     cursor: pointer;
@@ -114,7 +114,7 @@
 }
 
 .phone-theater-page[data-theater-scene="calendar"] .phone-theater-calendar-year-toggle-icon {
-    color: var(--calendar-red);
+    color: var(--yuzi-theater-calendar-red);
     font-size: 10px;
     transition: transform 0.16s ease;
 }
@@ -163,7 +163,7 @@
     border: 0;
     border-radius: 10px;
     background: transparent;
-    color: var(--calendar-text);
+    color: var(--yuzi-theater-calendar-text);
     font-size: 12px;
     line-height: 1.35;
     text-align: center;
@@ -177,7 +177,7 @@
 }
 
 .phone-theater-page[data-theater-scene="calendar"] .phone-theater-calendar-year-option.is-selected {
-    background: linear-gradient(135deg, var(--calendar-red) 0%, var(--calendar-orange) 100%);
+    background: linear-gradient(135deg, var(--yuzi-theater-calendar-red) 0%, var(--yuzi-theater-calendar-orange) 100%);
     color: #ffffff;
     font-weight: 700;
 }
@@ -191,7 +191,7 @@
 
 .phone-theater-page[data-theater-scene="calendar"] .phone-theater-calendar-weekdays {
     padding: 0 4px;
-    color: var(--calendar-muted);
+    color: var(--yuzi-theater-calendar-muted);
     font-size: 11px;
     font-weight: 600;
     text-align: center;
@@ -211,7 +211,7 @@
     border: 0;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.74);
-    color: var(--calendar-text);
+    color: var(--yuzi-theater-calendar-text);
     font-size: 13px;
     cursor: pointer;
     transition: transform 0.16s ease, background-color 0.16s ease, color 0.16s ease;
@@ -229,12 +229,12 @@
 
 .phone-theater-page[data-theater-scene="calendar"] .phone-theater-calendar-day.is-today {
     color: #ffffff;
-    background: linear-gradient(135deg, var(--calendar-red) 0%, var(--calendar-orange) 100%);
+    background: linear-gradient(135deg, var(--yuzi-theater-calendar-red) 0%, var(--yuzi-theater-calendar-orange) 100%);
     box-shadow: 0 8px 18px rgba(255, 59, 48, 0.28);
 }
 
 .phone-theater-page[data-theater-scene="calendar"] .phone-theater-calendar-day.is-selected:not(.is-today) {
-    color: var(--calendar-red);
+    color: var(--yuzi-theater-calendar-red);
     background: rgba(255, 59, 48, 0.12);
     box-shadow: inset 0 0 0 1px rgba(255, 59, 48, 0.18);
 }
@@ -266,7 +266,7 @@
 }
 
 .phone-theater-page[data-theater-scene="calendar"] .phone-theater-calendar-detail.is-empty {
-    color: var(--calendar-muted);
+    color: var(--yuzi-theater-calendar-muted);
     text-align: center;
 }
 
@@ -286,7 +286,7 @@
 
 .phone-theater-page[data-theater-scene="calendar"] .phone-theater-calendar-detail-relation {
     margin-top: 2px;
-    color: var(--calendar-muted);
+    color: var(--yuzi-theater-calendar-muted);
     font-size: 11px;
 }
 
@@ -319,14 +319,14 @@
 
 .phone-theater-page[data-theater-scene="calendar"] .phone-theater-calendar-festival {
     margin-bottom: 5px;
-    color: var(--calendar-red);
+    color: var(--yuzi-theater-calendar-red);
     font-size: 13px;
     font-weight: 700;
 }
 
 .phone-theater-page[data-theater-scene="calendar"] .phone-theater-calendar-event {
     margin-bottom: 6px;
-    color: var(--calendar-text);
+    color: var(--yuzi-theater-calendar-text);
     font-size: 13px;
     font-weight: 650;
     line-height: 1.45;

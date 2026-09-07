@@ -3,21 +3,21 @@
    ======================================== */
 
 .phone-app-page.phone-theater-page[data-theater-scene="square"] {
-    --square-jade: #6f9187;
-    --square-jade-deep: #496f66;
-    --square-jade-soft: #e4eee8;
-    --square-paper: #fbfaf5;
-    --square-paper-warm: #f5efe3;
-    --square-paper-strong: #fffdf7;
-    --square-ink: #2f2923;
-    --square-ink-soft: #6e6258;
-    --square-gold: #c7a268;
-    --square-gold-deep: #a9834d;
-    --square-gold-soft: rgba(199, 162, 104, 0.18);
-    --square-line: rgba(139, 111, 73, 0.18);
-    --square-line-strong: rgba(139, 111, 73, 0.28);
-    --square-card: rgba(255, 253, 247, 0.92);
-    --square-shadow: 0 10px 24px rgba(82, 66, 45, 0.08);
+    --yuzi-theater-square-jade: #6f9187;
+    --yuzi-theater-square-jade-deep: #496f66;
+    --yuzi-theater-square-jade-soft: #e4eee8;
+    --yuzi-theater-square-paper: #fbfaf5;
+    --yuzi-theater-square-paper-warm: #f5efe3;
+    --yuzi-theater-square-paper-strong: #fffdf7;
+    --yuzi-theater-square-ink: #2f2923;
+    --yuzi-theater-square-ink-soft: #6e6258;
+    --yuzi-theater-square-gold: #c7a268;
+    --yuzi-theater-square-gold-deep: #a9834d;
+    --yuzi-theater-square-gold-soft: rgba(199, 162, 104, 0.18);
+    --yuzi-theater-square-line: rgba(139, 111, 73, 0.18);
+    --yuzi-theater-square-line-strong: rgba(139, 111, 73, 0.28);
+    --yuzi-theater-square-card: rgba(255, 253, 247, 0.92);
+    --yuzi-theater-square-shadow: 0 10px 24px rgba(82, 66, 45, 0.08);
     background:
         radial-gradient(circle at 18% 0%, rgba(111, 145, 135, 0.08), transparent 30%),
         radial-gradient(circle at 88% 12%, rgba(199, 162, 104, 0.12), transparent 28%),
@@ -29,7 +29,7 @@
     background:
         radial-gradient(circle at 84% 4%, rgba(199, 162, 104, 0.09), transparent 24%),
         linear-gradient(180deg, rgba(253, 251, 246, 0.98) 0%, rgba(244, 238, 227, 0.96) 100%);
-    color: var(--square-ink);
+    color: var(--yuzi-theater-square-ink);
 }
 
 .phone-app-page.phone-theater-page[data-theater-scene="square"] .phone-theater-nav {
@@ -40,7 +40,7 @@
 }
 
 .phone-app-page.phone-theater-page[data-theater-scene="square"] .phone-theater-nav .phone-nav-title {
-    color: var(--square-ink);
+    color: var(--yuzi-theater-square-ink);
     letter-spacing: 0.08em;
     font-weight: 700;
 }
@@ -48,7 +48,7 @@
 .phone-app-page.phone-theater-page[data-theater-scene="square"] .phone-theater-nav .phone-nav-back,
 .phone-app-page.phone-theater-page[data-theater-scene="square"] .phone-theater-nav .phone-theater-edit-toggle,
 .phone-app-page.phone-theater-page[data-theater-scene="square"] .phone-theater-nav .phone-theater-delete-toggle {
-    color: var(--square-jade-deep);
+    color: var(--yuzi-theater-square-jade-deep);
 }
 
 .phone-app-page.phone-theater-page[data-theater-scene="square"] .phone-theater-nav .phone-theater-edit-toggle,
@@ -81,7 +81,7 @@
     border-radius: 18px;
     padding: 15px 14px 14px;
     border: 1px solid rgba(199, 162, 104, 0.22);
-    box-shadow: var(--square-shadow);
+    box-shadow: var(--yuzi-theater-square-shadow);
 }
 
 .phone-theater-page[data-theater-scene="square"] .phone-theater-square-post::before,
@@ -159,7 +159,7 @@
 .phone-theater-page[data-theater-scene="square"] .phone-theater-author {
     font-size: 14px;
     font-weight: 700;
-    color: var(--square-ink);
+    color: var(--yuzi-theater-square-ink);
     line-height: 1.35;
 }
 
@@ -171,7 +171,7 @@
     border-radius: 999px;
     border: 1px solid rgba(199, 162, 104, 0.3);
     background: linear-gradient(180deg, rgba(255, 248, 235, 0.96) 0%, rgba(248, 238, 216, 0.92) 100%);
-    color: var(--square-gold-deep);
+    color: var(--yuzi-theater-square-gold-deep);
     font-size: 11px;
     font-weight: 600;
 }
@@ -179,14 +179,14 @@
 .phone-theater-page[data-theater-scene="square"] .phone-theater-square-time {
     font-size: 11.5px;
     line-height: 1.4;
-    color: var(--square-ink-soft);
+    color: var(--yuzi-theater-square-ink-soft);
 }
 
 .phone-theater-page[data-theater-scene="square"] .phone-theater-title {
     margin: 0 0 8px;
     font-size: 19px;
     font-weight: 700;
-    color: var(--square-ink);
+    color: var(--yuzi-theater-square-ink);
     line-height: 1.45;
     letter-spacing: 0.01em;
 }
@@ -194,7 +194,7 @@
 .phone-theater-page[data-theater-scene="square"] .phone-theater-body-text {
     font-size: 14px;
     line-height: 1.82;
-    color: var(--square-ink);
+    color: var(--yuzi-theater-square-ink);
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -215,7 +215,7 @@
     font-size: 12px;
     line-height: 1.4;
     border: 1px solid transparent;
-    color: var(--square-jade-deep);
+    color: var(--yuzi-theater-square-jade-deep);
     background: rgba(228, 238, 232, 0.92);
     border-color: rgba(111, 145, 135, 0.18);
 }
@@ -229,7 +229,7 @@
     padding: 0;
     border-radius: 999px;
     border: 1px solid rgba(199, 162, 104, 0.24);
-    color: var(--square-gold-deep);
+    color: var(--yuzi-theater-square-gold-deep);
     background: rgba(255, 248, 236, 0.9);
     box-shadow: 0 5px 14px rgba(82, 73, 58, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.82);
     line-height: 0;
@@ -273,12 +273,12 @@
     gap: 6px;
     font-size: 12px;
     font-weight: 700;
-    color: var(--square-jade-deep);
+    color: var(--yuzi-theater-square-jade-deep);
     letter-spacing: 0.06em;
 }
 
 .phone-theater-page[data-theater-scene="square"] .phone-theater-square-section-mark {
-    color: var(--square-gold-deep);
+    color: var(--yuzi-theater-square-gold-deep);
     font-size: 12px;
     line-height: 1;
 }
@@ -299,7 +299,7 @@
 
 .phone-theater-page[data-theater-scene="square"] .phone-theater-square-featured-author {
     font-weight: 700;
-    color: var(--square-ink);
+    color: var(--yuzi-theater-square-ink);
     font-size: 13px;
     margin-bottom: 2px;
 }
@@ -380,7 +380,7 @@
     border-radius: 999px;
     border: 1px solid rgba(111, 145, 135, 0.16);
     background: rgba(232, 240, 236, 0.8);
-    color: var(--square-jade-deep);
+    color: var(--yuzi-theater-square-jade-deep);
     font-size: 11.5px;
     font-weight: 600;
 }

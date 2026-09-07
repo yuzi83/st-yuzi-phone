@@ -6,12 +6,14 @@
 
 ## 使用规则
 
-1. 颜色、尺寸、间距、圆角、字体、阴影、透明度和动效值必须使用已有 `--yuzi-phone-*` token；组件 CSS 和 HTML 模板不得新增散写视觉常量。
+1. 颜色、尺寸、间距、圆角、字体、阴影、透明度和动效值必须使用已有 `--yuzi-*` token；组件 CSS 和 HTML 模板不得新增散写视觉常量。
 2. 先复用含义相同的公共 token；确实缺少时，在 [`00-phone-tokens.css`](../styles/phone-base/00-phone-tokens.css) 新增语义化 token，并同步更新本文。
 3. 应用 ID、名称、图标、角标数字、路由和动作属于运行时数据，不得写成 CSS token 或 Figma 示例数据。
 4. 用户设置应解析为运行时 CSS 变量；不得在组件中直接读取持久化对象或写入颜色值。
 5. 只使用项目内登记的本地资源；不得提交 Figma 临时资源 URL、截图或生成的 React/Tailwind。
 6. 小手机组件不得直接消费 SillyTavern 的 `--SmartTheme*`、`--ui-color-*` 或宿主页面颜色；宿主主题隔离只能回落到本文登记的小手机语义 token。
+7. 所有**扩展自有** CSS 自定义属性必须以 `--yuzi-` 开头；按职责使用 `--yuzi-phone-*`、`--yuzi-theme-*`、`--yuzi-settings-*`、`--yuzi-variable-manager-*`、`--yuzi-theater-*`、`--yuzi-table-review-*` 或 `--yuzi-generic-template-*`，不得新增 `--phone-*`、`--vm-*`、`--tur-*`、`--calendar-*` 等通用前缀。
+8. 通用表的正式运行时变量是 `--yuzi-generic-template-*` 与 `--yuzi-generic-template-resolved-*`。旧模板中的 `--gt*`、`--_gt-*` 和旧 style token key 会在进入运行时前兼容迁移；它们只属于历史输入，不得在新增样式、内置模板或文档示例中使用。
 
 ## 基础与外壳
 
@@ -87,11 +89,13 @@
 
 SillyTavern 主题可能用 `!important` 强制改写原生控件。此时只允许在小手机外壳隔离层使用同样的 `!important` 取回控制权，并同时设置 `color`、`-webkit-text-fill-color`、`background-color` 和 `border-color`；组件页面仍然只引用上述 token，不复制颜色。`select option` 与 `::placeholder` 必须单独覆盖，否则关闭的下拉框正常、展开后的选项或占位文字仍可能不可读。
 
+使用原生 `checkbox` 的页面必须复用外壳隔离规则：显式恢复 `appearance` / `-webkit-appearance: checkbox`、设置 `color-scheme` 与对应 Yuzi `accent-color`，并保留 `:focus-visible` 焦点环。不要把这条规则施加到已经自绘轨道的开关。
+
 ## 底栏与 Home 区域契约
 
 App 页面存在固定底栏时，在底栏根节点声明 `data-phone-bottom-bar`。外壳会自动识别当前活动页中可见的底栏，将 Home Indicator 停靠到其下方，并把底栏计算后的背景复制给独立 Home 区域；没有底栏的页面继续使用悬浮 Home Indicator。App 不得判断自己的路由，也不得硬编码 Home Indicator 留白。
 
-底栏背景必须能够脱离页面内容独立绘制。不要只依赖半透明背景、`backdrop-filter` 或底层渐变，因为这些效果复制到独立 Home 区域后没有相同的背后内容，会显出外壳灰色。需要玻璃感时，底栏仍应提供近乎不透明的最终表面，例如变量 App 使用 `--vm-surface-strong`；模糊只作为附加效果。
+底栏背景必须能够脱离页面内容独立绘制。不要只依赖半透明背景、`backdrop-filter` 或底层渐变，因为这些效果复制到独立 Home 区域后没有相同的背后内容，会显出外壳灰色。需要玻璃感时，底栏仍应提供近乎不透明的最终表面，例如变量 App 使用 `--yuzi-variable-manager-surface-strong`；模糊只作为附加效果。
 
 ## 玻璃材质
 

@@ -50,13 +50,13 @@ const GENERIC_FIELD_BINDING_ALLOWED_KEYS = Object.freeze([
 ]);
 
 const GENERIC_STYLE_TOKEN_ALIAS_MAP = Object.freeze({
-    tableBackgroundColor: ['gtBodyBg', 'gtListBg', 'gtDetailBg', 'gtDetailFieldBg'],
-    headerBackgroundColor: ['gtNavBg'],
-    textColor: ['gtText', 'gtNavText', 'gtListItemText', 'gtDetailValueText', 'gtActionBtnText'],
-    borderColor: ['gtNavBorderColor', 'gtListBorder', 'gtDetailBorder', 'gtDetailFieldBorder', 'gtActionBtnBorder'],
-    borderRadius: ['gtRadiusLg'],
-    boxShadow: ['gtShadowMd'],
-    backdropFilter: ['gtBackdropFilter'],
+    tableBackgroundColor: ['yuziGenericTemplateBodyBg', 'yuziGenericTemplateListBg', 'yuziGenericTemplateDetailBg', 'yuziGenericTemplateDetailFieldBg'],
+    headerBackgroundColor: ['yuziGenericTemplateNavBg'],
+    textColor: ['yuziGenericTemplateText', 'yuziGenericTemplateNavText', 'yuziGenericTemplateListItemText', 'yuziGenericTemplateDetailValueText', 'yuziGenericTemplateActionBtnText'],
+    borderColor: ['yuziGenericTemplateNavBorderColor', 'yuziGenericTemplateListBorder', 'yuziGenericTemplateDetailBorder', 'yuziGenericTemplateDetailFieldBorder', 'yuziGenericTemplateActionBtnBorder'],
+    borderRadius: ['yuziGenericTemplateRadiusLg'],
+    boxShadow: ['yuziGenericTemplateShadowMd'],
+    backdropFilter: ['yuziGenericTemplateBackdropFilter'],
 });
 
 export function normalizeTemplateType(rawType, fallback = PHONE_TEMPLATE_TYPE_GENERIC) {
@@ -90,12 +90,25 @@ function normalizeGenericLayoutOptions(rawLayout) {
     };
 }
 
-function normalizeGenericStyleTokens(rawStyleTokens) {
+function toGenericStyleTokenKey(rawKey) {
+    const key = normalizeString(rawKey, 48).replace(/[^a-zA-Z0-9_-]/g, '');
+    return /^gt[A-Z]/.test(key) ? `yuziGenericTemplate${key.slice(2)}` : key;
+}
+
+export function normalizeGenericStyleTokens(rawStyleTokens) {
     const normalized = normalizeStyleTokens(rawStyleTokens);
-    const merged = { ...normalized };
+    const merged = {};
+
+    Object.entries(normalized).forEach(([rawKey, value]) => {
+        if (Object.prototype.hasOwnProperty.call(GENERIC_STYLE_TOKEN_ALIAS_MAP, rawKey)) return;
+
+        const safeKey = toGenericStyleTokenKey(rawKey);
+        if (!safeKey || (merged[safeKey] && rawKey !== safeKey)) return;
+        merged[safeKey] = value;
+    });
 
     Object.entries(GENERIC_STYLE_TOKEN_ALIAS_MAP).forEach(([legacyKey, mappedKeys]) => {
-        const legacyValue = merged[legacyKey];
+        const legacyValue = normalized[legacyKey];
         if (!legacyValue || !Array.isArray(mappedKeys)) return;
 
         mappedKeys.forEach((nextKey) => {
