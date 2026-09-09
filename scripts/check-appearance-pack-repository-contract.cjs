@@ -108,7 +108,7 @@ function main() {
         && has(facadeDeleteSection, 'appIconOrigins: iconCleanup.appIconOrigins')
         && has(facadeDeleteSection, "if (activeCleared) patch.appearanceActivePackId = '';")
         && appearsBefore(facadeDeleteSection, 'const saved = savePhoneSettingsPatch(patch);', 'const deleteResult = await deleteAppearancePackImpl(targetPackId);')
-        && has(facadeDeleteSection, 'if (!saved || !flushPhoneSettingsSave())')
+        && has(facadeDeleteSection, 'if (!saved || !flushPhoneSettingsSave() || !await waitForPhoneSettingsSave())')
         && has(facadeDeleteSection, '仓库包未删除')
         && has(facadeDeleteSection, 'savePhoneSettingsPatch(settingsBackup)')
         && !has(facadeDeleteSection, 'backgroundImage')

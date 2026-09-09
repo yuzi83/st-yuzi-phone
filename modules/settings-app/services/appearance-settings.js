@@ -23,7 +23,7 @@ import {
     listAppearancePacks as listAppearancePacksImpl,
     saveAppearancePack as saveAppearancePackImpl,
 } from './appearance-settings/appearance-pack-repository.js';
-import { flushPhoneSettingsSave, getPhoneSettings, savePhoneSettingsPatch } from '../../settings.js';
+import { flushPhoneSettingsSave, getPhoneSettings, savePhoneSettingsPatch, waitForPhoneSettingsSave } from '../../settings.js';
 import {
     applyAppearanceFontLibrary as applyAppearanceFontLibraryImpl,
     deleteAppearanceFont as deleteAppearanceFontImpl,
@@ -141,7 +141,7 @@ export async function deleteAppearancePackFromRepository(id) {
         if (activeCleared) patch.appearanceActivePackId = '';
 
         const saved = savePhoneSettingsPatch(patch);
-        if (!saved || !flushPhoneSettingsSave()) {
+        if (!saved || !flushPhoneSettingsSave() || !await waitForPhoneSettingsSave()) {
             savePhoneSettingsPatch(settingsBackup);
             flushPhoneSettingsSave();
             return {
@@ -157,7 +157,7 @@ export async function deleteAppearancePackFromRepository(id) {
     if (!deleteResult?.success) {
         if (!settingsChanged) return deleteResult;
 
-        const restored = savePhoneSettingsPatch(settingsBackup) && flushPhoneSettingsSave();
+        const restored = savePhoneSettingsPatch(settingsBackup) && flushPhoneSettingsSave() && await waitForPhoneSettingsSave();
         return restored
             ? { ...deleteResult, activeCleared: false }
             : { ...deleteResult, message: `${deleteResult.message || '删除失败'}；相关图标设置恢复保存失败`, activeCleared: false };

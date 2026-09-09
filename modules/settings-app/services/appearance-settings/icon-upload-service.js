@@ -3,7 +3,7 @@ import {
     savePhoneSettingsPatch,
 } from '../../../settings.js';
 import { PHONE_ICONS } from '../../../phone-home/icons.js';
-import { cacheRemove, cacheSet, CACHE_STORES } from '../../../cache-manager.js';
+import { cacheRemove, CACHE_STORES } from '../../../cache-manager.js';
 import { escapeHtml, escapeHtmlAttr } from '../../../utils/dom-escape.js';
 import { formatFileSize } from '../../../utils/device.js';
 import { Logger } from '../../../error-handler.js';
@@ -136,7 +136,7 @@ export function createIconUploadService(deps = {}) {
                 return false;
             }
 
-            cacheSet(CACHE_STORES.images, `icon:${key}`, dataUrl, 1000 * 60 * 60 * 24 * 30).catch(() => {});
+            cacheRemove(CACHE_STORES.images, `icon:${key}`).catch(() => {});
             render();
             showToast(listEl, '图标已更新');
             return true;

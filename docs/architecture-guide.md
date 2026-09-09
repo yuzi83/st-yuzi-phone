@@ -369,6 +369,7 @@ sequenceDiagram
 关键边界：
 
 - [`facade.js`](../modules/qq-v2/application/facade.js) 是未来 UI 的唯一应用入口，返回领域状态、可执行能力与失败或只读原因。
+- 消息快捷菜单通过 Facade 的 `editMessage` / `recallMessage` 操作。任意历史用户消息均可作为撤回起点，UI 按发送者类型显示入口；Repository 在删除事务内再次验证目标属于当前会话且为用户消息，从完整记录中删除该条及其后所有消息，不依赖当前分页。撤回复用既有删除链的请求取消、媒体清理、队列校正与世界书同步；编辑保留消息身份及其他结构化字段，取消旧上下文请求但不自动生成。回填草稿只在撤回成功且原 UI 作用域仍有效时执行。
 - [`default-runtime.js`](../modules/qq-v2/runtime/default-runtime.js) 负责扩展级 runtime 生命周期与宿主事件转发；[`production-runtime.js`](../modules/qq-v2/application/production-runtime.js) 组合状态仓储、请求、世界书和主动消息服务。
 - [`runtime.js`](../modules/qq-v2/runtime/runtime.js) 通过 [`scope-coordinator.js`](../modules/qq-v2/runtime/scope-coordinator.js) 管理 Scope Session：每次 refresh 请求立即撤销旧 Session，即使 scopeId 相同也创建新 generation；宿主读取、转场与 ready 回调仍在单一 host mutation lane 串行，只有最新请求可发布 ready Session，旧 Session 的异步写入必须以 `scope_inactive` 停止。
 - 宿主 `CHAT_CHANGED` 完成新 Scope Session 后，若手机当前可见且 route 为 `qq` 或 `qq:*`，入口层必须重渲当前 route，让旧 QQ lifecycle 销毁并以新 Session 重挂；Facade 订阅故意只接收挂载时的 scope 事件，不能把跨 scope 通知当成普通页面刷新。
@@ -667,6 +668,13 @@ Appearance 页面服务统一由 [`appearance-settings.js`](../modules/settings-
 6. 导入 JSON 美化包只保存到仓库，不自动应用；应用仓库包时才写入当前 [`backgroundImage`](../modules/settings/schema.js:107)、[`appIcons`](../modules/settings/schema.js:108)，并更新 `appearanceActivePackId`。
 7. 删除当前激活仓库包会清空 `appearanceActivePackId`，但不撤销整包应用留下的背景和图标；只有通过图标选择器登记在 `appIconOrigins` 中、来源正是该包的图标会恢复默认。设置补丁必须先成功持久化，再删除仓库包；仓库删除失败时恢复原设置。
 
+外观文件持久化边界：
+
+- `modules/settings/appearance-context.js` 隔离运行时设置与宿主设置；`index.js` 在 QQ 和 UI 初始化前等待资源恢复。运行时继续使用 Data URL，避免改动裁剪、预览和旧 JSON 美化包格式。
+- `modules/settings/appearance-asset-repository.js` 把壁纸、图标、悬浮入口封面、本地字体及旧资源池转为独立 IndexedDB Blob；宿主字段中的文件内容替换为 `yuzi-appearance:` 引用。沿用内容指纹并核对完整内容，重复应用和刷新不重复写入相同文件。上传不再写第二份图片缓存。
+- 设置保存串行执行，资源事务成功后才更新宿主命名空间。旧 Base64 通过相同路径迁移，失败不清除旧值；`flushPhoneSettingsSave()` 只发起保存，需要等待本地资源提交的异步操作使用 `waitForPhoneSettingsSave()`，它不代表酒馆服务器已确认落盘。
+- 缺失资源回退默认显示，普通设置保存保留原引用；重新上传、重新导入或明确清除对应项可以替换引用。资源跟随当前浏览器站点存储，不自动跨设备同步；历史资源暂不跨标签页回收，以免破坏仍在使用的引用和旧设置备份。
+
 自定义图标选择链路：
 
 1. 上传按钮仍是唯一入口；没有当前美化包或当前包不含图标时，直接进入原本的本地上传与裁剪。
@@ -701,7 +709,7 @@ Appearance 页面服务统一由 [`appearance-settings.js`](../modules/settings-
 
 1. [`layer-runtime.js`](../modules/fullscreen-overlay/layer-runtime.js) 只管理宿主 `body` 下唯一的 `.yuzi-phone-fullscreen-overlay-layer`，提供 mount / get / clear / dispose 公共 seam。
 2. 内容源 Adapter 通过 [`source-registry.js`](../modules/fullscreen-overlay/source-registry.js) 注册；[`source-catalog.js`](../modules/fullscreen-overlay/source-catalog.js) 复用 [`buildTableNavigationCatalog()`](../modules/table-navigation/catalog.js) 枚举全部 `sheet_*` 物理表，并登记默认位于末尾但可排序的虚拟来源 `QQ`，再合并用户保存的启用状态、顺序与 `sourceModelBySheetKey` 模型绑定。[`sources/generic-table.js`](../modules/fullscreen-overlay/sources/generic-table.js) 让所有用户 `sheet_*` 物理表都可使用普通表格弹窗；格式正确的直播表优先由专用 Adapter 匹配并额外开放滚动弹幕；[`sources/qq.js`](../modules/fullscreen-overlay/sources/qq.js) 只开放普通表格弹窗。
-3. 全局模型 registry 按最终模型 ID 复用 renderer；内容源 Adapter 不直接创建 DOM。Adapter 声明默认模型，Catalog/运行时解析来源绑定；事件表现无关。`sourceModelBySheetKey` 覆盖 Adapter 的默认 `modelId`，但只能从该 Adapter 的 `modelIds` 能力列表中选择；最终模型在 Catalog 与来源批次组装阶段解析，不写入单条事件。当前稳定模型为滚动弹幕 `scrolling-barrage` 与普通表格弹窗 `table-popup`。
+3. 全局模型 registry 按最终模型 ID 复用 renderer；内容源 Adapter 不直接创建 DOM。Adapter 声明默认模型，Catalog/运行时解析来源绑定；事件表现无关。`sourceModelBySheetKey` 覆盖 Adapter 的默认 `modelId`，但只能从该 Adapter 的 `modelIds` 能力列表中选择；最终模型在 Catalog 与来源批次组装阶段解析，不写入单条事件。当前稳定模型为滚动弹幕 `scrolling-barrage`、普通表格浮窗 `table-popup` 与正文卡片 `inline-table-popup`。直播表可选三者，其他物理表只可选后两者，QQ 固定 `table-popup`；不扩大滚动弹幕的来源能力。
 4. [`scheduler.js`](../modules/fullscreen-overlay/scheduler.js) 是严格串行 scheduler。严格来源顺序仍保留；handoff 发生在当前来源完成发射/入口交接时。已发射的视觉元素可在交接后自然离场，不阻塞下一来源。来源间只保留短过渡；`replace()` 让最新楼层替换尚未发射的旧批次，`clear()` 会终止当前来源、清空待播来源并通知 renderer 清理。
 5. 滚动弹幕 renderer 只消费标准事件和全局模型设置，不知道“直播表”字段。直播表 Adapter 位于 [`sources/live-table.js`](../modules/fullscreen-overlay/sources/live-table.js)，按物理行以及“剧情 → 推角 → 对线”的固定字段顺序读取非空分号项；手动测试读取全部弹幕，审核自动播放只读取本楼变化行，两者都不设置业务条数上限。
 6. 普通表格弹窗 renderer 位于 [`renderers/table-popup.js`](../modules/fullscreen-overlay/renderers/table-popup.js)。普通表事件生成无标题、无边框、无阴影的圆角字段网格，并保留原表头顺序、空字段和完整字段值；QQ 的 `message-notification` 事件复用相同定位、时长、大小、圆角、背景与并发参数，但内容改为头像加固定单行通知。手动测试每张物理表只读取第一条可展示行，审核自动播放只读取本楼 `insert` / `update` 的当前行；QQ 手动测试从当前有效私聊随机取一个 NPC。弹窗使用 1–6 张全局并发上限、有限次数随机落点和静态矩形避让；不做模板工坊/小剧场识别、页面克隆、逐帧碰撞或永恒循环。
@@ -710,7 +718,7 @@ Appearance 页面服务统一由 [`appearance-settings.js`](../modules/settings-
 
 手动测试与自动播放只在输入范围上不同，之后复用同一套 Adapter、模型解析与 Scheduler。
 
-全屏浮层接入扩展的 enabled 生命周期：扩展启用且浮层主开关开启时运行，关闭小手机窗口不停止；扩展 disabled / destroy 时必须取消订阅、队列、timer、动画和宿主节点。`document.hidden` 时 scheduler 暂停发射，CSS 动画同步暂停；后台期间只保留最新待播批次，恢复可见后继续。测试按钮可以绕过主开关，但必须尊重当前已勾选且适配可用的来源；清空不会修改持久设置或当前签名基线。
+全屏浮层接入扩展的 enabled 生命周期：扩展启用且浮层主开关开启时运行，关闭小手机窗口不停止；扩展 disabled / destroy 时必须取消订阅、队列、timer、动画和宿主节点。`document.hidden` 时 scheduler 暂停发射，CSS 动画同步暂停；后台期间只保留最新待播批次，恢复可见后继续。总开关默认关闭，升级保留原启用状态。关闭时不创建运行组件，已创建的审核订阅、QQ 订阅、宿主正文监听、Scheduler、renderer、计时器与自有节点全部销毁；测试按钮也不能绕过总开关。重新开启才创建新组件并建立基线；清空不会修改持久设置或当前签名基线。
 
 移动端性能边界固定如下：
 
@@ -725,7 +733,17 @@ Appearance 页面服务统一由 [`appearance-settings.js`](../modules/settings-
 
 滚动弹幕全局调色板默认只有 `#FFFFFF`，允许 1–16 个合法完整 HEX 栏位且允许重复。每条弹幕在发射时按栏位等概率随机，并在存在其他实际颜色时尽量避免连续同色。设置页颜色控件支持原生 color input、HEX 输入、能力检测后的 EyeDropper 吸管及恢复默认；非法 HEX、取消吸管或浏览器不支持吸管时不得破坏最后一个合法值。
 
-全屏浮层主开关、全部可用物理表与 QQ 来源默认开启。普通表格弹窗默认在上方 25% 区域居中、并发 1、停留 4 秒、交接 0.2 秒、2 列、正常大小、20px 圆角、`#FFFFFF` 背景与 0.94 背景透明度。列数固定尊重用户的 1 / 2 / 3 选择；大小档位同步缩放卡片、字号、间距与圆角。背景色复用同一套 color input、HEX 与 EyeDropper 能力，但与弹幕调色板相互独立。
+全屏浮层总开关默认关闭；来源列表中的全部可用物理表与 QQ 默认勾选，但勾选不代表功能已开启。普通表格弹窗默认在上方 25% 区域居中、并发 1、停留 4 秒、交接 0.2 秒、2 列、紧凑大小、20px 圆角、`#FFFFFF` 背景与 0.94 背景透明度。列数固定尊重用户的 1 / 2 / 3 选择；大小档位同步缩放卡片、字号、间距与圆角。背景色复用同一套 color input、HEX 与 EyeDropper 能力，但与弹幕调色板相互独立。
+
+正文卡片出口：
+
+- [`renderers/inline-table-popup.js`](../modules/fullscreen-overlay/renderers/inline-table-popup.js) 与浮窗复用 [`table-popup-card.js`](../modules/fullscreen-overlay/renderers/table-popup-card.js) 的纯文本卡片构造器，不引入公开注册 API、点击动作或玉子美化集成。
+- [`integration/inline-message-bridge.js`](../modules/integration/inline-message-bridge.js) 从 fresh context 定位最新可见 AI 楼（包括开场白），在 `.mes_text` 后、媒体和文件区之前插入 `.yuzi-phone-inline-table-popup-container`；找不到目标时不回退用户楼或 `body`。测试返回 `no-ai-message` 提示。
+- 容器宽度 100%、单列、零间距；每张卡片保留完整圆角、内部字段布局，不加来源标题，不限条数，无入场或退场动画。不修改消息正文或 `extra`，刷新与重开聊天不恢复。
+- 严格来源顺序不变：本批第一个正文来源替换旧容器，该来源全部卡片一次加入；同批后续正文来源连续追加。排队项携带批次与失效版本，用户发送、目标楼重绘/更新/滑动/删除、生成开始、聊天切换、来源绑定改变、清空、关闭和销毁均使旧正文内容失效；已排队旧内容不能复活。
+- 正文模型只保存字段列数、大小档位、圆角、背景色和背景透明度。设置规范化在首次缺少正文配置时从当前浮窗复制五项，此后独立保存，既不复制浮窗计时/位置参数，也不联动后续更改。
+- 所有节点与样式使用玉子独占命名空间，只移除持有的自有容器，不选择或删除 `.acu-*`，不覆盖正文 HTML，不依赖参考前端上下顺序。此隔离不能替外部扩展保证任意全局 CSS 或整楼 DOM 重写都兼容。
+- “清空当前内容”清理浮层与正文容器，不修改用户设置。设置页仍叫“弹幕设置”，模型编辑下拉只切换参数面板，不篡改来源绑定。
 
 ### 6.4 Beautify 模板系统
 

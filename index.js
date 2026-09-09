@@ -11,6 +11,7 @@
 
 import { onPhoneActivated, onPhoneDeactivated, destroyPhoneRuntime } from './modules/phone-core/lifecycle.js';
 import {
+    initializePhoneSettings,
     getPhoneSettings,
     resetPhoneSettingsToDefault,
     migrateLegacyPhoneSettings,
@@ -479,6 +480,7 @@ async function doInitialize() {
         return;
     }
 
+    await initializePhoneSettings();
     await initializeQQV2Runtime();
 
     const { settings } = await initializePhoneBootstrapUi({

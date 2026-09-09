@@ -233,13 +233,13 @@ async function testDefaultSourceCatalogKeepsDisplayNameAndDefaultLiveSelection()
     );
     assert.deepStrictEqual(
         viewModel.tables.find(table => table.sheetKey === 'sheet_live')?.modelIds,
-        ['scrolling-barrage', 'table-popup'],
+        ['scrolling-barrage', 'table-popup', 'inline-table-popup'],
         '直播表必须可独立选择弹幕或普通表格弹窗',
     );
     assert.deepStrictEqual(
         viewModel.tables.find(table => table.sheetKey === 'sheet_diary')?.modelIds,
-        ['table-popup'],
-        '普通物理表第一版只提供普通表格弹窗模型',
+        ['table-popup', 'inline-table-popup'],
+        '普通物理表可选浮窗或正文卡片',
     );
     const rebound = await service.saveConfig({
         ...viewModel.config,
@@ -386,7 +386,7 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
     assert.match(html, /data-fullscreen-overlay-move="down"/u);
     assert.match(html, /class="phone-settings-select"/u);
     assert.match(html, /data-fullscreen-overlay-source-model="sheet_live"/u);
-    assert.match(html, /value="table-popup">普通表格弹窗<\/option>/u);
+    assert.match(html, /value="table-popup">普通表格浮窗<\/option>/u);
     assert.doesNotMatch(
         html.match(/id="phone-fullscreen-overlay-playback-model"[^>]*>/u)?.[0] || '',
         /\bdisabled\b/u,

@@ -11,6 +11,7 @@ export function createSettingsPersistenceTools(options = {}) {
         extensionName,
         clone,
         showNotification,
+        onSettingChanged,
     } = options;
 
     const SAVE_SETTINGS_DEBOUNCE_CONFIG = {
@@ -154,6 +155,7 @@ export function createSettingsPersistenceTools(options = {}) {
             }
 
             settings[key] = result.value;
+            onSettingChanged?.(key);
             schedulePersistSettings(ctx);
             return true;
         } catch (error) {
@@ -211,6 +213,7 @@ export function createSettingsPersistenceTools(options = {}) {
                     });
                 }
                 settings[key] = result.value;
+                onSettingChanged?.(key);
             });
 
             if (hasInvalid) {
@@ -242,6 +245,7 @@ export function createSettingsPersistenceTools(options = {}) {
             }
 
             ctx.extensionSettings[extensionName] = clone(defaultSettings);
+            onSettingChanged?.();
             schedulePersistSettings(ctx);
             return true;
         } catch (error) {

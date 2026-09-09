@@ -10,6 +10,7 @@ const ALLOWED_STORAGE_FILES = new Set([
 ]);
 
 const ALLOWED_INDEXED_DB_FILES = new Set([
+    'modules/settings/appearance-asset-repository.js',
     'modules/cache-manager.js',
     'modules/settings-app/services/appearance-settings/appearance-pack-repository.js',
     'modules/content-presets/repository.js',
@@ -193,9 +194,9 @@ function main() {
         && !has(contentPresetRepository, 'yuzi-phone-appearance-packs'));
     check(results, REQUIRED_APPEARANCE_PACK_REPOSITORY, '外观包仓库定义数量、单包和总容量限制', has(appearancePackRepository, 'MAX_PACK_COUNT = 20') && has(appearancePackRepository, 'MAX_SINGLE_PACK_BYTES = 20 * 1024 * 1024') && has(appearancePackRepository, 'MAX_TOTAL_PACK_BYTES = 100 * 1024 * 1024'));
     check(results, REQUIRED_CACHE_FILES.backgroundService, '背景图片原始设置走 settings', has(backgroundService, "savePhoneSetting('backgroundImage', dataUrl);"));
-    check(results, REQUIRED_CACHE_FILES.backgroundService, '背景图片大对象预览走 cache-manager', has(backgroundService, 'cacheSet(CACHE_STORES.images, cachedKey, dataUrl'));
+    check(results, REQUIRED_CACHE_FILES.backgroundService, '背景上传不再向缓存复制图片', !has(backgroundService, 'cacheSet(') && !has(backgroundService, 'cacheGet('));
     check(results, REQUIRED_CACHE_FILES.iconUploadService, '应用图标原始设置走 settings', has(iconUploadService, 'savePhoneSettingsPatch(nextState);'));
-    check(results, REQUIRED_CACHE_FILES.iconUploadService, '应用图标大对象预览走 cache-manager', has(iconUploadService, 'cacheSet(CACHE_STORES.images, `icon:${key}`, dataUrl'));
+    check(results, REQUIRED_CACHE_FILES.iconUploadService, '图标上传不再向缓存复制图片', !has(iconUploadService, 'cacheSet('));
 
     const failed = results.filter(item => !item.ok);
     if (failed.length > 0) {

@@ -12,11 +12,13 @@ import {
 import {
     SCROLLING_BARRAGE_MODEL_ID,
     TABLE_POPUP_MODEL_ID,
+    INLINE_TABLE_POPUP_MODEL_ID,
 } from '../../../fullscreen-overlay/settings.js';
 
 const MODEL_LABELS = Object.freeze({
     [SCROLLING_BARRAGE_MODEL_ID]: '横向滚动弹幕',
-    [TABLE_POPUP_MODEL_ID]: '普通表格弹窗',
+    [TABLE_POPUP_MODEL_ID]: '普通表格浮窗',
+    [INLINE_TABLE_POPUP_MODEL_ID]: '插入正文',
 });
 
 function asArray(value) {
@@ -230,13 +232,14 @@ function buildBarrageModelHtml(barrage) {
     `;
 }
 
-function buildPopupModelHtml(popup) {
+function buildPopupModelHtml(popup, inline = false) {
     const areaPercent = [25, 50, 75, 100].includes(Number(popup.areaPercent))
         ? Number(popup.areaPercent)
         : 75;
     const placementMode = popup.placementMode === 'center' ? 'center' : 'random';
     const centered = placementMode === 'center';
     return `
+        ${inline ? '' : `
         <label class="phone-settings-field-inline" for="phone-fullscreen-overlay-popup-placement">
             <span>弹窗位置</span>
             <select id="phone-fullscreen-overlay-popup-placement" class="phone-settings-select">
@@ -253,7 +256,9 @@ function buildPopupModelHtml(popup) {
                 <option value="100"${selected(areaPercent === 100)}>全屏</option>
             </select>
         </label>
+        `}
         <div class="phone-fullscreen-overlay-parameter-list">
+            ${inline ? '' : `
             ${buildParameterField({
                 id: 'phone-fullscreen-overlay-popup-max-concurrent',
                 label: '同时显示',
@@ -287,6 +292,7 @@ function buildPopupModelHtml(popup) {
                 suffix: '秒',
                 description: '每张弹窗从淡入到淡出的显示时长（1–15 秒）。',
             })}
+            `}
             ${buildSelectParameterField({
                 id: 'phone-fullscreen-overlay-popup-column-count',
                 label: '网格列数',
@@ -355,24 +361,20 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
         && typeof config.models[SCROLLING_BARRAGE_MODEL_ID] === 'object'
         ? config.models[SCROLLING_BARRAGE_MODEL_ID]
         : {};
-    const popup = config?.models?.[TABLE_POPUP_MODEL_ID]
-        && typeof config.models[TABLE_POPUP_MODEL_ID] === 'object'
-        ? config.models[TABLE_POPUP_MODEL_ID]
-        : {};
     const tables = asArray(viewModel.tables);
     const eyeDropperSupported = viewModel.eyeDropperSupported === true;
     const enabledCount = tables.filter(table => table?.enabled === true).length;
     const availableCount = tables.filter(table => table?.availability === 'available').length;
     const palette = asArray(barrage.palette);
-    const selectedModelId = viewModel.selectedModelId === TABLE_POPUP_MODEL_ID
-        ? TABLE_POPUP_MODEL_ID
-        : SCROLLING_BARRAGE_MODEL_ID;
-    const editingPopup = selectedModelId === TABLE_POPUP_MODEL_ID;
+    const selectedModelId = [TABLE_POPUP_MODEL_ID, INLINE_TABLE_POPUP_MODEL_ID].includes(viewModel.selectedModelId)
+        ? viewModel.selectedModelId : SCROLLING_BARRAGE_MODEL_ID;
+    const editingPopup = selectedModelId !== SCROLLING_BARRAGE_MODEL_ID;
+    const popup = config.models?.[selectedModelId] || {};
 
     const heroHtml = buildSettingsHeroHtml({
-        eyebrow: '全屏临时视觉内容',
+        eyebrow: '弹幕、浮窗与正文卡片',
         title: '弹幕设置',
-        description: '按表格顺序调度透明浮层内容；每张表可独立选择滚动弹幕或普通表格弹窗。',
+        description: '按来源顺序展示内容；直播表支持弹幕；物理表可选浮窗或插入正文，QQ 仅浮窗。',
         chips: [
             { text: config.enabled === true ? '自动播放已开启' : '自动播放已关闭', tone: config.enabled === true ? 'info' : 'neutral' },
             { text: `${enabledCount}/${availableCount} 个可用来源`, tone: 'soft' },
@@ -392,11 +394,11 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
         bodyHtml = `
             ${buildSettingsSectionHtml({
                 title: '运行状态',
-                desc: '关闭主开关不会影响测试按钮；小手机窗口关闭后，已启用的后台监听仍继续工作。',
+                desc: '关闭总开关会停止全部内容、监听和测试；仅关闭小手机窗口不会停止已开启的功能。',
                 bodyHtml: `
                     <label class="phone-fullscreen-overlay-master-switch" for="phone-fullscreen-overlay-enabled">
                         <span>
-                            <strong>启用全屏浮层</strong>
+                            <strong>启用弹幕与卡片</strong>
                             <small>只响应已适配、已勾选且真正发生变化的表格来源。</small>
                         </span>
                         <input type="checkbox"
@@ -408,7 +410,7 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
 
             ${buildSettingsSectionHtml({
                 title: '表格来源与顺序',
-                desc: '全部物理表都可使用普通表格弹窗；直播表还可保留滚动弹幕。多个来源严格按此顺序依次交接。',
+                desc: '物理表可选浮窗或插入正文，直播表还可选滚动弹幕，QQ 仅浮窗。多个来源严格按此顺序依次交接。',
                 bodyHtml: `<div class="phone-fullscreen-overlay-source-list">${sourceRows}</div>`,
             })}
 
@@ -420,11 +422,12 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
                         <span>播放模型</span>
                         <select id="phone-fullscreen-overlay-playback-model" class="phone-settings-select">
                             <option value="${SCROLLING_BARRAGE_MODEL_ID}"${selected(selectedModelId === SCROLLING_BARRAGE_MODEL_ID)}>横向滚动弹幕</option>
-                            <option value="${TABLE_POPUP_MODEL_ID}"${selected(selectedModelId === TABLE_POPUP_MODEL_ID)}>普通表格弹窗</option>
+                            <option value="${TABLE_POPUP_MODEL_ID}"${selected(selectedModelId === TABLE_POPUP_MODEL_ID)}>普通表格浮窗</option>
+                            <option value="${INLINE_TABLE_POPUP_MODEL_ID}"${selected(selectedModelId === INLINE_TABLE_POPUP_MODEL_ID)}>插入正文</option>
                         </select>
                     </label>
                     ${editingPopup
-                        ? buildPopupModelHtml(popup)
+                        ? buildPopupModelHtml(popup, selectedModelId === INLINE_TABLE_POPUP_MODEL_ID)
                         : buildBarrageModelHtml(barrage)}
                 `,
             })}
@@ -467,13 +470,13 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
 
             ${buildSettingsSectionHtml({
                 title: '立即操作',
-                desc: '测试会读取所有已勾选来源；弹幕读取完整弹幕串，弹窗每张表只读取第一条可展示行。主开关关闭时也可测试。',
+                desc: '测试会读取所有已勾选来源；弹幕读取完整弹幕串，弹窗每张表只读取第一条可展示行。总开关关闭时完全停止，不能测试。',
                 bodyHtml: `
                     <div class="phone-fullscreen-overlay-action-grid">
                         <button type="button" class="phone-settings-btn phone-fullscreen-overlay-primary-action"
-                            id="phone-fullscreen-overlay-test">测试已勾选来源</button>
+                            id="phone-fullscreen-overlay-test"${disabled(config.enabled !== true)}>测试已勾选来源</button>
                         <button type="button" class="phone-settings-btn phone-settings-btn-danger"
-                            id="phone-fullscreen-overlay-clear">清空当前浮层</button>
+                            id="phone-fullscreen-overlay-clear">清空当前内容</button>
                     </div>
                 `,
             })}

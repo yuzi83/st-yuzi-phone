@@ -16,7 +16,7 @@
 - `16-fullscreen-overlay.css`：全屏浮层运行时与设置页聚合层；必须位于现有 active layers 最后
 
 ## fullscreen-overlay 子目录
-- `fullscreen-overlay/00-runtime.css`：宿主 `body` 下 Yuzi 全屏透明层与滚动弹幕动画
+- `fullscreen-overlay/00-runtime.css`：宿主 `body` 下 Yuzi 全屏透明层与滚动弹幕动画，以及正文中的 `.yuzi-phone-inline-table-popup-container`（满宽、零间距、无动画）
 - `fullscreen-overlay/01-settings.css`：小手机“弹幕设置”页面；复用设置页主题变量和控件表面，不扩大宿主选择器
 
 聚合顺序固定为 `00-runtime.css` → `01-settings.css`。运行时根节点、自定义属性与动画名称使用 `yuzi-phone-fullscreen-overlay-*` 命名空间；设置页只在 `.phone-fullscreen-overlay-settings-page` 作用域内补充布局，并继续消费共享 `--yuzi-settings-*` 颜色变量，避免 SillyTavern 深色主题把下拉框或输入框渲染成不可读的同色前景/背景。

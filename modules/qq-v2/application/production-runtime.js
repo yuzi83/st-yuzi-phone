@@ -2425,10 +2425,27 @@ export function createQQV2ProductionRuntime(options = {}) {
             await notifySubscribers(normalizedScopeId);
             return result;
         },
+        async editMessage({ scopeId, conversationId, messageId, content, userName = getUserName(), storyTime = getStoryTime() }) {
+            const scopeSession = captureReadyScopeSession(scopeId);
+            const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
+            assertReadyScopeSession(scopeSession);
+            assertConversationWritable(normalizedScopeId, conversationId);
+            await getConversation(normalizedScopeId, conversationId);
+            assertReadyScopeSession(scopeSession);
+            await requestService.cancelConversation({ scopeId: normalizedScopeId, conversationId });
+            assertReadyScopeSession(scopeSession);
+            const result = await repository.editMessage(normalizedScopeId, conversationId, messageId, content, { scopeSession });
+            await requestService.reconcileConversation?.({ scopeId: normalizedScopeId, conversationId });
+            await syncConversations({ scopeId: normalizedScopeId, scopeSession, conversationIds: [conversationId], userName: asText(userName, 256), storyTime: asText(storyTime, 128) });
+            assertReadyScopeSession(scopeSession);
+            await notifySubscribers(normalizedScopeId);
+            return result;
+        },
         async deleteMessages({
             scopeId,
             conversationId,
             messageIds,
+            recallMessageId,
             userName = getUserName(),
             storyTime = getStoryTime(),
         }) {
@@ -2444,7 +2461,7 @@ export function createQQV2ProductionRuntime(options = {}) {
                 normalizedScopeId,
                 conversationId,
                 messageIds,
-                { scopeSession },
+                { scopeSession, recallMessageId },
             );
             await revokeMissingMediaRenderLeases(normalizedScopeId);
             await deleteStoredImages(result.releasedGeneratedImagePaths);

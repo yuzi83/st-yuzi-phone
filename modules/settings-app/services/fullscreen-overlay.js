@@ -358,6 +358,7 @@ export function createFullscreenOverlaySettingsService(options = {}) {
 
     async function testSelectedSources(config) {
         const normalized = normalizeAgainstCurrentCatalog(config);
+        if (!normalized.enabled) return { ok: false, code: 'disabled', config: clone(normalized) };
         const sourceSheetKeys = normalized.sourceOrder.filter(
             sheetKey => normalized.sourceEnabledBySheetKey[sheetKey] === true,
         );
@@ -379,7 +380,7 @@ export function createFullscreenOverlaySettingsService(options = {}) {
             });
             return {
                 ok: result?.ok !== false,
-                code: asId(result?.code),
+                code: asId(result?.code || result?.reason),
                 config: clone(normalized),
             };
         } catch {

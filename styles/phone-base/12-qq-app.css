@@ -2748,7 +2748,7 @@
 }
 
 .yuzi-qq-image-library-view:not(.is-selection-mode) .yuzi-qq-image-library-delete-action {
-    display: none;
+    display: inline-grid;
 }
 
 .yuzi-qq-image-library-view.is-selection-mode .yuzi-qq-image-library-pack-action {
@@ -4187,4 +4187,60 @@
 
 .yuzi-qq-quote-preview {
     inline-size: 100%;
+}
+
+/* Message long-press actions stay inside the phone, beside the target bubble. */
+.yuzi-qq-app .yuzi-qq-message-quick-menu {
+    position: absolute;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: calc(var(--yuzi-qq-touch-size) * 2 + var(--yuzi-qq-inline-gap) * 3);
+    max-width: calc(100% - var(--yuzi-qq-inline-gap) * 2);
+    padding: var(--yuzi-qq-inline-gap);
+    gap: var(--yuzi-qq-inline-gap);
+    border-radius: var(--yuzi-qq-dialog-menu-radius);
+    background: color-mix(in srgb, var(--yuzi-qq-dark-surface) 70%, var(--yuzi-qq-on-accent));
+    color: var(--yuzi-qq-on-accent);
+    box-shadow: var(--yuzi-qq-shadow-dialog);
+}
+
+.yuzi-qq-app .yuzi-qq-message-quick-action {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: var(--yuzi-qq-touch-size);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--yuzi-qq-inline-gap) / 2);
+    padding: calc(var(--yuzi-qq-inline-gap) / 2);
+    border-radius: var(--yuzi-qq-inline-gap);
+    background: transparent;
+    color: inherit;
+    font-size: var(--yuzi-qq-caption-size);
+}
+
+.yuzi-qq-app .yuzi-qq-message-quick-action > i {
+    font-size: calc(var(--yuzi-qq-tool-icon-size) * .8);
+}
+
+.yuzi-qq-app .yuzi-qq-message-quick-action:hover,
+.yuzi-qq-app .yuzi-qq-message-quick-action:focus-visible {
+    background: color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.yuzi-qq-app .yuzi-qq-message-quick-menu::before {
+    content: '';
+    position: absolute;
+    top: calc(var(--yuzi-qq-inline-gap) / -2);
+    left: calc(var(--yuzi-qq-message-menu-arrow-left, 50%) - var(--yuzi-qq-inline-gap) / 2);
+    width: var(--yuzi-qq-inline-gap);
+    height: var(--yuzi-qq-inline-gap);
+    background: inherit;
+    transform: rotate(45deg);
+}
+
+.yuzi-qq-app .yuzi-qq-message-quick-menu.is-above::before {
+    top: auto;
+    bottom: calc(var(--yuzi-qq-inline-gap) / -2);
 }

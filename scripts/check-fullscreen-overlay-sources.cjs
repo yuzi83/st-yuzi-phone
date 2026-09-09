@@ -371,7 +371,7 @@ async function checkLiveTableSourceAdapterContract() {
 
     assert.equal(adapter.id, 'live-table');
     assert.equal(adapter.modelId, 'scrolling-barrage');
-    assert.deepEqual(adapter.modelIds, ['scrolling-barrage', 'table-popup']);
+    assert.deepEqual(adapter.modelIds, ['scrolling-barrage', 'table-popup', 'inline-table-popup']);
     assert.equal(adapter.defaultEnabled, true);
     assert.equal(adapter.matches(context), true);
     assert.equal(adapter.matches({ ...context, tableName: '直播表副本' }), false);
@@ -631,7 +631,7 @@ async function checkGenericTableSourceAdapterContract() {
 
     assert.equal(adapter.id, 'generic-table');
     assert.equal(adapter.modelId, 'table-popup');
-    assert.deepEqual(adapter.modelIds, ['table-popup']);
+    assert.deepEqual(adapter.modelIds, ['table-popup', 'inline-table-popup']);
     assert.equal(adapter.defaultEnabled, true);
     assert.equal(adapter.matches(context), true);
 

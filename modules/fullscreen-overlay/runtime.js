@@ -1,3 +1,5 @@
+import { INLINE_TABLE_POPUP_MODEL_ID } from './settings.js';
+
 function isRecord(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -184,6 +186,10 @@ export function createFullscreenOverlayRuntime(deps = {}) {
             settingKey,
         ),
     );
+    let inlineEpoch = 0;
+    let inlineGroupKey = 0;
+    let inlineUnsubscribe = null;
+    let componentVersion = 0;
     let started = false;
     let suspended = false;
     let generation = 0;
@@ -212,6 +218,11 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     function resetReviewPlaybackState() {
         activeReviewPlaybackKey = '';
         scheduledReviewSheetKeys.clear();
+    }
+
+    function invalidateInline() {
+        inlineEpoch++;
+        safeCall(() => getRenderer(INLINE_TABLE_POPUP_MODEL_ID)?.clear?.(), undefined, onError, { action: 'inline.clear' });
     }
 
     function getRenderer(rendererId) {
@@ -251,11 +262,13 @@ export function createFullscreenOverlayRuntime(deps = {}) {
 
     function refreshSettings(value) {
         const wasEnabled = settings.enabled === true;
+        const previousBindings = JSON.stringify([settings.sourceModelBySheetKey, settings.sourceEnabledBySheetKey]);
         const rawValue = arguments.length > 0
             ? value
             : safeCall(deps.getSettings, {}, onError, { action: 'settings.read' });
         settings = normalizeSettings(resolveOverlaySettingsValue(rawValue, settingKey));
 
+        if (previousBindings !== JSON.stringify([settings.sourceModelBySheetKey, settings.sourceEnabledBySheetKey])) invalidateInline();
         for (const renderer of rendererRegistry.values()) {
             safeCall(
                 typeof renderer?.refreshSettings === 'function'
@@ -460,7 +473,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
 
         const rendererResult = attemptCall(
             () => String(
-                currentSettings?.sourceModelBySheetKey?.[entry.sheetKey]
+                (Array.isArray(entry.modelIds) ? entry.modelId : currentSettings?.sourceModelBySheetKey?.[entry.sheetKey])
                 || entry.modelId
                 || adapter?.modelId
                 || '',
@@ -511,6 +524,8 @@ export function createFullscreenOverlayRuntime(deps = {}) {
             sheetKey: entry.sheetKey,
             tableName: context.tableName,
             rendererId,
+            inlineEpoch,
+            inlineTarget: rendererId === INLINE_TABLE_POPUP_MODEL_ID ? deps.getInlineTarget?.() : undefined,
             items: [...eventsResult.items],
             modelSettings,
             settings: modelSettings,
@@ -555,6 +570,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     }
 
     function subscribeExternalSources() {
+        const version = componentVersion;
         const adapters = safeCall(
             () => deps.registry?.list?.(),
             [],
@@ -564,7 +580,8 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         for (const adapter of Array.isArray(adapters) ? adapters : []) {
             if (typeof adapter?.subscribe !== 'function') continue;
             const result = attemptCall(
-                () => adapter.subscribe(events => enqueueExternalSourceEvents(adapter.id, events)),
+                () => adapter.subscribe(events => version === componentVersion
+                    ? enqueueExternalSourceEvents(adapter.id, events) : false),
                 onError,
                 {
                     action: 'source-subscription.start',
@@ -836,9 +853,11 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     }
 
     async function replaceScheduledBatches(batches, action) {
+        inlineGroupKey++;
+        const scheduled = (batches || []).map(batch => ({ ...batch, inlineGroupKey }));
         stopScheduledRendererLoops(batches, action);
         try {
-            return await scheduler?.replace?.(batches);
+            return await scheduler?.replace?.(scheduled);
         } catch (error) {
             onError(error, { action });
             return false;
@@ -846,11 +865,12 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     }
 
     async function appendScheduledBatches(batches, action) {
+        const scheduled = (batches || []).map(batch => ({ ...batch, inlineGroupKey }));
         try {
             if (typeof scheduler?.append === 'function') {
-                return await scheduler.append(batches);
+                return await scheduler.append(scheduled);
             }
-            return await scheduler?.replace?.(batches);
+            return await scheduler?.replace?.(scheduled);
         } catch (error) {
             onError(error, { action });
             return false;
@@ -858,7 +878,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     }
 
     async function handleStableSnapshot(snapshot, metadata = {}) {
-        if (!started || suspended) return false;
+        if (!started || suspended || settings.enabled !== true) return false;
         const stableGeneration = generation;
         const normalizedMetadata = isRecord(metadata) ? metadata : {};
         const hasReviewChangedSheetKeys = Object.prototype.hasOwnProperty.call(
@@ -978,6 +998,11 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     }
 
     function createComponents() {
+        const version = ++componentVersion;
+        Promise.resolve(deps.subscribeInlineInvalidation?.(invalidateInline)).then(dispose => {
+            if (version !== componentVersion) dispose?.();
+            else inlineUnsubscribe = dispose;
+        }).catch(error => onError(error, { action: 'inline.subscribe' }));
         layerRuntime = safeCall(
             () => deps.createLayerRuntime?.({
                 getSettings: () => settings,
@@ -990,6 +1015,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         rendererRegistry = normalizeRendererRegistry(safeCall(
             () => deps.createRendererRegistry?.({
                 layerRuntime,
+                getInlineEpoch: () => inlineEpoch,
                 getSettings: () => settings,
                 onError,
             }),
@@ -1240,6 +1266,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
 
     function activateAutomaticRuntime(reason) {
         if (!started || settings.enabled !== true) return false;
+        if (!scheduler) createComponents();
         resetReviewPlaybackState();
         awaitingExternalChatResume = false;
         suspended = true;
@@ -1254,27 +1281,9 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     }
 
     function deactivateAutomaticRuntime(reason) {
-        clearCoordinatorRetryTimer();
-        clearBaselineSyncRetryTimer();
-        generation += 1;
-        suspended = false;
-        awaitingExternalChatResume = false;
-        coordinatorBaselineReady = false;
-        baselinePromise = null;
-        sourceSignatures.clear();
-        clearBatchConfirmations();
-        resetReviewPlaybackState();
-        coordinatorRetryAttempt = 0;
-        baselineSyncRetryAttempt = 0;
-        stopAllRendererLoops('settings-disabled');
-        safeCall(
-            () => coordinator?.stop?.(),
-            undefined,
-            onError,
-            { action: 'coordinator.stop-disabled', reason },
-        );
-        coordinatorStarted = false;
-        void replaceScheduledBatches([], 'scheduler.disable-auto');
+        stop(reason);
+        // 扩展仍启用，但功能没有任何运行资源；设置变更可以重新启动它。
+        started = true;
         return true;
     }
 
@@ -1304,7 +1313,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         sourceSignatures.clear();
         clearBatchConfirmations();
         resetReviewPlaybackState();
-        createComponents();
+        if (settings.enabled === true) createComponents();
 
         awaitingExternalChatResume = false;
         coordinatorBaselineReady = false;
@@ -1318,6 +1327,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
 
     function suspendForChatChange(chatId = null) {
         if (!started) return false;
+        invalidateInline();
         stopAllRendererLoops('chat-change-suspend');
         resetReviewPlaybackState();
         if (settings.enabled !== true) {
@@ -1363,11 +1373,15 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         }
 
         refreshSettings();
+        if (settings.enabled !== true) {
+            return { ok: false, reason: 'disabled', sourceCount: 0, itemCount: 0 };
+        }
+        const testGeneration = generation;
         try {
             const currentSnapshot = arguments.length > 0
                 ? await snapshot
                 : await deps.readSnapshot?.();
-            if (!started) {
+            if (!started || settings.enabled !== true || generation !== testGeneration) {
                 return {
                     ok: false,
                     reason: 'stopped',
@@ -1379,6 +1393,9 @@ export function createFullscreenOverlayRuntime(deps = {}) {
                 changedOnly: false,
                 sourceEventsBySheetKey: await readTestSourceEvents(currentSnapshot),
             });
+            if (!started || settings.enabled !== true || generation !== testGeneration) {
+                return { ok: false, reason: 'stopped', sourceCount: 0, itemCount: 0 };
+            }
             if (batches.length === 0) {
                 return {
                     ok: false,
@@ -1388,6 +1405,10 @@ export function createFullscreenOverlayRuntime(deps = {}) {
                 };
             }
 
+            if (deps.getInlineTarget && batches.some(batch => batch.rendererId === INLINE_TABLE_POPUP_MODEL_ID)
+                && !deps.getInlineTarget()) {
+                return { ok: false, reason: 'no-ai-message', sourceCount: 0, itemCount: 0 };
+            }
             const accepted = await replaceScheduledBatches(
                 batches,
                 'scheduler.test-selected',
@@ -1409,6 +1430,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     }
 
     function clear() {
+        invalidateInline();
         stopAllRendererLoops('clear');
         safeCall(
             () => scheduler?.clear?.(),
@@ -1426,6 +1448,10 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     }
 
     function stop(reason = 'disabled') {
+        componentVersion++;
+        invalidateInline();
+        safeCall(() => inlineUnsubscribe?.(), undefined, onError, { action: 'inline.unsubscribe' });
+        inlineUnsubscribe = null;
         clearCoordinatorRetryTimer();
         clearBaselineSyncRetryTimer();
         stopExternalSources();
@@ -1465,6 +1491,9 @@ export function createFullscreenOverlayRuntime(deps = {}) {
         baselineSyncRetryAttempt = 0;
         coordinator = null;
         scheduler = null;
+        for (const renderer of rendererRegistry.values()) {
+            safeCall(() => renderer?.dispose?.(), undefined, onError, { action: 'renderer.dispose' });
+        }
         rendererRegistry = new Map();
         layerRuntime = null;
         return true;

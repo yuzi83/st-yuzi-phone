@@ -1659,11 +1659,42 @@ export function createQQV2Repository(options = {}) {
                 };
             });
         },
+        async editMessage(scopeId, conversationId, messageId, content, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
+                const scope = getScope(state, scopeId, false);
+                getConversation(scope, conversationId);
+                const message = scope.messages[asText(messageId, 256)];
+                if (!message || message.conversationId !== conversationId) {
+                    throw new QQV2DomainError('QQ 消息不存在', 'message_not_found');
+                }
+                if (message.senderType === 'system' || !['text', 'voice', 'image', 'video', 'sticker', 'transfer'].includes(message.type)) {
+                    throw new QQV2DomainError('此消息不能编辑', 'message_not_editable');
+                }
+                if (typeof content !== 'string' || (message.type !== 'transfer' && !content.trim())) {
+                    throw new QQV2DomainError('消息内容不能为空', 'message_content_required');
+                }
+                if (message.type === 'transfer') message.transfer.note = content;
+                else message.content = content;
+                return { message: messageWithQuote(scope, message) };
+            });
+        },
         async deleteMessages(scopeId, conversationId, messageIds, operationOptions = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
-                const ids = [...new Set(Array.isArray(messageIds) ? messageIds.map((id) => asText(id, 256)).filter(Boolean) : [])];
+                let ids = [...new Set(Array.isArray(messageIds) ? messageIds.map((id) => asText(id, 256)).filter(Boolean) : [])];
+                let recalledMessage = null;
+                if (operationOptions.recallMessageId) {
+                    const all = Object.values(scope.messages)
+                        .filter((message) => message.conversationId === conversationId)
+                        .sort((a, b) => a.sequence - b.sequence);
+                    const target = all.find((message) => message.messageId === operationOptions.recallMessageId);
+                    if (!target || target.senderType !== 'self' || target.type === 'system') {
+                        throw new QQV2DomainError('只能撤回当前会话中存在的用户消息', 'message_not_recallable');
+                    }
+                    recalledMessage = copy(target);
+                    ids = all.filter((message) => message.sequence >= target.sequence).map((message) => message.messageId);
+                }
                 const deletedMessages = ids.map((messageId) => {
                     const message = scope.messages[messageId];
                     return message?.conversationId === conversationId ? message : null;
@@ -1686,6 +1717,7 @@ export function createQQV2Repository(options = {}) {
                 releasedAssetIds.forEach((assetId) => removeAssetIfUnreferenced(scope, assetId));
                 return {
                     deletedMessageIds,
+                    ...(recalledMessage ? { recalledMessage } : {}),
                     releasedGeneratedImagePaths: generatedImagePaths
                         .filter((path) => !generatedImageStillReferenced(state, path)),
                 };

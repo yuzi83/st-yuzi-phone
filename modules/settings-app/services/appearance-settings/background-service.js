@@ -1,5 +1,5 @@
 import { getPhoneSettings, savePhoneSetting } from '../../../settings.js';
-import { cacheGet, cacheRemove, cacheSet, CACHE_STORES } from '../../../cache-manager.js';
+import { cacheRemove, CACHE_STORES } from '../../../cache-manager.js';
 import { escapeHtmlAttr } from '../../../utils/dom-escape.js';
 import { Logger } from '../../../error-handler.js';
 import { STORAGE_BUDGETS } from '../../constants.js';
@@ -33,13 +33,6 @@ export function setupBgUpload(container, options = {}) {
 
     if (phoneSettings.backgroundImage) {
         preview.innerHTML = `<img src="${escapeHtmlAttr(phoneSettings.backgroundImage)}" class="phone-bg-thumb">`;
-    } else {
-        cacheGet(CACHE_STORES.images, cachedKey).then((cached) => {
-            if (disposed) return;
-            if (typeof cached === 'string' && cached) {
-                preview.innerHTML = `<img src="${escapeHtmlAttr(cached)}" class="phone-bg-thumb">`;
-            }
-        }).catch(() => {});
     }
 
     const uploadBtn = container.querySelector('#phone-upload-bg');
@@ -58,7 +51,7 @@ export function setupBgUpload(container, options = {}) {
             }
 
             preview.innerHTML = `<img src="${escapeHtmlAttr(dataUrl)}" class="phone-bg-thumb">`;
-            cacheSet(CACHE_STORES.images, cachedKey, dataUrl, 1000 * 60 * 60 * 24 * 30).catch(() => {});
+            cacheRemove(CACHE_STORES.images, cachedKey).catch(() => {});
             showToast(container, '背景已更新');
         }, {
             runtime,

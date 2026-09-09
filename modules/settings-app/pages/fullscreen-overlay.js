@@ -7,6 +7,7 @@ import {
 import {
     SCROLLING_BARRAGE_MODEL_ID,
     TABLE_POPUP_MODEL_ID,
+    INLINE_TABLE_POPUP_MODEL_ID,
 } from '../../fullscreen-overlay/settings.js';
 
 function clone(value) {
@@ -62,13 +63,15 @@ function getBarrageModel(config) {
     return config?.models?.[SCROLLING_BARRAGE_MODEL_ID] || {};
 }
 
-function getPopupModel(config) {
-    return config?.models?.[TABLE_POPUP_MODEL_ID] || {};
+function getPopupModel(config, modelId = TABLE_POPUP_MODEL_ID) {
+    return config?.models?.[modelId] || {};
 }
 
 function getActionMessage(code, fallback) {
     const messages = {
         no_enabled_sources: '请先勾选至少一个可用表格来源。',
+        disabled: '请先开启总开关再测试。',
+        'no-ai-message': '暂无可插入的 AI 正文。',
         runtime_unavailable: '全屏浮层运行时尚未就绪，请稍后重试。',
         settings_save_failed: '弹幕设置保存失败，请稍后重试。',
         test_failed: '弹幕测试失败，请稍后重试。',
@@ -226,8 +229,8 @@ export function createFullscreenOverlayPage(ctx) {
             '#phone-fullscreen-overlay-playback-model',
         );
         bind(playbackModelInput, 'change', () => {
-            state.selectedModelId = playbackModelInput.value === TABLE_POPUP_MODEL_ID
-                ? TABLE_POPUP_MODEL_ID
+            state.selectedModelId = [TABLE_POPUP_MODEL_ID, INLINE_TABLE_POPUP_MODEL_ID].includes(playbackModelInput.value)
+                ? playbackModelInput.value
                 : SCROLLING_BARRAGE_MODEL_ID;
             requestRerender();
         });
@@ -293,14 +296,16 @@ export function createFullscreenOverlayPage(ctx) {
             TABLE_POPUP_MODEL_ID,
             value => ({ durationMs: value * 1000 }),
         );
+        const cardModelId = state.selectedModelId === INLINE_TABLE_POPUP_MODEL_ID
+            ? INLINE_TABLE_POPUP_MODEL_ID : TABLE_POPUP_MODEL_ID;
         bindNumericSetting(
             '#phone-fullscreen-overlay-popup-radius',
-            TABLE_POPUP_MODEL_ID,
+            cardModelId,
             value => ({ borderRadiusPx: value }),
         );
         bindNumericSetting(
             '#phone-fullscreen-overlay-popup-opacity',
-            TABLE_POPUP_MODEL_ID,
+            cardModelId,
             value => ({ opacity: value }),
         );
 
@@ -308,7 +313,7 @@ export function createFullscreenOverlayPage(ctx) {
             '#phone-fullscreen-overlay-popup-column-count',
         );
         bind(popupColumnInput, 'change', () => {
-            void persist(updateModel(state.config, TABLE_POPUP_MODEL_ID, {
+            void persist(updateModel(state.config, cardModelId, {
                 columnCount: Number(popupColumnInput.value),
             }));
         });
@@ -316,18 +321,18 @@ export function createFullscreenOverlayPage(ctx) {
             '#phone-fullscreen-overlay-popup-size',
         );
         bind(popupSizeInput, 'change', () => {
-            void persist(updateModel(state.config, TABLE_POPUP_MODEL_ID, {
+            void persist(updateModel(state.config, cardModelId, {
                 sizePreset: popupSizeInput.value,
             }));
         });
 
-        colorControl = state.selectedModelId === TABLE_POPUP_MODEL_ID
+        colorControl = state.selectedModelId !== SCROLLING_BARRAGE_MODEL_ID
             ? createFullscreenOverlaySingleColorControl({
                 container: ctx.container,
                 pageRuntime: ctx.pageRuntime,
-                getColor: () => getPopupModel(state.config).backgroundColor,
+                getColor: () => getPopupModel(state.config, cardModelId).backgroundColor,
                 onColorChange: (backgroundColor) => {
-                    void persist(updateModel(state.config, TABLE_POPUP_MODEL_ID, {
+                    void persist(updateModel(state.config, cardModelId, {
                         backgroundColor,
                     }));
                 },
@@ -363,7 +368,7 @@ export function createFullscreenOverlayPage(ctx) {
             const token = generation;
             const result = await service.clearOverlay();
             if (!isCurrent(token)) return;
-            if (result?.ok === true) notify('已清空当前浮层内容。');
+            if (result?.ok === true) notify('已清空当前内容。');
             else notify(getActionMessage(result?.code, '清空浮层失败，请稍后重试。'), true);
         });
     };

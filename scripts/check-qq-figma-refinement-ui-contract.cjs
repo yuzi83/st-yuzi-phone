@@ -225,10 +225,10 @@ function main() {
             && /pointerdown/.test(app)
             && /setTimeout/.test(app)
             && /classList\.toggle\('is-selection-mode'/.test(app)
-            && cssRuleHas(css, '.yuzi-qq-image-library-view:not(.is-selection-mode) .yuzi-qq-image-library-delete-action', 'display: none')
+            && cssRuleHas(css, '.yuzi-qq-image-library-view:not(.is-selection-mode) .yuzi-qq-image-library-delete-action', 'display: inline-grid')
             && cssRuleHas(css, '.yuzi-qq-image-library-view.is-selection-mode .yuzi-qq-image-library-delete-action', 'display: inline-grid')
             && /\u5220\u9664/.test(app),
-        'image libraries must support the four shared stores, long-press multi-select, selection-only trash, and delete wording',
+        'image libraries must support the four shared stores, long-press multi-select, always-visible trash, and delete wording',
     );
     requireContract(
         /avatar[\s\S]*profile-background[\s\S]*chat-background[\s\S]*sticker/.test(imageLibrary)

@@ -22,56 +22,21 @@ function createLegacySpecialTemplate() {
 }
 
 async function runFaultCase(mode) {
-    let timerId = 0;
-    const timers = new Map();
-    const state = { phase: 'write' };
-    const namespaceTarget = {};
-    const throwingStore = new Proxy({}, {
-        get(target, key, receiver) {
-            if (key === 'templates') throw new Error('fixture template store read failure');
-            return Reflect.get(target, key, receiver);
-        },
-    });
-    const verificationNamespace = actualNamespace => new Proxy(actualNamespace, {
-        get(target, key, receiver) {
-            if (mode === 'verify-failed' && key === 'beautifyActiveTemplateIdGeneric') {
-                return 'stale.generic.template';
-            }
-            if (mode === 'unexpected-error' && key === 'yuziPhoneBeautifyTemplates') {
-                return throwingStore;
-            }
-            return Reflect.get(target, key, receiver);
-        },
-    });
-    const extensionSettingsTarget = { YuziPhone: namespaceTarget };
-    const extensionSettings = new Proxy(extensionSettingsTarget, {
-        get(target, key, receiver) {
-            if (key === 'YuziPhone' && state.phase === 'verify') return verificationNamespace(target.YuziPhone);
-            return Reflect.get(target, key, receiver);
-        },
-        set(target, key, value, receiver) {
-            const result = Reflect.set(target, key, value, receiver);
-            if (key === 'YuziPhone' && state.phase === 'write') state.phase = 'verify';
-            return result;
-        },
-    });
-    const ctx = { extensionSettings, saveSettingsDebounced() {} };
-    global.window = {
-        getContext: () => ctx,
-        setTimeout(callback) {
-            const id = ++timerId;
-            timers.set(id, () => {
-                timers.delete(id);
-                callback();
-            });
-            return id;
-        },
-        clearTimeout(id) { timers.delete(id); },
-    };
-
-    const settingsModule = await import(url('modules/settings.js'));
-    Object.assign(namespaceTarget, clone(settingsModule.defaultSettings));
-    const reset = await import(url('modules/phone-beautify-templates/reset.js'));
+    const ctx = { extensionSettings: {}, saveSettingsDebounced() {} };
+    global.window = { getContext: () => ctx, setTimeout: () => 1, clearTimeout() {} };
+    // 故障注入针对运行时读取，不再假定运行时与宿主持久化对象是同一对象。
+    const fs = require('node:fs');
+    let source = fs.readFileSync(path.join(ROOT, 'modules/phone-beautify-templates/reset.js'), 'utf8');
+    source = source.replace(/from '([^']+)'/g, (_match, relative) =>
+        `from '${pathToFileURL(path.resolve(ROOT, 'modules/phone-beautify-templates', relative)).href}'`);
+    if (mode === 'verify-failed') {
+        source = source.replace('getPhoneSettings, savePhoneSettingsPatch', 'getPhoneSettings as getActualPhoneSettings, savePhoneSettingsPatch');
+        source += `\nfunction getPhoneSettings() { return { ...getActualPhoneSettings(), beautifyActiveTemplateIdGeneric: 'stale.generic.template' }; }`;
+    } else {
+        source = source.replace('import { readTemplateStore }', 'import { readTemplateStore as _readTemplateStore }');
+        source += `\nfunction readTemplateStore() { throw new Error('fixture template store read failure'); }`;
+    }
+    const reset = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
     const result = reset.restorePhoneBeautifyTemplatesToBuiltinDefaults();
     assert.equal(result.success, false);
     if (mode === 'verify-failed') {
@@ -157,7 +122,7 @@ async function main() {
     assert.equal(result.success, true);
     assert.equal(result.code, reset.BEAUTIFY_RESTORE_DEFAULTS_OK);
     assert.equal(result.verification.ok, true);
-    const actual = ctx.extensionSettings[settingsModule.extensionName];
+    const actual = settingsModule.getPhoneSettings();
     assert.equal(actual.enabled, false, 'reset 不得修改无关设置');
     assert.deepEqual(actual.yuziPhoneBeautifyTemplates.templates, []);
     assert.deepEqual(actual.yuziPhoneBeautifyTemplates.bindings, {});
@@ -184,6 +149,8 @@ async function main() {
     assert.ok(timers.size > 0, '成功 reset 应调度宿主保存');
     const firstScheduledId = timers.keys().next().value;
     timers.get(firstScheduledId)();
+    await settingsModule.waitForPhoneSettingsSave();
+    assert.deepEqual(ctx.extensionSettings[settingsModule.extensionName], settingsModule.getPhoneSettings(), '资源落库后才发布宿主设置');
     assert.equal(saveCalls, 1, '触发防抖 timer 后必须调用一次宿主保存');
     assert.equal(timers.size, 0, '执行保存后必须清理 debounce 与 max-wait timer');
 

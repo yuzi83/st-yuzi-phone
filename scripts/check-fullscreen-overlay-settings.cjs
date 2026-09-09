@@ -34,6 +34,7 @@ async function testPublicDefaults(mod) {
             sourceOrder: [],
             sourceModelBySheetKey: {},
             models: {
+                'inline-table-popup': { columnCount: 2, sizePreset: 'compact', borderRadiusPx: 20, backgroundColor: '#FFFFFF', opacity: 0.94 },
                 'scrolling-barrage': {
                     maxConcurrent: 3,
                     intervalMs: 1600,

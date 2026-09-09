@@ -243,7 +243,7 @@ function createRuntimeHarness(createFullscreenOverlayRuntime, options = {}) {
             return coordinatorInvalidationCount;
         },
         async publishStableSnapshot(snapshot = rawData) {
-            assert(coordinatorCallbacks, 'coordinator callbacks should exist after start');
+            if (!coordinatorCallbacks) return false;
             return coordinatorCallbacks.onStableSnapshot(snapshot, {
                 signature: JSON.stringify(snapshot),
             });
@@ -720,60 +720,8 @@ async function testRuntimeStableSnapshotAcknowledgementSemantics() {
     assert.equal(seam.start(), true);
     await flushAsync();
 
-    const disabledSnapshot = structuredClone(h.getRawData());
-    disabledSnapshot.sheet_a.content[1][0] = 'A-disabled-consumed';
-    h.setRawData(disabledSnapshot);
-    const signaturesBeforeDisabledReject = seam.getState().sourceSignatures;
-    h.setSchedulerReplaceBehavior(() => false);
-    assert.equal(
-        await h.publishStableSnapshot(),
-        false,
-        '主开关关闭时，清空待队列被明确拒绝必须向 coordinator 返回拒绝',
-    );
-    assert.deepEqual(
-        seam.getState().sourceSignatures,
-        signaturesBeforeDisabledReject,
-        '主开关关闭时清队失败不得提前提交来源签名',
-    );
-
-    const unhandledRejections = [];
-    const captureUnhandledRejection = reason => unhandledRejections.push(reason);
-    process.on('unhandledRejection', captureUnhandledRejection);
-    try {
-        h.setSchedulerReplaceBehavior(() => Promise.reject(
-            new Error('模拟关闭状态清队异步失败'),
-        ));
-        assert.equal(
-            await h.publishStableSnapshot(),
-            false,
-            '主开关关闭时，清空待队列 Promise reject 必须向 coordinator 返回拒绝',
-        );
-        await flushAsync();
-        assert.deepEqual(
-            seam.getState().sourceSignatures,
-            signaturesBeforeDisabledReject,
-            '主开关关闭时清队异步失败不得提前提交来源签名',
-        );
-        assert.deepEqual(
-            unhandledRejections,
-            [],
-            '关闭状态清队 Promise reject 必须被 runtime 吸收并记录，不能泄漏未处理拒绝',
-        );
-    } finally {
-        process.off('unhandledRejection', captureUnhandledRejection);
-    }
-
-    h.setSchedulerReplaceBehavior(() => true);
-    assert.equal(
-        await h.publishStableSnapshot(),
-        true,
-        '主开关关闭时，正确更新来源基线后必须明确确认快照已消费',
-    );
-    assert.equal(
-        seam.getState().sourceSignatures.sheet_a,
-        'A-disabled-consumed',
-        '主开关关闭仍必须推进运行时来源签名基线',
-    );
+    assert.equal(seam.getState().coordinator, null, '关闭不创建审核消费者');
+    assert.deepEqual(seam.getState().sourceSignatures, {});
 
     h.setSettings({
         ...h.getSettings(),
@@ -926,12 +874,8 @@ async function testRuntimePublicSeamAndSourceOrchestration() {
     );
 
     const signatureStateBeforeTest = seam.getState().sourceSignatures;
-    seam.refreshSettings({
-        ...h.getSettings(),
-        enabled: false,
-    });
     const testResult = await seam.testSelectedSources();
-    assert.equal(testResult.ok, true, '测试必须能绕过主开关');
+    assert.equal(testResult.ok, true, '开启状态允许测试');
     assert.equal(testResult.sourceCount, 2);
     assert.deepEqual(
         h.calls.filter(call => call[0] === 'scheduler.replace' && call[1].length > 0).at(-1)[1]
@@ -1051,7 +995,7 @@ async function testEternalLoopKeepsCurrentCycleWhenUpdateHasNoEvents() {
     seam.stop();
 }
 
-async function testDisabledRuntimeDefersAutomaticWorkButKeepsTestButton() {
+async function testDisabledRuntimeFullyStopsIncludingTestButton() {
     const {
         createFullscreenOverlayRuntime,
     } = await import(moduleUrl('modules/fullscreen-overlay/runtime.js'));
@@ -1078,16 +1022,9 @@ async function testDisabledRuntimeDefersAutomaticWorkButKeepsTestButton() {
     );
 
     const readsBeforeTest = h.calls.filter(call => call[0] === 'snapshot.read').length;
-    const testResult = await seam.testSelectedSources();
-    assert.equal(testResult.ok, true, 'disabled 状态测试按钮仍必须直接读取并播放');
-    assert.equal(
-        h.calls.filter(call => call[0] === 'snapshot.read').length,
-        readsBeforeTest + 1,
-    );
-    assert(
-        h.calls.some(call => call[0] === 'scheduler.replace' && call[1].length > 0),
-        '测试按钮必须把直接读取结果交给 Scheduler',
-    );
+    assert.equal((await seam.testSelectedSources()).reason, 'disabled');
+    assert.equal(h.calls.filter(call => call[0] === 'snapshot.read').length, readsBeforeTest);
+    assert.equal(seam.getState().scheduler, null);
 
     const readsBeforeEnable = h.calls.filter(call => call[0] === 'snapshot.read').length;
     h.setSettings({
@@ -1121,7 +1058,7 @@ async function testDisabledRuntimeDefersAutomaticWorkButKeepsTestButton() {
     const disableCalls = h.calls.slice(callsBeforeDisable);
     assert(disableCalls.some(call => call[0] === 'coordinator.stop'));
     assert(
-        disableCalls.some(call => call[0] === 'scheduler.replace' && call[1].length === 0),
+        disableCalls.some(call => call[0] === 'scheduler.dispose'),
         'true→false 必须清掉待播批次',
     );
     assert.equal(seam.getState().disabled, true);
@@ -1149,7 +1086,7 @@ async function testDisabledRuntimeDefersAutomaticWorkButKeepsTestButton() {
     assert.equal(
         h.calls.filter(call => call[0] === 'snapshot.read').length,
         readsBeforeDisable,
-        '禁用后除测试按钮外不得继续读取快照',
+        '禁用后包括测试按钮都不得读取快照',
     );
 }
 
@@ -1404,7 +1341,7 @@ async function main() {
     await testRuntimePublicSeamAndSourceOrchestration();
     await testChatAndStopLifecycle();
     await testEternalLoopKeepsCurrentCycleWhenUpdateHasNoEvents();
-    await testDisabledRuntimeDefersAutomaticWorkButKeepsTestButton();
+    await testDisabledRuntimeFullyStopsIncludingTestButton();
     await testDisablingClearsCoordinatorAndBaselineRetries();
     await testBackgroundSidecarIsolationAndBarrierReuse();
     testStaticProductionWiring();

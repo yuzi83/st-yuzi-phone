@@ -1,3 +1,5 @@
+import { getInlineMessageTarget, subscribeInlineMessageInvalidation } from '../integration/inline-message-bridge.js';
+import { createInlineTablePopupRenderer } from './renderers/inline-table-popup.js';
 import { Logger } from '../error-handler.js';
 import { getPhoneSettings } from '../settings.js';
 import { getTableData } from '../phone-core/data-api.js';
@@ -6,6 +8,7 @@ import {
     FULLSCREEN_OVERLAY_SETTING_KEY,
     SCROLLING_BARRAGE_MODEL_ID,
     TABLE_POPUP_MODEL_ID,
+    INLINE_TABLE_POPUP_MODEL_ID,
     normalizeFullscreenOverlaySettings,
 } from './settings.js';
 import { createOverlaySourceRegistry } from './source-registry.js';
@@ -61,12 +64,14 @@ const fullscreenOverlayRuntime = createFullscreenOverlayRuntime({
     normalizeSettings: normalizeFullscreenOverlaySettings,
     getSettings: () => getPhoneSettings()?.[FULLSCREEN_OVERLAY_SETTING_KEY],
     readSnapshot: () => getTableData(),
+    getInlineTarget: getInlineMessageTarget,
+    subscribeInlineInvalidation: subscribeInlineMessageInvalidation,
     registry: sourceRegistry,
     buildSourceCatalog: buildOverlaySourceCatalog,
     createLayerRuntime: () => createFullscreenOverlayLayerRuntime({
         documentRef: globalThis.document,
     }),
-    createRendererRegistry: ({ layerRuntime, getSettings, onError }) => {
+    createRendererRegistry: ({ layerRuntime, getSettings, getInlineEpoch, onError }) => {
         const barrageRenderer = createScrollingBarrageRenderer({
             layerRuntime,
             documentRef: globalThis.document,
@@ -80,7 +85,12 @@ const fullscreenOverlayRuntime = createFullscreenOverlayRuntime({
             acquireMediaRender: acquireQQMediaRender,
             onError,
         });
+        const inlineRenderer = createInlineTablePopupRenderer({
+            documentRef: globalThis.document, getSettings, getInlineEpoch,
+            getTarget: getInlineMessageTarget,
+        });
         return new Map([
+            [INLINE_TABLE_POPUP_MODEL_ID, inlineRenderer],
             [SCROLLING_BARRAGE_MODEL_ID, barrageRenderer],
             [TABLE_POPUP_MODEL_ID, popupRenderer],
         ]);

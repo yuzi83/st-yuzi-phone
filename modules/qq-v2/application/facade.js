@@ -377,7 +377,7 @@ function cloneTransfer(transfer) {
     return Object.freeze({
         amount: asText(source.amount, 64),
         currency: asText(source.currency, 32),
-        note: asText(source.note, 1000),
+        note: String(source.note ?? ''),
         status: asText(source.status, 32) || 'pending',
         recipientId: asText(source.recipientId, 256),
     });
@@ -1774,6 +1774,47 @@ export function createQQV2Facade(options = {}) {
                 } catch (error) {
                     return failed(error);
                 }
+            },
+            async editMessage(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function' || typeof runtime.getConversation !== 'function' || typeof runtime.editMessage !== 'function') return unavailable('editMessage');
+                try {
+                    const context = cloneContext(asObject(await runtime.getSnapshot()).context);
+                    const conversationId = asText(input.conversationId, 256);
+                    const messageId = asText(input.messageId, 256);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    if (!conversationId || !messageId) return Object.freeze({ ok: false, status: 'invalid', reason: 'message-required' });
+                    if (typeof input.content !== 'string') return Object.freeze({ ok: false, status: 'invalid', reason: 'content-required' });
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    const result = await runtime.editMessage({
+                        scopeId: context.scopeId, conversationId,
+                        messageId, content: input.content,
+                        userName: context.user.name, storyTime: context.storyTime,
+                    });
+                    return Object.freeze({ ok: true, status: 'accepted', result: Object.freeze({
+                        message: cloneMessage(result.message),
+                    }) });
+                } catch (error) { return failed(error); }
+            },
+            async recallMessage(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function' || typeof runtime.getConversation !== 'function' || typeof runtime.deleteMessages !== 'function') return unavailable('recallMessage');
+                try {
+                    const context = cloneContext(asObject(await runtime.getSnapshot()).context);
+                    const conversationId = asText(input.conversationId, 256);
+                    const messageId = asText(input.messageId, 256);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    if (!conversationId || !messageId) return Object.freeze({ ok: false, status: 'invalid', reason: 'message-required' });
+
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    const result = await runtime.deleteMessages({
+                        scopeId: context.scopeId, conversationId,
+                        recallMessageId: messageId, messageIds: [],
+                        userName: context.user.name, storyTime: context.storyTime,
+                    });
+                    return Object.freeze({ ok: true, status: 'accepted', result: Object.freeze({
+                        recalledMessage: cloneMessage(result.recalledMessage),
+                        deletedMessageIds: Object.freeze(asArray(result.deletedMessageIds).map((id) => asText(id, 256))),
+                    }) });
+                } catch (error) { return failed(error); }
             },
             async deleteMessages(input = {}) {
                 if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');

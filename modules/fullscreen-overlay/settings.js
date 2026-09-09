@@ -1,6 +1,7 @@
 export const FULLSCREEN_OVERLAY_SETTING_KEY = 'fullscreenOverlay';
 export const SCROLLING_BARRAGE_MODEL_ID = 'scrolling-barrage';
 export const TABLE_POPUP_MODEL_ID = 'table-popup';
+export const INLINE_TABLE_POPUP_MODEL_ID = 'inline-table-popup';
 
 const DEFAULT_OVERLAY_COLOR = '#FFFFFF';
 const MAX_OVERLAY_PALETTE_SIZE = 16;
@@ -24,6 +25,10 @@ export const FULLSCREEN_OVERLAY_DEFAULTS = Object.freeze({
             opacity: 0.86,
             eternalEnabled: false,
             palette: Object.freeze(['#FFFFFF']),
+        }),
+        [INLINE_TABLE_POPUP_MODEL_ID]: Object.freeze({
+            columnCount: 2, sizePreset: 'compact', borderRadiusPx: 20,
+            backgroundColor: '#FFFFFF', opacity: 0.94,
         }),
         [TABLE_POPUP_MODEL_ID]: Object.freeze({
             maxConcurrent: 1,
@@ -53,6 +58,7 @@ function cloneDefaults() {
         sourceOrder: [],
         sourceModelBySheetKey: {},
         models: {
+            [INLINE_TABLE_POPUP_MODEL_ID]: { ...FULLSCREEN_OVERLAY_DEFAULTS.models[INLINE_TABLE_POPUP_MODEL_ID] },
             [SCROLLING_BARRAGE_MODEL_ID]: {
                 ...barrageDefaults,
                 palette: [...barrageDefaults.palette],
@@ -267,6 +273,11 @@ function normalizeTablePopupModel(value) {
     };
 }
 
+function normalizeInlineModel(value) {
+    const { columnCount, sizePreset, borderRadiusPx, backgroundColor, opacity } = normalizeTablePopupModel(value);
+    return { columnCount, sizePreset, borderRadiusPx, backgroundColor, opacity };
+}
+
 export function normalizeFullscreenOverlaySettings(value) {
     if (!isRecord(value)) return cloneDefaults();
     const models = isRecord(value.models) ? value.models : {};
@@ -276,6 +287,9 @@ export function normalizeFullscreenOverlaySettings(value) {
         sourceOrder: normalizeSourceOrder(value.sourceOrder),
         sourceModelBySheetKey: normalizeStringMap(value.sourceModelBySheetKey),
         models: {
+            [INLINE_TABLE_POPUP_MODEL_ID]: normalizeInlineModel(
+                models[INLINE_TABLE_POPUP_MODEL_ID] ?? models[TABLE_POPUP_MODEL_ID],
+            ),
             [SCROLLING_BARRAGE_MODEL_ID]: normalizeScrollingBarrageModel(
                 models[SCROLLING_BARRAGE_MODEL_ID],
             ),

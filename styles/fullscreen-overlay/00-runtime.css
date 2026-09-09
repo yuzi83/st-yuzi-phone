@@ -175,3 +175,26 @@
         opacity: 0;
     }
 }
+
+/* 正文出口只限定玉子自有节点，不覆盖宿主与其他扩展。 */
+.yuzi-phone-inline-table-popup-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+.yuzi-phone-inline-table-popup-container > .yuzi-phone-fullscreen-overlay-table-popup {
+    position: static;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    animation: none;
+    transform: none;
+    will-change: auto;
+    pointer-events: auto;
+}

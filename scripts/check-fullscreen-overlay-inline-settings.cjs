@@ -1,0 +1,24 @@
+const assert = require('node:assert/strict');
+(async () => {
+    const { normalizeFullscreenOverlaySettings: normalize } = await import('../modules/fullscreen-overlay/settings.js');
+    const value = normalize({ enabled: false, models: { 'table-popup': { columnCount: 3, backgroundColor: '#123456' } } });
+    assert.equal(value.enabled, false);
+    assert.equal(value.models['inline-table-popup']?.columnCount, 3, '首次正文设置复制浮窗外观');
+    assert.equal(value.models['inline-table-popup'].backgroundColor, '#123456');
+    value.models['table-popup'].columnCount = 1;
+    assert.equal(normalize(value).models['inline-table-popup'].columnCount, 3, '迁移后设置独立');
+    assert.equal(normalize().enabled, false);
+    assert.equal(normalize({ enabled: true }).enabled, true);
+    const { createGenericTableSourceAdapter } = await import('../modules/fullscreen-overlay/sources/generic-table.js');
+    const { createLiveTableSourceAdapter } = await import('../modules/fullscreen-overlay/sources/live-table.js');
+    assert.deepEqual(createGenericTableSourceAdapter().modelIds, ['table-popup', 'inline-table-popup']);
+    assert.deepEqual(createLiveTableSourceAdapter().modelIds, ['scrolling-barrage', 'table-popup', 'inline-table-popup']);
+    const rows = createLiveTableSourceAdapter().readEvents({ modelId: 'inline-table-popup', sheetKey: 'sheet_live', headers: ['内容'], rows: [['你好']] });
+    assert.equal(rows[0]?.cells[0].value, '你好');
+    const { validateSettings } = await import('../modules/settings/schema.js');
+    const persisted = validateSettings({ fullscreenOverlay: { enabled: false, models: { 'table-popup': { borderRadiusPx: 30 } } } });
+    persisted.fullscreenOverlay.models['table-popup'].borderRadiusPx = 8;
+    assert.equal(validateSettings(persisted).fullscreenOverlay.models['inline-table-popup'].borderRadiusPx, 30);
+    assert.equal(persisted.fullscreenOverlay.enabled, false);
+    console.log('[通过] 正文卡片设置迁移与开关保留');
+})().catch(error => { console.error(error); process.exitCode = 1; });

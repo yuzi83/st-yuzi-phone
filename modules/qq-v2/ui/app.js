@@ -2506,6 +2506,7 @@ export function createQQApp({
             body = createElement('span', 'yuzi-qq-message-bubble yuzi-qq-private-message-bubble');
             body.textContent = message.content;
         }
+        body.setAttribute('data-qq-message-body', '');
         stack.append(body);
         const lastSelf = [...allMessages].reverse().find((item) => item.senderType === 'self');
         if (conversation.request?.phase === 'failed' && own && lastSelf?.messageId === message.messageId) {
@@ -3271,7 +3272,8 @@ export function createQQApp({
         });
         const syncSelection = () => {
             main.classList.toggle('is-selection-mode', imageLibrarySelectionMode);
-            deleteAction.disabled = selectedImageAssetIds.size + selectedStickerIds.size === 0;
+            deleteAction.disabled = imageLibrarySelectionMode && selectedImageAssetIds.size + selectedStickerIds.size === 0;
+            deleteAction.setAttribute('aria-label', imageLibrarySelectionMode ? '删除已选资源' : '进入删除模式');
             main.querySelectorAll('[data-qq-image-library-item]').forEach((item) => {
                 item.classList.toggle('is-selected', selectedImageAssetIds.has(item.dataset.qqImageLibraryItem));
             });
@@ -3279,6 +3281,15 @@ export function createQQApp({
                 item.classList.toggle('is-selected', selectedStickerIds.has(item.dataset.qqStickerLibraryItem));
             });
         };
+        deleteAction.addEventListener('click', (event) => {
+            event.stopPropagation();
+            if (imageLibrarySelectionMode) {
+                confirmImageLibraryDeletion();
+                return;
+            }
+            imageLibrarySelectionMode = true;
+            syncSelection();
+        });
         cards.forEach(({ library, title, sticker, assets }) => {
             const card = createElement('section', 'yuzi-qq-image-library-card');
             card.setAttribute('aria-label', title);
@@ -4235,9 +4246,126 @@ export function createQQApp({
         showDialog({ title: '', content: menu, actions: [cancel], className: 'yuzi-qq-message-action-menu-dialog' });
     };
 
+    const openMessageEditor = (conversationId, message) => {
+        const transfer = message.type === 'transfer';
+        const content = createElement('div', 'yuzi-qq-dialog-form');
+        const input = createElement('textarea');
+        input.rows = 4;
+        input.value = transfer ? String(message.transfer?.note ?? '') : message.content;
+        input.setAttribute('aria-label', transfer ? '转账备注' : '消息内容');
+        const error = createElement('p', 'yuzi-qq-form-error');
+        const cancel = createButton('取消', 'yuzi-qq-secondary-button');
+        cancel.addEventListener('click', clearOverlay);
+        const save = createButton('保存', 'yuzi-qq-primary-button');
+        const sync = () => { save.disabled = !transfer && !input.value.trim(); };
+        input.addEventListener('input', sync);
+        save.addEventListener('click', async () => {
+            save.disabled = true;
+            input.disabled = true;
+            try {
+                const result = await facade.intent.editMessage({ conversationId, messageId: message.messageId, content: input.value });
+                if (!result?.ok) throw new Error(result?.error?.message || '保存失败');
+                clearOverlay();
+                await loadMessages(conversationId);
+                await render();
+            } catch (failure) {
+                error.textContent = failure.message || '保存失败';
+                input.disabled = false;
+                sync();
+            }
+        });
+        input.addEventListener('keydown', (event) => {
+            if (!shouldSubmitComposerKey(event)) return;
+            event.preventDefault();
+            if (!save.disabled) save.click();
+        });
+        content.append(input, error);
+        sync();
+        showDialog({ title: transfer ? '编辑转账备注' : '编辑消息', content, actions: [cancel, save] });
+        input.focus();
+    };
+
+    const recallMessage = async (conversationId, messageId) => {
+        const scopeKey = currentScopeKey();
+        const result = await facade.intent.recallMessage({ conversationId, messageId });
+        if (!result?.ok) throw new Error(result?.error?.message || '撤回失败');
+        if (disposed || currentScopeKey() !== scopeKey) return;
+        const original = result.result?.recalledMessage;
+        if (original?.type === 'text') {
+            const draft = drafts.get(conversationId) || '';
+            drafts.set(conversationId, draft ? draft + '\n' + original.content : original.content);
+        }
+        clearOverlay();
+        await loadMessages(conversationId);
+        await render();
+    };
+
+    const openMessageQuickMenu = (conversationId, message) => {
+        const anchor = [...viewport.querySelectorAll('[data-qq-message]')]
+            .find((item) => item.dataset.qqMessage === message.messageId);
+        if (!anchor) return;
+        const menu = createElement('div', 'yuzi-qq-message-quick-menu');
+        const remove = createButton('', 'yuzi-qq-message-quick-action', { role: 'menuitem' });
+        remove.append(createIcon('trash'), document.createTextNode('删除'));
+        const select = createButton('', 'yuzi-qq-message-quick-action', { role: 'menuitem' });
+        select.append(createIcon('circle-check'), document.createTextNode('多选'));
+        remove.addEventListener('click', async () => {
+            menu.querySelectorAll('button').forEach((button) => { button.disabled = true; });
+            try {
+                const result = await facade.intent.deleteMessages({
+                    conversationId,
+                    messageIds: [message.messageId],
+                });
+                if (!result?.ok) throw new Error(result?.error?.message || '删除失败');
+                if (overlay === layer) clearOverlay();
+                await loadMessages(conversationId);
+                await render();
+            } catch (error) {
+                menu.querySelectorAll('button').forEach((button) => { button.disabled = false; });
+                report(error);
+            }
+        });
+        select.addEventListener('click', () => enterMessageSelection(conversationId, message.messageId));
+        menu.append(remove, select);
+        if (message.senderType !== 'system' && ['text', 'voice', 'image', 'video', 'sticker', 'transfer'].includes(message.type)) {
+            const edit = createButton('', 'yuzi-qq-message-quick-action', { role: 'menuitem' });
+            edit.append(createIcon('pen-to-square'), document.createTextNode('编辑'));
+            edit.addEventListener('click', () => openMessageEditor(conversationId, message));
+            menu.append(edit);
+        }
+        if (message.senderType === 'self' && message.type !== 'system') {
+            const recall = createButton('', 'yuzi-qq-message-quick-action', { role: 'menuitem' });
+            recall.append(createIcon('rotate-left'), document.createTextNode('撤回'));
+            recall.addEventListener('click', async () => {
+                menu.querySelectorAll('button').forEach((button) => { button.disabled = true; });
+                try { await recallMessage(conversationId, message.messageId); }
+                catch (error) {
+                    menu.querySelectorAll('button').forEach((button) => { button.disabled = false; });
+                    report(error);
+                }
+            });
+            menu.append(recall);
+        }
+        const { layer } = showAnchoredMenu(anchor, menu);
+        menu.setAttribute('aria-label', '消息操作');
+        const bounds = layer.getBoundingClientRect();
+        const target = (anchor.querySelector('[data-qq-message-body], .yuzi-qq-system-message') || anchor).getBoundingClientRect();
+        const scaleX = bounds.width / layer.offsetWidth || 1;
+        const scaleY = bounds.height / layer.offsetHeight || 1;
+        const center = (target.left + target.width / 2 - bounds.left) / scaleX;
+        const left = Math.max(8, Math.min(center - menu.offsetWidth / 2, layer.offsetWidth - menu.offsetWidth - 8));
+        const below = (target.bottom - bounds.top) / scaleY + 8;
+        const above = (target.top - bounds.top) / scaleY - menu.offsetHeight - 8;
+        const top = below + menu.offsetHeight <= layer.offsetHeight - 8 ? below : above;
+        menu.classList.toggle('is-above', top === above);
+        menu.style.left = left + 'px';
+        menu.style.setProperty('--yuzi-qq-message-menu-arrow-left', (center - left) + 'px');
+        menu.style.top = Math.max(8, Math.min(top, layer.offsetHeight - menu.offsetHeight - 8)) + 'px';
+    };
+
     const messageMenu = createMessageMenuController({
         open: ({ conversationId, message }) => openMessageMenu(conversationId, message.messageId),
-        longPress: ({ conversationId, message }) => enterMessageSelection(conversationId, message.messageId),
+        longPress: ({ conversationId, message }) => openMessageQuickMenu(conversationId, message),
     });
 
     const openTransferActionLegacy = (conversationId, messageId) => {
@@ -4821,7 +4949,6 @@ export function createQQApp({
         if (target.dataset.qqContactPackMenu) return openContactPackMenu(target);
         if (target.dataset.qqImageLibraryPackMenu) return openImageLibraryPackMenu(target);
         if (target.dataset.qqImageLibraryUpload) return uploadImageLibraryAsset(target.dataset.qqImageLibraryUpload);
-        if (target.dataset.qqImageLibraryDelete) return confirmImageLibraryDeletion();
         if (target.dataset.qqChat) {
             if (openSwipeConversationId === target.dataset.qqChat) {
                 closeConversationSwipe();

@@ -1,3 +1,4 @@
+import { normalizeFullscreenOverlaySettings } from '../fullscreen-overlay/settings.js';
 import { Logger } from '../error-handler.js';
 import { normalizeTableContentReplacementSettings } from '../table-content-replacement/config.js';
 import {
@@ -114,6 +115,7 @@ export const APPEARANCE_FONT_LIBRARY_LIMITS = Object.freeze({
 });
 
 export const defaultSettings = {
+    fullscreenOverlay: normalizeFullscreenOverlaySettings(),
     enabled: true,
     floatingToggleEnabled: true,
     phoneToggleX: null,
@@ -649,6 +651,8 @@ export function validateSetting(key, value) {
         return { valid: true, value: undefined, removed: true };
     }
 
+    if (key === 'fullscreenOverlay') return { valid: true, value: normalizeFullscreenOverlaySettings(value) };
+
     const rule = validationRules[key];
 
     if (!rule) {
@@ -742,6 +746,7 @@ export function validateSetting(key, value) {
 export function validateSettings(settings) {
     const validated = {
         ...defaultSettings,
+        fullscreenOverlay: normalizeFullscreenOverlaySettings(),
         imageGeneration: normalizeImageGenerationSettings(defaultSettings.imageGeneration),
         tableContentReplacement: normalizeTableContentReplacementSettings(defaultSettings.tableContentReplacement),
     };

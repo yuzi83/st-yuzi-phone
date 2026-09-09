@@ -133,7 +133,7 @@ async function main() {
     assert.match(appSource, /data-qq-select-message/, 'the message menu exposes multi-selection');
     assert.match(appSource, /data-qq-delete-selected/, 'the selection state provides a batch-delete command');
     assert.match(appSource, /messageSelection\.selectAll\(/, 'the selection state provides select-all');
-    assert.match(appSource, /longPress:\s*\(\{ conversationId, message \}\) => enterMessageSelection/, 'long-press enters selection mode directly');
+    assert.match(appSource, /longPress:\s*\(\{ conversationId, message \}\) => openMessageQuickMenu/, 'long-press opens the quick menu before selection');
     assert.doesNotMatch(appSource, /setMessageInjection\(/, 'the private message menu must not expose single-message injection');
     assert.match(appSource, /data-qq-update-selected-injection/, 'selection mode exposes the batch injection command');
     assert.match(selectionSource, /facade\.intent\.setMessagesInjection\(/, 'manual worldbook injection crosses the Facade once per batch');

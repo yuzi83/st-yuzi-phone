@@ -6,6 +6,7 @@ import {
 import {
     SCROLLING_BARRAGE_MODEL_ID,
     TABLE_POPUP_MODEL_ID,
+    INLINE_TABLE_POPUP_MODEL_ID,
 } from '../settings.js';
 import {
     getGenericTableSignature,
@@ -98,7 +99,7 @@ function selectRows(table) {
 }
 
 function getLiveTableSignature(context) {
-    if (context?.modelId === TABLE_POPUP_MODEL_ID) {
+    if ([TABLE_POPUP_MODEL_ID, INLINE_TABLE_POPUP_MODEL_ID].includes(context?.modelId)) {
         return getGenericTableSignature(context);
     }
     const table = resolveTableContext(context);
@@ -111,7 +112,7 @@ function getLiveTableSignature(context) {
 }
 
 function readLiveTableEvents(context) {
-    if (context?.modelId === TABLE_POPUP_MODEL_ID) {
+    if ([TABLE_POPUP_MODEL_ID, INLINE_TABLE_POPUP_MODEL_ID].includes(context?.modelId)) {
         return readGenericTableEvents(context, SOURCE_ID);
     }
     const table = resolveTableContext(context);
@@ -144,6 +145,7 @@ export function createLiveTableSourceAdapter() {
         modelIds: Object.freeze([
             SCROLLING_BARRAGE_MODEL_ID,
             TABLE_POPUP_MODEL_ID,
+            INLINE_TABLE_POPUP_MODEL_ID,
         ]),
         defaultEnabled: true,
         requiredHeaders: BARRAGE_FIELDS,

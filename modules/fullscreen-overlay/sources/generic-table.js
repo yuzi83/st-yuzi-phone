@@ -1,4 +1,4 @@
-import { TABLE_POPUP_MODEL_ID } from '../settings.js';
+import { TABLE_POPUP_MODEL_ID, INLINE_TABLE_POPUP_MODEL_ID } from '../settings.js';
 import { normalizeText } from '../../phone-theater/core/table-index.js';
 import { shouldSkipAutoManagedColumn } from '../../utils/table-column-metadata.js';
 
@@ -89,7 +89,7 @@ export function createGenericTableSourceAdapter() {
     return Object.freeze({
         id: SOURCE_ID,
         modelId: TABLE_POPUP_MODEL_ID,
-        modelIds: Object.freeze([TABLE_POPUP_MODEL_ID]),
+        modelIds: Object.freeze([TABLE_POPUP_MODEL_ID, INLINE_TABLE_POPUP_MODEL_ID]),
         defaultEnabled: true,
         matches(context) {
             return Boolean(resolveTableContext(context).sheetKey);
