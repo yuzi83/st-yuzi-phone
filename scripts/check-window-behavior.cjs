@@ -161,10 +161,26 @@ function createPointerEvent({ pointerId = 1, clientX = 0, clientY = 0, target = 
 function createRuntimeStub() {
     const listeners = [];
     const cleanups = [];
+    const animationFrames = new Map();
+    let nextAnimationFrameId = 1;
 
     return {
         listeners,
         cleanups,
+        animationFrames,
+        requestAnimationFrame(callback) {
+            const id = nextAnimationFrameId++;
+            animationFrames.set(id, callback);
+            return id;
+        },
+        cancelAnimationFrame(id) {
+            animationFrames.delete(id);
+        },
+        flushAnimationFrames() {
+            const callbacks = [...animationFrames.values()];
+            animationFrames.clear();
+            callbacks.forEach((callback) => callback(Date.now()));
+        },
         addEventListener(target, type, handler, options) {
             target.addEventListener(type, handler, options);
             const record = { target, type, handler, options };
@@ -232,12 +248,26 @@ async function testDragBehavior(runtimeModule, dragModule) {
     runtimeStub.listeners.find((item) => item.target === phoneEl.notch && item.type === 'pointerdown').handler(down);
 
     const move = createPointerEvent({ pointerId: 5, clientX: 200, clientY: 230, target: phoneEl.notch });
-    runtimeStub.listeners.find((item) => item.target === phoneEl.notch && item.type === 'pointermove').handler(move);
-    assert.equal(phoneEl.style.left, '160px');
-    assert.equal(phoneEl.style.top, '180px');
+    const fartherMove = createPointerEvent({ pointerId: 5, clientX: 300, clientY: 350, target: phoneEl.notch });
+    const moveHandler = runtimeStub.listeners.find(
+        (item) => item.target === phoneEl.notch && item.type === 'pointermove',
+    ).handler;
+    moveHandler(move);
+    moveHandler(fartherMove);
+    assert.equal(phoneEl.style.left, '0px');
+    assert.equal(phoneEl.style.top, '0px');
+    assert.equal(runtimeStub.animationFrames.size, 1, 'drag updates in one frame should be coalesced');
+    runtimeStub.flushAnimationFrames();
+    assert.equal(phoneEl.style.transform, 'translate3d(160px, 180px, 0)');
 
+    moveHandler(move);
+    assert.equal(runtimeStub.animationFrames.size, 1);
     const up = createPointerEvent({ pointerId: 5, clientX: 200, clientY: 230, target: phoneEl.notch });
     runtimeStub.listeners.find((item) => item.target === phoneEl.notch && item.type === 'pointerup').handler(up);
+    assert.equal(runtimeStub.animationFrames.size, 0);
+    assert.equal(phoneEl.style.left, '160px');
+    assert.equal(phoneEl.style.top, '180px');
+    assert.equal(phoneEl.style.transform, '');
     assert.deepEqual(saveCalls, [
         { key: 'phoneContainerX', value: 160 },
         { key: 'phoneContainerY', value: 180 },

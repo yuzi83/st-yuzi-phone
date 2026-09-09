@@ -449,6 +449,69 @@ function createPrivateConversation(state, scope, person, random) {
     };
 }
 
+function normalizeImportedContactAsset(value, expectedKind, label) {
+    if (value === null || value === undefined) return null;
+    if (!value || typeof value !== 'object' || Array.isArray(value) || !(value.blob instanceof Blob)) {
+        throw new QQV2DomainError(`${label}图片无效`, 'contact_import_asset_invalid');
+    }
+    const mimeType = asText(value.mimeType || value.blob.type, 128).toLowerCase();
+    if (!/^image\/[a-z0-9.+-]+$/u.test(mimeType)) {
+        throw new QQV2DomainError(`${label}图片类型无效`, 'contact_import_asset_invalid');
+    }
+    return { kind: expectedKind, blob: value.blob, mimeType };
+}
+
+function normalizeImportedPrivateContact(input, index) {
+    const source = input && typeof input === 'object' && !Array.isArray(input) ? input : null;
+    if (!source) throw new QQV2DomainError(`导入联系人 ${index + 1} 无效`, 'contact_import_invalid');
+    return {
+        formalName: exactContactFormalName(source.formalName),
+        signature: asText(source.signature, 1000),
+        gender: asText(source.gender, 120),
+        birthday: asText(source.birthday, 120),
+        avatar: normalizeImportedContactAsset(source.avatar, 'avatar', '头像'),
+        profileBackground: normalizeImportedContactAsset(source.profileBackground, 'profile-background', '资料背景'),
+        chatBackground: normalizeImportedContactAsset(source.chatBackground, 'background', '聊天背景'),
+    };
+}
+
+function activatePrivateContact(scope, conversation, person, input = {}) {
+    const activated = conversation.status !== 'active';
+    conversation.status = 'active';
+    if (activated) {
+        appendSystemMessage(
+            scope,
+            conversation,
+            `${asText(input.userName, 120) || '用户'}和${person.formalName}成为好友`,
+            asText(input.storyTime, 128),
+        );
+    }
+    return activated;
+}
+
+function deleteUnactivatedPrivateContact(scope, conversation, person) {
+    const conversationId = conversation.conversationId;
+    const releasableAssetIds = new Set([
+        conversation.backgroundAssetId,
+        person.avatarAssetId,
+        person.profileBackgroundAssetId,
+    ]);
+    Object.values(scope.messages)
+        .filter((message) => message.conversationId === conversationId)
+        .forEach((message) => {
+            releasableAssetIds.add(message.assetId);
+            releasableAssetIds.add(message.senderAvatarAssetId);
+            delete scope.messages[message.messageId];
+        });
+    Object.values(scope.assets)
+        .filter((asset) => asset.conversationId === conversationId)
+        .forEach((asset) => releasableAssetIds.add(asset.assetId));
+    delete scope.conversations[conversationId];
+    if (!personStillReferenced(scope, person.personId)) delete scope.people[person.personId];
+    releasableAssetIds.forEach((assetId) => removeAssetIfUnreferenced(scope, assetId));
+    return { removed: true, conversation: copy(conversation), person: copy(person) };
+}
+
 function syncSenderAvatar(scope, senderId, assetId) {
     Object.values(scope.messages).forEach((message) => {
         if (message.senderId === senderId) message.senderAvatarAssetId = assetId;
@@ -1350,6 +1413,66 @@ export function createQQV2Repository(options = {}) {
                 return copy({ group, conversation });
             });
         },
+        async importPrivateContacts(scopeId, contacts = [], operationOptions = {}) {
+            if (!Array.isArray(contacts)) {
+                throw new QQV2DomainError('导入联系人必须是数组', 'contact_import_invalid');
+            }
+            const imported = contacts.map(normalizeImportedPrivateContact);
+            if (imported.length === 0) return [];
+            return transactScoped(scopeId, operationOptions, (state) => {
+                const scope = getScope(state, scopeId, false);
+                if (!scope.assets || typeof scope.assets !== 'object' || Array.isArray(scope.assets)) {
+                    scope.assets = {};
+                }
+                const saveAsset = (conversation, asset) => {
+                    if (!asset) return '';
+                    const record = {
+                        assetId: createId('asset'),
+                        scopeId: scope.scopeId,
+                        conversationId: conversation.conversationId,
+                        kind: asset.kind,
+                        blob: asset.blob,
+                        mimeType: asset.mimeType,
+                    };
+                    scope.assets[record.assetId] = record;
+                    return record.assetId;
+                };
+                return imported.map((contact) => {
+                    const person = {
+                        personId: createId('person'),
+                        scopeId: scope.scopeId,
+                        formalName: contact.formalName,
+                        normalizedName: contact.formalName,
+                        avatarAssetId: '',
+                        signature: contact.signature,
+                        gender: contact.gender,
+                        birthday: contact.birthday,
+                        profileBackgroundAssetId: '',
+                    };
+                    const conversation = {
+                        conversationId: createId('private'),
+                        scopeId: scope.scopeId,
+                        kind: 'private',
+                        personId: person.personId,
+                        groupId: '',
+                        status: 'contact',
+                        remark: '',
+                        backgroundAssetId: '',
+                        unreadCount: 0,
+                        nextSequence: 1,
+                        lastSequence: 0,
+                        lastMessageId: '',
+                        injection: createDefaultInjection(),
+                    };
+                    person.avatarAssetId = saveAsset(conversation, contact.avatar);
+                    person.profileBackgroundAssetId = saveAsset(conversation, contact.profileBackground);
+                    conversation.backgroundAssetId = saveAsset(conversation, contact.chatBackground);
+                    scope.people[person.personId] = person;
+                    scope.conversations[conversation.conversationId] = conversation;
+                    return copy({ person, conversation });
+                });
+            });
+        },
         async createPrivateConversation(scopeId, input = {}, operationOptions = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, true);
@@ -1363,21 +1486,27 @@ export function createQQV2Repository(options = {}) {
                     candidate.kind === 'private' && candidate.personId === person.personId
                 )) || null;
                 if (conversation) {
-                    const restored = conversation.status !== 'active';
-                    conversation.status = 'active';
-                    if (restored) {
-                        appendSystemMessage(
-                            scope,
-                            conversation,
-                            `${asText(input.userName, 120) || '用户'}和${person.formalName}成为好友`,
-                            asText(input.storyTime, 128),
-                        );
-                    }
+                    const restored = activatePrivateContact(scope, conversation, person, input);
                     return { created: false, restored, person: copy(person), conversation: copy(conversation) };
                 }
                 conversation = createPrivateConversation(state, scope, person, random);
                 scope.conversations[conversation.conversationId] = conversation;
                 return { created: true, person: copy(person), conversation: copy(conversation) };
+            });
+        },
+        async activatePrivateContact(scopeId, conversationId, input = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
+                const scope = getScope(state, scopeId, false);
+                const conversation = getConversation(scope, conversationId);
+                if (conversation.kind !== 'private') {
+                    throw new QQV2DomainError('只能激活私聊联系人', 'private_conversation_required');
+                }
+                if (!['contact', 'active'].includes(conversation.status)) {
+                    throw new QQV2DomainError('当前联系人不能激活会话', 'contact_activation_invalid');
+                }
+                const person = getPerson(scope, conversation.personId);
+                const activated = activatePrivateContact(scope, conversation, person, input);
+                return copy({ activated, person, conversation });
             });
         },
         async removePrivateFriend(scopeId, conversationId, input = {}, operationOptions = {}) {
@@ -1388,6 +1517,9 @@ export function createQQV2Repository(options = {}) {
                     throw new QQV2DomainError('只能删除私聊好友', 'private_conversation_required');
                 }
                 const person = getPerson(scope, conversation.personId);
+                if (conversation.status === 'contact') {
+                    return deleteUnactivatedPrivateContact(scope, conversation, person);
+                }
                 if (conversation.status !== 'active') {
                     return { removed: false, conversation: copy(conversation), person: copy(person) };
                 }

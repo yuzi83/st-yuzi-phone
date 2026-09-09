@@ -206,6 +206,7 @@ async function main() {
     const { __test__ } = await import('../modules/qq-v2/ui/app.js');
     const app = read('modules/qq-v2/ui/app.js');
     const css = read('styles/phone-base/12-qq-app.css');
+    const mediaViewer = sourceSlice(app, 'const openMessageMediaViewer =', 'const messageNode =');
     const messageNode = sourceSlice(app, 'const messageNode =', 'const renderMessageStream =');
     const clickHandler = sourceSlice(app, 'const handleClick = async', 'const handleEmojiPanelKeyDown =');
 
@@ -217,6 +218,8 @@ async function main() {
         'image messages must have a dedicated rendering branch');
     assert.match(messageNode, /message\.type === 'video'[\s\S]*yuzi-qq-narrative-card is-video/,
         'video messages must remain on the existing narrative-card path');
+    assert.match(messageNode, /message\.type === 'video'[\s\S]*data-qq-view-media/,
+        'video messages must open the shared media viewer');
     assert.match(messageNode, /normalizeGeneratedImagePath\(message\.generatedImagePath\)/,
         'generated image rendering must consume the validated local user-image path');
     assert.match(messageNode, /yuzi-qq-generated-image-description[\s\S]*descriptionText/,
@@ -229,11 +232,11 @@ async function main() {
         'persisted images must expose a compact regenerate action');
 
     assert.match(messageNode, /yuzi-qq-generated-image-viewer-button/,
-        'a generated image must be an explicit viewer trigger');
-    assert.match(messageNode, /data-qq-view-image/,
-        'the viewer trigger must use QQ delegated click handling');
+        'every image message must be an explicit viewer trigger');
+    assert.match(messageNode, /data-qq-view-media/,
+        'the media viewer trigger must use QQ delegated click handling');
     assert.match(messageNode, /const descriptionText =/,
-        'the image copy must be prepared once for the image alt and placeholder');
+        'the image copy must be prepared once for the card and media viewer');
     assert.match(messageNode, /body\.append\(media\);/,
         'an image card must end with the media itself instead of a caption row');
     assert.doesNotMatch(
@@ -247,12 +250,20 @@ async function main() {
         'a pending image must show its narrative copy inside the centered placeholder',
     )
 
-    assert.match(app, /const openGeneratedImageViewer =[\s\S]*showDialog\(/u,
-        'QQ must open generated images with its own dialog system');
-    assert.match(clickHandler, /target\.dataset\.qqViewImage/u,
-        'QQ delegated clicks must recognize the image viewer trigger');
-    assert.match(clickHandler, /openGeneratedImageViewer\(/u,
-        'the image viewer trigger must open the QQ image viewer');
+    assert.match(app, /const openMessageMediaViewer =[\s\S]*showDialog\(/u,
+        'QQ must open image and video messages with its own dialog system');
+    assert.match(mediaViewer, /yuzi-qq-image-viewer\$\{normalizedImagePath \? '' : ' is-description-only'\}/u,
+        'description-only media must use a dedicated compact viewer state');
+    assert.match(mediaViewer, /if \(normalizedImagePath\) \{[\s\S]*?viewer\.append\(visual\);[\s\S]*?viewer\.append\(copy\);/u,
+        'only a real generated image may render the large visual area');
+    assert.doesNotMatch(mediaViewer, /is-\$\{mediaType\}/u,
+        'description-only media must not reserve a large icon visual area');
+    assert.match(app, /yuzi-qq-image-viewer-description[\s\S]*copy\.textContent/u,
+        'the media viewer must preserve complete narrative content');
+    assert.match(clickHandler, /target\.dataset\.qqViewMedia/u,
+        'QQ delegated clicks must recognize the shared media viewer trigger');
+    assert.match(clickHandler, /openMessageMediaViewer\(/u,
+        'the media viewer trigger must open the shared QQ viewer');
 
     assert.match(clickHandler, /imageGenerationController\.generate\(\{/,
         'QQ delegated clicks must run through the executable image-task controller');
@@ -267,16 +278,32 @@ async function main() {
         'a generated image card must remove bubble padding');
     assert.ok(cssRuleHas(css, '.yuzi-qq-generated-image-card.has-image', 'background:\\s*transparent'),
         'a generated image card must look like the picture itself');
-    assert.ok(cssRuleHas(css, '.yuzi-qq-generated-image-viewer-button', 'cursor:\\s*zoom-in'),
+    assert.ok(cssRuleHas(css, '.yuzi-qq-generated-image-viewer-button.has-image', 'cursor:\\s*zoom-in'),
         'a generated image must visibly support click-to-zoom');
     assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer-image', 'object-fit:\\s*contain'),
         'the QQ image viewer must show the whole picture');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer-description', 'white-space:\\s*pre-wrap'),
+        'the media viewer must keep complete multi-line narrative text');
     assert.ok(cssRuleHas(css, '.yuzi-qq-image-view-dialog', 'inline-size:\\s*100%'),
         'the QQ image viewer dialog must fill the available phone width');
     assert.ok(cssRuleHas(css, '.yuzi-qq-image-view-dialog', 'block-size:\\s*100%'),
         'the QQ image viewer dialog must fill the available phone height');
-    assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer-close', 'backdrop-filter:\\s*blur'),
-        'the viewer close control must use a translucent glass treatment');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-view-dialog', 'pointer-events:\\s*none'),
+        'the transparent media dialog must let overlay clicks dismiss it');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer', 'pointer-events:\\s*auto'),
+        'the visible media card must remain interactive above the overlay');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer', 'block-size:\\s*min\\(var\\(--yuzi-qq-image-viewer-max-height\\),\\s*100%\\)'),
+        'the visible media card must have a bounded concrete height');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer-visual', 'block-size:\\s*100%'),
+        'the media visual must stretch into the viewer grid row');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer.is-description-only', 'block-size:\\s*auto'),
+        'description-only media must grow to its actual text content');
+    assert.ok(cssRuleHas(css, '.yuzi-qq-image-viewer.is-description-only .yuzi-qq-image-viewer-description', 'overflow:\\s*visible'),
+        'description-only media must not show an inner scrollbar when its content fits');
+    assert.doesNotMatch(app, /yuzi-qq-image-viewer-close/u,
+        'the media viewer must not render a dedicated close button');
+    assert.doesNotMatch(css, /\.yuzi-qq-image-viewer-close\s*\{/u,
+        'the removed close button must not retain CSS');
     assert.ok(cssRuleHas(
         css,
         '.yuzi-qq-generated-image-placeholder .yuzi-qq-generated-image-description',

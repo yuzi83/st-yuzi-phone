@@ -40,9 +40,12 @@ async function main() {
     const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../modules/qq-v2/ui/app.js'), 'utf8');
     assert.match(source, /data-qq-add-contact/);
     const contactsRootSource = source.slice(source.indexOf('const renderContactsRoot'), source.indexOf('const renderProfile'));
-    assert.match(contactsRootSource, /const decorativeAdd = createElement\('span', 'yuzi-qq-identity-action yuzi-qq-contact-add-visual'\);/, 'contacts add control must be a non-button visual node');
-    assert.match(contactsRootSource, /decorativeAdd\.setAttribute\('aria-hidden', 'true'\);/, 'contacts add visual must stay hidden from the interactive accessibility tree');
-    assert.doesNotMatch(contactsRootSource, /data-qq-add-contact/, 'contacts add visual must not open the real add-contact flow');
+    assert.match(contactsRootSource, /const contactPack = createButton\('', 'yuzi-qq-icon-button yuzi-qq-identity-action yuzi-qq-contact-root-pack-action'/,
+        'contacts header must expose the real import/export entry');
+    assert.match(contactsRootSource, /data-qq-contact-pack-menu/,
+        'contacts header entry must open the contact import/export menu');
+    assert.doesNotMatch(contactsRootSource, /data-qq-add-contact/,
+        'contacts header must not reuse the Messages-only add-contact action');
 }
 
 main().then(() => console.log('[qq-add-contact] passed')).catch((error) => {

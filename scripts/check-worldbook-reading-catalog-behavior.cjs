@@ -70,6 +70,44 @@ async function testBoundCatalogSelectsEveryEnabledEntryByDefault() {
     ]);
 }
 
+async function testCatalogHidesQQV2ProjectionEntries() {
+    const { createWorldbookReadingCatalog } = await importModule(
+        'modules/worldbook-reading/catalog.js',
+    );
+    const catalog = createWorldbookReadingCatalog({
+        source: {
+            async load() {
+                return [{
+                    name: '角色主书',
+                    sourceRole: 'primary',
+                    entries: [
+                        { uid: 1, comment: '普通设定' },
+                        {
+                            uid: 2,
+                            comment: 'YuziQQ｜私聊｜林知夏｜private-00000000-0000-4000-8000-000000000001',
+                        },
+                        {
+                            uid: 3,
+                            comment: '外部重写后仍有 v2 标记的 QQ 投影',
+                            extensions: { yuziPhoneQQV2: { version: 2 } },
+                        },
+                    ],
+                }];
+            },
+        },
+        preferences: {
+            async read() {
+                return {};
+            },
+            async write() {},
+        },
+    });
+
+    const snapshot = await catalog.load();
+
+    assert.deepEqual(snapshot.entries.map((entry) => entry.ref.uid), ['1']);
+}
+
 async function testBlockedCommentKeywordsUnselectEntriesButIgnoreContentKeywords() {
     const { createWorldbookReadingCatalog } = await importModule(
         'modules/worldbook-reading/catalog.js',
@@ -428,6 +466,7 @@ async function testSillyTavernAdapterSilentlyDegradesWhenWorldbookApiIsMissing()
 
 async function main() {
     await testBoundCatalogSelectsEveryEnabledEntryByDefault();
+    await testCatalogHidesQQV2ProjectionEntries();
     await testBlockedCommentKeywordsUnselectEntriesButIgnoreContentKeywords();
     await testBlockedKeywordsPersistAsNormalizedSettings();
     await testDeselectPersistsOnlySparseFalseOverride();

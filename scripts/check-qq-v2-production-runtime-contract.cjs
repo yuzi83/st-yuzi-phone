@@ -1717,6 +1717,32 @@ async function testProductionFacadeBridgesPrivateProfilesMediaAndUnreadState() {
         conversationId: privateTwo.conversation.conversationId,
     }), { ok: true, status: 'accepted', unreadCount: 0 });
     assert.equal((await facade.query.unread()).unread.total, 0);
+
+    const contactPack = await facade.query.contactPack();
+    assert.equal(contactPack.ok, true);
+    assert.equal(contactPack.pack.contacts.length, 2, 'only private contacts belong in a contact pack');
+    const contactPackSource = JSON.stringify(contactPack.pack);
+    assert.deepEqual(await facade.query.contactPackPreview({ source: contactPackSource }), {
+        ok: true,
+        status: 'ready',
+        contacts: 2,
+    });
+    assert.deepEqual(await facade.intent.importContactPack({ source: contactPackSource }), {
+        ok: true,
+        status: 'accepted',
+        imported: { contacts: 2 },
+    });
+    const importedContacts = (await facade.query.conversations()).conversations
+        .filter((conversation) => conversation.kind === 'private' && conversation.status === 'contact');
+    assert.equal(importedContacts.length, 2, 'imported private contacts remain out of the Messages page');
+    const activatedContact = await facade.intent.activatePrivateContact({
+        conversationId: importedContacts[0].conversationId,
+    });
+    assert.equal(activatedContact.ok, true);
+    assert.equal(activatedContact.result.conversation.status, 'active');
+    assert.equal((await facade.query.conversation({
+        conversationId: importedContacts[1].conversationId,
+    })).conversation.status, 'contact', 'activating one imported contact must not activate its duplicate');
     runtime.destroy();
 }
 

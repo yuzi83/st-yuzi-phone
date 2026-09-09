@@ -20,7 +20,10 @@ async function main() {
         group: {
             groupId: 'group-1',
             name: 'Hidden group',
-            mutes: { 'person-1': '永久' },
+            mutes: {
+                'person-1': '永久',
+                __self__: '2042-05-20 09:30',
+            },
         },
         unreadCount: 9,
     };
@@ -54,6 +57,26 @@ async function main() {
         async getConversation(input) {
             calls.push(['getConversation', input]);
             return input.conversationId === 'group-1' ? groupConversation : privateConversation;
+        },
+        async exportContactPack(input) {
+            calls.push(['exportContactPack', input]);
+            return {
+                format: 'yuzi-phone-qq-contact-pack',
+                schemaVersion: 1,
+                contacts: [{ name: 'Alice' }],
+            };
+        },
+        async previewContactPack(input) {
+            calls.push(['previewContactPack', input]);
+            return { contacts: 2 };
+        },
+        async importContactPack(input) {
+            calls.push(['importContactPack', input]);
+            return { contacts: 2 };
+        },
+        async activatePrivateContact(input) {
+            calls.push(['activatePrivateContact', input]);
+            return { activated: true, person: privateConversation.person, conversation: privateConversation };
         },
         async listMessages(input) {
             calls.push(['listMessages', input]);
@@ -168,6 +191,47 @@ async function main() {
     assert.equal(JSON.stringify(bootstrap).includes('must-not-leak'), false);
 
     calls.length = 0;
+    assert.deepEqual(await facade.query.contactPack(), {
+        ok: true,
+        status: 'ready',
+        pack: {
+            format: 'yuzi-phone-qq-contact-pack',
+            schemaVersion: 1,
+            contacts: [{ name: 'Alice' }],
+        },
+    });
+    assert.deepEqual(calls, [['exportContactPack', { scopeId: 'scope-alpha' }]]);
+
+    const contactPackSource = '{"format":"yuzi-phone-qq-contact-pack"}';
+    calls.length = 0;
+    assert.deepEqual(await facade.query.contactPackPreview({ source: contactPackSource }), {
+        ok: true,
+        status: 'ready',
+        contacts: 2,
+    });
+    assert.deepEqual(calls, [['previewContactPack', { source: contactPackSource }]]);
+
+    calls.length = 0;
+    assert.deepEqual(await facade.intent.importContactPack({ source: contactPackSource }), {
+        ok: true,
+        status: 'accepted',
+        imported: { contacts: 2 },
+    });
+    assert.deepEqual(calls, [['importContactPack', { scopeId: 'scope-alpha', source: contactPackSource }]]);
+
+    calls.length = 0;
+    assert.equal((await facade.intent.activatePrivateContact({ conversationId: 'private-1' })).ok, true);
+    assert.deepEqual(calls, [
+        ['getConversation', { scopeId: 'scope-alpha', conversationId: 'private-1' }],
+        ['activatePrivateContact', {
+            scopeId: 'scope-alpha',
+            conversationId: 'private-1',
+            userName: 'Traveler',
+            storyTime: '2042-05-20 09:30',
+        }],
+    ]);
+
+    calls.length = 0;
     const conversations = await facade.query.conversations();
     assert.deepEqual(calls, [['listConversations', { scopeId: 'scope-alpha' }]]);
     assert.deepEqual(conversations.conversations.map((conversation) => ({
@@ -187,6 +251,10 @@ async function main() {
     const groupProfile = await facade.query.conversation({ conversationId: 'group-1' });
     assert.equal(groupProfile.conversation.kind, 'group');
     assert.deepEqual(groupProfile.conversation.group.mutes, { 'person-1': '永久' });
+    assert.equal(groupProfile.conversation.muted, false,
+        'a temporary self mute expires at the current story time');
+    assert.equal(groupProfile.conversation.canSend, true,
+        'an expired temporary self mute must not lock the composer after reopening QQ');
     assert.deepEqual(calls, [['getConversation', { scopeId: 'scope-alpha', conversationId: 'group-1' }]]);
 
     calls.length = 0;

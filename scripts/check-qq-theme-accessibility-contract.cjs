@@ -83,6 +83,8 @@ function main() {
 
     assert.match(css, /\.yuzi-qq-app button:focus-visible,[\s\S]*?outline:\s*var\(--yuzi-qq-focus-ring-width\) solid var\(--yuzi-qq-accent\);/,
         'keyboard controls must retain a visible semantic focus ring');
+    assert.match(css, /#yuzi-phone-standalone \.yuzi-phone-shell \.yuzi-qq-app :is\(input, textarea, select\):focus-visible\s*\{[\s\S]*?outline:\s*none !important;/u,
+        'QQ form fields must override the shell blue focus outline');
     assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.yuzi-qq-app\s*\{[\s\S]*?--yuzi-qq-transition:\s*var\(--yuzi-qq-reduced-transition\);/,
         'reduced-motion users must force QQ motion through the semantic immediate-transition token');
     assert.match(tokens, /--yuzi-qq-reduced-transition:\s*0ms;/,

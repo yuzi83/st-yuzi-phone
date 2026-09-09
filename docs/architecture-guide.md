@@ -419,7 +419,7 @@ flowchart LR
 
 - [`WorldbookContextResolver.resolve(request)`](../modules/worldbook-reading/context-resolver.js) 是扫描与渲染的唯一边界。它取最近两条非系统、非隐藏、非旁白且成功的正文消息；手动请求仅读当前会话，主动请求读本周期的全部相关会话，每个会话各自截取最近 3 条未删除消息。
 - [`production-runtime.js`](../modules/qq-v2/application/production-runtime.js) 在交给 Resolver 前统一调用 `formatQQV2MessageSemantic()`，因此语音、图片、视频、表情、转账和关系系统消息与提示词历史使用同一套可读语义。
-- [`WorldbookReadingCatalog`](../modules/worldbook-reading/catalog.js) 只装载当前角色主书和全部附加书。未禁用条目默认全选，设置只稀疏保存 `{ 书名: { UID: false } }`；禁用或未选条目不进入候选集。
+- [`WorldbookReadingCatalog`](../modules/worldbook-reading/catalog.js) 只装载当前角色主书和全部附加书，并在候选目录阶段排除 QQ v2 投影（v2 marker 或 `YuziQQ｜` 保留命名空间）。未禁用条目默认全选，设置只稀疏保存 `{ 书名: { UID: false } }`；禁用或未选条目不进入候选集。
 - 常驻/蓝灯条目全部激活；选择/绿灯条目支持 TavernHelper 的 `keys`/`filters` 与 `and_any`/`not_all`/`not_any`/`and_all`，并兼容 snake_case、大小写和整词匹配字段。递归最多 10 轮，按书名 + UID 去重；QQ 聊天投影只要带旧 v2 marker 或使用新版 `YuziQQ｜` 保留命名空间就必须排除，外部重写丢失 marker 后也不得读回自身投影。
 - 这条链路有意不执行 SillyTavern 的 token 预算、概率、包含组竞争与权重、delay/cooldown、角色/标签过滤或 generation trigger。
 - [`st-runtime-adapter.js`](../modules/worldbook-reading/st-runtime-adapter.js) 逐次发现可选 `EjsTemplate` / `Mvu` / `AutoCardUpdaterAPI`，并读取最新 `qrf_plot` / `qrf_plot_tasks`。每次请求会立即捕获当时可用的 `querySql` / `exportTableAsJson` 函数与 receiver，不在执行中重读可能被插件热重载改写的全局方法。EJS 的 `@@activate`/`@@dont_activate`/`@@if`/`@@preprocessing` 在激活前生效，激活后仍逐条渲染正文；所有条目随后合并，只调用一次 [`shujuku-template-renderer.js`](../modules/worldbook-reading/shujuku-template-renderer.js)，因此 `$v` 与 random/calc/max/min store 在同一 `{{世界书内容}}` 内共享请求级作用域。该白名单解释器不使用 `eval` / `new Function`，并处理 random、calc/max/min、db/sql、`$v`、cell 和嵌套条件。

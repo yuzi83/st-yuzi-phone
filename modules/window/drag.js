@@ -31,6 +31,19 @@ export function initPhoneShellDrag() {
     let offsetX = 0;
     let offsetY = 0;
     let pointerId = null;
+    let startLeft = 0;
+    let startTop = 0;
+    let dragWidth = 0;
+    let dragHeight = 0;
+    let nextLeft = 0;
+    let nextTop = 0;
+    let hasMoved = false;
+    let frameId = null;
+
+    function renderPosition() {
+        frameId = null;
+        phoneEl.style.transform = `translate3d(${nextLeft - startLeft}px, ${nextTop - startTop}px, 0)`;
+    }
 
     function onContextMenu(event) {
         event.preventDefault();
@@ -45,6 +58,13 @@ export function initPhoneShellDrag() {
         const rect = phoneEl.getBoundingClientRect();
         offsetX = event.clientX - rect.left;
         offsetY = event.clientY - rect.top;
+        startLeft = rect.left;
+        startTop = rect.top;
+        dragWidth = rect.width;
+        dragHeight = rect.height;
+        nextLeft = startLeft;
+        nextTop = startTop;
+        hasMoved = false;
 
         event.target.setPointerCapture(event.pointerId);
         phoneEl.classList.add('dragging');
@@ -57,12 +77,16 @@ export function initPhoneShellDrag() {
         const constrained = dragDeps.constrainPosition(
             event.clientX - offsetX,
             event.clientY - offsetY,
-            phoneEl.offsetWidth,
-            phoneEl.offsetHeight,
+            dragWidth,
+            dragHeight,
         );
 
-        phoneEl.style.left = constrained.x + 'px';
-        phoneEl.style.top = constrained.y + 'px';
+        nextLeft = constrained.x;
+        nextTop = constrained.y;
+        hasMoved = true;
+        if (frameId === null) {
+            frameId = runtime.requestAnimationFrame(renderPosition);
+        }
         event.preventDefault();
     }
 
@@ -70,6 +94,15 @@ export function initPhoneShellDrag() {
         if (!isDragging || event.pointerId !== pointerId) return;
 
         isDragging = false;
+        if (frameId !== null) {
+            runtime.cancelAnimationFrame(frameId);
+            frameId = null;
+        }
+        if (hasMoved) {
+            phoneEl.style.left = nextLeft + 'px';
+            phoneEl.style.top = nextTop + 'px';
+        }
+        phoneEl.style.transform = '';
         try {
             event.target.releasePointerCapture(event.pointerId);
         } catch {}
@@ -81,6 +114,7 @@ export function initPhoneShellDrag() {
         dragDeps.savePhoneSetting('phoneContainerY', Number.isFinite(top) ? top : 0);
 
         pointerId = null;
+        hasMoved = false;
     }
 
     unboundHandles.forEach((el) => {
@@ -96,6 +130,15 @@ export function initPhoneShellDrag() {
     });
 
     runtime.registerCleanup(() => {
+        if (frameId !== null) {
+            runtime.cancelAnimationFrame(frameId);
+            frameId = null;
+        }
+        isDragging = false;
+        pointerId = null;
+        hasMoved = false;
+        phoneEl.classList.remove('dragging');
+        phoneEl.style.transform = '';
         unboundHandles.forEach((el) => {
             delete el.dataset[DRAG_BOUND_ATTR];
         });

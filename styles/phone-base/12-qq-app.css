@@ -41,6 +41,11 @@
     outline-offset: var(--yuzi-qq-line-width);
 }
 
+#yuzi-phone-standalone .yuzi-phone-shell .yuzi-qq-app :is(input, textarea, select):focus-visible {
+    outline: none !important;
+    outline-offset: 0 !important;
+}
+
 .yuzi-qq-viewport {
     position: relative;
     display: flex;
@@ -1341,8 +1346,7 @@
     min-inline-size: var(--yuzi-qq-root-action-size);
 }
 
-.yuzi-qq-identity-action,
-.yuzi-qq-contact-add-visual {
+.yuzi-qq-identity-action {
     display: grid;
     inline-size: var(--yuzi-qq-root-action-size);
     block-size: var(--yuzi-qq-root-action-size);
@@ -2649,7 +2653,8 @@
     gap: 0;
 }
 
-.yuzi-qq-image-library-pack-menu {
+.yuzi-qq-image-library-pack-menu,
+.yuzi-qq-contact-pack-menu {
     position: absolute;
     inset-block-start: calc(var(--yuzi-qq-anchored-menu-top) + var(--yuzi-qq-message-add-menu-offset));
     inset-inline-end: max(var(--yuzi-qq-page-padding), var(--yuzi-qq-anchored-menu-right));
@@ -2662,7 +2667,8 @@
     box-shadow: var(--yuzi-qq-message-add-menu-shadow);
 }
 
-.yuzi-qq-image-library-pack-menu-item {
+.yuzi-qq-image-library-pack-menu-item,
+.yuzi-qq-contact-pack-menu-item {
     display: flex;
     align-items: center;
     min-block-size: var(--yuzi-qq-dialog-menu-row-height);
@@ -3989,7 +3995,20 @@
     border-radius: inherit;
     background: transparent;
     color: inherit;
+    cursor: pointer;
+}
+
+.yuzi-qq-generated-image-viewer-button.has-image {
     cursor: zoom-in;
+}
+
+.yuzi-qq-generated-image-viewer-button.is-placeholder,
+.yuzi-qq-generated-image-viewer-button.is-placeholder .yuzi-qq-generated-image-placeholder {
+    inline-size: 100%;
+}
+
+.yuzi-qq-media-viewer-button {
+    cursor: pointer;
 }
 
 .yuzi-qq-generated-image-card.has-image .yuzi-qq-generated-image {
@@ -4017,6 +4036,7 @@
     overflow: visible;
     background: transparent;
     box-shadow: none;
+    pointer-events: none;
 }
 
 .yuzi-qq-image-view-dialog .yuzi-qq-dialog-body {
@@ -4025,15 +4045,42 @@
     block-size: 100%;
     padding: 0;
     overflow: visible;
+    pointer-events: none;
 }
 
 .yuzi-qq-image-viewer {
     position: relative;
     display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    inline-size: min(var(--yuzi-qq-dialog-width), 100%);
+    block-size: min(var(--yuzi-qq-image-viewer-max-height), 100%);
+    max-block-size: 100%;
+    min-block-size: 0;
+    gap: var(--yuzi-qq-inline-gap);
+    padding: var(--yuzi-qq-page-padding);
+    overflow: hidden;
+    border-radius: var(--yuzi-qq-radius-dialog);
+    background: var(--yuzi-qq-dialog-surface);
+    box-shadow: var(--yuzi-qq-shadow-dialog);
+    place-items: stretch;
+    pointer-events: auto;
+}
+
+.yuzi-qq-image-viewer.is-description-only {
+    display: block;
+    block-size: auto;
+    max-block-size: calc(100% - (var(--yuzi-qq-page-padding) * 2));
+    overflow: auto;
+}
+
+.yuzi-qq-image-viewer-visual {
+    display: grid;
     inline-size: 100%;
     block-size: 100%;
     min-block-size: 0;
     place-items: center;
+    overflow: hidden;
+    border-radius: var(--yuzi-qq-radius);
 }
 
 .yuzi-qq-image-viewer-image {
@@ -4044,22 +4091,23 @@
     border-radius: var(--yuzi-qq-radius);
 }
 
-.yuzi-qq-image-viewer-close {
-    position: absolute;
-    inset-block-start: var(--yuzi-qq-inline-gap);
-    inset-inline-end: var(--yuzi-qq-inline-gap);
-    z-index: 2;
-    display: inline-grid;
-    inline-size: var(--yuzi-qq-image-viewer-close-size);
-    block-size: var(--yuzi-qq-image-viewer-close-size);
-    padding: 0;
-    border: var(--yuzi-qq-line-width) solid color-mix(in srgb, var(--yuzi-qq-elevated) 28%, transparent);
-    border-radius: var(--yuzi-qq-radius-full);
-    place-items: center;
+.yuzi-qq-image-viewer-description {
+    justify-self: stretch;
+    max-inline-size: 100%;
+    max-block-size: 35%;
+    margin: 0;
+    padding: var(--yuzi-qq-bubble-padding-block) var(--yuzi-qq-bubble-padding-inline);
+    overflow: auto;
+    border-radius: var(--yuzi-qq-radius);
     color: var(--yuzi-qq-text);
-    background: color-mix(in srgb, var(--yuzi-qq-elevated) 24%, transparent);
-    cursor: pointer;
-    backdrop-filter: blur(var(--yuzi-qq-image-viewer-blur));
+    background: color-mix(in srgb, var(--yuzi-qq-elevated) 16%, transparent);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.yuzi-qq-image-viewer.is-description-only .yuzi-qq-image-viewer-description {
+    max-block-size: none;
+    overflow: visible;
 }
 
 .yuzi-qq-quote-card {

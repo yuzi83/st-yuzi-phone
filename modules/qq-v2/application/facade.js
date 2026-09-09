@@ -35,6 +35,30 @@ function cloneContext(context) {
     });
 }
 
+function parseStoryTime(value) {
+    const raw = asText(value, 128);
+    const match = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?$/.exec(raw);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const hour = Number(match[4] || 0);
+    const minute = Number(match[5] || 0);
+    const time = Date.UTC(year, month - 1, day, hour, minute);
+    const date = new Date(time);
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    return time;
+}
+
+function isGroupMuteActive(until, storyTime) {
+    const muteUntil = asText(until, 128);
+    if (!muteUntil) return false;
+    if (muteUntil === 'permanent') return true;
+    const now = parseStoryTime(storyTime);
+    const expiry = parseStoryTime(muteUntil);
+    return now === null || expiry === null || now < expiry;
+}
+
 function cloneGlobalSettings(settings) {
     const source = asObject(settings);
     return Object.freeze({
@@ -274,10 +298,14 @@ function cloneMessagePreview(message) {
     });
 }
 
-function cloneGroup(group) {
+function cloneGroup(group, storyTime = '') {
     if (!group || typeof group !== 'object') return null;
     const source = asObject(group);
-    const mutes = asObject(source.mutes);
+    const mutes = Object.fromEntries(
+        Object.entries(asObject(source.mutes))
+            .map(([personId, until]) => [asText(personId, 256), asText(until, 128)])
+            .filter(([personId, until]) => personId && isGroupMuteActive(until, storyTime)),
+    );
     return Object.freeze({
         groupId: asText(source.groupId || source.id, 256),
         name: asText(source.name, 256),
@@ -289,19 +317,15 @@ function cloneGroup(group) {
         selfRole: asText(source.selfRole, 32) || 'member',
         selfExited: source.selfExited === true,
         selfMuted: source.selfMuted === true || Boolean(mutes.__self__),
-        mutes: Object.freeze(Object.fromEntries(
-            Object.entries(mutes)
-                .map(([personId, until]) => [asText(personId, 256), asText(until, 128)])
-                .filter(([personId, until]) => personId && until),
-        )),
+        mutes: Object.freeze(mutes),
     });
 }
 
-function cloneConversation(conversation) {
+function cloneConversation(conversation, storyTime = '') {
     const source = asObject(conversation);
     const kind = source.kind === 'group' ? 'group' : 'private';
     const person = asObject(source.person);
-    const group = cloneGroup(source.group);
+    const group = cloneGroup(source.group, storyTime);
     const status = asText(source.status, 32) || 'active';
     const muted = kind === 'group' && group?.selfMuted === true;
     const readOnly = status !== 'active'
@@ -570,6 +594,38 @@ export function createQQV2Facade(options = {}) {
                     return failed(error);
                 }
             },
+            async contactPack() {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.exportContactPack !== 'function') return unavailable('exportContactPack');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    const pack = await runtime.exportContactPack({ scopeId: context.scopeId });
+                    return Object.freeze({
+                        ok: true,
+                        status: asText(snapshot.phase, 32) || 'ready',
+                        pack: Object.freeze(pack),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async contactPackPreview(input = {}) {
+                if (typeof runtime.previewContactPack !== 'function') return unavailable('previewContactPack');
+                const source = String(input.source ?? '');
+                if (!source.trim()) return Object.freeze({ ok: false, status: 'invalid', reason: 'contact-pack-required' });
+                try {
+                    const preview = asObject(await runtime.previewContactPack({ source }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'ready',
+                        contacts: Math.max(0, Math.trunc(asNumber(preview.contacts))),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
             async sharedResources() {
                 if (typeof runtime.listSharedResources !== 'function') return unavailable('listSharedResources');
                 const resources = asObject(await runtime.listSharedResources());
@@ -594,7 +650,9 @@ export function createQQV2Facade(options = {}) {
                 return Object.freeze({
                     ok: true,
                     status: asText(snapshot.phase, 32) || 'ready',
-                    conversations: Object.freeze(asArray(conversations).map(cloneConversation)),
+                    conversations: Object.freeze(asArray(conversations).map((conversation) => (
+                        cloneConversation(conversation, context.storyTime)
+                    ))),
                 });
             },
             async messages(input = {}) {
@@ -639,7 +697,7 @@ export function createQQV2Facade(options = {}) {
                 return Object.freeze({
                     ok: true,
                     status: asText(snapshot.phase, 32) || 'ready',
-                    conversation: cloneConversation(conversation),
+                    conversation: cloneConversation(conversation, context.storyTime),
                 });
             },
             async person(input = {}) {
@@ -804,6 +862,30 @@ export function createQQV2Facade(options = {}) {
                             profileBackgrounds: Math.max(0, Math.trunc(asNumber(imported.profileBackgrounds))),
                             chatBackgrounds: Math.max(0, Math.trunc(asNumber(imported.chatBackgrounds))),
                             stickers: Math.max(0, Math.trunc(asNumber(imported.stickers))),
+                        }),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async importContactPack(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.importContactPack !== 'function') return unavailable('importContactPack');
+                const source = String(input.source ?? '');
+                if (!source.trim()) return Object.freeze({ ok: false, status: 'invalid', reason: 'contact-pack-required' });
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    const imported = asObject(await runtime.importContactPack({
+                        scopeId: context.scopeId,
+                        source,
+                    }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        imported: Object.freeze({
+                            contacts: Math.max(0, Math.trunc(asNumber(imported.contacts))),
                         }),
                     });
                 } catch (error) {
@@ -1835,6 +1917,36 @@ export function createQQV2Facade(options = {}) {
                             restored: result.restored === true,
                             person: clonePerson(result.person),
                             conversation: cloneConversation(result.conversation),
+                        }),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async activatePrivateContact(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.getConversation !== 'function') return unavailable('getConversation');
+                if (typeof runtime.activatePrivateContact !== 'function') return unavailable('activatePrivateContact');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    const conversationId = asText(input.conversationId, 256);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
+                    if (!await hasPrivateConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
+                    const result = asObject(await runtime.activatePrivateContact({
+                        scopeId: context.scopeId,
+                        conversationId,
+                        userName: context.user.name,
+                        storyTime: context.storyTime,
+                    }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        result: Object.freeze({
+                            activated: result.activated === true,
+                            person: clonePerson(result.person),
+                            conversation: cloneConversation(result.conversation, context.storyTime),
                         }),
                     });
                 } catch (error) {

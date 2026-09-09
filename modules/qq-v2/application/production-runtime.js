@@ -24,6 +24,7 @@ import {
     createQQV2BackendRouter,
     createQQV2DatabaseCurrentApiBackend,
 } from '../request/database-current-api-backend.js';
+import { createQQContactPackService } from '../resources/contact-pack.js';
 import { createQQImageLibraryPackService } from '../resources/image-library-pack.js';
 import { createQQDefaultImageLibraryInstaller } from '../resources/default-image-library.js';
 import { createQQV2ResourceService } from '../resources/service.js';
@@ -386,6 +387,7 @@ export function createQQV2ProductionRuntime(options = {}) {
     const sharedStorage = options.sharedStorage || createQQV2SharedResourceStorage({ stateStore });
     const repository = options.repository || createQQV2Repository({ stateStore });
     const globalRuntimeSettings = options.globalRuntimeSettings || createQQV2GlobalRuntimeSettings({ stateStore });
+    const contactPacks = options.contactPacks || createQQContactPackService({ repository });
     const imageLibraryPacks = options.imageLibraryPacks || createQQImageLibraryPackService({ stateStore });
     const defaultImageLibrary = options.defaultImageLibrary || createQQDefaultImageLibraryInstaller({
         stateStore,
@@ -1628,6 +1630,23 @@ export function createQQV2ProductionRuntime(options = {}) {
             await notifySubscribers();
             return result;
         },
+        async exportContactPack({ scopeId }) {
+            const scopeSession = captureReadyScopeSession(scopeId);
+            const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
+            return contactPacks.exportPack({ scopeId: normalizedScopeId });
+        },
+        previewContactPack: ({ source } = {}) => contactPacks.previewPack(source),
+        async importContactPack({ scopeId, source } = {}) {
+            const scopeSession = captureReadyScopeSession(scopeId);
+            const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
+            const result = await contactPacks.importPack({
+                scopeId: normalizedScopeId,
+                source,
+                operationOptions: { scopeSession },
+            });
+            await notifySubscribers(normalizedScopeId);
+            return result;
+        },
         async acquireStickerRender({ stickerId }) {
             const normalizedStickerId = asText(stickerId, 256);
             if (!normalizedStickerId) return null;
@@ -2223,6 +2242,18 @@ export function createQQV2ProductionRuntime(options = {}) {
             const scopeSession = captureReadyScopeSession(scopeId);
             const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
             const result = await repository.createPrivateConversation(normalizedScopeId, input, { scopeSession });
+            await notifySubscribers(normalizedScopeId);
+            return result;
+        },
+        async activatePrivateContact({ scopeId, conversationId, ...input }) {
+            const scopeSession = captureReadyScopeSession(scopeId);
+            const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
+            const result = await repository.activatePrivateContact(
+                normalizedScopeId,
+                asText(conversationId, 256),
+                input,
+                { scopeSession },
+            );
             await notifySubscribers(normalizedScopeId);
             return result;
         },

@@ -24,6 +24,7 @@
 
 .yuzi-phone-root .yuzi-phone-standalone.dragging {
     opacity: 0.9;
+    will-change: transform;
 }
 
 .yuzi-phone-root .yuzi-phone-standalone.resizing {

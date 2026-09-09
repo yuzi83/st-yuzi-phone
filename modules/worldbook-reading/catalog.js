@@ -22,6 +22,11 @@ function isEntryBlockedByKeyword(entry, blockedKeywords) {
     return blockedKeywords.some((keyword) => comment.includes(keyword));
 }
 
+function isQQProjection(entry) {
+    return entry?.extensions?.yuziPhoneQQV2?.version === 2
+        || String(entry?.comment || entry?.name || '').startsWith('YuziQQ｜');
+}
+
 function entrySelected(selection, entry, bookName, uid, enabled, blockedKeywords) {
     if (!enabled || isEntryBlockedByKeyword(entry, blockedKeywords)) return false;
     const bookPreferences = asObject(asObject(selection)[bookName]);
@@ -47,6 +52,7 @@ export function createWorldbookReadingCatalog({ source, preferences, blockedKeyw
                 books.push(Object.freeze({ name: bookName, sourceRole }));
 
                 for (const value of asArray(worldbook?.entries)) {
+                    if (isQQProjection(value)) continue;
                     const uid = String(value?.uid ?? '').trim();
                     if (!uid) continue;
                     const enabled = entryEnabled(value);
