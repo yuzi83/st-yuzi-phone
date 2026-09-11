@@ -143,7 +143,8 @@ async function main() {
             tables: displayTables(),
         });
         await writeMount(displays.projectDir, 'displays/task-inline/mount.js');
-        await writeMount(displays.projectDir, 'displays/summary-task-popup/mount.js');
+        await writeMount(displays.projectDir, 'displays/summary-task-inline/mount.js');
+        await writeMount(displays.projectDir, 'displays/summary-popup/mount.js');
         await writeMount(displays.projectDir, 'displays/summary-barrage/mount.js');
 
         runCli('project-add-display.mjs', [
@@ -170,12 +171,39 @@ async function main() {
             '--project', displays.projectFile,
             '--table', '纪要表',
             '--field', '编码索引',
-            '--id', 'summary-task-popup',
-            '--name', '纪要与任务浮窗',
-            '--kind', 'popup',
+            '--id', 'summary-task-inline',
+            '--name', '纪要与任务正文组合',
+            '--kind', 'inline',
             '--target', '{"table":"纪要表","fields":["编码索引","概览"]}',
             '--target', '{"table":"任务表","fields":["任务编号","任务内容"]}',
-            '--mount', 'displays/summary-task-popup/mount.js',
+            '--mount', 'displays/summary-task-inline/mount.js',
+            '--theme',
+            '--font',
+            '--json',
+        ]);
+        for (const kind of ['popup', 'barrage']) {
+            assert.throws(() => runCli('project-add-display.mjs', [
+                '--project', displays.projectFile,
+                '--table', '纪要表',
+                '--field', '编码索引',
+                '--id', `invalid-multi-${kind}`,
+                '--name', '非法多表展示',
+                '--kind', kind,
+                '--target', '{"table":"纪要表","fields":["编码索引","概览"]}',
+                '--target', '{"table":"任务表","fields":["任务编号","任务内容"]}',
+                '--mount', 'displays/summary-task-inline/mount.js',
+                '--json',
+            ]), /只有弹窗／插入正文可以多表组合/, `${kind} 制作必须拒绝多表组合`);
+        }
+        runCli('project-add-display.mjs', [
+            '--project', displays.projectFile,
+            '--table', '纪要表',
+            '--field', '编码索引',
+            '--id', 'summary-popup',
+            '--name', '纪要浮窗',
+            '--kind', 'popup',
+            '--target', '{"table":"纪要表","fields":["编码索引","概览"]}',
+            '--mount', 'displays/summary-popup/mount.js',
             '--theme',
             '--font',
             '--json',
@@ -188,7 +216,6 @@ async function main() {
             '--name', '纪要弹幕',
             '--kind', 'barrage',
             '--target', '{"table":"纪要表","fields":["编码索引","概览"]}',
-            '--target', '{"table":"任务表","fields":["任务编号","任务内容"]}',
             '--mount', 'displays/summary-barrage/mount.js',
             '--json',
         ]);
@@ -203,11 +230,13 @@ async function main() {
 
         const importedDisplay = importContentPreset(displayBundleText);
         const inline = importedDisplay.displays.find(display => display.id === 'task-inline');
-        const popup = importedDisplay.displays.find(display => display.id === 'summary-task-popup');
+        const combinedInline = importedDisplay.displays.find(display => display.id === 'summary-task-inline');
+        const popup = importedDisplay.displays.find(display => display.id === 'summary-popup');
         const barrage = importedDisplay.displays.find(display => display.id === 'summary-barrage');
         assert.ok(inline, '宿主必须直接导入真实工坊 inline 展示');
-        assert.ok(popup, '宿主必须直接导入真实工坊组合 popup 展示');
-        assert.ok(barrage, '宿主必须直接导入真实工坊组合 barrage 展示');
+        assert.ok(combinedInline, '宿主必须直接导入真实工坊多表 inline 展示');
+        assert.ok(popup, '宿主必须直接导入真实工坊单表 popup 展示');
+        assert.ok(barrage, '宿主必须直接导入真实工坊单表 barrage 展示');
         assert.deepEqual(inline.integrations, { theme: true, font: true }, '宿主不得丢失 inline 顶层 integrations');
         assert.deepEqual(inline.imageGeneration, {
             canvases: [
@@ -226,12 +255,16 @@ async function main() {
             ],
         }, '宿主不得丢失 inline 的多画布生图合同');
         assert.deepEqual(inline.interactions, ['expand', 'tabs', 'append-input', 'image-generate'], '宿主不得丢失 inline 顶层 interactions');
-        assert.deepEqual(popup.targets, [
+        assert.equal(importedDisplay.displays.length, 4, '被拒绝的多表浮窗和弹幕不得留下展示记录');
+        assert.deepEqual(combinedInline.targets, [
             { tableName: '纪要表', fields: ['编码索引', '概览'] },
             { tableName: '任务表', fields: ['任务编号', '任务内容'] },
-        ], '宿主必须保留组合 popup 的全部表和字段合同');
+        ], '宿主必须保留组合 inline 的全部表和字段合同');
+        assert.deepEqual(popup.targets, [
+            { tableName: '纪要表', fields: ['编码索引', '概览'] },
+        ], '宿主必须保留单表 popup 的完整字段合同');
         assert.deepEqual(popup.integrations, { theme: true, font: true }, '宿主不得丢失 popup 顶层 integrations');
-        assert.deepEqual(barrage.targets, popup.targets, '宿主必须保留组合 barrage 的全部表和字段合同');
+        assert.deepEqual(barrage.targets, popup.targets, '宿主必须保留单表 barrage 的完整字段合同');
 
         const pageWithHostCapabilities = await createWorkshopProject({
             root: runRoot,
