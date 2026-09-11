@@ -1,4 +1,8 @@
-import { INLINE_TABLE_POPUP_MODEL_ID } from './settings.js';
+import {
+    INLINE_TABLE_POPUP_MODEL_ID,
+    SCROLLING_BARRAGE_MODEL_ID,
+    TABLE_POPUP_MODEL_ID,
+} from './settings.js';
 
 function isRecord(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -59,6 +63,8 @@ function createSourceContext(snapshot, catalogEntry, rowSelection = null) {
     const content = Array.isArray(sheet?.content) ? sheet.content : [];
     return {
         ...catalogEntry,
+        snapshot,
+        rawData: snapshot,
         sheetKey,
         tableName: String(catalogEntry?.tableName || sheet?.name || '').trim(),
         sheet,
@@ -72,6 +78,18 @@ function normalizeRendererRegistry(value) {
     if (value instanceof Map) return value;
     if (isRecord(value)) return new Map(Object.entries(value));
     return new Map();
+}
+
+function resolveModelSettings(currentSettings, entry, rendererId) {
+    const models = isRecord(currentSettings?.models) ? currentSettings.models : {};
+    if (isRecord(models[rendererId])) return models[rendererId];
+    const kind = entry?.customDisplay?.display?.kind;
+    const fallbackModelId = kind === 'barrage'
+        ? SCROLLING_BARRAGE_MODEL_ID
+        : (kind === 'popup'
+            ? TABLE_POPUP_MODEL_ID
+            : (kind === 'inline' ? INLINE_TABLE_POPUP_MODEL_ID : ''));
+    return isRecord(models[fallbackModelId]) ? models[fallbackModelId] : {};
 }
 
 function normalizeChangedSheetKeys(value) {
@@ -223,10 +241,31 @@ export function createFullscreenOverlayRuntime(deps = {}) {
     function invalidateInline() {
         inlineEpoch++;
         safeCall(() => getRenderer(INLINE_TABLE_POPUP_MODEL_ID)?.clear?.(), undefined, onError, { action: 'inline.clear' });
+        for (const [rendererId, renderer] of rendererRegistry) {
+            if (rendererId === INLINE_TABLE_POPUP_MODEL_ID) continue;
+            safeCall(() => renderer.invalidateInline?.(), undefined, onError, { action: 'inline.clear', rendererId });
+        }
     }
 
     function getRenderer(rendererId) {
-        return rendererRegistry.get(String(rendererId || '').trim()) || null;
+        const id = String(rendererId || '').trim();
+        if (!id) return null;
+        const existing = rendererRegistry.get(id);
+        if (existing) return existing;
+        const dynamic = safeCall(
+            () => deps.resolveDynamicRenderer?.(id, {
+                layerRuntime,
+                getInlineEpoch: () => inlineEpoch,
+                getSettings: () => settings,
+                onError,
+            }),
+            null,
+            onError,
+            { action: 'renderer.dynamic-resolve', rendererId: id },
+        );
+        if (!dynamic || typeof dynamic.play !== 'function') return null;
+        rendererRegistry.set(id, dynamic);
+        return dynamic;
     }
 
     function stopRendererLoops(rendererIds, action) {
@@ -504,7 +543,7 @@ export function createFullscreenOverlayRuntime(deps = {}) {
             };
         }
 
-        const modelSettings = currentSettings?.models?.[rendererId] || {};
+        const modelSettings = resolveModelSettings(currentSettings, entry, rendererId);
         const sourceId = String(entry.sourceId || adapter?.id || '').trim();
         if (!sourceId) {
             onError(
@@ -529,6 +568,11 @@ export function createFullscreenOverlayRuntime(deps = {}) {
             items: [...eventsResult.items],
             modelSettings,
             settings: modelSettings,
+            customDisplay: entry.customDisplay || null,
+            targetSheetKeys: Array.isArray(entry.targetSheetKeys)
+                ? [...entry.targetSheetKeys]
+                : [],
+            snapshot: context.snapshot,
         };
         if (confirmation) {
             Object.assign(batch, confirmation);
@@ -675,8 +719,11 @@ export function createFullscreenOverlayRuntime(deps = {}) {
 
             const changed = !sourceSignatures.has(entry.sheetKey)
                 || !Object.is(sourceSignatures.get(entry.sheetKey), signature);
+            const watchedSheetKeys = Array.isArray(entry.targetSheetKeys) && entry.targetSheetKeys.length > 0
+                ? entry.targetSheetKeys
+                : [entry.sheetKey];
             const reviewChanged = changedSheetKeySet === null
-                || changedSheetKeySet.has(entry.sheetKey);
+                || watchedSheetKeys.some(sheetKey => changedSheetKeySet.has(sheetKey));
             if (hasChangedSheetFilter && entry.enabled && reviewChanged) {
                 matchedChangedSourceCount += 1;
             }

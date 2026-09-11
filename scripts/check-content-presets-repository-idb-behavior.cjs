@@ -10,6 +10,7 @@ function createHarness({ seed = {}, autoComplete = true, requestError = null, de
     const committed = {
         presets: new Map((seed.presets || []).map(value => [value.id, structuredClone(value)])),
         activeByTable: new Map((seed.activeByTable || []).map(value => [value.sheetKey, structuredClone(value)])),
+        popupByTable: new Map((seed.popupByTable || []).map(value => [value.sheetKey, structuredClone(value)])),
     };
     const transactions = [];
 
@@ -20,6 +21,7 @@ function createHarness({ seed = {}, autoComplete = true, requestError = null, de
             this.staged = {
                 presets: cloneMap(committed.presets),
                 activeByTable: cloneMap(committed.activeByTable),
+                popupByTable: cloneMap(committed.popupByTable),
             };
             this.aborted = false;
             this.completed = false;
@@ -56,11 +58,11 @@ function createHarness({ seed = {}, autoComplete = true, requestError = null, de
                     return request;
                 },
                 delete(key) {
-                    if (name === 'activeByTable' && key === deleteErrorKey) throw new Error('fixture binding delete failed');
+                    if ((name === 'activeByTable' || name === 'popupByTable') && key === deleteErrorKey) throw new Error('fixture binding delete failed');
                     map.delete(key);
                 },
                 index(indexName) {
-                    assert.equal(name, 'activeByTable');
+                    assert.ok(name === 'activeByTable' || name === 'popupByTable');
                     assert.equal(indexName, 'presetId');
                     return {
                         getAll(presetId) {
@@ -91,6 +93,7 @@ function createHarness({ seed = {}, autoComplete = true, requestError = null, de
             if (this.aborted || this.completed) return;
             committed.presets = cloneMap(this.staged.presets);
             committed.activeByTable = cloneMap(this.staged.activeByTable);
+            committed.popupByTable = cloneMap(this.staged.popupByTable);
             this.completed = true;
             this.oncomplete?.();
         }
@@ -172,7 +175,7 @@ async function setup(options = {}) {
 }
 
 function assertTransaction(tx) {
-    assert.deepEqual(tx.storeNames, ['presets', 'activeByTable']);
+    assert.deepEqual(tx.storeNames, ['presets', 'activeByTable', 'popupByTable']);
     assert.equal(tx.mode, 'readwrite');
 }
 
@@ -325,13 +328,13 @@ async function main() {
             const { harness, repository } = await setup({ seed: { presets: [malformedPath] } });
             await assert.rejects(
                 () => repository.setActiveBinding('sheet-malformed-path', 'preset-malformed-path', 'item-malformed-path'),
-                /不符合 v2 Runtime API 合同/,
+                /不符合玉子美化 Runtime API 合同/,
             );
             assert.equal(harness.lastTransaction.abortCalls, 1, '拒绝畸形路径绑定时必须中止事务');
             assert.equal(harness.committed.activeByTable.has('sheet-malformed-path'), false);
             await assert.rejects(
                 () => repository.replacePresetRecord(malformedPath),
-                /不符合 v2 Runtime API 合同/,
+                /不符合玉子美化 Runtime API 合同/,
             );
             assert.equal(harness.transactions.length, 1, 'replace 必须在开启事务前拒绝畸形路径记录');
         }
@@ -346,12 +349,12 @@ async function main() {
             const { harness, repository } = await setup({ seed: { presets: [malformedHtml] } });
             await assert.rejects(
                 () => repository.setActiveBinding('sheet-malformed-html', 'preset-malformed-html', 'item-malformed-html'),
-                /不符合 v2 Runtime API 合同/,
+                /不符合玉子美化 Runtime API 合同/,
             );
             assert.equal(harness.lastTransaction.abortCalls, 1, '拒绝畸形 HTML 入口绑定时必须中止事务');
             await assert.rejects(
                 () => repository.replacePresetRecord(malformedHtml),
-                /不符合 v2 Runtime API 合同/,
+                /不符合玉子美化 Runtime API 合同/,
             );
             assert.equal(harness.transactions.length, 1, 'replace 必须在开启事务前拒绝畸形 HTML 入口记录');
         }
@@ -361,7 +364,7 @@ async function main() {
             const { harness, repository } = await setup({ seed: { presets: [untrusted] } });
             await assert.rejects(
                 () => repository.setActiveBinding('sheet-untrusted', 'preset-untrusted', 'item-untrusted'),
-                /不符合 v2 Runtime API 合同/,
+                /不符合玉子美化 Runtime API 合同/,
             );
             assert.equal(harness.lastTransaction.abortCalls, 1, '拒绝不可信绑定时必须中止事务');
             assert.equal(harness.committed.activeByTable.has('sheet-untrusted'), false);

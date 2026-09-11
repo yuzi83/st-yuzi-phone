@@ -12,12 +12,14 @@ const WORLDBOOK_TIME_UNITS = new Set(['hour', 'day', 'month', 'year']);
 const DEFAULT_WORLDBOOK_INJECTION_COUNT = 30;
 const GLOBAL_PRESET_DEFAULTS = Object.freeze({
     activeApiPresetId: '',
+    assistantReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.assistantReply,
     privateReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateReply,
     privateProactivePresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateProactive,
     groupReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.groupReply,
     groupProactivePresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.groupProactive,
 });
 const GLOBAL_RUNTIME_DEFAULTS = Object.freeze({
+    sendButtonEnabled: false,
     hostContextTurns: 3,
     conversationHistoryLimit: 100,
     hostContextExtractTag: 'content',
@@ -84,7 +86,9 @@ function normalizeSettings(value) {
     const proactive = asObject(source.proactive);
     const worldbook = asObject(source.worldbook);
     return {
+        sendButtonEnabled: source.sendButtonEnabled === true,
         activeApiPresetId: asText(source.activeApiPresetId, 256),
+        assistantReplyPresetId: asText(source.assistantReplyPresetId, 256) || QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.assistantReply,
         privateReplyPresetId: asText(source.privateReplyPresetId, 256)
             || GLOBAL_PRESET_DEFAULTS.privateReplyPresetId,
         privateProactivePresetId: asText(source.privateProactivePresetId, 256)
@@ -235,10 +239,11 @@ function clearLegacyScopeProactiveSettings(state) {
 function applyPatch(current, patch) {
     const source = asObject(patch);
     const next = normalizeSettings(current);
+    if (Object.hasOwn(source, 'sendButtonEnabled')) next.sendButtonEnabled = source.sendButtonEnabled === true;
     if (Object.hasOwn(source, 'activeApiPresetId')) {
         next.activeApiPresetId = asText(source.activeApiPresetId, 256);
     }
-    for (const key of ['privateReplyPresetId', 'privateProactivePresetId', 'groupReplyPresetId', 'groupProactivePresetId']) {
+    for (const key of ['assistantReplyPresetId', 'privateReplyPresetId', 'privateProactivePresetId', 'groupReplyPresetId', 'groupProactivePresetId']) {
         if (Object.hasOwn(source, key)) next[key] = asText(source[key], 256) || GLOBAL_PRESET_DEFAULTS[key];
     }
     for (const key of ['hostContextTurns', 'conversationHistoryLimit']) {

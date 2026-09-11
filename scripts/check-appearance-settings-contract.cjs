@@ -99,7 +99,7 @@ function main() {
     check(results, 'iconUpload', '自定义图标总占用来自 appIcons 而不是资源池', has(contents.iconUpload, 'const currentIcons = phoneSettings.appIcons || {};')
         && has(contents.iconUpload, 'const currentIconsBytes = estimateIconsStorageBytes(currentIcons);'));
     check(results, 'iconUpload', '自定义图标 UI 展示当前 appIcons 全量清理入口', has(contents.iconUpload, 'const allCurrentIconEntries = Object.entries(currentIcons);')
-        && has(contents.iconUpload, '当前设置图标清理')
+        && has(contents.iconUpload, '图标清理 ·')
         && has(contents.iconUpload, 'phone-icon-cleanup-row')
         && has(contents.iconUpload, 'phone-icon-delete-current-btn')
         && has(contents.iconUpload, '隐藏旧图标 / 无当前图标位'));
@@ -352,8 +352,8 @@ function main() {
         && has(contents.appearanceBuilder, '导入到仓库')
         && has(contents.appearanceBuilder, 'id="phone-appearance-pack-repository"')
         && has(contents.appearanceBuilder, 'id="phone-appearance-pack-repository-list"')
-        && has(contents.appearanceBuilder, '导入会先保存到美化包仓库')
-        && has(contents.appearanceBuilder, '删除仓库条目不会清空当前已应用的背景和图标')
+        && !has(contents.appearanceBuilder, '导入会先保存到美化包仓库')
+        && has(contents.appearanceBuilder, '导入官方美化包。')
         && !has(contents.appearanceBuilder, '带 slotKey 的图标优先回到对应 App'));
     check(results, 'appearanceBuilder', '外观页不再暴露资源池图标清理按钮或旧资源池文案', has(contents.appearanceBuilder, '自定义图标')
         && !has(contents.appearanceBuilder, 'id="phone-clear-icon-resource-pool"')
@@ -370,14 +370,13 @@ function main() {
         && has(contents.appearanceBuilder, 'id="phone-font-css-url"')
         && has(contents.appearanceBuilder, 'id="phone-font-url-family"')
         && has(contents.appearanceBuilder, 'id="phone-import-font-url-btn"')
-        && has(contents.appearanceBuilder, '保存 URL 字体')
-        && has(contents.appearanceBuilder, 'HTTPS 字体 CSS URL')
-        && has(contents.appearanceBuilder, '@import')
-        && has(contents.appearanceBuilder, '不会下载、缓存或注入任意 CSS 片段'));
-    check(results, 'appearanceBuilder', '外观页 HTML 包含首页 App 名称颜色设置', has(contents.appearanceBuilder, '首页 App 名称颜色')
+        && has(contents.appearanceBuilder, '保存网络字体')
+        && has(contents.appearanceBuilder, 'HTTPS 字体 CSS 地址')
+        && has(contents.appearanceBuilder, '需联网加载。'));
+    check(results, 'appearanceBuilder', '外观页 HTML 包含首页 App 名称颜色设置', has(contents.appearanceBuilder, '首页名称颜色')
         && has(contents.appearanceBuilder, 'id="phone-home-app-label-color-mode"')
-        && has(contents.appearanceBuilder, '白色文字（适合深色背景）')
-        && has(contents.appearanceBuilder, '黑色文字（适合浅色背景）'));
+        && has(contents.appearanceBuilder, '>白色</option>')
+        && has(contents.appearanceBuilder, '>黑色</option>'));
 
     check(results, 'appearancePage', '外观页从 appearancePageService 读取 setupBgUpload()', has(contents.appearancePage, 'const setupBgUpload = appearancePageService.setupBgUpload;'));
     check(results, 'appearancePage', '外观页从 appearancePageService 读取 renderIconUploadList()', has(contents.appearancePage, 'const renderIconUploadList = appearancePageService.renderIconUploadList;'));

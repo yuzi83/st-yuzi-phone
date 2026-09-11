@@ -159,6 +159,7 @@ export function createQQV2ProactiveService(options = {}) {
             return (input) => options.actionService.execute({
                 scopeId: input.scopeId,
                 response: input.response,
+                diagnostic: input.diagnostic,
                 scenario: input.scenario,
                 references: input.references,
                 personReferences: input.personReferences,
@@ -174,20 +175,23 @@ export function createQQV2ProactiveService(options = {}) {
         return null;
     };
 
-    const resolveCandidates = async (scopeId, kind, historyLimit) => {
+    const resolveCandidates = async (scopeId, kind, historyLimit, sendButtonEnabled = false) => {
         const conversations = await requireFunction(repository.listConversations, 'repository.listConversations')(scopeId);
         const candidates = [];
         const getPerson = requireFunction(repository.getPerson, 'repository.getPerson');
         const listMessages = requireFunction(repository.listMessages, 'repository.listMessages');
+        const waitingForSend = (conversation, messages) => sendButtonEnabled && messages.some(message => (
+            (message.senderType === 'self' || message.senderId === '__self__')
+            && Number(message.sequence) > (Number(conversation.lastHandledUserSequence) || 0)
+        ));
         for (const conversation of conversations) {
             if (kind === 'private') {
-                if (conversation.kind !== 'private' || conversation.status !== 'active') continue;
+                if (conversation.assistantCharacterId || conversation.kind !== 'private' || conversation.status !== 'active') continue;
                 const person = await getPerson(scopeId, conversation.personId);
                 if (!person) continue;
-                const messages = truncateConversationHistory(
-                    await listMessages(scopeId, conversation.conversationId),
-                    historyLimit,
-                );
+                const history = await listMessages(scopeId, conversation.conversationId);
+                if (waitingForSend(conversation, history)) continue;
+                const messages = truncateConversationHistory(history, historyLimit);
                 candidates.push({
                     referenceId: `P${candidates.length + 1}`,
                     conversationId: conversation.conversationId,
@@ -213,7 +217,7 @@ export function createQQV2ProactiveService(options = {}) {
         const peopleById = new Map();
         const privateFriends = [];
         for (const conversation of conversations) {
-            if (conversation.kind !== 'private' || conversation.status !== 'active') continue;
+            if (conversation.assistantCharacterId || conversation.kind !== 'private' || conversation.status !== 'active') continue;
             const person = await getPerson(scopeId, conversation.personId);
             if (!person || peopleById.has(person.personId)) continue;
             peopleById.set(person.personId, person);
@@ -252,10 +256,9 @@ export function createQQV2ProactiveService(options = {}) {
             }));
             const labelFor = (personId) => labelsById.get(personId)
                 || (personId === '__self__' ? '用户' : asText(personId, 120));
-            const messages = truncateConversationHistory(
-                await listMessages(scopeId, conversation.conversationId),
-                historyLimit,
-            );
+            const history = await listMessages(scopeId, conversation.conversationId);
+            if (waitingForSend(conversation, history)) continue;
+            const messages = truncateConversationHistory(history, historyLimit);
             candidates.push({
                 referenceId: `G${candidates.length + 1}`,
                 conversationId: conversation.conversationId,
@@ -280,7 +283,8 @@ export function createQQV2ProactiveService(options = {}) {
         };
     };
 
-    const executeCycle = async ({ scopeId, kind, configRevision, scopeSession, signal, isCurrent }) => {
+    const executeCycle = async ({ scopeId, kind, configRevision, scopeSession, signal, isCurrent, diagnostic = {} }) => {
+        diagnostic.source = kind === 'group' ? 'QQ · 群聊主动消息' : 'QQ · 私聊主动消息';
         if (privateOnly && kind !== 'private') return { status: 'cancelled' };
         const current = () => configRevisionByScope.get(scopeId) === configRevision
             && !signal?.aborted
@@ -310,7 +314,7 @@ export function createQQV2ProactiveService(options = {}) {
         const [apiPreset, promptPreset, candidateData, stickers] = await Promise.all([
             apiPresetResolver(apiPresetId),
             promptPresetResolver(promptPresetId),
-            resolveCandidates(scopeId, kind, runtimeSettings.conversationHistoryLimit),
+            resolveCandidates(scopeId, kind, runtimeSettings.conversationHistoryLimit, runtimeSettings.sendButtonEnabled),
             listStickers(),
         ]);
         if (!apiPreset || !promptPreset) {
@@ -318,6 +322,10 @@ export function createQQV2ProactiveService(options = {}) {
         }
         if (!current()) return { status: 'cancelled' };
         const { candidates, personReferences, friendReferences } = candidateData;
+        Object.assign(diagnostic, {
+            apiKey: apiPreset.apiKey, model: apiPreset.model,
+            conversation: candidates.map(item => item.title || item.name || item.conversationId).join('、'),
+        });
         const projectionSignaturesBeforeCommit = new Map(candidates.map((candidate) => [
             candidate.conversationId,
             createProjectionSignature(candidate),
@@ -355,7 +363,9 @@ export function createQQV2ProactiveService(options = {}) {
             variables,
         });
         if (!current()) return { status: 'cancelled' };
+        diagnostic.stage = 'request';
         const response = await backend.generate({ preset: apiPreset, messages: promptMessages, signal });
+        Object.assign(diagnostic, { response: response?.content ?? response, model: response?.model || apiPreset.model, finishReason: response?.finishReason, stage: 'protocol' });
         if (!current()) return { status: 'cancelled' };
         const references = Object.fromEntries(candidates.map((candidate) => [candidate.referenceId, candidate.conversationId]));
         const messageReferences = createProactiveMessageReferences(candidates);
@@ -363,6 +373,7 @@ export function createQQV2ProactiveService(options = {}) {
         // The commit seam must make the last currentness check immediately before its transaction.
         if (!current()) return { status: 'cancelled' };
         const actionResult = await commitActions({
+            diagnostic,
             scopeId,
             kind,
             response: response?.content ?? response,
@@ -378,6 +389,7 @@ export function createQQV2ProactiveService(options = {}) {
             isCurrent: current,
         });
         if (!current()) return { status: 'cancelled' };
+        diagnostic.stage = 'completed';
         const appliedActions = Array.isArray(actionResult?.applied) ? actionResult.applied : [];
         const createdConversationIds = Array.isArray(actionResult?.createdConversationIds)
             ? actionResult.createdConversationIds
@@ -433,6 +445,7 @@ export function createQQV2ProactiveService(options = {}) {
                 scopeId,
                 kind,
                 runtimeSettings.conversationHistoryLimit,
+                runtimeSettings.sendButtonEnabled,
             );
             if (!current()) return { status: 'cancelled' };
             const projectionSignaturesAfterCommit = new Map(nextCandidateData.candidates.map((candidate) => [

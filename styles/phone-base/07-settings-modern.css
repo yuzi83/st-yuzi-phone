@@ -2029,3 +2029,48 @@
     border-radius: 4px;
     box-shadow: 0 2px 12px rgba(58, 55, 49, 0.12);
 }
+
+/* QQ failure diagnostics reuse Settings surfaces and the phone's own theme, not the host theme. */
+.phone-settings-page .yuzi-failure-logs {
+    color: var(--yuzi-settings-text-primary);
+}
+.phone-settings-page .yuzi-failure-log {
+    min-width: 0;
+    margin-bottom: 14px;
+    padding: 0 14px;
+    border: 1px solid var(--yuzi-settings-border);
+    border-radius: 16px;
+    background: var(--yuzi-settings-surface);
+    color: var(--yuzi-settings-text-primary);
+}
+.phone-settings-page .yuzi-failure-logs :is(h3, summary) {
+    margin: 10px 0 6px;
+    color: var(--yuzi-settings-text-primary);
+    font: inherit;
+    font-weight: 600;
+}
+.phone-settings-page .yuzi-failure-logs p {
+    margin: 6px 0 10px;
+    color: var(--yuzi-settings-text-secondary);
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+}
+.phone-settings-page .yuzi-failure-logs pre {
+    margin: 8px 0 12px;
+    padding: 12px;
+    border: 1px solid var(--yuzi-settings-border);
+    border-radius: 10px;
+    background: var(--yuzi-settings-surface-muted);
+    color: var(--yuzi-settings-text-primary);
+    font: inherit;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    user-select: text;
+}
+.phone-settings-page .yuzi-failure-logs summary { cursor: pointer; }
+.phone-settings-page .yuzi-failure-logs summary:focus-visible {
+    outline: 2px solid var(--yuzi-settings-accent);
+    outline-offset: 3px;
+}
+.phone-settings-page .yuzi-failure-logs [hidden] { display: none; }

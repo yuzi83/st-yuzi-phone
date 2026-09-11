@@ -237,6 +237,9 @@ async function createImageRuntimeFixture(options = {}) {
         ...(options.promptTranslationService
             ? { promptTranslationService: options.promptTranslationService }
             : {}),
+        ...(options.imageGenerationOrchestrator
+            ? { imageGenerationOrchestrator: options.imageGenerationOrchestrator }
+            : {}),
         projectionService: {
             async reconcileScope() { return []; },
             async retryPending() { return []; },
@@ -360,6 +363,64 @@ async function testRuntimeSkipsPromptTranslationWhenItsSwitchIsOff() {
 
     assert.equal(translationCalls, 0);
     assert.equal(fixture.generationInputs[0].prompt, '星野铃，站在窗边');
+
+    fixture.runtime.destroy();
+}
+
+async function testRuntimeDelegatesPostCompositionToSharedOrchestrator() {
+    const calls = [];
+    const fixture = await createImageRuntimeFixture({
+        getImageGenerationConfig: () => ({
+            enabled: true,
+            timeoutMs: 90_000,
+            roleMappings: [],
+            promptTranslationEnabled: true,
+            promptTranslationApiPresetId: 'translator-api',
+            promptTranslationPresetId: 'image-preset',
+            promptTranslationExtractTag: 'content',
+            promptTranslationExcludeTags: ['analysis'],
+        }),
+        imageGenerationOrchestrator: {
+            async generate(input) {
+                calls.push(input);
+                return {
+                    ok: true,
+                    status: 'stored',
+                    path: 'user/images/yuzi-phone-generated/orchestrated.png',
+                    generatedAt: 1_787_558_400_123,
+                };
+            },
+        },
+    });
+    const created = await fixture.repository.createPrivateConversation(fixture.scopeId, { name: '星野铃' });
+    const [message] = await fixture.repository.appendMessages(
+        fixture.scopeId,
+        created.conversation.conversationId,
+        [{
+            senderId: created.person.personId,
+            senderType: 'person',
+            type: 'image',
+            content: '站在窗边',
+        }],
+    );
+
+    const result = await fixture.runtime.generateMessageImage({
+        scopeId: fixture.scopeId,
+        conversationId: created.conversation.conversationId,
+        messageId: message.messageId,
+    });
+
+    assert.equal(calls.length, 1, 'QQ 必须委托共享生图编排，而不是复制翻译和生成流程');
+    assert.equal(calls[0].naturalPrompt, '星野铃，站在窗边');
+    assert.equal(calls[0].timeoutMs, 90_000);
+    assert.deepEqual(calls[0].translation, {
+        apiPresetId: 'translator-api',
+        imageGenerationPresetId: 'image-preset',
+    });
+    assert.equal(calls[0].folder, 'yuzi-phone-generated');
+    assert.match(calls[0].filename, /^qq-/);
+    assert.equal(fixture.generationInputs.length, 0, '注入编排器时 QQ 不得绕过它直接请求生图服务');
+    assert.equal(result.message.generatedImagePath, 'user/images/yuzi-phone-generated/orchestrated.png');
 
     fixture.runtime.destroy();
 }
@@ -863,6 +924,7 @@ async function main() {
     await testRuntimeGeneratesForAiAndSelfThenSafelyReplacesTheOldImage();
     await testRuntimeUsesPromptTranslationOutputBeforeCallingImageGeneration();
     await testRuntimeSkipsPromptTranslationWhenItsSwitchIsOff();
+    await testRuntimeDelegatesPostCompositionToSharedOrchestrator();
     await testFacadeExposesGeneratedImageIntentWithoutLeakingRuntimeDetails();
 }
 

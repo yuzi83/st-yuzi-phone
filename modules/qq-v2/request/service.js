@@ -134,6 +134,7 @@ function assertManualActionsTargetConversation(actions, conversationId) {
  */
 export function createQQV2RequestService(options = {}) {
     const repository = options.repository;
+    const failureLog = options.failureLog;
     if (!repository
         || typeof repository.appendMessages !== 'function'
         || typeof repository.getScope !== 'function'
@@ -315,6 +316,16 @@ export function createQQV2RequestService(options = {}) {
             setState(key, { phase: 'idle', pendingUserMessageCount: 0, error: '' });
             return;
         }
+        Object.assign(entry.diagnostic, {
+            source: conversation.kind === 'group' ? 'QQ · 群聊回复' : 'QQ · 私聊回复',
+            conversation: conversation.title || conversation.name || entry.conversationId,
+        });
+        try {
+            const contact = conversation.kind === 'group'
+                ? await repository.getGroup?.(entry.scopeId, conversation.groupId)
+                : await repository.getPerson?.(entry.scopeId, conversation.personId);
+            entry.diagnostic.conversation = contact?.name || contact?.formalName || entry.diagnostic.conversation;
+        } catch { /* A missing display label must not block generation. */ }
         const messages = await repository.listMessages(entry.scopeId, entry.conversationId);
         const handledSequence = Number(conversation.lastHandledUserSequence) || 0;
         const pending = messages.filter((message) => isSelfMessage(message) && Number(message.sequence) > handledSequence);
@@ -329,7 +340,8 @@ export function createQQV2RequestService(options = {}) {
         }) || scope.settings || {};
         const apiPresetId = asText(runtimeSettings.activeApiPresetId, 256);
         const promptPresetId = asText(
-            conversation.kind === 'group' ? runtimeSettings.groupReplyPresetId : runtimeSettings.privateReplyPresetId,
+            conversation.assistantCharacterId ? runtimeSettings.assistantReplyPresetId
+                : conversation.kind === 'group' ? runtimeSettings.groupReplyPresetId : runtimeSettings.privateReplyPresetId,
             256,
         );
         if (!apiPresetId || !promptPresetId) {
@@ -345,6 +357,7 @@ export function createQQV2RequestService(options = {}) {
             throw new QQV2RequestError('Selected QQ API or AI prompt preset no longer exists', 'preset_missing');
         }
 
+        Object.assign(entry.diagnostic, { apiKey: apiPreset.apiKey, model: apiPreset.model });
         const requestBuild = normalizeManualRequestBuild(await buildManualRequest({
             scopeId: entry.scopeId,
             scopeSession: entry.scopeSession,
@@ -361,7 +374,9 @@ export function createQQV2RequestService(options = {}) {
             : stickerCatalog.references;
         const promptMessages = requestBuild.messages;
         if (!isCurrentEntry(entry)) return;
+        entry.diagnostic.stage = 'request';
         const response = await backend.generate({ preset: apiPreset, messages: promptMessages, signal: entry.controller.signal });
+        Object.assign(entry.diagnostic, { response: response?.content ?? response, model: response?.model || apiPreset.model, finishReason: response?.finishReason, stage: 'protocol' });
         if (!isCurrentEntry(entry)) return;
 
         const scenario = conversation.kind === 'group' ? 'group-reply' : 'private-reply';
@@ -378,6 +393,7 @@ export function createQQV2RequestService(options = {}) {
             actionResult = await commitManualActions({
                 scopeId: entry.scopeId,
                 response: response?.content ?? response,
+                diagnostic: entry.diagnostic,
                 scenario,
                 references,
                 personReferences: requestBuild.personReferences,
@@ -396,6 +412,7 @@ export function createQQV2RequestService(options = {}) {
                 reference,
                 conversations.find((item) => item.conversationId === conversationId) || null,
             ]));
+            entry.diagnostic.stage = 'validate';
             const validatedActions = await validateActions(actions, {
                 scenario,
                 conversations: conversationsByReference,
@@ -406,6 +423,7 @@ export function createQQV2RequestService(options = {}) {
                 .find(([, conversationId]) => conversationId === entry.conversationId)?.[0] || entry.conversationId;
             assertManualActionsTargetConversation(validatedActions, currentReference);
             if (!isCurrentEntry(entry)) return;
+            entry.diagnostic.stage = 'save';
             actionResult = await repository.applyAIActions(
                 entry.scopeId,
                 mapQQV2StickerActionReferences(validatedActions, stickerReferences),
@@ -418,6 +436,7 @@ export function createQQV2RequestService(options = {}) {
             );
         }
         if (!isCurrentEntry(entry)) return;
+        entry.diagnostic.stage = 'completed';
         await notifyManualMutation({
             kind: 'ai-actions',
             scopeId: entry.scopeId,
@@ -431,6 +450,7 @@ export function createQQV2RequestService(options = {}) {
     };
 
     const executeProactive = async (entry) => entry.execute({
+        diagnostic: entry.diagnostic,
         scopeId: entry.scopeId,
         scopeSession: entry.scopeSession,
         signal: entry.controller.signal,
@@ -439,6 +459,11 @@ export function createQQV2RequestService(options = {}) {
 
     const runEntry = async (entry) => {
         active = entry;
+        entry.diagnostic = failureLog?.begin({
+            scopeId: entry.scopeId,
+            source: entry.kind === 'proactive' ? 'QQ · 主动消息' : 'QQ · 回复',
+            conversation: entry.conversationId || '',
+        }) || {};
         try {
             if (!isCurrentEntry(entry)) {
                 if (entry.kind !== 'proactive') states.delete(entry.key);
@@ -450,6 +475,9 @@ export function createQQV2RequestService(options = {}) {
                 await executeManual(entry);
             }
         } catch (error) {
+            if (isCurrentEntry(entry)) {
+                try { failureLog?.record(entry.diagnostic, error); } catch { /* Best-effort diagnostics. */ }
+            }
             if (entry.kind === 'proactive' && !entry.controller.signal.aborted) {
                 try {
                     await onProactiveError(error, Object.freeze({
@@ -480,6 +508,7 @@ export function createQQV2RequestService(options = {}) {
                 });
             }
         } finally {
+            delete entry.diagnostic;
             releaseScopeSession(entry);
             if (active === entry) active = null;
         }
@@ -725,9 +754,12 @@ export function createQQV2RequestService(options = {}) {
             if (!['private', 'group'].includes(conversation?.kind) || conversation?.status !== 'active') {
                 throw new QQV2RequestError('QQ conversation is unavailable', 'conversation_unavailable');
             }
-            preemptProactiveForManual();
+            const scope = await repository.getScope(scopeId);
+            const settings = await runtimeSettingsResolver(scopeId, scope, { scopeSession });
             const key = requestKey(scopeId, conversationId);
-            const runningEntry = active?.key === key ? active : null;
+            const runningEntry = active?.key === key && !active.controller.signal.aborted ? active : null;
+            const shouldRequest = settings.sendButtonEnabled !== true || queued.has(key) || Boolean(runningEntry);
+            preemptProactiveForManual();
             if (runningEntry) superseding.add(key);
             const message = input.message && typeof input.message === 'object' ? input.message : {};
             let created;
@@ -754,6 +786,7 @@ export function createQQV2RequestService(options = {}) {
                 superseding.delete(key);
                 return Object.freeze({ message: created });
             }
+            if (!shouldRequest) return Object.freeze({ message: created });
             if (runningEntry && active === runningEntry) {
                 enqueue(scopeId, conversationId, scopeSession, { serial: runningEntry.serial });
                 abortEntry(runningEntry, 'new-manual-message');

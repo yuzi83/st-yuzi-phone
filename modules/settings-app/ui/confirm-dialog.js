@@ -45,6 +45,7 @@ function normalizeClassTokens(value) {
  * @param {Object} runtime 可选 runtime scope
  * @param {Object} options 可选弹窗配置
  * @param {string|string[]} options.overlayClassName overlay 额外 class
+ * @param {Function} options.onCancel 取消回调
  */
 export function showConfirmDialog(container, title, message, onConfirm, confirmText = '确认', cancelText = '取消', runtime = null, options = {}) {
     const runtimeApi = createDialogRuntime(runtime);
@@ -74,7 +75,10 @@ export function showConfirmDialog(container, title, message, onConfirm, confirmT
         runtimeApi.setTimeout(() => overlay.remove(), 200);
     };
 
-    runtimeApi.addEventListener(overlay.querySelector('.phone-confirm-dialog-cancel'), 'click', closeDialog);
+    runtimeApi.addEventListener(overlay.querySelector('.phone-confirm-dialog-cancel'), 'click', () => {
+        closeDialog();
+        options?.onCancel?.();
+    });
     runtimeApi.addEventListener(overlay.querySelector('.phone-confirm-dialog-confirm'), 'click', () => {
         closeDialog();
         onConfirm?.();

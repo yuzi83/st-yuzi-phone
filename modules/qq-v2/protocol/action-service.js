@@ -63,6 +63,11 @@ export function createQQV2ActionService(options = {}) {
             const messageReferences = asObject(input.messageReferences);
             const visibleMessageRefs = asReferenceSet(input.visibleMessageRefs);
             const actions = await parseResponse(input.response, input.parseOptions || {});
+            const assistantTargets = [...conversations.values()].filter(item => item?.assistantCharacterId);
+            if (assistantTargets.length && (conversations.size !== 1 || actions.some(action => !['message', 'transfer'].includes(action.type)))) {
+                throw Object.assign(new Error('陪聊只能回复当前会话或处理转账'), { code: 'assistant_action_forbidden' });
+            }
+            if (input.diagnostic) input.diagnostic.stage = 'validate';
             await validateActions(actions, {
                 scenario: input.scenario,
                 conversations,
@@ -70,8 +75,20 @@ export function createQQV2ActionService(options = {}) {
                 visibleMessageRefs,
             });
             const personReferences = asObject(input.personReferences);
+            const assistantPerson = assistantTargets.length === 1
+                ? await repository.getPerson(scopeId, assistantTargets[0].personId)
+                : null;
             const mappedActions = mapQQV2StickerActionReferences(
-                actions.map((action) => mapActionReferences(action, personReferences, messageReferences)),
+                actions.map((action) => {
+                    const mapped = mapActionReferences(action, personReferences, messageReferences);
+                    // 仅兼容当前陪聊人物的完整姓名；标准引用优先，不扩展 actor/recipient 等字段。
+                    if (action.type === 'message' && assistantPerson?.formalName
+                        && action.sender === assistantPerson.formalName
+                        && !Object.hasOwn(personReferences, action.sender)) {
+                        mapped.sender = assistantTargets[0].personId;
+                    }
+                    return mapped;
+                }),
                 asObject(input.stickerReferences),
             );
             if (!isCurrent()) {
@@ -79,6 +96,7 @@ export function createQQV2ActionService(options = {}) {
                 error.code = 'request_cancelled';
                 throw error;
             }
+            if (input.diagnostic) input.diagnostic.stage = 'save';
             return repository.applyAIActions(scopeId, mappedActions, {
                 references,
                 storyTime: input.storyTime,

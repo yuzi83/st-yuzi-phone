@@ -280,3 +280,9 @@ Figma 原始底栏顺序不直接复用。生产 QQ 固定为 消息、联系人
 | `279:4753 / 278:1533` | 设置外观二级 | `.yuzi-qq-settings-detail-view`、`.yuzi-qq-settings-detail-sheet` | `--yuzi-qq-settings-detail-*` |
 | `279:4926 / 279:5019` | 设置选择与上传弹层 | `.yuzi-qq-dialog`、`.yuzi-qq-overlay` | `--yuzi-qq-dialog-*`、`--yuzi-qq-overlay` |
 | `407:641 / 407:1786` | 删除好友与左滑删除参考 | `.yuzi-qq-dialog`、`.yuzi-qq-swipe-row` | 仅映射结构和 role token，不作为生产图片嵌入 |
+
+### QQ 可选发送键
+
+设置首页“发送键”开关使用 `--yuzi-qq-send-switch-width`（44px）、`--yuzi-qq-send-switch-height`（26px）、`--yuzi-qq-send-switch-padding`（3px）、`--yuzi-qq-send-switch-thumb`（20px）和 `--yuzi-qq-send-switch-duration`（150ms）。开关未选中消费 `--yuzi-qq-muted`，选中消费 `--yuzi-qq-accent`，滑块消费 `--yuzi-qq-on-accent`；减少动态效果时停用滑动过渡。
+
+输入框的纸飞机与终止键互斥显示，共用 `--yuzi-qq-private-stop-size`、`--yuzi-qq-private-stop-icon-size` 和 `--yuzi-qq-radius-8`，不增加第二个按钮位置。纸飞机使用 `--yuzi-qq-accent`，终止键仍使用 `--yuzi-qq-danger`，禁用状态消费 `--yuzi-qq-disabled-opacity`。

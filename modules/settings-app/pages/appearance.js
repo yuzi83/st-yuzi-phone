@@ -59,7 +59,7 @@ function renderAppearancePackRepositoryList(listEl, result, settings = {}, selec
     const packs = Array.isArray(result.packs) ? result.packs : [];
     const activePackId = String(settings?.appearanceActivePackId || '').trim();
     if (!packs.length) {
-        listEl.innerHTML = '<div class="phone-settings-note">仓库为空。导入 JSON 美化包后会保存在这里，当前外观不会被自动替换。</div>';
+        listEl.innerHTML = '<div class="phone-settings-note">暂无美化包，请先导入。</div>';
         return;
     }
 

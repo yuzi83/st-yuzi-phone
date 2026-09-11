@@ -399,6 +399,16 @@ sequenceDiagram
 - QQ 单会话详情中的世界书注入开关、灯色与深度覆盖、关键词等设置继续按 QQ 会话独立保存；全局值只提供默认与跟随来源，不能覆盖已有的会话级选择。
 - 主动消息由 `production-runtime.js` 在正文稳定后读取当前聊天可见、成功的 AI 楼层；新增楼层跨过“每隔多少轮”的整数倍时入队一次，所以切换聊天后仍按该聊天自身的总 AI 楼层节奏运行。它只保留运行时楼层基线，不在任何宿主聊天 scope 或 IndexedDB 写入旧的计数或轮换进度。删除聊天只删除该 scope 的会话、消息、媒体引用、宿主聊天级目标 `bookName` 和世界书投影状态，无需删除主动消息进度。主动动作批次只有在新增、删除或修改可投影 QQ 事实时才同步对应会话；`none`、纯已读或空动作不触发世界书保存。
 
+#### QQ 可选发送键
+
+QQ 设置首页的“发送键”是默认关闭、跨酒馆聊天共享的 `sendButtonEnabled` 设置，由 `global-runtime-settings.js` 保存，经 Production Runtime 和 Facade 暴露；不写入会话、不另建 localStorage 或消息暂存队列。关闭时保留原自动请求链路。
+
+开启后，私聊、群聊和助手空闲时发送的各类用户消息仍走 `sendManual` 保存及既有世界书同步，但不加入回复队列。输入框右侧的纸飞机与终止键共用一个位置和尺寸：空闲/失败时显示纸飞机，排队/生成时只显示终止键。`composer.js` 的批次提交器先通过现有输入框提交逻辑保存非空草稿，再复用 Facade `retryRequest` 提交当前会话的未回复批次；重复点击被提交器抑制，草稿失败或旧 UI 销毁后不继续请求，跨步骤携带 `scopeId` 防止切换酒馆聊天后误提交。
+
+发送键只改变空闲阶段的自动触发：已有排队项继续合并新消息；生成中继续发消息仍中止旧请求并带上新消息重新排队。回复完成或手动终止后，新消息重新等待纸飞机；已取消但尚未退出的请求不能恢复自动触发。开关切换本身不取消、重启或新增请求；刷新、关闭手机或切换页面不自动提交已保存消息。各会话独立提交，失败重试入口仍可使用。
+
+主动消息总开关和独立生图等辅助功能保持独立。发送键开启时，主动候选从完整历史判断会话是否仍有未处理用户消息；有待提交消息的私聊/群聊不成为本轮主动候选，其他会话照常参与。生成过程中用户再发消息仍使用既有主动请求抢占/取消保护。行为回归由 `scripts/check-qq-send-button-behavior.cjs` 通过真实 Facade、运行时和存储适配器覆盖，不发出真实 API 请求。
+
 #### 5.3.1 QQ 世界书上下文读取
 
 QQ 的“世界书注入”与 `{{世界书内容}}` 读取是两条独立链路：前者由 [`projection-service.js`](../modules/qq-v2/worldbook/projection-service.js) 把 QQ 事实投影到真实世界书；后者由 [`context-resolver.js`](../modules/worldbook-reading/context-resolver.js) 为手动回复和主动消息构造一次性上下文。关闭或删除投影不得关闭读取栏，读取栏的选择也不得改写会话投影设置。
@@ -436,6 +446,19 @@ flowchart LR
 - 世界书列表、角色绑定、世界书读写和聊天文件查证必须使用第 4.1 节登记的宿主 API；遇到新宿主需求先扩展桥接层与本节清单，不在业务代码中临时硬编码。
 - QQ route 只能挂载当前 v2 UI，不能借用或恢复旧 QQ v1 UI、旧路由参数或旧存储模型作为加载 fallback。
 - 不要在 Table Viewer、通用表 CRUD 或 Theater 中补回 QQ 分支；广场、论坛等小剧场仍由 `modules/phone-theater/**` 独立维护。
+
+#### 5.3.2 助手陪聊
+
+助手是私聊机制上的隔离用途，不建立第二套聊天引擎。领域会话保持 `kind: 'private'`，以 `assistantCharacterId` 明确区分；该标记必须保留到 Facade 与渲染层。
+
+- [`assistant-characters.js`](../modules/qq-v2/domain/assistant-characters.js) 定义内置北白川玉子、固定头像、出厂人设和全局人物库视图。全局事实源是 QQ IndexedDB `sharedResources.assistantCharacters`；每个 scope 中的同 ID 人物仅作为现有私聊机制的资料投影，保存全局人物时同步现有投影。图片仍引用共享图片资料，不把 Blob 塞进人物记录。
+- [`repository.js`](../modules/qq-v2/domain/repository.js) 原子创建/复用助手会话，保存全局人物，删除自建人物及跨 scope 会话。会话删除与普通 QQ 共用 `deleteConversationState()`，清理消息、私有媒体和无其他引用的生成图片；助手不会保留成普通联系人。公共图片资料及人物库不随单会话删除。更新普通私聊资料入口仅允许助手修改会话背景，人物资料必须经过全局人物入口。
+- [`facade.js`](../modules/qq-v2/application/facade.js) 的 `assistantCharacters` / `assistantConversations` 查询与 `openAssistant` / `saveAssistantCharacter` / `deleteAssistantCharacter` 意图构成 UI 边界。普通 `conversations` 查询和联系人导出排除助手；聊天查询、消息、转账、媒体和生图接口继续复用。
+- [`assistant-preset.js`](../modules/qq-v2/prompt/assistant-preset.js) 生成“陪聊”内置预设：总说明、成对 user/assistant、XML 协议、执行确认。`assistantReplyPresetId` 与其他预设选择一样全局保存。`{{人物人设}}` 使用人物姓名及完整已保存文本；正文和历史范围沿用 QQ，世界书扫描仍是最近两条合格宿主消息、人物名和当前会话最近三条消息。
+- [`production-runtime.js`](../modules/qq-v2/application/production-runtime.js) 继续组合现有请求、媒体、生图和删除清理链；修改人物资料先取消相关旧请求。生图不裁掉表格映射或描述中其他人物的识别，也不把完整人设另行塞进生图提示词；会话删除后的迟到生图通过既有存活校验被拒绝并清理产物。
+- 陪聊不可写世界书：Repository 拒绝修改助手注入及消息选择，世界书投影服务和主动消息候选均排除助手。协议执行入口只允许当前会话的 message/transfer，不接受 read、none、新建会话或群管理。陪聊 message 的 sender 若与当前人物完整姓名完全一致，可在引用转换处解析为当前人物 ID；标准引用优先，不模糊匹配、不查询全局同名人物，也不扩展普通私聊、群聊或 actor/recipient 字段。助手也不能作为普通好友加入群聊。
+- [`assistant.js`](../modules/qq-v2/ui/assistant.js) 只拥有人物选择、姓名创建与人设设置，不复制消息列表或私聊界面。普通 QQ UI 管理背景和消息；人设草稿跨刷新保留，保存按钮显式提交，恢复默认先回填草稿，返回时提示放弃未保存修改。新增 CSS 仅位于 QQ 作用域。
+- [`check-qq-assistant-contract.cjs`](../scripts/check-qq-assistant-contract.cjs) 通过生产 Facade 验证全局人设、scope 隔离、删除、预设选择、真实私聊协议请求、世界书读取、多人合影与迟到生图清理。仅宿主、浏览器 DOM 和外部生成服务使用测试替身，不进行真实付费调用。
 
 ## 6. UI 模块职责
 
@@ -589,6 +612,14 @@ CSS 层读取这些 data attributes 和 CSS 变量，见 [`styles/05-phone-gener
 3. [`createCurrentPageRuntime()`](../modules/settings-app/page-runtime.js:41) 为新 mode 创建新的 runtime scope。
 4. 页面定义通过 [`createPage()`](../modules/settings-app/page-renderers/preset-renderers.js:24) / [`createPage()`](../modules/settings-app/page-renderers/editor-renderers.js:19) / [`createPage()`](../modules/settings-app/page-renderers/personalization-renderers.js:43) 返回页面对象。
 5. 页面对象可提供 [`mount()`](../modules/settings-app/render.js:119)、[`update()`](../modules/settings-app/render.js:119)、[`dispose()`](../modules/settings-app/render.js:119) 三类生命周期入口。
+
+#### 设置 → 日志
+
+- [`pages/logs.js`](../modules/settings-app/pages/logs.js) 复用 Settings 的页面注册、`buildSettingsPageFrame()`、section、按钮、page runtime 与滚动保持器；原始返回、问题说明、处理建议和技术详情四个区域统一使用默认收起的原生 `details`；复制和展开不重建页面，实时更新保留已有卡片与展开状态。样式在 `.phone-settings-page .yuzi-failure-logs` 内消费 `--yuzi-settings-*`，不跟随宿主酒馆主题的文字或背景色。
+- [`failure-log.js`](../modules/qq-v2/request/failure-log.js) 是独立的内存诊断集合，不属于 QQ 消息事实、设置或持久化仓库。仅保留当前酒馆聊天最近 50 次失败，单次正文上限 16,000 字符、技术详情 2,000 字符，总序列化文本预算 256,000 字符；截断和提前淘汰均明确提示。刷新、切换聊天、runtime 销毁或手动清空后不恢复，关闭手机或离开日志页不清空。
+- QQ 请求队列为每次执行建立请求局部诊断上下文；手动和主动请求共同在队列失败出口记录一次，包含对应原始正文、来源、会话、模型和错误阶段。动作服务在仓储事务前标记保存阶段；成功提交后不再把投影等后续失败记为 AI 回复失败。
+- 诊断只读取必要字段，保存前脱敏，不保存 API 密钥、请求头、完整提示词或世界书上下文。scope 与清空 revision 双重隔离阻止旧请求写回；取消、失效请求、已读不回和不行动不记错。日志观察失败不得影响请求和领域事务。
+- 空回与 API 响应结构错误分开识别；协议错误、动作不合法、配置错误、网络错误与保存错误各自解释。数据库当前 API 不提供详细原因时保持未知，不推断成空回。日志只提供复制、展开和清空，重试仍由 QQ 会话现有入口负责。
 
 #### 6.3.2 Settings state 契约
 

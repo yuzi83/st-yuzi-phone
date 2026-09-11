@@ -18,6 +18,7 @@ const EXPECTED_STAGE_PROMPTS = [
 ];
 
 const EXPECTED_SCRIPTS = {
+  'project:add-display': 'node tools/project-add-display.mjs',
   'project:new': 'node tools/project-new.mjs',
   'project:import-tables': 'node tools/project-import-tables.mjs',
   'project:add-item': 'node tools/project-add-item.mjs',
@@ -54,6 +55,58 @@ const STAGE_CAPABILITY_CONTRACTS = new Map([
 ]);
 
 const EXPECTED_PROCESS_CONTRACT = {
+  popupAuthoring: {
+  "terminology": "弹窗",
+  "opening": "小手机有三个弹窗接口",
+  "interfaceNames": [
+    "弹幕",
+    "弹窗／浮窗",
+    "弹窗／插入正文"
+  ],
+  "askInterfaceFirst": true,
+  "multiTableKinds": [
+    "inline"
+  ],
+  "singleTableKinds": [
+    "barrage",
+    "popup"
+  ],
+  "askCombinationOnlyAfterInline": true,
+  "askInlineImageButton": true,
+  "repeatConfirmedChoices": false,
+  "combinationUnit": "one-popup",
+  "currentDataSelection": {
+    "providedBy": "host-current-snapshot",
+    "doNotAskUser": [
+      "which-row",
+      "whether-latest",
+      "which-record-triggers",
+      "how-host-filters"
+    ],
+    "historyOrRowPickerOnlyWhenExplicitlyRequested": true
+  },
+  "document": "docs/runtime/popup-authoring-workflow.md"
+},
+  hostCapabilities: {
+  "readBeforeDiscussion": [
+    "docs/runtime/authoring-workflow.md",
+    "docs/runtime/host-capabilities.md",
+    "docs/runtime/host-capabilities.d.ts"
+  ],
+  "hostSourceRequired": false,
+  "userVersionGate": false,
+  "batchRelatedQuestions": true,
+  "requireUserImageIdentityChoice": true,
+  "singleRowIdentityExemption": false,
+  "imageDiscussion": [
+    "display-size-and-responsive-ratio",
+    "composed-field-and-framing-prompt",
+    "ask-optional-user-prompt"
+  ],
+  "previewRealGeneration": false,
+  "previewCredentials": false,
+  "allowDeferredPreview": true
+},
   phaseOrder: ['setup', 'per-table', 'release'],
   guidance: {
     role: 'guide-not-decision-maker',
@@ -81,6 +134,7 @@ const EXPECTED_PROCESS_CONTRACT = {
     hostDomAllowedWhenExplicitlyRequested: true,
   },
   tableLoop: {
+    scope: 'page-items',
     queueSource: 'workflow-state.json#queue',
     currentSource: 'workflow-state.json#currentTable',
     defaultCoverage: 'all-imported-tables',
@@ -125,7 +179,7 @@ const EXPECTED_PROCESS_CONTRACT = {
   },
   deliverables: [
     { id: 'tables-json', kind: 'chatSheets-json', path: 'projects/*/tables/generated/tables.json', independent: true },
-    { id: 'beautify-bundle', kind: 'yuzi-beautify-preset-v2', path: 'output/*.json', independent: true },
+    { id: 'beautify-bundle', kind: 'yuzi-beautify-preset', path: 'output/*.json', independent: true },
     { id: 'editable-source', kind: 'source-project', path: 'projects/*/project.json', independent: true },
   ],
 };
@@ -147,8 +201,11 @@ const EXPECTED_RUNTIME_BOUNDARY = {
 };
 
 const REQUIRED_DOCUMENT_FRAGMENTS = new Map([
-  ['README.md', ['npm run project:new', 'npm run project:import-tables', 'npm run project:add-item', 'npm run project:skip-table', 'npm run project:status', 'npm run project:check', 'npm run preview', 'npm run tables:cli', 'npm run tables:check', 'npm run tables:test', '制作期模拟', '直接自动派生', '逐表 Markdown', '引导者', '没有编程基础', '主动建议下一步', '直接移除', '不需要运行全仓 `npm run verify`']],
-  ['AGENTS.md', ['一次只处理当前表', '用户明确', '不得批量', '完成、跳过和未模拟', 'Bundle 不创建、修改或迁移数据库表', '表格输入本身就是执行授权', '不得先要求用户用自然语言说明如何拆表', '流程引导者', '不替用户作决定', '大白话', '建议下一步', '直接从 generated 和制作队列移除', '不要为删表、改字段等日常操作运行全仓']],
+  ['docs/runtime/authoring-workflow.md', ['普通用户', '先检查，再讨论', '用户选择图片的稳定标识字段', '即使只有一行也不能省略', '显示尺寸', '完整拼接提示词', '要不要再补充自己的提示词内容', '模拟永远只测试', 'not-run', '当前显示哪一行']],
+  ['docs/runtime/host-capabilities.md', ['generateImage', 'readImage', 'getImageGenerationState', 'subscribeImageGeneration', 'promptSuffix', 'context.apiVersion', 'width/height/aspectRatio', 'tables', 'events', 'settings', '当前显示哪一行']],
+  ['docs/runtime/popup-authoring-workflow.md', ['小手机有三个弹窗接口', '**弹幕**', '**弹窗／浮窗**', '**弹窗／插入正文**', '先问选择哪个弹窗接口', '只能单表', '当前数据由小手机运行时提供', '不得询问用户显示哪条', '要不要加生图按钮？', '图片标识也必须问', '历史记录列表', '组合弹窗是一份作品', 'project:add-display']],
+  ['README.md', ['npm run project:new', 'npm run project:import-tables', 'npm run project:add-item', 'npm run project:skip-table', 'npm run project:status', 'npm run project:check', 'npm run preview', 'npm run tables:cli', 'npm run tables:check', 'npm run tables:test', '制作期模拟', '直接自动派生', '逐表 Markdown', '引导者', '没有编程基础', '主动建议下一步', '直接移除', '不需要运行全仓 `npm run verify`', '当前显示哪一行']],
+  ['AGENTS.md', ['一次只处理当前表', '用户明确', '不得批量', '完成、跳过和未模拟', 'Bundle 不创建、修改或迁移数据库表', '表格输入本身就是执行授权', '不得先要求用户用自然语言说明如何拆表', '流程引导者', '不替用户作决定', '大白话', '建议下一步', '直接从 generated 和制作队列移除', '不要为删表、改字段等日常操作运行全仓', '当前显示哪一行']],
   ['prompts/1-建项导表与全表盘点.md', ['空白草稿', '完整 chatSheets', '全部表', 'project:import-tables', '不得停在只读检查', '先修改 `tables/source/*.md`']],
   ['prompts/2-逐表需求与字段合同.md', ['当前表', '字段合同', '用户确认', 'project:skip-table', '大白话', '主动提出具体美化建议']],
   ['prompts/3-逐表设计与实现.md', ['当前表', 'project:add-item', '不进入下一张表', '用户实际会看到', '由用户确认']],
@@ -397,7 +454,7 @@ export async function validateAiWorkflow(root = path.resolve(fileURLToPath(new U
     errors.push(`无法读取 prompts 目录：${error.message}`);
   }
 
-  const documents = ['README.md', 'AGENTS.md', ...EXPECTED_STAGE_PROMPTS, 'prompts/制作提示.md', 'docs/INDEX.md'];
+  const documents = ['README.md', 'AGENTS.md', ...EXPECTED_STAGE_PROMPTS, 'prompts/制作提示.md', 'docs/INDEX.md', 'docs/runtime/authoring-workflow.md', 'docs/runtime/host-capabilities.md', 'docs/runtime/popup-authoring-workflow.md'];
   for (const relative of documents) {
     const file = await resolveProjectFile(root, relative, '流程文档', errors);
     if (!file) continue;

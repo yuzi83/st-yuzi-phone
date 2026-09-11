@@ -16,6 +16,7 @@ import { createOverlaySourceRegistry } from '../../fullscreen-overlay/source-reg
 import { createLiveTableSourceAdapter } from '../../fullscreen-overlay/sources/live-table.js';
 import { createQQFullscreenOverlaySourceAdapter } from '../../fullscreen-overlay/sources/qq.js';
 import { createGenericTableSourceAdapter } from '../../fullscreen-overlay/sources/generic-table.js';
+import { createContentPresetDisplaySourceAdapter } from '../../fullscreen-overlay/sources/content-preset-display.js';
 
 export {
     FULLSCREEN_OVERLAY_DEFAULTS,
@@ -260,6 +261,7 @@ export function createFullscreenOverlaySettingsService(options = {}) {
         createLiveTableSourceAdapter(),
         createQQFullscreenOverlaySourceAdapter(),
         createGenericTableSourceAdapter(),
+        createContentPresetDisplaySourceAdapter(),
     ]);
     const sourceCatalog = options.sourceCatalog || null;
     const overlayActions = isPlainObject(options.overlayActions)

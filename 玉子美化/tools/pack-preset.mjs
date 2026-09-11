@@ -180,6 +180,7 @@ export async function packPreset({ projectFile, outputFile, dryRun = false, over
     wouldOverwrite: Boolean(existing),
     presetId: bundle.manifest.id,
     itemCount: bundle.manifest.items.length,
+    displayCount: (bundle.manifest.displays || []).length,
     serializedBytes: Buffer.byteLength(serialized, 'utf8'),
     bundleSha256: hash(Buffer.from(serialized, 'utf8')),
   };

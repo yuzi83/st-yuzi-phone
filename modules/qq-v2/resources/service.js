@@ -1,3 +1,4 @@
+import { createAssistantPromptPreset } from '../prompt/assistant-preset.js';
 import { QQ_V2_BUILT_IN_PROMPT_PRESET_IDS } from '../domain/prompt-preset-ids.js';
 import { normalizeQQV2OpenAIBaseUrl } from '../api-endpoint-policy.js';
 import { createQQV2ApiKeyStore } from './api-key-store.js';
@@ -648,6 +649,7 @@ const BUILT_IN_PROMPT_PRESETS = Object.freeze([
             }),
         ]),
     }),
+    createAssistantPromptPreset(QQ_PRIVATE_REPLY_XML_PROTOCOL),
 ]);
 
 function resourceError(code, message) {

@@ -51,6 +51,24 @@ const appearanceContext = createAppearanceSettingsContext({
     },
     onMissing: () => showNotification('本浏览器缺少部分外观资源，已显示默认外观。请重新导入美化包；原资源引用仍保留。', 'warning'),
 });
+export const PHONE_SETTINGS_UPDATED_EVENT = 'yuzi-phone-settings-updated';
+
+function notifyPhoneSettingsUpdated(key = '') {
+    try {
+        globalThis.window?.dispatchEvent?.(new CustomEvent(PHONE_SETTINGS_UPDATED_EVENT, {
+            detail: { key: String(key ?? '') },
+        }));
+    } catch {
+        // 设置持久化成功不依赖外观订阅者；无 DOM 的测试/运行环境安全降级。
+    }
+}
+
+export function subscribePhoneSettingsUpdates(listener) {
+    if (typeof listener !== 'function' || !globalThis.window?.addEventListener) return () => {};
+    const handle = event => listener(event?.detail || {});
+    globalThis.window.addEventListener(PHONE_SETTINGS_UPDATED_EVENT, handle);
+    return () => globalThis.window?.removeEventListener?.(PHONE_SETTINGS_UPDATED_EVENT, handle);
+}
 
 const getContext = appearanceContext.getContext;
 export const initializePhoneSettings = appearanceContext.initialize;
@@ -93,7 +111,10 @@ export function getPhoneSettings() {
 const persistenceTools = createSettingsPersistenceTools({
     getContext,
     ensureNamespace,
-    onSettingChanged: appearanceContext.markChanged,
+    onSettingChanged(key) {
+        appearanceContext.markChanged(key);
+        notifyPhoneSettingsUpdated(key);
+    },
     validateSetting,
     defaultSettings,
     extensionName,

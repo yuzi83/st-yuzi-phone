@@ -12,6 +12,7 @@ import {
   createProject,
   getProjectStatus,
   importProjectTables,
+  workflowSummaryHash,
 } from '../tools/project-lib.mjs';
 import { readbackPreset } from '../tools/readback-preset.mjs';
 
@@ -24,6 +25,18 @@ const packTool = path.join(projectRoot, 'tools', 'pack-preset.mjs');
 const readbackTool = path.join(projectRoot, 'tools', 'readback-preset.mjs');
 const checkTool = path.join(projectRoot, 'tools', 'check-preset.mjs');
 const checkItemTool = path.join(projectRoot, 'tools', 'check-item.mjs');
+
+// Adding support for optional displays must not invalidate an unchanged legacy confirmation.
+const legacyProject = JSON.parse(await fs.readFile(path.join(projectRoot, 'examples/project.json'), 'utf8'));
+const legacyState = JSON.parse(await fs.readFile(path.join(projectRoot, 'examples/workflow-state.json'), 'utf8'));
+assert.equal(workflowSummaryHash(legacyProject, legacyState), legacyState.confirmation.summaryHash);
+const changedLegacy = structuredClone(legacyState);
+changedLegacy.queue[0].preview.status = 'not-run';
+assert.notEqual(workflowSummaryHash(legacyProject, changedLegacy), legacyState.confirmation.summaryHash, '真实模拟状态变化仍使确认失效');
+const withDisplay = structuredClone(legacyState);
+withDisplay.queue[0].displays = [{ id: 'new-display', fields: ['姓名'] }];
+assert.notEqual(workflowSummaryHash(legacyProject, withDisplay), legacyState.confirmation.summaryHash, '新增展示仍使确认失效');
+
 
 async function exists(file) {
   try {

@@ -61,47 +61,29 @@ export function buildGenericListToolbarActionsHtml(options = {}) {
             data-toggle-sort="1"
             aria-pressed="${sortDescending ? 'true' : 'false'}"
             ${totalRowCount <= 1 ? 'disabled' : ''}
-        >${sortDescending ? '正序' : '倒序'}</button>
+            aria-label="当前${sortDescending ? '倒序' : '正序'}，切换为${sortDescending ? '正序' : '倒序'}"
+            title="当前${sortDescending ? '倒序' : '正序'}，切换为${sortDescending ? '正序' : '倒序'}"
+        ><svg class="phone-generic-sort-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path class="phone-generic-sort-up" d="M7 20V4m-4 4 4-4 4 4"/><path class="phone-generic-sort-down" d="M17 4v16m-4-4 4 4 4-4"/></svg></button>
     `;
 }
 
-export function buildGenericListToolbarInfoHtml(options = {}) {
-    const {
-        searchQuery = '',
-        totalRowCount = 0,
-        visibleCount = 0,
-        toolbarHint = '',
-        showResultCount = true,
-        showToolbarHint = true,
-        onlyShowReviewUpdates = false,
-        reviewUpdatedRowCount = 0,
-    } = options;
-    const reviewCount = Math.max(0, Number(reviewUpdatedRowCount || 0));
-    const resultText = onlyShowReviewUpdates
-        ? (searchQuery
-            ? `本楼更新筛选 ${visibleCount}/${reviewCount}`
-            : `本楼更新 ${visibleCount}/${reviewCount}`)
-        : (searchQuery ? `筛选结果 ${visibleCount}/${totalRowCount}` : `共 ${totalRowCount} 条记录`);
-
-    return `
-        ${showResultCount ? `<span class="phone-generic-result-pill">${resultText}</span>` : ''}
-        ${showToolbarHint ? `<span class="phone-generic-toolbar-hint">${escapeHtml(toolbarHint)}</span>` : ''}
-    `;
+export function buildGenericListToolbarInfoHtml({ visibleCount = 0, showResultCount = true } = {}) {
+    return showResultCount ? `<span class="phone-generic-result-pill">${visibleCount}条</span>` : '';
 }
 
 export function buildGenericListToolbarHtml(options = {}) {
     return `
         <section class="phone-generic-toolbar-card">
+            <div data-generic-toolbar-region="search">
+                ${buildGenericListToolbarSearchHtml(options)}
+            </div>
             <div class="phone-generic-toolbar-main">
-                <div data-generic-toolbar-region="search">
-                    ${buildGenericListToolbarSearchHtml(options)}
+                <div class="phone-generic-toolbar-info" data-generic-toolbar-region="info">
+                    ${buildGenericListToolbarInfoHtml(options)}
                 </div>
                 <div class="phone-generic-toolbar-actions" data-generic-toolbar-region="actions">
                     ${buildGenericListToolbarActionsHtml(options)}
                 </div>
-            </div>
-            <div class="phone-generic-toolbar-info" data-generic-toolbar-region="info">
-                ${buildGenericListToolbarInfoHtml(options)}
             </div>
         </section>
     `;
@@ -181,9 +163,15 @@ export function buildGenericListRowHtml(viewModel, options = {}) {
     const deleteDisabled = viewModel.rowLocked || deletingAny;
     const rowKey = viewModel.rowKey || `row:${viewModel.rowIndex}`;
     const rowVersion = viewModel.rowVersion || '';
+    const rowAction = lockManageMode ? 'toggle-row-lock' : deleteManageMode ? 'toggle-delete-selection' : 'open-row';
+    const manageAttrs = lockManageMode
+        ? `data-row-lock="${viewModel.rowIndex}" aria-pressed="${viewModel.rowLocked ? 'true' : 'false'}"`
+        : deleteManageMode
+            ? `data-row-delete="${viewModel.rowIndex}" aria-pressed="${deleteSelected ? 'true' : 'false'}" aria-disabled="${deleteDisabled ? 'true' : 'false'}"`
+            : '';
 
     return `
-        <button type="button" class="phone-nav-list-item phone-generic-slot-list-item ${viewModel.rowLocked ? 'is-row-locked' : ''} ${deleteSelected ? 'is-delete-selected' : ''}" data-action="open-row" data-row-index="${viewModel.rowIndex}" data-row-key="${escapeHtmlAttr(rowKey)}" data-row-version="${escapeHtmlAttr(rowVersion)}">
+        <button type="button" class="phone-nav-list-item phone-generic-slot-list-item ${viewModel.rowLocked ? 'is-row-locked' : ''} ${deleteSelected ? 'is-delete-selected' : ''}" data-action="${rowAction}" ${manageAttrs} data-row-index="${viewModel.rowIndex}" data-row-key="${escapeHtmlAttr(rowKey)}" data-row-version="${escapeHtmlAttr(rowVersion)}">
             <span class="phone-generic-list-item-content">
                 <span class="phone-generic-list-item-head">
                     ${showListIndex ? `<span class="phone-generic-list-index">#${viewModel.rowIndex + 1}</span>` : ''}
@@ -203,9 +191,9 @@ export function buildGenericListRowHtml(viewModel, options = {}) {
                     ${showListTime && viewModel.timeText ? `<span class="phone-generic-list-time">${escapeHtml(viewModel.timeText)}</span>` : ''}
                 </span>
                 ${lockManageMode
-                    ? `<span class="phone-row-lock-chip ${viewModel.rowLocked ? 'locked' : ''}" data-action="toggle-row-lock" data-row-lock="${viewModel.rowIndex}" role="button" tabindex="0">${viewModel.rowLocked ? '已锁定' : '锁定'}</span>`
+                    ? `<span class="phone-row-lock-chip ${viewModel.rowLocked ? 'locked' : ''}" aria-hidden="true">${viewModel.rowLocked ? '已锁定' : '锁定'}</span>`
                     : deleteManageMode
-                        ? `<span class="phone-row-select-circle ${deleteSelected ? 'is-selected' : ''} ${deletingCurrent ? 'pending' : ''} ${deleteDisabled ? 'disabled' : ''}" data-action="toggle-delete-selection" data-row-delete="${viewModel.rowIndex}" role="checkbox" tabindex="0" aria-checked="${deleteSelected ? 'true' : 'false'}" aria-disabled="${deleteDisabled ? 'true' : 'false'}" title="${viewModel.rowLocked ? '条目已锁定' : (deleteSelected ? '取消选择' : '选择删除')}">${deleteSelected ? '✓' : ''}</span>`
+                        ? `<span class="phone-row-select-circle ${deleteSelected ? 'is-selected' : ''} ${deletingCurrent ? 'pending' : ''} ${deleteDisabled ? 'disabled' : ''}" aria-hidden="true" title="${viewModel.rowLocked ? '条目已锁定' : (deleteSelected ? '取消选择' : '选择删除')}">${deleteSelected ? '✓' : ''}</span>`
                         : (showListArrow ? '<span class="phone-nav-list-arrow phone-generic-slot-list-arrow">查看</span>' : '')
                 }
             </span>
@@ -267,7 +255,7 @@ function buildGenericEmptyStateHtml(options = {}) {
         <div class="phone-empty-msg phone-generic-empty-state">
             <div class="phone-generic-empty-title">${escapeHtml(emptyStateTitle)}</div>
             <div class="phone-generic-empty-desc">${escapeHtml(emptyStateDesc)}</div>
-            <button type="button" class="phone-generic-empty-action" data-action="${emptyAction}" data-empty-action="${emptyActionType}">${emptyActionLabel}</button>
+            ${emptyAction !== 'clear-search' ? `<button type="button" class="phone-generic-empty-action" data-action="${emptyAction}" data-empty-action="${emptyActionType}">${emptyActionLabel}</button>` : ''}
         </div>
     `;
 }
@@ -358,11 +346,9 @@ export function buildGenericListPageHtml(options = {}) {
         searchQuery = '',
         totalRowCount = 0,
         visibleCount = 0,
-        toolbarHint = '',
         filteredRows = [],
         showSearch = true,
         showResultCount = true,
-        showToolbarHint = true,
         showListIndex = true,
         showListStatus = true,
         showListTime = true,
@@ -405,10 +391,8 @@ export function buildGenericListPageHtml(options = {}) {
                             searchQuery,
                             totalRowCount,
                             visibleCount,
-                            toolbarHint,
                             showSearch,
                             showResultCount,
-                            showToolbarHint,
                             sortDescending,
                             onlyShowReviewUpdates,
                             reviewUpdatedRowCount,

@@ -403,6 +403,7 @@ async function testFourBuiltInPromptPresetsAreAvailableAsEditableLibraryEntries(
             { id: 'builtin-private-proactive', isBuiltIn: true },
             { id: 'builtin-group-reply', isBuiltIn: true },
             { id: 'builtin-group-proactive', isBuiltIn: true },
+            { id: 'builtin-assistant-reply', isBuiltIn: true },
         ],
     );
     for (const preset of presets) {
@@ -456,7 +457,7 @@ async function testNewYuziDefaultLibraryDoesNotReadSupersededDevelopmentPresetSt
 
     const presets = await resources.listPromptPresets();
 
-    assert.equal(presets.length, 4);
+    assert.equal(presets.length, 5);
     assert.match(presets[0].messages[0].content, /你是玉子/);
     assert.equal(presets[0].messages.at(-1).name, '玉子执行确认');
 }

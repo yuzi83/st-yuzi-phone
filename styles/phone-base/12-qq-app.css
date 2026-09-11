@@ -1094,6 +1094,9 @@
 }
 
 .yuzi-qq-dialog-actions {
+    /* Action labels stay at the baseline; dialog details inherit the live text scale. */
+    font-size: 14px;
+    line-height: 21px;
     display: flex;
     flex: 0 0 auto;
     flex-wrap: wrap;
@@ -3436,6 +3439,8 @@
 }
 
 .yuzi-qq-message-stack {
+    /* Follow the phone container; cap long lines in proportion to the live text size. */
+    --yuzi-qq-chat-bubble-max-width: min(75cqi, calc(28 * var(--yuzi-qq-body-size)));
     min-inline-size: 0;
     max-inline-size: min(
         var(--yuzi-qq-chat-bubble-max-width),
@@ -3584,6 +3589,7 @@
     inline-size: auto;
 }
 
+.yuzi-qq-app .yuzi-qq-send-batch-button,
 .yuzi-qq-stop-generation-button {
     display: grid;
     flex: 0 0 var(--yuzi-qq-private-stop-size);
@@ -3967,7 +3973,13 @@
 }
 
 
+.yuzi-qq-generated-image-card.is-placeholder {
+    inline-size: fit-content;
+}
+
 .yuzi-qq-generated-image-card.has-image {
+    /* Text can grow without enlarging existing image previews. */
+    max-inline-size: min(100%, var(--yuzi-qq-message-max-width));
     inline-size: fit-content;
     gap: 0;
     padding: 0;
@@ -4243,4 +4255,83 @@
 .yuzi-qq-app .yuzi-qq-message-quick-menu.is-above::before {
     top: auto;
     bottom: calc(var(--yuzi-qq-inline-gap) / -2);
+}
+
+/* 助手只添加人物选择与人设编辑布局，其余沿用 QQ 皮肤和会话组件。 */
+.yuzi-qq-app .yuzi-qq-assistant-characters {
+    display: flex;
+    flex-direction: column;
+    max-height: 55cqh;
+    overflow-y: auto;
+}
+.yuzi-qq-app .yuzi-qq-assistant-character-row,
+.yuzi-qq-app .yuzi-qq-assistant-profile-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--yuzi-qq-inline-gap);
+    padding: var(--yuzi-qq-inline-gap) 0;
+}
+.yuzi-qq-app .yuzi-qq-assistant-character-row > .yuzi-qq-conversation-row {
+    flex: 1;
+    min-width: 0;
+}
+.yuzi-qq-app .yuzi-qq-assistant-persona {
+    display: flex;
+    flex-direction: column;
+    gap: var(--yuzi-qq-inline-gap);
+    padding-block: var(--yuzi-qq-dialog-gap);
+}
+.yuzi-qq-app .yuzi-qq-assistant-persona textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: calc(var(--yuzi-qq-body-line-height) * 10);
+    resize: vertical;
+    padding: var(--yuzi-qq-dialog-gap);
+    font: inherit;
+    line-height: var(--yuzi-qq-body-line-height);
+    color: inherit;
+    background: transparent;
+    border: var(--yuzi-qq-line-width) solid var(--yuzi-qq-settings-outline);
+    border-radius: var(--yuzi-qq-radius);
+}
+
+/* The optional send action shares the stop control's single composer slot. */
+.yuzi-qq-app .yuzi-qq-send-batch-button {
+    background: var(--yuzi-qq-accent);
+}
+
+.yuzi-qq-app .yuzi-qq-send-button-switch {
+    appearance: none;
+    flex: 0 0 var(--yuzi-qq-send-switch-width);
+    inline-size: var(--yuzi-qq-send-switch-width);
+    block-size: var(--yuzi-qq-send-switch-height);
+    margin: 0;
+    padding: var(--yuzi-qq-send-switch-padding);
+    border: 0;
+    border-radius: var(--yuzi-qq-radius-full);
+    background: var(--yuzi-qq-muted);
+    cursor: pointer;
+}
+
+.yuzi-qq-app .yuzi-qq-send-button-switch::before {
+    content: '';
+    display: block;
+    inline-size: var(--yuzi-qq-send-switch-thumb);
+    block-size: var(--yuzi-qq-send-switch-thumb);
+    border-radius: 50%;
+    background: var(--yuzi-qq-on-accent);
+    transition: transform var(--yuzi-qq-send-switch-duration) ease;
+}
+
+.yuzi-qq-app .yuzi-qq-send-button-switch[aria-checked="true"] {
+    background: var(--yuzi-qq-accent);
+}
+
+.yuzi-qq-app .yuzi-qq-send-button-switch[aria-checked="true"]::before {
+    transform: translateX(calc(var(--yuzi-qq-send-switch-width) - var(--yuzi-qq-send-switch-height)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .yuzi-qq-app .yuzi-qq-send-button-switch::before { transition: none; }
 }

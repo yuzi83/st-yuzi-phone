@@ -43,10 +43,10 @@ function main() {
         has(contents.appearanceBuilder, 'id="phone-floating-toggle-enabled"'));
     pushCheck(results, 'appearanceBuilder', 'button-style builder 声明内部页重置位置按钮 DOM ID',
         has(contents.appearanceBuilder, 'id="phone-toggle-position-reset-btn"'));
-    pushCheck(results, 'appearanceBuilder', 'button-style builder 包含“悬浮窗开关”文案',
-        has(contents.appearanceBuilder, '悬浮窗开关'));
-    pushCheck(results, 'appearanceBuilder', 'button-style builder 包含“重置悬浮按钮位置”文案',
-        has(contents.appearanceBuilder, '重置悬浮按钮位置'));
+    pushCheck(results, 'appearanceBuilder', 'button-style builder 包含“显示悬浮按钮”文案',
+        has(contents.appearanceBuilder, '显示悬浮按钮'));
+    pushCheck(results, 'appearanceBuilder', 'button-style builder 包含“重置位置”文案',
+        has(contents.appearanceBuilder, '重置位置'));
 
     pushCheck(results, 'buttonStylePage', 'button-style 页面兼容旧配置读取 floatingToggleEnabled',
         has(contents.buttonStylePage, 'const floatingToggleEnabled = settings.floatingToggleEnabled !== false;'));

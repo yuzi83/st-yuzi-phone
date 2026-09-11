@@ -1,3 +1,4 @@
+import { assistantCharacterLibrary, assistantCharacterView } from './assistant-characters.js';
 import { createEmptyQQV2State } from '../storage/state-store.js';
 import { QQ_V2_BUILT_IN_PROMPT_PRESET_IDS } from './prompt-preset-ids.js';
 
@@ -114,6 +115,7 @@ function emptyScope(scopeId) {
         },
         settings: {
             activeApiPresetId: '',
+            assistantReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.assistantReply,
             privateReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateReply,
             privateProactivePresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.privateProactive,
             groupReplyPresetId: QQ_V2_BUILT_IN_PROMPT_PRESET_IDS.groupReply,
@@ -364,7 +366,10 @@ function conversationSummary(scope, conversation) {
     return {
         conversation: copy(conversation),
         person: copy(person),
-        group: copy(group),
+        group: group ? {
+            ...copy(group),
+            members: group.memberIds.map((personId) => copy(scope.people[personId] || null)),
+        } : null,
         lastMessage: messageWithQuote(scope, scope.messages[conversation.lastMessageId]),
     };
 }
@@ -738,6 +743,7 @@ function updateConversationAfterMessageRemoval(scope, conversation) {
 function isPrivateFriend(scope, personId) {
     return Object.values(scope.conversations).some((conversation) => (
         conversation.kind === 'private'
+        && !conversation.assistantCharacterId
         && conversation.personId === personId
         && (conversation.status === 'active' || conversation.status === 'contact')
     ));
@@ -930,6 +936,73 @@ export class QQV2DomainError extends Error {
 }
 
 /** The stable v2 domain repository. Every mutation is a single state-store transaction. */
+function deleteConversationState(state, scopeId, conversationId) {
+    const scope = getScope(state, scopeId, false);
+    const conversation = getConversation(scope, conversationId);
+    const group = conversation.kind === 'group' ? getGroup(scope, conversation.groupId) : null;
+    const retainPrivateContact = conversation.kind === 'private'
+        && !conversation.assistantCharacterId
+        && isPrivateFriend(scope, conversation.personId);
+    const retainActiveGroup = conversation.kind === 'group'
+        && conversation.status === 'active'
+        && group.status === 'active'
+        && group.selfExited !== true;
+    const mode = conversation.kind === 'private'
+        ? 'private'
+        : retainActiveGroup
+            ? 'group-history'
+            : group.ownerId === SELF_ID
+                ? 'dissolved'
+                : 'exited';
+    const affectedPersonIds = conversation.kind === 'private'
+        ? [conversation.personId]
+        : [...new Set([...group.memberIds, group.ownerId])];
+    const deletedMessages = Object.values(scope.messages)
+        .filter((message) => message.conversationId === conversationId);
+    const releasedAssetIds = new Set([
+        conversation.backgroundAssetId,
+        ...deletedMessages.flatMap((message) => [message.assetId, message.senderAvatarAssetId]),
+    ]);
+    const generatedImagePaths = [...new Set(deletedMessages
+        .map((message) => asText(message.generatedImagePath, 2048))
+        .filter(Boolean))];
+    deletedMessages.forEach((message) => delete scope.messages[message.messageId]);
+    Object.values(scope.assets).filter((asset) => asset.conversationId === conversationId).forEach((asset) => delete scope.assets[asset.assetId]);
+    if (retainPrivateContact || retainActiveGroup) {
+        conversation.status = 'contact';
+        if (retainActiveGroup) {
+            conversation.status = 'active';
+            conversation.hiddenFromMessages = true;
+        }
+        conversation.backgroundAssetId = '';
+        conversation.unreadCount = 0;
+        conversation.nextSequence = 1;
+        conversation.lastSequence = 0;
+        conversation.lastMessageId = '';
+        conversation.injection = createDefaultInjection();
+    } else {
+        delete scope.conversations[conversationId];
+    }
+    if (conversation.kind === 'group' && !retainActiveGroup) delete scope.groups[conversation.groupId];
+    if (!retainPrivateContact && !retainActiveGroup) {
+        affectedPersonIds.forEach((personId) => {
+            if (personStillReferenced(scope, personId)) return;
+            const person = scope.people[personId];
+            if (!person) return;
+            const avatarAssetId = person.avatarAssetId;
+            delete scope.people[personId];
+            removeAssetIfUnreferenced(scope, avatarAssetId);
+        });
+    }
+    releasedAssetIds.forEach((assetId) => removeAssetIfUnreferenced(scope, assetId));
+    return {
+        deletedConversationId: conversationId,
+        mode,
+        releasedGeneratedImagePaths: generatedImagePaths
+            .filter((path) => !generatedImageStillReferenced(state, path)),
+    };
+}
+
 export function createQQV2Repository(options = {}) {
     const stateStore = options.stateStore;
     const random = typeof options.random === 'function' ? options.random : Math.random;
@@ -1000,6 +1073,79 @@ export function createQQV2Repository(options = {}) {
     };
 
     return Object.freeze({
+        async listAssistantConversationTargets(characterId) {
+            const state = await stateStore.read();
+            return Object.values(state.scopes).flatMap(scope => Object.values(scope.conversations || {})
+                .filter(item => item.assistantCharacterId === characterId)
+                .map(item => ({ scopeId: scope.scopeId, conversationId: item.conversationId })));
+        },
+        async deleteAssistantCharacter(scopeId, characterId, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, state => {
+                const library = assistantCharacterLibrary(state);
+                const character = Object.hasOwn(library, characterId) ? library[characterId] : null;
+                if (!character || character.isBuiltIn) throw new QQV2DomainError('不能删除该助手人物', 'assistant_not_deletable');
+                const results = [];
+                for (const scope of Object.values(state.scopes)) {
+                    for (const conversation of Object.values(scope.conversations || {})) {
+                        if (conversation.assistantCharacterId === characterId) results.push(deleteConversationState(state, scope.scopeId, conversation.conversationId));
+                    }
+                }
+                delete library[characterId];
+                return { deleted: true, releasedGeneratedImagePaths: results.flatMap(result => result.releasedGeneratedImagePaths) };
+            });
+        },
+        async listAssistantCharacters() {
+            const state = await stateStore.read();
+            return Object.values(assistantCharacterLibrary(state)).map(assistantCharacterView);
+        },
+        async saveAssistantCharacter(scopeId, characterId, patch = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, state => {
+                const scope = getScope(state, scopeId, false);
+                const library = assistantCharacterLibrary(state);
+                const character = Object.hasOwn(library, characterId) ? library[characterId] : null;
+                if (!character) throw new QQV2DomainError('助手人物不存在', 'assistant_not_found');
+                if (Object.hasOwn(patch, 'formalName')) character.formalName = requireText(patch.formalName, '姓名', 120);
+                if (Object.hasOwn(patch, 'persona')) character.persona = String(patch.persona ?? '');
+                if (Object.hasOwn(patch, 'avatarAssetId')) {
+                    // 全局人物只能引用全局图片资料，不能悬挂到其他聊天的私有媒体。
+                    const id = asText(patch.avatarAssetId, 256);
+                    if (id && !findImageLibraryAsset(state, id)) throw new QQV2DomainError('请选择图片资料中的头像', 'asset_not_found');
+                    character.avatarAssetId = requireProfileAsset(state, scope, id, 'avatar');
+                    character.avatarUrl = '';
+                }
+                for (const target of Object.values(state.scopes)) {
+                    const person = target.people?.[characterId];
+                    if (person?.assistantCharacterId !== characterId) continue;
+                    Object.assign(person, character, { normalizedName: character.formalName });
+                    syncSenderAvatar(target, person.personId, character.avatarAssetId);
+                }
+                return assistantCharacterView(character);
+            });
+        },
+        async openAssistant(scopeId, input = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
+                const scope = getScope(state, scopeId, false);
+                const library = assistantCharacterLibrary(state);
+                const requestedId = asText(input.characterId, 256);
+                let character = Object.hasOwn(library, requestedId) ? library[requestedId] : null;
+                if (!character && input.characterId) throw new QQV2DomainError('助手人物不存在', 'assistant_not_found');
+                if (!character) {
+                    const characterId = createId('assistant');
+                    character = { characterId, formalName: requireText(input.name, '姓名', 120), persona: '',
+                        avatarAssetId: chooseImageLibraryAssetId(state, 'avatar', random), avatarUrl: '', isBuiltIn: false };
+                    library[characterId] = character;
+                }
+                const existing = Object.values(scope.conversations).find(item => item.assistantCharacterId === character.characterId);
+                if (existing) return { created: false, conversation: copy(existing), person: copy(scope.people[existing.personId]) };
+                const person = { ...createPrivatePerson(state, scope, character.formalName, random), ...character,
+                    personId: character.characterId, assistantCharacterId: character.characterId };
+                scope.people[person.personId] = person;
+                const conversation = { ...createPrivateConversation(state, scope, person, random), assistantCharacterId: character.characterId };
+                conversation.injection.enabled = false;
+                scope.conversations[conversation.conversationId] = conversation;
+                return { created: true, conversation: copy(conversation), person: copy(person) };
+            });
+        },
         async ensureScope(scopeId, hostMetadata = null, operationOptions = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, true);
@@ -1189,6 +1335,7 @@ export function createQQV2Repository(options = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
+                if (conversation.assistantCharacterId) throw new QQV2DomainError('助手不能注入世界书', 'assistant_worldbook_forbidden');
                 const current = conversation.injection;
                 const next = { ...current };
                 if (Object.hasOwn(patch, 'enabled')) next.enabled = patch.enabled === true;
@@ -1218,6 +1365,7 @@ export function createQQV2Repository(options = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
+                if (conversation.assistantCharacterId) throw new QQV2DomainError('助手不能注入世界书', 'assistant_worldbook_forbidden');
                 const message = scope.messages[asText(messageId, 256)];
                 if (!message || message.conversationId !== conversation.conversationId) {
                     throw new QQV2DomainError('手选世界书消息不存在', 'message_not_found');
@@ -1234,6 +1382,7 @@ export function createQQV2Repository(options = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
+                if (conversation.assistantCharacterId) throw new QQV2DomainError('助手不能注入世界书', 'assistant_worldbook_forbidden');
                 const ids = [...new Set((Array.isArray(messageIds) ? messageIds : [])
                     .map((messageId) => asText(messageId, 256))
                     .filter(Boolean))];
@@ -1353,6 +1502,7 @@ export function createQQV2Repository(options = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
+                if (conversation.assistantCharacterId && Object.keys(profile).some(key => key !== 'backgroundAssetId')) throw new QQV2DomainError('请通过助手人物设置修改资料', 'assistant_profile_managed');
                 if (conversation.kind !== 'private') {
                     throw new QQV2DomainError('只有私聊会话可以修改人物资料', 'private_conversation_required');
                 }
@@ -1363,7 +1513,7 @@ export function createQQV2Repository(options = {}) {
                 if (Object.hasOwn(profile, 'formalName')) {
                     const formalName = exactContactFormalName(profile.formalName);
                     const collision = Object.values(scope.people).find((candidate) => (
-                        candidate.personId !== person.personId && candidate.formalName === formalName
+                        candidate.personId !== person.personId && !candidate.assistantCharacterId && candidate.formalName === formalName
                     ));
                     if (collision) throw new QQV2DomainError('已存在同名联系人', 'person_name_conflict');
                     person.formalName = formalName;
@@ -1477,7 +1627,7 @@ export function createQQV2Repository(options = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, true);
                 const formalName = exactContactFormalName(input.name);
-                let person = Object.values(scope.people).find((candidate) => candidate.formalName === formalName) || null;
+                let person = Object.values(scope.people).find((candidate) => !candidate.assistantCharacterId && candidate.formalName === formalName) || null;
                 if (!person) {
                     person = createPrivatePerson(state, scope, formalName, random);
                     scope.people[person.personId] = person;
@@ -1513,6 +1663,7 @@ export function createQQV2Repository(options = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
                 const conversation = getConversation(scope, conversationId);
+                if (conversation.assistantCharacterId) throw new QQV2DomainError('请通过助手人物设置修改资料', 'assistant_profile_managed');
                 if (conversation.kind !== 'private') {
                     throw new QQV2DomainError('只能删除私聊好友', 'private_conversation_required');
                 }
@@ -1621,6 +1772,24 @@ export function createQQV2Repository(options = {}) {
                 .filter((message) => message.conversationId === conversationId)
                 .sort((left, right) => left.sequence - right.sequence)
                 .map((message) => messageWithQuote(scope, message));
+        },
+        async listMessagePage(scopeId, conversationId, { beforeSequence, limit = 50 } = {}) {
+            const state = await stateStore.read();
+            const scope = getScope(state, scopeId, false);
+            const empty = { items: [], hasMore: false, nextBeforeSequence: null };
+            if (!scope.conversations[conversationId]) return empty;
+            const before = Number.isInteger(Number(beforeSequence)) ? Number(beforeSequence) : Number.POSITIVE_INFINITY;
+            const size = Math.max(1, Math.min(200, Number(limit) || 50));
+            // ponytail: 根状态仍需全量读取；只为本页构建展示模型，存储拆分另行评估。
+            const eligible = Object.values(scope.messages)
+                .filter((message) => message.conversationId === conversationId && Number(message.sequence) < before)
+                .sort((left, right) => left.sequence - right.sequence);
+            const items = eligible.slice(-size).map((message) => messageWithQuote(scope, message));
+            return {
+                items,
+                hasMore: eligible.length > items.length,
+                nextBeforeSequence: items[0]?.sequence ?? null,
+            };
         },
         async appendMessages(scopeId, conversationId, inputs, operationOptions = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
@@ -1792,6 +1961,9 @@ export function createQQV2Repository(options = {}) {
                         if (deleted.has(message.assetId)) message.assetId = '';
                     });
                 });
+                for (const character of Object.values(state.sharedResources.assistantCharacters || {})) {
+                    if (deleted.has(character.avatarAssetId)) character.avatarAssetId = '';
+                }
                 deletedAssetIds.forEach((assetId) => delete libraryAssets[assetId]);
                 return { deletedAssetIds };
             });
@@ -1867,71 +2039,7 @@ export function createQQV2Repository(options = {}) {
             });
         },
         async deleteConversation(scopeId, conversationId, operationOptions = {}) {
-            return transactScoped(scopeId, operationOptions, (state) => {
-                const scope = getScope(state, scopeId, false);
-                const conversation = getConversation(scope, conversationId);
-                const group = conversation.kind === 'group' ? getGroup(scope, conversation.groupId) : null;
-                const retainPrivateContact = conversation.kind === 'private'
-                    && isPrivateFriend(scope, conversation.personId);
-                const retainActiveGroup = conversation.kind === 'group'
-                    && conversation.status === 'active'
-                    && group.status === 'active'
-                    && group.selfExited !== true;
-                const mode = conversation.kind === 'private'
-                    ? 'private'
-                    : retainActiveGroup
-                        ? 'group-history'
-                        : group.ownerId === SELF_ID
-                            ? 'dissolved'
-                            : 'exited';
-                const affectedPersonIds = conversation.kind === 'private'
-                    ? [conversation.personId]
-                    : [...new Set([...group.memberIds, group.ownerId])];
-                const deletedMessages = Object.values(scope.messages)
-                    .filter((message) => message.conversationId === conversationId);
-                const releasedAssetIds = new Set([
-                    conversation.backgroundAssetId,
-                    ...deletedMessages.flatMap((message) => [message.assetId, message.senderAvatarAssetId]),
-                ]);
-                const generatedImagePaths = [...new Set(deletedMessages
-                    .map((message) => asText(message.generatedImagePath, 2048))
-                    .filter(Boolean))];
-                deletedMessages.forEach((message) => delete scope.messages[message.messageId]);
-                Object.values(scope.assets).filter((asset) => asset.conversationId === conversationId).forEach((asset) => delete scope.assets[asset.assetId]);
-                if (retainPrivateContact || retainActiveGroup) {
-                    conversation.status = 'contact';
-                    if (retainActiveGroup) {
-                        conversation.status = 'active';
-                        conversation.hiddenFromMessages = true;
-                    }
-                    conversation.backgroundAssetId = '';
-                    conversation.unreadCount = 0;
-                    conversation.nextSequence = 1;
-                    conversation.lastSequence = 0;
-                    conversation.lastMessageId = '';
-                    conversation.injection = createDefaultInjection();
-                } else {
-                    delete scope.conversations[conversationId];
-                }
-                if (conversation.kind === 'group' && !retainActiveGroup) delete scope.groups[conversation.groupId];
-                if (!retainPrivateContact && !retainActiveGroup) {
-                    affectedPersonIds.forEach((personId) => {
-                        if (personStillReferenced(scope, personId)) return;
-                        const person = scope.people[personId];
-                        if (!person) return;
-                        const avatarAssetId = person.avatarAssetId;
-                        delete scope.people[personId];
-                        removeAssetIfUnreferenced(scope, avatarAssetId);
-                    });
-                }
-                releasedAssetIds.forEach((assetId) => removeAssetIfUnreferenced(scope, assetId));
-                return {
-                    deletedConversationId: conversationId,
-                    mode,
-                    releasedGeneratedImagePaths: generatedImagePaths
-                        .filter((path) => !generatedImageStillReferenced(state, path)),
-                };
-            });
+            return transactScoped(scopeId, operationOptions, state => deleteConversationState(state, scopeId, conversationId));
         },
         async applyAIActions(scopeId, actions, options = {}) {
             return transactScoped(scopeId, options, (state) => {
@@ -1954,7 +2062,7 @@ export function createQQV2Repository(options = {}) {
                 const createPrivate = (action) => {
                     if (conversationReferences.has(action.id)) throw new QQV2DomainError('新私聊引用重复', 'action_reference_duplicate');
                     const formalName = exactContactFormalName(action.name);
-                    let person = Object.values(scope.people).find((candidate) => candidate.formalName === formalName) || null;
+                    let person = Object.values(scope.people).find((candidate) => !candidate.assistantCharacterId && candidate.formalName === formalName) || null;
                     if (!person) {
                         person = createPrivatePerson(state, scope, formalName, random);
                         scope.people[person.personId] = person;
@@ -2004,7 +2112,7 @@ export function createQQV2Repository(options = {}) {
                             throw new QQV2DomainError('新增群成员引用缺失或重复', 'action_reference_duplicate');
                         }
                         const formalName = exactContactFormalName(action.name);
-                        let person = Object.values(scope.people).find((candidate) => candidate.formalName === formalName) || null;
+                        let person = Object.values(scope.people).find((candidate) => !candidate.assistantCharacterId && candidate.formalName === formalName) || null;
                         if (!person) {
                             person = createPrivatePerson(state, scope, formalName, random);
                             scope.people[person.personId] = person;

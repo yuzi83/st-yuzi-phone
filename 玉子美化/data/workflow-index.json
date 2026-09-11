@@ -19,11 +19,16 @@
       "preview": "node tools/preview-preset.mjs",
       "tables:cli": "node tools/table-source.cjs",
       "tables:check": "node tools/verify-tables.mjs",
-      "tables:test": "node tests/table-source-tests.mjs"
+      "tables:test": "node tests/table-source-tests.mjs",
+      "project:add-display": "node tools/project-add-display.mjs"
     }
   },
   "processContract": {
-    "phaseOrder": ["setup", "per-table", "release"],
+    "phaseOrder": [
+      "setup",
+      "per-table",
+      "release"
+    ],
     "guidance": {
       "role": "guide-not-decision-maker",
       "decisionOwner": "user",
@@ -40,13 +45,25 @@
       "deriveProjectIdentity": true,
       "dryRunBeforeWrite": true,
       "splitBeforeClarification": true,
-      "postSplitChoices": ["start-beautification", "choose-beautification-target", "edit-markdown-first"],
+      "postSplitChoices": [
+        "start-beautification",
+        "choose-beautification-target",
+        "edit-markdown-first"
+      ],
       "markdownEditOutput": "rebuild-generated-tables"
     },
     "externalApiDocs": {
       "readOnlyWhenExplicitlyRequested": true,
-      "tavernDocuments": ["docs/architecture-notes.md", "docs/sillytavern-api.txt"],
-      "triggerExamples": ["酒馆接口", "SillyTavern", "TavernHelper", "酒馆输入框"],
+      "tavernDocuments": [
+        "docs/architecture-notes.md",
+        "docs/sillytavern-api.txt"
+      ],
+      "triggerExamples": [
+        "酒馆接口",
+        "SillyTavern",
+        "TavernHelper",
+        "酒馆输入框"
+      ],
       "hostDomAllowedWhenExplicitlyRequested": true
     },
     "tableLoop": {
@@ -55,7 +72,10 @@
       "defaultCoverage": "all-imported-tables",
       "oneTableAtATime": true,
       "batchBypass": "forbidden",
-      "advanceStates": ["completed", "skipped"],
+      "advanceStates": [
+        "completed",
+        "skipped"
+      ],
       "iterationOrder": [
         "requirements",
         "field-contract",
@@ -75,8 +95,14 @@
         "askEveryCompletedTable": true,
         "executionOptional": true,
         "simulationLabel": "制作期模拟",
-        "recordStatuses": ["not-run", "passed", "skipped", "failed"]
-      }
+        "recordStatuses": [
+          "not-run",
+          "passed",
+          "skipped",
+          "failed"
+        ]
+      },
+      "scope": "page-items"
     },
     "schemaChange": {
       "explainImpactBeforeEdit": true,
@@ -89,16 +115,40 @@
       "skipKeepsTableInGenerated": true
     },
     "verification": {
-      "routineTableEdit": ["source-check", "build-dry-run", "build", "refresh-project", "draft-check"],
-      "toolOrWorkflowChange": ["targeted-check", "full-verify-before-delivery"],
+      "routineTableEdit": [
+        "source-check",
+        "build-dry-run",
+        "build",
+        "refresh-project",
+        "draft-check"
+      ],
+      "toolOrWorkflowChange": [
+        "targeted-check",
+        "full-verify-before-delivery"
+      ],
       "releaseUsesActualProject": true
     },
     "releaseGate": {
       "requiresAllQueueTerminal": true,
-      "terminalStates": ["completed", "skipped"],
-      "summaryFields": ["completed", "skipped", "preview-not-run", "preview-skipped", "preview-failed"],
+      "terminalStates": [
+        "completed",
+        "skipped"
+      ],
+      "summaryFields": [
+        "completed",
+        "skipped",
+        "preview-not-run",
+        "preview-skipped",
+        "preview-failed"
+      ],
       "requiresExplicitUserConfirmation": true,
-      "orderedCapabilities": ["project-status", "confirm-project", "release-check", "pack-bundle", "readback-bundle"],
+      "orderedCapabilities": [
+        "project-status",
+        "confirm-project",
+        "release-check",
+        "pack-bundle",
+        "readback-bundle"
+      ],
       "bundleWritesTables": false
     },
     "deliverables": [
@@ -110,7 +160,7 @@
       },
       {
         "id": "beautify-bundle",
-        "kind": "yuzi-beautify-preset-v2",
+        "kind": "yuzi-beautify-preset",
         "path": "output/*.json",
         "independent": true
       },
@@ -120,7 +170,59 @@
         "path": "projects/*/project.json",
         "independent": true
       }
-    ]
+    ],
+    "hostCapabilities": {
+      "readBeforeDiscussion": [
+        "docs/runtime/authoring-workflow.md",
+        "docs/runtime/host-capabilities.md",
+        "docs/runtime/host-capabilities.d.ts"
+      ],
+      "hostSourceRequired": false,
+      "userVersionGate": false,
+      "batchRelatedQuestions": true,
+  "requireUserImageIdentityChoice": true,
+  "singleRowIdentityExemption": false,
+      "imageDiscussion": [
+        "display-size-and-responsive-ratio",
+        "composed-field-and-framing-prompt",
+        "ask-optional-user-prompt"
+      ],
+      "previewRealGeneration": false,
+      "previewCredentials": false,
+      "allowDeferredPreview": true
+    },
+    "popupAuthoring": {
+      "terminology": "弹窗",
+      "opening": "小手机有三个弹窗接口",
+      "interfaceNames": [
+        "弹幕",
+        "弹窗／浮窗",
+        "弹窗／插入正文"
+      ],
+      "askInterfaceFirst": true,
+      "multiTableKinds": [
+        "inline"
+      ],
+      "singleTableKinds": [
+        "barrage",
+        "popup"
+      ],
+      "askCombinationOnlyAfterInline": true,
+  "askInlineImageButton": true,
+      "repeatConfirmedChoices": false,
+      "combinationUnit": "one-popup",
+      "currentDataSelection": {
+        "providedBy": "host-current-snapshot",
+        "doNotAskUser": [
+          "which-row",
+          "whether-latest",
+          "which-record-triggers",
+          "how-host-filters"
+        ],
+        "historyOrRowPickerOnlyWhenExplicitlyRequested": true
+      },
+      "document": "docs/runtime/popup-authoring-workflow.md"
+    }
   },
   "runtimeBoundary": {
     "status": "external-required",
@@ -166,7 +268,10 @@
             "tools/project-check.mjs"
           ],
           "dependsOn": [],
-          "inputs": ["完整 chatSheets JSON", "可选项目 ID、显示名与美化目标"],
+          "inputs": [
+            "完整 chatSheets JSON",
+            "可选项目 ID、显示名与美化目标"
+          ],
           "requiredProjectCapabilities": [
             "create-project",
             "import-tables",
@@ -175,12 +280,30 @@
             "tables-roundtrip"
           ],
           "outputs": [
-            { "type": "fileGlob", "path": "projects/*/project.json" },
-            { "type": "fileGlob", "path": "projects/*/workflow-state.json" },
-            { "type": "fileGlob", "path": "projects/*/tables/original/imported.json" },
-            { "type": "fileGlob", "path": "projects/*/tables/source/*.md" },
-            { "type": "fileGlob", "path": "projects/*/tables/generated/tables.json" },
-            { "type": "artifact", "name": "全表盘点与默认制作队列" }
+            {
+              "type": "fileGlob",
+              "path": "projects/*/project.json"
+            },
+            {
+              "type": "fileGlob",
+              "path": "projects/*/workflow-state.json"
+            },
+            {
+              "type": "fileGlob",
+              "path": "projects/*/tables/original/imported.json"
+            },
+            {
+              "type": "fileGlob",
+              "path": "projects/*/tables/source/*.md"
+            },
+            {
+              "type": "fileGlob",
+              "path": "projects/*/tables/generated/tables.json"
+            },
+            {
+              "type": "artifact",
+              "name": "全表盘点与默认制作队列"
+            }
           ],
           "checks": [
             {
@@ -240,10 +363,23 @@
             "docs/bundle/source-project-format.md",
             "tools/project-add-item.mjs",
             "tools/project-skip-table.mjs",
-            "tools/preview-preset.mjs"
+            "tools/preview-preset.mjs",
+            "docs/runtime/authoring-workflow.md",
+            "docs/runtime/host-capabilities.md",
+            "docs/runtime/host-capabilities.d.ts",
+            "examples/image-avatar/mount.js",
+            "examples/image-avatar/canvas.json",
+            "docs/runtime/popup-authoring-workflow.md",
+            "tools/project-add-display.mjs"
           ],
-          "dependsOn": ["setup"],
-          "inputs": ["全表制作队列", "当前表", "当前表需求与字段合同"],
+          "dependsOn": [
+            "setup"
+          ],
+          "inputs": [
+            "全表制作队列",
+            "当前表",
+            "当前表需求与字段合同"
+          ],
           "requiredProjectCapabilities": [
             "project-status",
             "add-item",
@@ -254,10 +390,22 @@
             "refresh-project"
           ],
           "outputs": [
-            { "type": "fileGlob", "path": "projects/*/pages/*" },
-            { "type": "fileGlob", "path": "projects/*/notes/*.md" },
-            { "type": "fileGlob", "path": "projects/*/workflow-state.json" },
-            { "type": "artifact", "name": "当前表结果确认" }
+            {
+              "type": "fileGlob",
+              "path": "projects/*/pages/*"
+            },
+            {
+              "type": "fileGlob",
+              "path": "projects/*/notes/*.md"
+            },
+            {
+              "type": "fileGlob",
+              "path": "projects/*/workflow-state.json"
+            },
+            {
+              "type": "artifact",
+              "name": "当前表结果确认"
+            }
           ],
           "checks": [
             {
@@ -347,8 +495,14 @@
             "tools/pack-preset.mjs",
             "tools/readback-preset.mjs"
           ],
-          "dependsOn": ["per-table"],
-          "inputs": ["全部完成或跳过的队列", "完成/跳过/未模拟汇总", "用户最终确认"],
+          "dependsOn": [
+            "per-table"
+          ],
+          "inputs": [
+            "全部完成或跳过的队列",
+            "完成/跳过/未模拟汇总",
+            "用户最终确认"
+          ],
           "requiredProjectCapabilities": [
             "project-status",
             "confirm-project",
@@ -357,10 +511,22 @@
             "readback-bundle"
           ],
           "outputs": [
-            { "type": "fileGlob", "path": "projects/*/tables/generated/tables.json" },
-            { "type": "fileGlob", "path": "output/*.json" },
-            { "type": "fileGlob", "path": "projects/*/project.json" },
-            { "type": "report", "name": "制作期验证与真实宿主待验收报告" }
+            {
+              "type": "fileGlob",
+              "path": "projects/*/tables/generated/tables.json"
+            },
+            {
+              "type": "fileGlob",
+              "path": "output/*.json"
+            },
+            {
+              "type": "fileGlob",
+              "path": "projects/*/project.json"
+            },
+            {
+              "type": "report",
+              "name": "制作期验证与真实宿主待验收报告"
+            }
           ],
           "checks": [
             {

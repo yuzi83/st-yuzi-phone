@@ -121,14 +121,22 @@ function extractContent(value) {
     }).join('').trim();
 }
 
-async function readJson(response) {
+async function readJson(response, secrets = []) {
+    let responseText = '';
     if (!response || typeof response.json !== 'function') {
         throw new QQV2BackendError('QQ backend returned an invalid response', 'invalid_response');
     }
     try {
+        if (typeof response.text === 'function') {
+            responseText = await response.text();
+            return JSON.parse(responseText);
+        }
         return await response.json();
     } catch (error) {
-        throw new QQV2BackendError('QQ backend returned invalid JSON', 'invalid_response', error);
+        const failure = new QQV2BackendError('QQ backend returned invalid JSON', 'invalid_response', error);
+        failure.status = response.status;
+        failure.responseText = redactText(responseText, secrets).slice(0, 2000);
+        throw failure;
     }
 }
 
@@ -220,16 +228,29 @@ export function createSillyTavernQQV2Backend(options = {}) {
             notifyPromptReady(onPromptReady, payload);
             logDebug('qq-v2.backend.generate', payload);
             const response = await post(LOCAL_GENERATE_PATH, payload, input.signal);
-            const data = await readJson(response);
+            const data = await readJson(response, [config.apiKey]);
             if (!response.ok || data?.error) {
-                throw new QQV2BackendError(
-                    redactText(data?.error?.message || `QQ backend request failed (HTTP ${response?.status ?? 0})`, [config.apiKey]),
+                const failure = new QQV2BackendError(
+                    redactText(data?.error?.message || (typeof data?.error === 'string' ? data.error : '') || `QQ backend request failed (HTTP ${response?.status ?? 0})`, [config.apiKey]),
                     'backend_request_failed',
                 );
+                failure.status = response.status;
+                throw failure;
             }
             const choice = Array.isArray(data?.choices) ? data.choices[0] : null;
-            const content = extractContent(choice?.message?.content);
-            if (!content) throw new QQV2BackendError('QQ backend returned no message content', 'invalid_response');
+            if (!choice?.message || typeof choice.message !== 'object') {
+                throw new QQV2BackendError('QQ backend response has no valid choices/message', 'invalid_response');
+            }
+            const content = extractContent(choice.message.content);
+            if (!content) {
+                const failure = new QQV2BackendError('QQ backend returned no message content', 'invalid_response');
+                failure.failureKind = 'empty';
+                failure.responseText = redactText([
+                    choice.finish_reason ? `finish_reason: ${choice.finish_reason}` : '',
+                    typeof choice.message.refusal === 'string' ? choice.message.refusal : '',
+                ].filter(Boolean).join('\n'), [config.apiKey]);
+                throw failure;
+            }
             return Object.freeze({
                 content,
                 model: asText(data?.model, 240) || config.model,
@@ -245,7 +266,7 @@ export function createSillyTavernQQV2Backend(options = {}) {
             };
             logDebug('qq-v2.backend.load-models', payload);
             const response = await post(LOCAL_STATUS_PATH, payload, input.signal);
-            const data = await readJson(response);
+            const data = await readJson(response, [config.apiKey]);
             if (!response.ok || data?.error) {
                 throw new QQV2BackendError(
                     redactText(data?.error?.message || `QQ backend model request failed (HTTP ${response?.status ?? 0})`, [config.apiKey]),

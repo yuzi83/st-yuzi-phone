@@ -43,6 +43,10 @@ export function createSettingsRendererServices(deps = {}) {
     };
 }
 
+function buildLogsPageContextFromServices(services) {
+    return { ...services.common, showToast: services.feedback.showToast };
+}
+
 function buildHomePageContextFromServices(services) {
     return {
         ...services.common,
@@ -122,6 +126,7 @@ function buildImageGenerationPageContextFromServices(services) {
         rerenderImageGenerationKeepScroll: services.scroll.rerenderImageGenerationKeepScroll,
         imageGenerationSettingsService: services.imageGeneration,
         qqV2PresetService: services.qqV2Presets,
+        subscribeContentPresetIndex: services.contentPresetWorkshop.subscribe,
     };
 }
 
@@ -157,6 +162,12 @@ function buildBeautifyTemplatePageContextFromServices(services) {
             importPrepared: services.contentPresetWorkshop.importPrepared,
             exportPreset: services.contentPresetWorkshop.exportPreset,
             deletePreset: services.contentPresetWorkshop.deletePreset,
+            setPageActive: services.contentPresetWorkshop.setPageActive,
+            clearPageActive: services.contentPresetWorkshop.clearPageActive,
+            clearAllPageActive: services.contentPresetWorkshop.clearAllPageActive,
+            setPopupActive: services.contentPresetWorkshop.setPopupActive,
+            clearPopupActive: services.contentPresetWorkshop.clearPopupActive,
+            clearAllPopupActive: services.contentPresetWorkshop.clearAllPopupActive,
             setActive: services.contentPresetWorkshop.setActive,
             clearActive: services.contentPresetWorkshop.clearActive,
             clearAllActive: services.contentPresetWorkshop.clearAllActive,
@@ -182,6 +193,7 @@ function buildApiPresetsPageContextFromServices(services) {
     };
 }
 
+export function buildLogsPageContext(deps = {}) { return buildLogsPageContextFromServices(getSettingsRendererServices(deps)); }
 export function buildHomePageContext(deps = {}) { return buildHomePageContextFromServices(getSettingsRendererServices(deps)); }
 export function buildAppearancePageContext(deps = {}) { return buildAppearancePageContextFromServices(getSettingsRendererServices(deps)); }
 export function buildButtonStylePageContext(deps = {}) { return buildButtonStylePageContextFromServices(getSettingsRendererServices(deps)); }
@@ -197,6 +209,7 @@ export function createSettingsPageContexts(deps = {}) {
     const services = getSettingsRendererServices(deps);
     return {
         home: buildHomePageContextFromServices(services),
+        logs: buildLogsPageContextFromServices(services),
         appearance: buildAppearancePageContextFromServices(services),
         buttonStyle: buildButtonStylePageContextFromServices(services),
         worldbookReading: buildWorldbookReadingPageContextFromServices(services),

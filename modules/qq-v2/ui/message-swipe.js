@@ -49,11 +49,6 @@ export function bindMessageQuoteSwipeGesture({
             startY: Number(event.clientY) || 0,
             axis: '',
         };
-        try {
-            row.setPointerCapture?.(event.pointerId);
-        } catch {
-            // Pointer capture is an enhancement; document hit testing remains usable.
-        }
     };
 
     const handlePointerMove = (event) => {
@@ -71,6 +66,12 @@ export function bindMessageQuoteSwipeGesture({
             return;
         }
 
+        // Preserve child-button clicks until an actual left swipe takes ownership.
+        try {
+            row.setPointerCapture?.(event.pointerId);
+        } catch {
+            // Pointer capture is an enhancement; document hit testing remains usable.
+        }
         event.preventDefault();
         row.classList.add('is-quote-swiping');
         row.style.setProperty(

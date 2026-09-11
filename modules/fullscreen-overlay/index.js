@@ -1,5 +1,8 @@
 import { getInlineMessageTarget, subscribeInlineMessageInvalidation } from '../integration/inline-message-bridge.js';
 import { createInlineTablePopupRenderer } from './renderers/inline-table-popup.js';
+import { createContentPresetOverlayRenderer } from '../content-presets/overlay-renderer.js';
+import { CONTENT_PRESET_DISPLAY_SOURCE_ID } from '../content-presets/display-directory.js';
+import { createContentPresetHostAppearance } from '../content-presets/host-appearance.js';
 import { Logger } from '../error-handler.js';
 import { getPhoneSettings } from '../settings.js';
 import { getTableData } from '../phone-core/data-api.js';
@@ -16,6 +19,7 @@ import { buildOverlaySourceCatalog } from './source-catalog.js';
 import { createLiveTableSourceAdapter } from './sources/live-table.js';
 import { createQQFullscreenOverlaySourceAdapter } from './sources/qq.js';
 import { createGenericTableSourceAdapter } from './sources/generic-table.js';
+import { createContentPresetDisplaySourceAdapter } from './sources/content-preset-display.js';
 import { createReviewResultCoordinator } from './review-result-coordinator.js';
 import { createFullscreenOverlayLayerRuntime } from './layer-runtime.js';
 import { createFullscreenOverlayScheduler } from './scheduler.js';
@@ -32,7 +36,9 @@ const sourceRegistry = createOverlaySourceRegistry([
     createLiveTableSourceAdapter(),
     createQQFullscreenOverlaySourceAdapter(),
     createGenericTableSourceAdapter(),
+    createContentPresetDisplaySourceAdapter(),
 ]);
+const contentPresetHostAppearance = createContentPresetHostAppearance();
 
 function logRuntimeError(error, context = {}) {
     try {
@@ -95,6 +101,21 @@ const fullscreenOverlayRuntime = createFullscreenOverlayRuntime({
             [TABLE_POPUP_MODEL_ID, popupRenderer],
         ]);
     },
+    resolveDynamicRenderer: (rendererId, {
+        layerRuntime,
+        getInlineEpoch,
+    } = {}) => (
+        String(rendererId || '').startsWith(`${CONTENT_PRESET_DISPLAY_SOURCE_ID}:`)
+            ? createContentPresetOverlayRenderer({
+                modelId: rendererId,
+                documentRef: globalThis.document,
+                layerRuntime,
+                getInlineTarget: getInlineMessageTarget,
+                getInlineEpoch,
+                hostAppearance: contentPresetHostAppearance,
+            })
+            : null
+    ),
     createScheduler: ({
         resolveRenderer,
         onError,

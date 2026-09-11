@@ -10,7 +10,86 @@ function importModule(relativePath) {
     return import(`${href}?contract=${Date.now()}-${Math.random()}`);
 }
 
+
+async function testConversationReadsAndMessagePages() {
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+    const base = createMemoryQQV2StateStore();
+    let reads = 0;
+    const stateStore = { ...base, async read() { reads += 1; return base.read(); } };
+    const repository = createQQV2Repository({ stateStore });
+    const scopeId = 'st:character:alice:perf';
+    const runtime = createQQV2ProductionRuntime({
+        stateStore, repository,
+        cryptoApi: require('node:crypto').webcrypto,
+        host: {
+            readScope: () => ({ scopeId, chatId: 'perf', chatFile: 'perf', hostType: 'character', hostId: 'alice' }),
+            readUserIdentity: () => ({ name: '用户', avatar: '' }),
+            readStoryTime: () => '', readStoryMessages: () => [],
+            readRawContext: () => ({ getRequestHeaders: () => ({}) }),
+        },
+        backend: { async generate() {}, async loadModels() { return []; } },
+        worldbookGateway: { async loadBook() { return { entries: {} }; }, async saveBook() {} },
+    });
+    try {
+        await runtime.initialize();
+        const alice = await repository.createPrivateConversation(scopeId, { name: 'Alice' });
+        const bob = await repository.createPrivateConversation(scopeId, { name: 'Bob' });
+        const group = await repository.createGroupConversation(scopeId, {
+            name: '群', memberIds: [alice.person.personId, bob.person.personId], ownerId: alice.person.personId,
+        });
+        reads = 0;
+        const conversations = await runtime.listConversations({ scopeId });
+        assert.equal(reads, 1, '整个会话列表连同群成员只读一次状态');
+        const summary = conversations.find(item => item.conversationId === group.conversation.conversationId);
+        const expectedMembers = await Promise.all(group.group.memberIds.map(id => repository.getPerson(scopeId, id)));
+        assert.deepEqual(summary.group.members, expectedMembers, '成员顺序和空成员语义保持不变');
+        reads = 0;
+        assert.deepEqual(await runtime.getConversation({ scopeId, conversationId: summary.conversationId }), summary);
+        assert.equal(reads, 1, '群详情连同成员只读一次状态');
+
+        const conversationId = alice.conversation.conversationId;
+        const inputs = Array.from({ length: 123 }, (_, i) => ({
+            senderId: '__self__', senderType: 'self', type: 'text', content: '消息' + i, storyTime: '',
+        }));
+        const inserted = await repository.appendMessages(scopeId, conversationId, inputs);
+        await repository.appendMessages(scopeId, conversationId, [{ ...inputs[0], quoteMessageId: inserted[0].messageId }]);
+        const all = await repository.listMessages(scopeId, conversationId);
+        const collected = [];
+        let beforeSequence;
+        do {
+            reads = 0;
+            const page = await runtime.listMessages({ scopeId, conversationId, beforeSequence });
+            assert.equal(reads, 1, '消息页不得先读会话再读取消息');
+            const expected = all.filter(m => beforeSequence === undefined || m.sequence < beforeSequence).slice(-50);
+            assert.deepEqual(page.items, expected, '分页与原全量模型一致，包括页外引用');
+            collected.unshift(...page.items);
+            beforeSequence = page.nextBeforeSequence;
+            if (!page.hasMore) break;
+        } while (true);
+        assert.deepEqual(collected, all, '翻页无遗漏或重复');
+        for (const limit of [1, 200, 500, 0, -1, 2.5]) {
+            const page = await runtime.listMessages({ scopeId, conversationId, limit });
+            const size = Math.max(1, Math.min(200, Number(limit) || 50));
+            assert.deepEqual(page.items, all.slice(-size));
+        }
+        const empty = { items: [], hasMore: false, nextBeforeSequence: null };
+        assert.deepEqual(await runtime.listMessages({ scopeId, conversationId, beforeSequence: 0 }), empty);
+        assert.deepEqual(await runtime.listMessages({ scopeId, conversationId: 'missing' }), empty);
+        await repository.deleteMessages(scopeId, conversationId, [inserted[0].messageId]);
+        const page = await runtime.listMessages({ scopeId, conversationId, limit: 1 });
+        assert.equal(page.items[0].quote.status, 'deleted');
+        assert.equal(page.items[0].quote.content, '');
+        assert.equal((await repository.listMessages(scopeId, conversationId)).length, all.length - 1,
+            '完整业务历史不受 UI 分页限制');
+    } finally {
+        runtime.destroy();
+    }
+}
+
 async function main() {
+    await testConversationReadsAndMessagePages();
     const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
     const { createQQV2GlobalRuntimeSettings } = await importModule(
         'modules/qq-v2/application/global-runtime-settings.js',

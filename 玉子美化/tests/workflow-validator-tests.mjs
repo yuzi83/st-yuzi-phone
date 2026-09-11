@@ -67,6 +67,26 @@ try {
   assert.deepEqual(baseline.errors, [], `当前工作流必须有效：\n${baseline.errors.join('\n')}`);
 
   await expectInvalid(({ workflow }) => {
+    workflow.processContract.popupAuthoring.askInterfaceFirst = false;
+  }, /popupAuthoring.askInterfaceFirst/);
+  await expectInvalid(({ workflow }) => {
+    workflow.processContract.popupAuthoring.multiTableKinds = ['inline', 'popup'];
+  }, /popupAuthoring.multiTableKinds/);
+  await expectInvalid(({ workflow }) => {
+    workflow.processContract.popupAuthoring.interfaceNames[0] = '快速浏览';
+  }, /popupAuthoring.interfaceNames/);
+
+  await expectInvalid(({ workflow }) => {
+    workflow.processContract.popupAuthoring.askInlineImageButton = false;
+  }, /askInlineImageButton/);
+  await expectInvalid(({ workflow }) => {
+    workflow.processContract.hostCapabilities.requireUserImageIdentityChoice = false;
+  }, /requireUserImageIdentityChoice/);
+  await expectInvalid(({ workflow }) => {
+    workflow.processContract.hostCapabilities.singleRowIdentityExemption = true;
+  }, /singleRowIdentityExemption/);
+
+  await expectInvalid(({ workflow }) => {
     workflow.schemaVersion = 1;
   }, /schemaVersion 必须为 2/);
 

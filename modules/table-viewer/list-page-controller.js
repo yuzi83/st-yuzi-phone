@@ -91,11 +91,12 @@ function bindSearchInput(container) {
         if (!nextContext?.state) return;
 
         const searchWasActive = document.activeElement === searchInput;
-        const visibleRows = new Set(getVisibleDeleteRowIndexesFromContext(nextContext, nextValue));
         const currentSelection = normalizeRowIndexes(nextContext.state.selectedDeleteRowIndexes || []);
-        const nextSelection = nextContext.state.deleteManageMode
-            ? currentSelection.filter((rowIndex) => visibleRows.has(rowIndex))
-            : currentSelection;
+        let nextSelection = currentSelection;
+        if (nextContext.state.deleteManageMode && currentSelection.length > 0) {
+            const visibleRows = new Set(getVisibleDeleteRowIndexesFromContext(nextContext, nextValue));
+            nextSelection = currentSelection.filter((rowIndex) => visibleRows.has(rowIndex));
+        }
         const selectionChanged = nextSelection.length !== currentSelection.length
             || nextSelection.some((value, index) => value !== currentSelection[index]);
         nextContext.state.set(selectionChanged
@@ -176,7 +177,7 @@ function openRowDetail(container, rowIndex) {
 
 function handleToggleRowLock(container, el) {
     const context = getGenericListControllerContext(container);
-    if (!context?.state) return;
+    if (!context?.state?.lockManageMode) return;
 
     const idx = Number(el.getAttribute('data-row-lock'));
     if (Number.isNaN(idx)) {
@@ -580,7 +581,7 @@ export function bindGenericListPageController(options = {}) {
 
     const delegatedCleanupFns = [];
     delegatedCleanupFns.push(addContainerListener(container, 'click', async (event) => {
-        const target = event.target instanceof HTMLElement ? event.target : null;
+        const target = event.target instanceof Element ? event.target : null;
         if (!target) return;
 
         const actionEl = target.closest('[data-action]');
@@ -594,24 +595,6 @@ export function bindGenericListPageController(options = {}) {
             event.stopPropagation();
         }
 
-        await handleActionClick(container, actionEl);
-    }));
-
-    delegatedCleanupFns.push(addContainerListener(container, 'keydown', async (event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') {
-            return;
-        }
-
-        const target = event.target instanceof HTMLElement ? event.target : null;
-        if (!target) return;
-
-        const actionEl = target.closest('[data-action="toggle-row-lock"], [data-action="toggle-delete-selection"]');
-        if (!(actionEl instanceof HTMLElement) || !container.contains(actionEl)) {
-            return;
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
         await handleActionClick(container, actionEl);
     }));
 

@@ -16,6 +16,7 @@ const STATIC_FILES = Object.freeze({
   '/frame.html': ['frame.html', 'text/html; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/runtime-v1.js': ['runtime-v1.js', 'text/javascript; charset=utf-8'],
+  '/image-actions.js': ['image-actions.js', 'text/javascript; charset=utf-8'],
   '/styles.css': ['styles.css', 'text/css; charset=utf-8'],
 });
 
@@ -90,6 +91,34 @@ function selectByToken(values, token, keys) {
   return values.find(value => keys.some(key => normalizeMatchText(value[key]) === normalized)) || null;
 }
 
+function displayPreviewMock(display, tables) {
+  if (!display) return null;
+  return {
+    kind: display.kind,
+    id: display.id,
+    name: display.name,
+    targets: display.targets.map(target => {
+      const table = selectByToken(tables, target.tableName, ['sheetKey', 'tableName']);
+      return { tableName: target.tableName, fields: target.fields, state: table?.state || null };
+    }),
+    ...(display.integrations ? { integrations: structuredClone(display.integrations) } : {}),
+    ...(display.imageGeneration ? { imageGeneration: structuredClone(display.imageGeneration) } : {}),
+    ...(display.interactions ? { interactions: structuredClone(display.interactions) } : {}),
+  };
+}
+
+function itemPreviewMock(item, tables) {
+  if (!item) return null;
+  const table = selectByToken(tables, item.target.tableName, ['sheetKey', 'tableName']);
+  return {
+    id: item.id,
+    name: item.name,
+    target: { tableName: item.target.tableName, fields: item.target.fields, state: table?.state || null },
+    ...(item.integrations ? { integrations: structuredClone(item.integrations) } : {}),
+    ...(item.imageGeneration ? { imageGeneration: structuredClone(item.imageGeneration) } : {}),
+  };
+}
+
 function mockRoute(url) {
   const match = /^\/api\/mock\/tables\/([^/]+)(\/reset)?$/.exec(url.pathname);
   if (!match) return null;
@@ -100,11 +129,12 @@ function writeSse(response, type, payload) {
   response.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`);
 }
 
-export async function buildPreviewSession(projectFile, { item = null, table = null } = {}) {
+export async function buildPreviewSession(projectFile, { item = null, display = null, table = null } = {}) {
   const [bundle, tableSource] = await Promise.all([buildBundle(projectFile), loadProjectTables(projectFile)]);
   const tables = tableSource.tables.map((entry, index, all) => ({ ...entry, state: stateForTable(entry, index, all.length) }));
   const selectedItem = selectByToken(bundle.manifest.items, item, ['id', 'name']) || bundle.manifest.items[0] || null;
-  const preferredTableName = table || selectedItem?.target?.tableName;
+  const selectedDisplay = selectByToken(bundle.manifest.displays || [], display, ['id', 'name']);
+  const preferredTableName = table || selectedDisplay?.targets[0]?.tableName || selectedItem?.target?.tableName;
   const selectedTable = selectByToken(tables, preferredTableName, ['sheetKey', 'tableName']) || tables[0] || null;
   return {
     kind: 'yuzi-beautify-preview-session',
@@ -114,7 +144,10 @@ export async function buildPreviewSession(projectFile, { item = null, table = nu
     bundle,
     tables,
     selectedItemId: selectedItem?.id || null,
+    selectedDisplayId: selectedDisplay?.id || null,
     selectedSheetKey: selectedTable?.sheetKey || null,
+    itemMock: itemPreviewMock(selectedItem, tables),
+    displayMock: displayPreviewMock(selectedDisplay, tables),
     builtAt: new Date().toISOString(),
   };
 }
@@ -123,6 +156,7 @@ export async function startPreviewServer({
   projectFile,
   port = 4173,
   item = null,
+  display = null,
   table = null,
   watch = true,
   watchDebounceMs = 160,
@@ -134,7 +168,7 @@ export async function startPreviewServer({
   if (!Number.isInteger(parsedPort) || parsedPort < 0 || parsedPort > 65_535) throw new Error(`端口无效：${port}`);
   const controller = await createPreviewSessionController({
     projectFile,
-    buildSession: () => buildPreviewSession(projectFile, { item, table }),
+    buildSession: () => buildPreviewSession(projectFile, { item, display, table }),
     watch,
     watchDebounceMs,
     ...(closeDrainMs === undefined ? {} : { closeDrainMs }),
@@ -269,11 +303,12 @@ const direct = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPat
 if (direct) {
   const options = parseCliArgs(process.argv.slice(2), { boolean: ['json'] });
   const projectFile = options.project || options._[0];
-  if (!projectFile) throw new Error('用法：npm run preview -- <project.json> [--item id] [--table sheetKey] [--port 4173]');
+  if (!projectFile) throw new Error('用法：npm run preview -- <project.json> [--item id] [--display id] [--table sheetKey] [--port 4173]');
   const preview = await startPreviewServer({
     projectFile,
     port: options.port || 4173,
     item: options.item || null,
+    display: options.display || null,
     table: options.table || null,
   });
   if (options.json) console.log(JSON.stringify({ host: preview.host, port: preview.port, url: preview.url }, null, 2));

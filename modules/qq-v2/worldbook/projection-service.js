@@ -542,7 +542,7 @@ export function createQQV2WorldbookProjectionService(options = {}) {
             allowInactiveScope,
         );
         return conversations.filter((conversation) => (
-            conversation.kind === 'private' || conversation.kind === 'group'
+            !conversation.assistantCharacterId && (conversation.kind === 'private' || conversation.kind === 'group')
         ));
     };
 
@@ -658,7 +658,9 @@ export function createQQV2WorldbookProjectionService(options = {}) {
 
     const syncConversation = async ({ scopeId, scopeSession = null, conversationId, userName = '', storyTime = '' } = {}) => {
         const data = await getProjectionData(scopeId, conversationId, scopeSession);
+        if (data.conversation.assistantCharacterId) return { status: 'empty' };
         if (!data.settings.enabled || !data.conversation.injection.enabled) {
+            if (data.conversation.assistantCharacterId) return { status: 'removed' };
             return removeProjection(scopeId, conversationId, data, { scopeSession });
         }
         const targetName = asText(data.settings.bookName, 256);
@@ -1042,6 +1044,7 @@ export function createQQV2WorldbookProjectionService(options = {}) {
         removeScopeProjections,
         async removeConversationProjection({ scopeId, scopeSession = null, conversationId } = {}) {
             const data = await getProjectionData(scopeId, conversationId, scopeSession);
+            if (data.conversation.assistantCharacterId) return { status: 'removed' };
             return removeProjection(scopeId, conversationId, data, { scopeSession });
         },
         async retryPending({ scopeId, scopeSession = null, userName = '', storyTime = '' } = {}) {

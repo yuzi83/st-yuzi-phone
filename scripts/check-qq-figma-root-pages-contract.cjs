@@ -54,8 +54,8 @@ async function main() {
     assert.deepEqual(fallbackOnlySections.map(section => section.letter), ['#'],
         'a directory containing only fallback contacts keeps one # section');
 
-    assert.match(app, /const renderAssistant = async \(token\) =>[\s\S]{0,900}yuzi-qq-assistant-root-sheet/,
-        'assistant renders the Figma identity/search/content shell instead of a naked blank view');
+    assert.match(app, /const renderAssistant = async \(token\) =>[\s\S]{0,150}renderMessagesRoot\(token, true\)/,
+        '助手列表复用消息页的完整布局');
     assert.match(app, /createIcon\('bars'\)/, 'private-chat detail control uses the Figma three-line menu icon');
     assert.doesNotMatch(app, /yuzi-qq-private-chat-profile-trigger/,
         'private-chat header does not add a second profile avatar control');

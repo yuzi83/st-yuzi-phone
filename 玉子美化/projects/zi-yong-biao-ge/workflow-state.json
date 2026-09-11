@@ -35,12 +35,30 @@
         "重要对话"
       ],
       "skipReason": null,
-      "completedAt": "2026-08-10T12:41:31.216Z",
+      "completedAt": "2026-09-11T09:21:30.566Z",
       "preview": {
-        "status": "passed",
-        "recordedAt": "2026-08-10T12:41:31.217Z",
-        "notes": "Codex 浏览器预览通过：自动新增 AM0002 测试行并实时显示；弹窗读取正确；Runtime 清理、重建、重新挂载和切表返回正常；320/375/430px 无横向溢出；无控制台错误或重复事件。"
-      }
+        "status": "skipped",
+        "recordedAt": "2026-09-11T09:21:30.567Z",
+        "notes": "用户明确要求：跳过全部制作期模拟、直接打包交付。未运行本轮视觉模拟；真实宿主未验证。 本次统一读取主设置字体变量 --yuzi-phone-font-family；覆盖标题、正文、按钮及图表文字。字体修改后的制作期模拟及真实宿主尚未验证；原有模拟结果不作为本次通过证据。"
+      },
+      "displays": [
+        {
+          "id": "story-inline",
+          "fields": [
+            "编码索引",
+            "时间跨度",
+            "概览",
+            "纪要",
+            "重要对话"
+          ],
+          "completedAt": "2026-09-11T11:59:13.041Z",
+          "preview": {
+            "status": "skipped",
+            "recordedAt": "2026-09-11T11:59:13.041Z",
+            "notes": "用户同意正文分页滚动传递最小修复并全部交付；继续跳过制作期模拟，最终滚动体验由用户验收。仅 overscroll-behavior 从 contain 改为 auto；布局、字段、生图和头像标识不变。"
+          }
+        }
+      ]
     },
     {
       "sheetKey": "sheet_global_data",
@@ -62,12 +80,28 @@
         "当前位置"
       ],
       "skipReason": null,
-      "completedAt": "2026-08-10T13:20:44.802Z",
+      "completedAt": "2026-09-11T09:21:30.577Z",
       "preview": {
-        "status": "passed",
-        "recordedAt": "2026-08-10T13:20:44.803Z",
-        "notes": "调整内容区纵向位置：大时间上移约12px，地点与时间变化区上移约24px；320/375/430px无横向溢出；清理重挂载后Mock数据保留；单次动作仅响应一次，日志无WARN或ERROR。"
-      }
+        "status": "skipped",
+        "recordedAt": "2026-09-11T09:21:30.577Z",
+        "notes": "用户明确要求：跳过全部制作期模拟、直接打包交付。未运行本轮视觉模拟；真实宿主未验证。 本次统一读取主设置字体变量 --yuzi-phone-font-family；覆盖标题、正文、按钮及图表文字。字体修改后的制作期模拟及真实宿主尚未验证；原有模拟结果不作为本次通过证据。"
+      },
+      "displays": [
+        {
+          "id": "story-inline",
+          "fields": [
+            "当前时间",
+            "当前位置",
+            "经过的时间"
+          ],
+          "completedAt": "2026-09-11T11:59:13.041Z",
+          "preview": {
+            "status": "skipped",
+            "recordedAt": "2026-09-11T11:59:13.041Z",
+            "notes": "用户同意正文分页滚动传递最小修复并全部交付；继续跳过制作期模拟，最终滚动体验由用户验收。仅 overscroll-behavior 从 contain 改为 auto；布局、字段、生图和头像标识不变。"
+          }
+        }
+      ]
     },
     {
       "sheetKey": "sheet_protagonist",
@@ -87,6 +121,7 @@
       "status": "completed",
       "itemId": "protagonist-dossier",
       "fields": [
+        "row_id",
         "姓名",
         "性别",
         "年龄",
@@ -97,12 +132,32 @@
         "特有属性"
       ],
       "skipReason": null,
-      "completedAt": "2026-08-10T18:35:48.047Z",
+      "completedAt": "2026-09-11T09:21:30.597Z",
       "preview": {
-        "status": "passed",
-        "recordedAt": "2026-08-10T18:35:48.048Z",
-        "notes": "制作期模拟通过：自动新增一行完整主角资料并实时显示；六维基础属性图、特有属性刻度条、320/375/430px 布局及四个导航动作正常；内容区独立滚动时标题栏位置保持不变，手机内部滚动条已隐藏；切换相邻表后 Runtime 正确清理并重新挂载，控制台无错误或重复事件。头像上传与预设内长期保存按用户决定暂缓，待小手机 presetAssets 接口接通后再验。"
-      }
+        "status": "skipped",
+        "recordedAt": "2026-09-11T09:21:30.597Z",
+        "notes": "用户明确要求：跳过全部制作期模拟、直接打包交付。未运行本轮视觉模拟；真实宿主未验证。 用户明确选择姓名为图片稳定标识；正文弹窗共用头像，不增加生图按钮。当前导入表仅有表头，无实际姓名可核验；空姓名/重名停止绑定。标识规则变更，不迁移或删除旧图；非视觉行为测试通过，制作期模拟延后，真实宿主未验证。"
+      },
+      "displays": [
+        {
+          "id": "story-inline",
+          "fields": [
+            "姓名",
+            "性别",
+            "年龄",
+            "外貌特征",
+            "身份",
+            "近况",
+            "特有属性"
+          ],
+          "completedAt": "2026-09-11T11:59:13.041Z",
+          "preview": {
+            "status": "skipped",
+            "recordedAt": "2026-09-11T11:59:13.041Z",
+            "notes": "用户同意正文分页滚动传递最小修复并全部交付；继续跳过制作期模拟，最终滚动体验由用户验收。仅 overscroll-behavior 从 contain 改为 auto；布局、字段、生图和头像标识不变。"
+          }
+        }
+      ]
     },
     {
       "sheetKey": "sheet_important_npc",
@@ -140,11 +195,11 @@
         "人际关系"
       ],
       "skipReason": null,
-      "completedAt": "2026-08-10T20:38:45.875Z",
+      "completedAt": "2026-09-11T09:21:30.584Z",
       "preview": {
-        "status": "passed",
-        "recordedAt": "2026-08-10T20:38:45.876Z",
-        "notes": "制作期模拟通过：内存 Mock 新增六名完整角色，验证在场/离场分组、三列人物弹窗、弹窗内外关闭、人物切换、当前 row_id 保持、实时更新、动态雷达图、一两项基础属性刻度条、特有属性与人际关系展示；320/375/430px 无横向溢出；清理并重新挂载后无重复事件，生命周期日志和浏览器控制台无新警告或错误。按用户决定未测试头像上传与 presetAssets 长期保存。"
+        "status": "skipped",
+        "recordedAt": "2026-09-11T09:21:30.584Z",
+        "notes": "用户明确要求：跳过全部制作期模拟、直接打包交付。未运行本轮视觉模拟；真实宿主未验证。 本次统一读取主设置字体变量 --yuzi-phone-font-family；覆盖标题、正文、按钮及图表文字。字体修改后的制作期模拟及真实宿主尚未验证；原有模拟结果不作为本次通过证据。"
       }
     },
     {
@@ -169,18 +224,36 @@
         "选项五"
       ],
       "skipReason": null,
-      "completedAt": "2026-08-11T09:40:41.256Z",
+      "completedAt": "2026-09-11T09:21:30.590Z",
       "preview": {
-        "status": "passed",
-        "recordedAt": "2026-08-11T09:40:41.257Z",
-        "notes": "修改后制作期预览通过：移除“选择一个行动方向”说明，五个按钮整体上移；点击成功不再显示“已追加到酒馆输入框”；追加、焦点与末尾光标仍正常；空白选项隐藏、长文本换行、320/375/430px无内部横向溢出；清理/重新挂载无重复事件；控制台无error/warn。真实SillyTavern宿主仍未验证。"
-      }
+        "status": "skipped",
+        "recordedAt": "2026-09-11T09:21:30.590Z",
+        "notes": "用户明确要求：跳过全部制作期模拟、直接打包交付。未运行本轮视觉模拟；真实宿主未验证。 本次统一读取主设置字体变量 --yuzi-phone-font-family；覆盖标题、正文、按钮及图表文字。字体修改后的制作期模拟及真实宿主尚未验证；原有模拟结果不作为本次通过证据。"
+      },
+      "displays": [
+        {
+          "id": "story-inline",
+          "fields": [
+            "选项一",
+            "选项二",
+            "选项三",
+            "选项四",
+            "选项五"
+          ],
+          "completedAt": "2026-09-11T11:59:13.041Z",
+          "preview": {
+            "status": "skipped",
+            "recordedAt": "2026-09-11T11:59:13.041Z",
+            "notes": "用户同意正文分页滚动传递最小修复并全部交付；继续跳过制作期模拟，最终滚动体验由用户验收。仅 overscroll-behavior 从 contain 改为 auto；布局、字段、生图和头像标识不变。"
+          }
+        }
+      ]
     }
   ],
   "currentTable": null,
   "confirmation": {
     "confirmed": true,
-    "confirmedAt": "2026-08-11T09:56:05.748Z",
-    "summaryHash": "42e4685368d1682324df58d2e8fa2b153d80041356cc42a0da36082e5b290bed"
+    "confirmedAt": "2026-09-11T12:00:03.898Z",
+    "summaryHash": "bd50117a2c380e07600511a9bdcd623109ec7267efe68e1888e4a6685a2f2569"
   }
 }

@@ -92,6 +92,70 @@ const path = require('node:path');
     assert.match(appSource, /from '\.\/narrative-tools\.js'/, 'the QQ UI uses the narrow narrative Facade boundary');
     assert.doesNotMatch(appSource, /getUserMedia|MediaRecorder|navigator\.mediaDevices/, 'narrative tools cannot request real recording devices');
     assert.doesNotMatch(appSource, /pendingAttachments|composerSendPlan/, 'tool messages cannot be batched behind the text composer');
+    // Exercise the actual dialog so the dropdown and free-text amount stay in sync.
+    const dialogSource = appSource.split('const openTransferDialog = ')[1].split('\n    const openSelectedMessageDeletion')[0].trim().replace(/;$/, '');
+    class Field {
+        constructor(tag) { this.tag = tag; this.value = ''; this.children = []; this.events = {}; this.dataset = {}; }
+        append(...items) { this.children.push(...items); if (this.tag === 'select' && this.children.length) this.value = this.children[0].value; }
+        setAttribute(name, value) { this[name] = value; }
+        addEventListener(type, handler) { this.events[type] = handler; }
+        focus() {}
+    }
+    let dialog;
+    let payload;
+    let currentConversation = { kind: 'private' };
+    const openDialog = require('node:vm').runInNewContext(dialogSource, {
+        asText: value => String(value ?? '').trim(),
+        conversationSnapshots: { get: () => currentConversation },
+        createElement: tag => new Field(tag),
+        createButton: () => new Field('button'),
+        Option: class extends Field { constructor(label, value) { super('option'); this.textContent = label; this.value = value; } },
+        groupTransferRecipients: () => [{ personId: 'person-bob', formalName: 'Bob' }],
+        facade: {},
+        submitTransferMessage: async value => { payload = value; return { ok: true }; },
+        clearOverlay() {}, loadMessages() {}, render() {},
+        showDialog: value => { dialog = value; },
+    });
+    await openDialog('private-1');
+    const [amount, currency, custom] = dialog.content.children;
+    const confirm = dialog.actions[1];
+    assert.equal(currency.value, '人民币');
+    assert.equal(custom.hidden, true);
+    assert.equal(confirm.disabled, true);
+    amount.value = '随意金额 1.23456789';
+    amount.events.input();
+    assert.equal(confirm.disabled, false, 'amount remains unrestricted text');
+    await confirm.events.click();
+    assert.equal(payload.amount, amount.value);
+    assert.equal(payload.currency, '人民币');
+    currency.value = 'custom';
+    currency.events.change();
+    assert.equal(custom.hidden, false);
+    assert.equal(confirm.disabled, true, 'custom currency still requires nonempty text');
+    custom.value = '月亮贝壳';
+    custom.events.input();
+    assert.equal(confirm.disabled, false);
+    await confirm.events.click();
+    assert.equal(payload.currency, '月亮贝壳');
+    currency.value = '人民币';
+    currency.events.change();
+    assert.equal(custom.hidden, true);
+    assert.equal(confirm.disabled, false);
+    currency.value = 'custom';
+    currency.events.change();
+    assert.equal(custom.value, '月亮贝壳', 'switching back preserves custom currency');
+    currentConversation = { kind: 'group' };
+    await openDialog('group-1');
+    const [recipient, groupAmount] = dialog.content.children;
+    groupAmount.value = '任意数量';
+    groupAmount.events.input();
+    assert.equal(dialog.actions[1].disabled, true, 'group transfer still requires a recipient');
+    recipient.value = 'person-bob';
+    recipient.events.change();
+    assert.equal(dialog.actions[1].disabled, false);
+    await dialog.actions[1].events.click();
+    assert.equal(payload.recipientId, 'person-bob');
+    assert.equal(payload.currency, '人民币');
     console.log('[qq-narrative-tools-contract] passed');
 })().catch((error) => {
     console.error('[qq-narrative-tools-contract] failed');

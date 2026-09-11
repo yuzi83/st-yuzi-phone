@@ -6,6 +6,11 @@ import { buildTableNavigationControlState } from '../table-navigation/controls.j
 import { resolveStableChatId } from '../integration/chat-identity.js';
 import { isContentPresetFullPageRuntimeEnabled } from './activation-gate.js';
 import { createAssetRuntime } from './asset-runtime.js';
+import {
+    createContentPresetAppearanceBridge,
+    createContentPresetHostAppearance,
+} from './host-appearance.js';
+import { contentPresetImageGenerationHost } from './image-generation-host.js';
 import { getContentPresetIndexSnapshot } from './index-state.js';
 import { createContentPresetInstance } from './instance-coordinator.js';
 import { matchesPresetItem } from './matcher.js';
@@ -16,6 +21,8 @@ import { createContentPresetRuntimeContextController } from './runtime-context.j
 import { importContentPresetModule, invokeContentPresetMount } from './script-runtime.js';
 import { contentPresetScrollRegistry } from './scroll-registry.js';
 import { createPresetStateSnapshot, createTableSnapshot } from './snapshot.js';
+
+const contentPresetHostAppearance = createContentPresetHostAppearance();
 
 function fileText(record, path) {
     const file = path ? record.files?.[path] : null;
@@ -29,10 +36,13 @@ const DEFAULT_RUNTIME_DEPS = Object.freeze({
     acquireCurrentViewingSheet,
     contentPresetScrollRegistry,
     createAssetRuntime,
+    createContentPresetAppearanceBridge,
     createContentPresetActions,
     createContentPresetInstance,
     createContentPresetRuntimeContextController,
     createPresetAssetsRuntime,
+    contentPresetHostAppearance,
+    contentPresetImageGenerationHost,
     getContentPresetIndexSnapshot,
     getPhoneCoreState,
     getPresetRecord,
@@ -92,6 +102,7 @@ export function __test__createTryRenderContentPreset(overrides = {}) {
     let presetAssets = null;
     let moduleRuntime = null;
     let contextController = null;
+    let releaseAppearance = () => {};
     let unsubscribeTableUpdate = () => {};
     let unregisterPageCleanup = () => {};
     let cancelScrollRestore = () => {};
@@ -103,6 +114,7 @@ export function __test__createTryRenderContentPreset(overrides = {}) {
         unregisterPageCleanup(); unregisterPageCleanup = () => {};
         unsubscribeTableUpdate(); unsubscribeTableUpdate = () => {};
         cancelScrollRestore(); cancelScrollRestore = () => {};
+        releaseAppearance(); releaseAppearance = () => {};
         contextController?.dispose(); contextController = null;
         moduleRuntime?.disposeModuleUrl(); moduleRuntime = null;
         presetAssets?.dispose(); presetAssets = null;
@@ -145,17 +157,29 @@ export function __test__createTryRenderContentPreset(overrides = {}) {
             style.textContent = assetRuntime.rewriteCss(css, item.entry.css);
             root.prepend(style);
         }
+        releaseAppearance = runtimeDeps.createContentPresetAppearanceBridge(
+            root,
+            item,
+            runtimeDeps.contentPresetHostAppearance,
+        );
         scrollKey.chatId = runtimeDeps.resolveStableChatId();
         const actions = runtimeDeps.createContentPresetActions({
             sheetKey: target.sheetKey,
             getRoute: () => runtimeDeps.getPhoneCoreState().currentRoute,
             isCurrent,
         });
+        const imageActions = runtimeDeps.contentPresetImageGenerationHost?.createPageActions?.({
+            item,
+            presetId: binding.presetId,
+            itemId: binding.itemId,
+            sheetKey: target.sheetKey,
+            isCurrent,
+        }) || {};
         contextController = runtimeDeps.createContentPresetRuntimeContextController({
             root,
             signal: instance.signal,
             initialState,
-            actions,
+            actions: Object.freeze({ ...actions, ...imageActions }),
             presetAssets,
             resolveAsset: assetRuntime.resolveAsset,
         });

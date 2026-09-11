@@ -53,6 +53,7 @@ export async function readbackPreset({ projectFile, file } = {}) {
   return {
     presetId: bundle.manifest.id,
     itemCount: bundle.manifest.items.length,
+    displayCount: (bundle.manifest.displays || []).length,
     bundleSha256: hash(Buffer.from(raw, 'utf8')),
     serializedBytesEqual: true,
     files,

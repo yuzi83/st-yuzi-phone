@@ -42,6 +42,7 @@ export const WORLDBOOK_READING_BLOCKED_KEYWORDS_DEFAULTS = Object.freeze([
 export const IMAGE_GENERATION_LIMITS = Object.freeze({
     timeoutMs: Object.freeze({ min: 10_000, max: 1_800_000 }),
     roleMappings: 32,
+    tableDisplaySheets: 128,
     promptColumns: 64,
     mappingIdLength: 96,
     sheetKeyLength: 160,
@@ -54,6 +55,7 @@ export const IMAGE_GENERATION_DEFAULTS = Object.freeze({
     enabled: false,
     timeoutMs: 300_000,
     roleMappings: Object.freeze([]),
+    tableDisplayEnabledBySheetKey: Object.freeze({}),
     promptTranslationEnabled: false,
     promptTranslationApiPresetId: '',
     promptTranslationPresetId: '',
@@ -157,6 +159,7 @@ export const defaultSettings = {
         enabled: IMAGE_GENERATION_DEFAULTS.enabled,
         timeoutMs: IMAGE_GENERATION_DEFAULTS.timeoutMs,
         roleMappings: [],
+        tableDisplayEnabledBySheetKey: {},
         promptTranslationEnabled: IMAGE_GENERATION_DEFAULTS.promptTranslationEnabled,
         promptTranslationApiPresetId: IMAGE_GENERATION_DEFAULTS.promptTranslationApiPresetId,
         promptTranslationPresetId: IMAGE_GENERATION_DEFAULTS.promptTranslationPresetId,
@@ -309,6 +312,26 @@ function normalizeImageGenerationRoleMappings(raw) {
     return normalized;
 }
 
+function normalizeImageGenerationTableDisplayEnabledBySheetKey(raw) {
+    if (!isPlainObject(raw)) return {};
+    const normalized = {};
+    let count = 0;
+
+    Object.entries(raw).forEach(([rawSheetKey, value]) => {
+        if (count >= IMAGE_GENERATION_LIMITS.tableDisplaySheets) return;
+        const sheetKey = normalizeImageGenerationText(
+            rawSheetKey,
+            IMAGE_GENERATION_LIMITS.sheetKeyLength,
+        );
+        if (!sheetKey || !isSafeRecordKey(sheetKey)) return;
+        if (normalizeImageGenerationBoolean(value, true) !== false) return;
+        normalized[sheetKey] = false;
+        count += 1;
+    });
+
+    return normalized;
+}
+
 export function normalizeImageGenerationSettings(raw) {
     const source = isPlainObject(raw) ? raw : {};
     const promptOutputFilter = normalizeImagePromptOutputFilterSettings(source);
@@ -324,6 +347,9 @@ export function normalizeImageGenerationSettings(raw) {
         enabled: normalizeImageGenerationBoolean(source.enabled, IMAGE_GENERATION_DEFAULTS.enabled),
         timeoutMs,
         roleMappings: normalizeImageGenerationRoleMappings(source.roleMappings),
+        tableDisplayEnabledBySheetKey: normalizeImageGenerationTableDisplayEnabledBySheetKey(
+            source.tableDisplayEnabledBySheetKey,
+        ),
         promptTranslationEnabled: normalizeImageGenerationBoolean(
             source.promptTranslationEnabled,
             IMAGE_GENERATION_DEFAULTS.promptTranslationEnabled,

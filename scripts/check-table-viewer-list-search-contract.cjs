@@ -27,6 +27,29 @@ function main() {
         Object.entries(FILES).map(([key, relativePath]) => [key, read(relativePath)])
     );
 
+    const assert = require('node:assert/strict');
+    const vm = require('node:vm');
+    const applySource = contents.controller.slice(
+        contents.controller.indexOf('    const applySearchQuery ='),
+        contents.controller.indexOf('    const addListener =', contents.controller.indexOf('    const applySearchQuery =')),
+    );
+    for (const [deleteManageMode, selected, expectedCalls, expectedSelection] of [
+        [false, [1, 2], 0, [1, 2]], [true, [], 0, []], [true, [1, 2], 1, [2]],
+    ]) {
+        let calls = 0;
+        const state = { deleteManageMode, selectedDeleteRowIndexes: selected,
+            set(patch) { Object.assign(this, patch); } };
+        vm.runInNewContext(applySource + '\napplySearchQuery("查询");', {
+            container: {}, searchInput: {}, document: { activeElement: null },
+            getGenericListControllerContext: () => ({ state }),
+            normalizeRowIndexes: values => [...new Set(values)].sort((a, b) => a - b),
+            getVisibleDeleteRowIndexesFromContext: () => { calls += 1; return [2]; },
+        });
+        assert.equal(calls, expectedCalls, '仅删除模式有选中项时计算候选');
+        assert.deepEqual(Array.from(state.selectedDeleteRowIndexes), expectedSelection);
+        assert.equal(state.listSearchQuery, '查询');
+    }
+
     const results = [];
 
     check(results, 'controller', '继续暴露 bindGenericListPageController()', has(contents.controller, 'export function bindGenericListPageController('));

@@ -68,8 +68,18 @@ function main() {
         '--yuzi-qq-composer-line-height',
         '--yuzi-qq-composer-input-max-height',
     ]) {
-        assert.match(tokens, new RegExp(`${escapeRegExp(token)}\\s*:[^;]*var\\(--yuzi-qq-readable-text-scale\\)`),
-            `${token} must accommodate the 160% readable-text setting`);
+        const typography = selectorBlock(tokens, '.yuzi-qq-app {');
+        const resolve = (name, seen = new Set()) => {
+            assert.ok(!seen.has(name), 'typography variables must not cycle');
+            const value = typography.match(new RegExp(`${escapeRegExp(name)}\\s*:\\s*([^;]+);`))?.[1];
+            assert.ok(value, `${name} must resolve inside QQ, not only at :root`);
+            if (value.includes('var(--yuzi-qq-readable-text-scale)')) return;
+            seen.add(name);
+            const dependency = value.match(/var\((--yuzi-qq-[\w-]+)\)/)?.[1];
+            assert.ok(dependency, `${name} must depend on the live text scale`);
+            resolve(dependency, seen);
+        };
+        resolve(token);
     }
 
     assert.match(css, /\.yuzi-qq-view\s*\{[\s\S]*?inline-size:\s*100%;[\s\S]*?max-inline-size:\s*none;[\s\S]*?margin-inline:\s*0;/,
@@ -89,6 +99,18 @@ function main() {
         'reduced-motion users must force QQ motion through the semantic immediate-transition token');
     assert.match(tokens, /--yuzi-qq-reduced-transition:\s*0ms;/,
         'the immediate transition value must be declared as a token, not in component CSS');
+
+    const responsiveStack = [...css.matchAll(/\.yuzi-qq-message-stack\s*\{([^}]+)\}/g)].at(-1)[1];
+    assert.match(responsiveStack, /--yuzi-qq-chat-bubble-max-width:\s*min\(75cqi, calc\(28 \* var\(--yuzi-qq-body-size\)\)\);/,
+        'both chat directions must cap text by phone width and live font size');
+    assert.match(responsiveStack, /calc\(100% - var\(--yuzi-qq-chat-avatar-size\) - var\(--yuzi-qq-message-gap\)\)/,
+        'narrow phones must still reserve room for the avatar and gap');
+    assert.doesNotMatch(responsiveStack, /(?:^|;)\s*(?:inline-size|flex-grow)\s*:/,
+        'short messages must not be forced to fill the responsive maximum');
+    assert.match(selectorBlock(css, '.yuzi-qq-generated-image-card.is-placeholder'), /inline-size:\s*fit-content;/,
+        'image descriptions must not remain locked to the fixed preview width');
+    assert.match(selectorBlock(css, '.yuzi-qq-generated-image-card.has-image'), /max-inline-size:\s*min\(100%, var\(--yuzi-qq-message-max-width\)\);/,
+        'real images retain their original cap independently of text width');
 
     for (const documented of [
         '--yuzi-qq-readable-text-scale',

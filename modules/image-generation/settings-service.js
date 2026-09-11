@@ -29,6 +29,43 @@ function asArray(value) {
     return Array.isArray(value) ? value : [];
 }
 
+function tableDisplaySourceRows(value) {
+    if (Array.isArray(value)) return value;
+    if (!value || typeof value !== 'object') return [];
+    if (Array.isArray(value.tables)) return value.tables;
+
+    const bySheetKey = value.bySheetKey;
+    const entries = bySheetKey instanceof Map
+        ? [...bySheetKey.entries()]
+        : bySheetKey && typeof bySheetKey === 'object'
+            ? Object.entries(bySheetKey)
+            : [];
+    return entries.map(([sheetKey, sources]) => {
+        const source = asArray(sources)[0] || {};
+        return {
+            sheetKey,
+            tableName: text(source.tableName) || text(source.canvas?.tableName),
+        };
+    });
+}
+
+function normalizeTableDisplaySources(value, config) {
+    const enabledBySheetKey = config?.tableDisplayEnabledBySheetKey || {};
+    const seen = new Set();
+    return tableDisplaySourceRows(value).reduce((sources, source) => {
+        const sheetKey = text(source?.sheetKey);
+        const tableName = text(source?.tableName);
+        if (!sheetKey || !tableName || seen.has(sheetKey)) return sources;
+        seen.add(sheetKey);
+        sources.push({
+            sheetKey,
+            tableName,
+            enabled: enabledBySheetKey[sheetKey] !== false,
+        });
+        return sources;
+    }, []);
+}
+
 function cloneSharedResources(result) {
     const source = result && typeof result === 'object' && !Array.isArray(result)
         ? result
@@ -58,6 +95,9 @@ export function createImageGenerationSettingsService(options = {}) {
     const tableReader = typeof options.tableReader === 'function'
         ? options.tableReader
         : async () => ({});
+    const getTableDisplaySources = typeof options.getTableDisplaySources === 'function'
+        ? options.getTableDisplaySources
+        : async () => [];
     const characterMapping = options.characterMapping
         && typeof options.characterMapping === 'object'
         ? options.characterMapping
@@ -114,12 +154,22 @@ export function createImageGenerationSettingsService(options = {}) {
         const model = typeof characterMapping.buildCharacterMappingModel === 'function'
             ? characterMapping.buildCharacterMappingModel(rawData, config.roleMappings)
             : emptyMappingModel();
+        let tableDisplaySources = [];
+        try {
+            tableDisplaySources = normalizeTableDisplaySources(
+                await getTableDisplaySources({ rawData }),
+                config,
+            );
+        } catch {
+            tableDisplaySources = [];
+        }
         const viewModel = {
             config: normalizeImageGenerationSettings(config),
             tables: cloneValue(Array.isArray(model?.tables) ? model.tables : []),
             resolvedMappings: cloneValue(
                 Array.isArray(model?.resolvedMappings) ? model.resolvedMappings : [],
             ),
+            tableDisplaySources: cloneValue(tableDisplaySources),
         };
         if (sharedResources) viewModel.sharedResources = sharedResources;
         if (input?.testInput && typeof input.testInput === 'object') {

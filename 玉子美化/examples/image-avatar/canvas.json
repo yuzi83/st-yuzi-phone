@@ -1,0 +1,7 @@
+{
+  "tableName": "人物表",
+  "stableIdentityFields": ["人物编号"],
+  "canvas": "avatar",
+  "promptFields": ["性别", "年龄", "外貌特征", "身份"],
+  "promptSuffix": "单人头像，1∶1正方形构图，头肩特写，人物居中，适当留白。"
+}

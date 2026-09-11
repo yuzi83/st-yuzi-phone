@@ -87,6 +87,16 @@ function asColumnRef(value) {
     };
 }
 
+function tableDisplayEnabledBySheetKey(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return Object.entries(value).reduce((result, [rawSheetKey, enabled]) => {
+        const sheetKey = asText(rawSheetKey);
+        if (!sheetKey || ['__proto__', 'constructor', 'prototype'].includes(sheetKey)) return result;
+        if (enabled === false) result[sheetKey] = false;
+        return result;
+    }, {});
+}
+
 function getConfig(viewModel = {}) {
     const config = viewModel?.config && typeof viewModel.config === 'object'
         ? viewModel.config
@@ -96,6 +106,9 @@ function getConfig(viewModel = {}) {
         enabled: config.enabled === true,
         timeoutMs: Number.isFinite(Number(config.timeoutMs)) ? Number(config.timeoutMs) : 300000,
         roleMappings: asArray(config.roleMappings),
+        tableDisplayEnabledBySheetKey: tableDisplayEnabledBySheetKey(
+            config.tableDisplayEnabledBySheetKey,
+        ),
         promptTranslationEnabled: config.promptTranslationEnabled === true,
         promptTranslationApiPresetId: asText(config.promptTranslationApiPresetId),
         promptTranslationPresetId: asText(config.promptTranslationPresetId),
@@ -114,6 +127,22 @@ function cloneConfig(config) {
             roleMappings: [...normalized.roleMappings],
         };
     }
+}
+
+function getTableDisplaySources(viewModel, config) {
+    const seen = new Set();
+    return asArray(viewModel?.tableDisplaySources).reduce((sources, source) => {
+        const sheetKey = asText(source?.sheetKey);
+        const tableName = asText(source?.tableName);
+        if (!sheetKey || !tableName || seen.has(sheetKey)) return sources;
+        seen.add(sheetKey);
+        sources.push({
+            sheetKey,
+            tableName,
+            enabled: source?.enabled !== false && config.tableDisplayEnabledBySheetKey[sheetKey] !== false,
+        });
+        return sources;
+    }, []);
 }
 
 function getTable(viewModel, sheetKey) {
@@ -403,6 +432,7 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
     const config = getConfig(viewModel);
     const testInput = getTestInput(viewModel);
     const mappings = config.roleMappings;
+    const tableDisplaySources = getTableDisplaySources(viewModel, config);
     const sharedResources = clonePresetResources(viewModel.sharedResources);
     const presetServiceAvailable = viewModel.presetServiceAvailable === true;
     const presetBusy = viewModel.presetBusy === true;
@@ -426,6 +456,21 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
             </label>
         `,
     });
+    const tableDisplaySection = tableDisplaySources.length
+        ? buildSettingsSectionHtml({
+            title: '表格美化生图',
+            desc: '这些是当前已应用、并且已声明生图画布的表格美化。关闭后，该表格里的生图按钮不会显示；重新开启即可恢复。',
+            bodyHtml: tableDisplaySources.map((source) => `
+                <label class="phone-appearance-check-item">
+                    <span class="phone-appearance-check-main">${escapeHtml(source.tableName)}</span>
+                    <input type="checkbox"
+                        class="phone-settings-switch phone-image-generation-table-display-enabled"
+                        data-sheet-key="${escapeHtmlAttr(source.sheetKey)}"
+                        ${source.enabled ? 'checked' : ''}>
+                </label>
+            `).join(''),
+        })
+        : '';
     const translationSection = buildSettingsSectionHtml({
         title: '中文提示词转换',
         desc: '开启后，先使用选中的 QQ API 预设读取生图预设，把当前中文提示词交给中间 AI；转换结果会原样继续发送给智慧姬。',
@@ -560,7 +605,7 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
     return buildSettingsPageFrame({
         title: '生图设置',
         bodyClass: 'phone-app-body phone-settings-scroll phone-image-generation-page',
-        bodyHtml: `${engineSection}${translationSection}${testSection}${mappingsSection}${requestSection}`,
+        bodyHtml: `${engineSection}${tableDisplaySection}${translationSection}${testSection}${mappingsSection}${requestSection}`,
     });
 }
 
@@ -719,6 +764,7 @@ function createImageGenerationPageSession(ctx) {
             enabled: false,
             timeoutMs: 300000,
             roleMappings: [],
+            tableDisplayEnabledBySheetKey: {},
             promptTranslationEnabled: false,
             promptTranslationApiPresetId: '',
             promptTranslationPresetId: '',
@@ -728,6 +774,7 @@ function createImageGenerationPageSession(ctx) {
                 enabled: false,
                 timeoutMs: 300000,
                 roleMappings: [],
+                tableDisplayEnabledBySheetKey: {},
                 promptTranslationEnabled: false,
                 promptTranslationApiPresetId: '',
                 promptTranslationPresetId: '',
@@ -755,6 +802,7 @@ function createImageGenerationPageSession(ctx) {
         presetBusy: false,
         resourceRequestVersion: 0,
         cleanups: [],
+        contentPresetIndexCleanup: null,
     };
     const isActive = () => state.active && ctx?.pageRuntime?.isDisposed?.() !== true;
     const clearBindings = () => {
@@ -765,6 +813,15 @@ function createImageGenerationPageSession(ctx) {
                 // 页面销毁时继续清理剩余监听器。
             }
         });
+    };
+    const clearContentPresetIndexSubscription = () => {
+        const cleanup = state.contentPresetIndexCleanup;
+        state.contentPresetIndexCleanup = null;
+        try {
+            cleanup?.();
+        } catch {
+            // 订阅清理失败不妨碍设置页销毁。
+        }
     };
     const addListener = (target, type, listener, options) => {
         if (!target || typeof listener !== 'function') return;
@@ -869,6 +926,17 @@ function createImageGenerationPageSession(ctx) {
     const readConfigFromDom = () => {
         const current = getConfig(state.viewModel);
         const cards = Array.from(ctx.container.querySelectorAll('.phone-image-generation-mapping-card') || []);
+        const tableDisplayEnabled = { ...current.tableDisplayEnabledBySheetKey };
+        Array.from(ctx.container.querySelectorAll('.phone-image-generation-table-display-enabled') || [])
+            .forEach((checkbox) => {
+                const sheetKey = asText(checkbox?.dataset?.sheetKey);
+                if (!sheetKey) return;
+                if (checkbox.checked === true) {
+                    delete tableDisplayEnabled[sheetKey];
+                } else {
+                    tableDisplayEnabled[sheetKey] = false;
+                }
+            });
         const translationToggle = ctx.container.querySelector('#phone-image-generation-prompt-translation-enabled');
         const imagePresetSelect = ctx.container.querySelector('#phone-image-generation-preset-select');
         const apiPresetSelect = ctx.container.querySelector('#phone-image-generation-api-preset-select');
@@ -884,6 +952,7 @@ function createImageGenerationPageSession(ctx) {
             roleMappings: cards.length > 0
                 ? cards.map((card, index) => readMappingConfig(card, state.viewModel, current.roleMappings[index]))
                 : current.roleMappings,
+            tableDisplayEnabledBySheetKey: tableDisplayEnabled,
             promptTranslationEnabled: translationToggle
                 ? translationToggle.checked === true
                 : current.promptTranslationEnabled,
@@ -1250,6 +1319,12 @@ function createImageGenerationPageSession(ctx) {
         addListener(ctx.container.querySelector('#phone-image-generation-enabled'), 'change', () => {
             void saveConfig(readConfigFromDom(), { refreshPreviewAfter: false });
         });
+        Array.from(ctx.container.querySelectorAll('.phone-image-generation-table-display-enabled') || [])
+            .forEach((checkbox) => {
+                addListener(checkbox, 'change', () => {
+                    void saveConfig(readConfigFromDom(), { refreshPreviewAfter: false });
+                });
+            });
         addListener(ctx.container.querySelector('#phone-image-generation-prompt-translation-enabled'), 'change', () => {
             const config = readConfigFromDom();
             if (config.promptTranslationEnabled && !selectedImagePresetIsUsable(config)) {
@@ -1441,6 +1516,11 @@ function createImageGenerationPageSession(ctx) {
     return {
         activate() {
             state.active = true;
+            clearContentPresetIndexSubscription();
+            const cleanup = ctx?.subscribeContentPresetIndex?.(() => {
+                if (isActive()) void load();
+            });
+            if (typeof cleanup === 'function') state.contentPresetIndexCleanup = cleanup;
             paint();
             void load();
         },
@@ -1450,6 +1530,7 @@ function createImageGenerationPageSession(ctx) {
         dispose() {
             state.active = false;
             state.requestVersion += 1;
+            clearContentPresetIndexSubscription();
             clearBindings();
         },
     };

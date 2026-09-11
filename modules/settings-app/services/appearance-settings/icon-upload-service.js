@@ -198,15 +198,14 @@ export function createIconUploadService(deps = {}) {
 
             const summaryHtml = `
                 <div class="phone-settings-desc" style="margin-bottom:10px;">
-                    自定义图标总占用：${escapeHtml(totalUsageText)} / ${escapeHtml(totalLimitText)}。如果超过上限，将无法继续上传新的自定义图标。
-                    下方“当前设置图标清理”会列出 appIcons 中的全部条目，包括隐藏旧图标。
+                    已用 ${escapeHtml(totalUsageText)} / 上限 ${escapeHtml(totalLimitText)}
                 </div>
             `;
             const allCurrentIconEntries = Object.entries(currentIcons);
             const cleanupHtml = `
                 <div class="phone-icon-cleanup-panel">
                     <div class="phone-settings-desc" style="margin:12px 0 8px;">
-                        当前设置图标清理：共 ${escapeHtml(String(allCurrentIconEntries.length))} 个自定义图标。删除这里只会移除 appIcons 中对应 key，不会影响表格数据或背景。
+                        图标清理 · ${escapeHtml(String(allCurrentIconEntries.length))} 个。仅移除图标，不影响表格数据或背景。
                     </div>
                     ${allCurrentIconEntries.length > 0 ? allCurrentIconEntries.map(([key, dataUrl]) => {
                         const slot = slotMap.get(key);

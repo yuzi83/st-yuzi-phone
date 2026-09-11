@@ -18,11 +18,24 @@ function readCharacterAvatar(context, characterId) {
 }
 
 export function resolveStableChatId(options = {}) {
-    const helper = (options.getTavernHelper || getTavernHelper)?.();
-    for (const key of ['chatId', 'chat_id', 'currentChatId']) {
-        const value = String(helper?.[key] ?? '').trim();
+    // Read the fresh host context, just like QQ; TavernHelper is only a legacy fallback.
+    let context;
+    try { context = (options.getContext || getFreshSillyTavernContext)(); } catch {}
+    try {
+        const current = asText(context?.getCurrentChatId?.());
+        if (current) return current;
+    } catch {}
+    for (const key of ['chatId', 'chat_id', 'chat_file']) {
+        const value = asText(context?.[key]);
         if (value) return value;
     }
+    try {
+        const helper = (options.getTavernHelper || getTavernHelper)?.();
+        for (const key of ['chatId', 'chat_id', 'currentChatId']) {
+            const value = asText(helper?.[key]);
+            if (value) return value;
+        }
+    } catch {}
     return '';
 }
 

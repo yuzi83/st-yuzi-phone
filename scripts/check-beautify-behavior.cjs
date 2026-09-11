@@ -29,7 +29,7 @@ async function main() {
     const { createBeautifyPageBehavior } = await import(url('modules/settings-app/pages/beautify-behavior.js'));
 
     function createHarness(deleteImpl, refreshImpl = () => undefined) {
-        let listener = null;
+        const listeners = new Map();
         let confirmCallback = null;
         let deleteCalls = 0;
         let refreshCalls = 0;
@@ -37,8 +37,14 @@ async function main() {
         const button = new FakeButton();
         const runtime = { disposed: false, isDisposed() { return this.disposed; } };
         const container = {
-            addEventListener(type, handler) { assert.equal(type, 'click'); listener = handler; },
-            removeEventListener(type, handler) { assert.equal(type, 'click'); if (listener === handler) listener = null; },
+            addEventListener(type, handler) {
+                assert.ok(['click', 'change'].includes(type), `未知的页面事件：${type}`);
+                listeners.set(type, handler);
+            },
+            removeEventListener(type, handler) {
+                assert.ok(['click', 'change'].includes(type), `未知的页面事件：${type}`);
+                if (listeners.get(type) === handler) listeners.delete(type);
+            },
         };
         const behavior = createBeautifyPageBehavior({
             container,
@@ -61,7 +67,7 @@ async function main() {
         const cleanup = behavior.attachPageInteractions();
         return {
             button, runtime, toasts,
-            click() { listener?.({ target: button }); },
+            click() { listeners.get('click')?.({ target: button }); },
             confirm() { return confirmCallback?.(); },
             cleanup,
             get deleteCalls() { return deleteCalls; },
@@ -147,11 +153,10 @@ async function main() {
     }
 
     for (const scenario of [
-        { action: 'activate', method: 'setActive', args: ['fixture.sheet', 'fixture.preset', 'fixture.item'], toast: '已设为当前美化' },
-        { action: 'clear', method: 'clearActive', args: ['fixture.sheet'], toast: '该表已恢复默认展示' },
-        { action: 'clear-all', method: 'clearAllActive', args: [], toast: '全部表已恢复默认展示', confirm: true },
+        { action: 'clear-all-page', method: 'clearAllPageActive', args: [], toast: '全部页面已恢复默认展示' },
+        { action: 'clear-all-popup', method: 'clearAllPopupActive', args: [], toast: '全部弹窗应用已清空' },
     ]) {
-        let listener = null;
+        const listeners = new Map();
         let confirmCallback = null;
         let operationCalls = 0;
         let refreshCalls = 0;
@@ -166,7 +171,7 @@ async function main() {
         };
         const behavior = createBeautifyPageBehavior({
             container: {
-                addEventListener(_type, handler) { listener = handler; },
+                addEventListener(type, handler) { listeners.set(type, handler); },
                 removeEventListener() {},
             },
             runtime,
@@ -177,12 +182,58 @@ async function main() {
             showToast(_container, message, isError) { toasts.push({ message, isError }); },
         });
         behavior.attachPageInteractions();
-        listener({ target: button });
-        if (scenario.confirm) await confirmCallback();
+        listeners.get('click')({ target: button });
+        await confirmCallback();
         await new Promise(resolve => setImmediate(resolve));
         assert.equal(operationCalls, 1, `${scenario.action} 必须只提交一次 mutation`);
         assert.equal(refreshCalls, 1, `${scenario.action} 必须只等待一次 committed refresh`);
         assert.deepEqual(toasts, [{ message: scenario.toast, isError: false }], `${scenario.action} 必须只显示一次成功 toast`);
+    }
+
+    for (const scenario of [
+        { application: 'page', value: 'page.preset:page.item', method: 'setPageActive', args: ['fixture.sheet', 'page.preset', 'page.item'], toast: '已设为当前页面美化' },
+        { application: 'popup', value: 'popup.preset', method: 'setPopupActive', args: ['fixture.sheet', 'popup.preset'], toast: '已设为当前弹窗美化' },
+        { application: 'page', value: '', method: 'clearPageActive', args: ['fixture.sheet'], toast: '该表已恢复默认页面' },
+        { application: 'popup', value: '', method: 'clearPopupActive', args: ['fixture.sheet'], toast: '该表已恢复内置展示' },
+    ]) {
+        const listeners = new Map();
+        let operationCalls = 0;
+        let refreshCalls = 0;
+        const toasts = [];
+        const select = new FakeElement();
+        select.dataset = {
+            contentPresetApplication: scenario.application,
+            sheetKey: 'fixture.sheet',
+        };
+        select.value = scenario.value;
+        select.selectedOptions = scenario.value ? [{
+            dataset: {
+                presetId: scenario.application === 'page' ? 'page.preset' : 'popup.preset',
+                ...(scenario.application === 'page' ? { itemId: 'page.item' } : {}),
+            },
+        }] : [];
+        const behavior = createBeautifyPageBehavior({
+            container: {
+                addEventListener(type, handler) { listeners.set(type, handler); },
+                removeEventListener() {},
+            },
+            runtime: { isDisposed: () => false },
+            waitForCommittedRefresh() { refreshCalls += 1; },
+        }, {
+            contentPresetWorkshopService: {
+                [scenario.method](...args) {
+                    operationCalls += 1;
+                    assert.deepEqual(args, scenario.args);
+                },
+            },
+            showToast(_container, message, isError) { toasts.push({ message, isError }); },
+        });
+        behavior.attachPageInteractions();
+        listeners.get('change')({ target: select });
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(operationCalls, 1, `${scenario.application} 应用变更必须只提交一次 mutation`);
+        assert.equal(refreshCalls, 1, `${scenario.application} 应用变更必须只等待一次 committed refresh`);
+        assert.deepEqual(toasts, [{ message: scenario.toast, isError: false }], `${scenario.application} 应用变更必须只显示一次成功 toast`);
     }
 
     {
@@ -198,7 +249,7 @@ async function main() {
     }
 
     for (const replacesExisting of [false, true]) {
-        let listener = null;
+        const listeners = new Map();
         let confirmCallback = null;
         let importCalls = 0;
         let refreshCalls = 0;
@@ -217,7 +268,7 @@ async function main() {
         try {
             const behavior = createBeautifyPageBehavior({
                 container: {
-                    addEventListener(_type, handler) { listener = handler; },
+                    addEventListener(type, handler) { listeners.set(type, handler); },
                     removeEventListener() {},
                 },
                 runtime: { isDisposed: () => false },
@@ -238,7 +289,7 @@ async function main() {
                 showToast(_container, message, isError) { toasts.push({ message, isError }); },
             });
             behavior.attachPageInteractions();
-            listener({ target: button });
+            listeners.get('click')({ target: button });
             await new Promise(resolve => setImmediate(resolve));
             if (replacesExisting) {
                 assert.equal(importCalls, 0, '覆盖导入确认前不得提交');
@@ -261,28 +312,41 @@ async function main() {
     const html = buildBeautifyTemplatePageHtml({
         status: 'ready',
         error: null,
-        presets: [{ id: 'fixture.preset', name: 'Fixture', version: '1', author: 'test', items: [{ id: 'fixture.item' }], issues: [] }],
+        presets: [{ id: 'fixture.preset', name: 'Fixture', version: '1', author: 'test', items: [{ id: 'fixture.item' }], displays: [{ id: 'fixture.display' }], issues: [] }],
         tables: [{
             sheetKey: 'fixture.sheet', tableName: '角色表', headers: ['姓名'],
-            active: { presetId: 'fixture.preset', itemId: 'fixture.item' },
-            candidates: [{
+            pageActive: { presetId: 'fixture.preset', itemId: 'fixture.item' },
+            pageCandidates: [{
                 presetId: 'fixture.preset', itemId: 'fixture.item',
                 preset: { name: 'Fixture' }, item: { name: 'Fixture item' },
             }],
+            popupActive: { presetId: 'fixture.preset' },
+            popupCandidates: [{
+                presetId: 'fixture.preset',
+                preset: { name: 'Fixture' },
+                displays: [{ id: 'fixture.display', name: 'Fixture display', kind: 'inline' }],
+            }],
         }, {
             sheetKey: 'fixture.second', tableName: '关系表', headers: ['姓名', '关系'],
-            active: null,
-            candidates: [{
+            pageActive: null,
+            pageCandidates: [{
                 presetId: 'fixture.preset', itemId: 'fixture.second-item',
                 preset: { name: 'Fixture' }, item: { name: '关系表 item' },
             }],
+            popupActive: null,
+            popupCandidates: [],
         }],
     });
-    for (const action of ['import', 'export', 'delete', 'activate', 'clear', 'clear-all']) {
+    for (const action of ['import', 'export', 'delete', 'clear-all-page', 'clear-all-popup']) {
         assert.match(html, new RegExp(`data-action="${action}"`));
     }
+    assert.match(html, /data-content-preset-application="page"/);
+    assert.match(html, /data-content-preset-application="popup"/);
+    assert.match(html, /表格美化应用/);
+    assert.match(html, /弹窗应用/);
     assert.match(html, /data-preset-id="fixture\.preset"/);
     assert.match(html, /data-item-id="fixture\.item"/);
+    assert.doesNotMatch(html, /data-item-id="fixture\.display"/, '弹窗应用只选择预设来源，具体样式不可写入应用下拉框');
     assert.match(html, /data-sheet-key="fixture\.sheet"/);
     assert.match(html, /data-item-id="fixture\.second-item"/);
     assert.match(html, /data-sheet-key="fixture\.second"/);

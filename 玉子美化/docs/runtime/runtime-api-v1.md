@@ -1,5 +1,7 @@
 # 玉子美化 Runtime API v1
 
+> 本文保留基础页面合同；主题、字体、受控生图与新版声明请同时读取 [宿主能力合同](./host-capabilities.md)。不要依据旧版“无 AI”条目否定已公开的生图动作，也不要把打包版本当成页面 context.apiVersion。
+
 本文档是玉子美化预设作者的运行时接口合同。它描述兼容宿主在激活一个 `yuzi-beautify-preset` Bundle 时提供的能力，不描述数据库插件、酒馆助手或 SillyTavern 原生扩展 API。
 
 配套类型声明见 [`yuzi-beautify-runtime-v1.d.ts`](./yuzi-beautify-runtime-v1.d.ts)。

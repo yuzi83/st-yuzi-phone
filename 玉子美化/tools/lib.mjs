@@ -8,6 +8,8 @@ import { assertSchema, validateSchema } from './schema-validator.mjs';
 export const FORMAT = 'yuzi-beautify-preset';
 export const VERSION = 2;
 export const API_VERSION = 1;
+export const DISPLAY_VERSION = 3;
+export const DISPLAY_API_VERSION = 2;
 export const readJson = async file => JSON.parse(await fs.readFile(file, 'utf8'));
 export const writeJson = async (file, value) => { await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8'); };
 export const hash = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -111,10 +113,14 @@ export function normalizeTables(input) {
   });
 }
 
-export function matchesItemToTable(item, table) {
-  if (normalizeMatchText(item?.target?.tableName) !== normalizeMatchText(table?.tableName)) return false;
+export function matchesTargetToTable(target, table) {
+  if (normalizeMatchText(target?.tableName) !== normalizeMatchText(table?.tableName)) return false;
   const actualFields = new Set((table?.headers || []).map(normalizeMatchText).filter(Boolean));
-  return (item?.target?.fields || []).map(normalizeMatchText).every(field => actualFields.has(field));
+  return (target?.fields || []).map(normalizeMatchText).every(field => actualFields.has(field));
+}
+
+export function matchesItemToTable(item, table) {
+  return matchesTargetToTable(item?.target, table);
 }
 
 function validateFields(fields, prefix, errors) {
@@ -129,17 +135,130 @@ function validateFields(fields, prefix, errors) {
   });
 }
 
+function validateIntegrations(integrations, prefix, errors) {
+  if (integrations === undefined) return;
+  if (!isObject(integrations)) {
+    errors.push(`${prefix}.integrations 必须是对象`);
+    return;
+  }
+  rejectUnknownKeys(integrations, ['theme', 'font'], `${prefix}.integrations`, errors);
+  if (Object.keys(integrations).length === 0) errors.push(`${prefix}.integrations 至少需要一个接入项`);
+  for (const key of ['theme', 'font']) {
+    if (integrations[key] !== undefined && integrations[key] !== true) errors.push(`${prefix}.integrations.${key} 只能为 true`);
+  }
+}
+
+function validateItemCapabilities(item, prefix, errors) {
+  validateIntegrations(item?.integrations, prefix, errors);
+  if (item?.imageGeneration === undefined) return;
+  if (!isObject(item.imageGeneration)) {
+    errors.push(`${prefix}.imageGeneration 必须是对象`);
+    return;
+  }
+  rejectUnknownKeys(item.imageGeneration, ['canvases'], `${prefix}.imageGeneration`, errors);
+  const canvases = item.imageGeneration.canvases;
+  if (!Array.isArray(canvases) || canvases.length === 0) {
+    errors.push(`${prefix}.imageGeneration.canvases 至少需要一个画布`);
+    return;
+  }
+  const tableName = normalizeMatchText(item?.target?.tableName);
+  const targetFields = new Set((Array.isArray(item?.target?.fields) ? item.target.fields : []).map(normalizeMatchText));
+  const canvasNames = new Set();
+  for (const [canvasIndex, canvas] of canvases.entries()) {
+    const canvasPrefix = `${prefix}.imageGeneration.canvases[${canvasIndex}]`;
+    if (!isObject(canvas)) {
+      errors.push(`${canvasPrefix} 必须是对象`);
+      continue;
+    }
+    rejectUnknownKeys(canvas, ['tableName', 'stableIdentityFields', 'canvas', 'promptFields', 'promptSuffix'], canvasPrefix, errors);
+    if (canvas.promptSuffix !== undefined && typeof canvas.promptSuffix !== 'string') errors.push(`${canvasPrefix}.promptSuffix 必须是字符串`);
+    const canvasName = normalizeMatchText(canvas.canvas);
+    const canvasTableName = normalizeMatchText(canvas.tableName);
+    if (!canvasName) errors.push(`${canvasPrefix}.canvas 缺失`);
+    if (canvasTableName !== tableName) errors.push(`${canvasPrefix}.tableName 必须等于 item.target.tableName`);
+    if (canvasName && canvasNames.has(canvasName)) errors.push(`${canvasPrefix}.canvas 重复：${canvas.canvas}`);
+    canvasNames.add(canvasName);
+    validateFields(canvas.stableIdentityFields, `${canvasPrefix}.stableIdentityFields`, errors);
+    validateFields(canvas.promptFields, `${canvasPrefix}.promptFields`, errors);
+    for (const field of [...(Array.isArray(canvas.stableIdentityFields) ? canvas.stableIdentityFields : []), ...(Array.isArray(canvas.promptFields) ? canvas.promptFields : [])]) {
+      if (!targetFields.has(normalizeMatchText(field))) errors.push(`${canvasPrefix} 引用了未在 item.target 声明的字段：${field}`);
+    }
+  }
+}
+
+function validateDisplayCapabilities(display, prefix, errors) {
+  validateIntegrations(display?.integrations, prefix, errors);
+
+  const targetByName = new Map((Array.isArray(display?.targets) ? display.targets : []).map(target => [normalizeMatchText(target.tableName), target]));
+  const canvases = display?.imageGeneration?.canvases;
+  if (display?.imageGeneration !== undefined) {
+    if (display?.kind !== 'inline') errors.push(`${prefix}.imageGeneration 仅 inline 展示可用`);
+    if (!isObject(display.imageGeneration)) {
+      errors.push(`${prefix}.imageGeneration 必须是对象`);
+    } else {
+      rejectUnknownKeys(display.imageGeneration, ['canvases'], `${prefix}.imageGeneration`, errors);
+      if (!Array.isArray(canvases) || canvases.length === 0) {
+        errors.push(`${prefix}.imageGeneration.canvases 至少需要一个画布`);
+      } else {
+        const seenCanvases = new Set();
+        for (const [canvasIndex, canvas] of canvases.entries()) {
+          const canvasPrefix = `${prefix}.imageGeneration.canvases[${canvasIndex}]`;
+          if (!isObject(canvas)) {
+            errors.push(`${canvasPrefix} 必须是对象`);
+            continue;
+          }
+          rejectUnknownKeys(canvas, ['tableName', 'stableIdentityFields', 'canvas', 'promptFields', 'promptSuffix'], canvasPrefix, errors);
+          if (canvas.promptSuffix !== undefined && typeof canvas.promptSuffix !== 'string') errors.push(`${canvasPrefix}.promptSuffix 必须是字符串`);
+          const canvasName = normalizeMatchText(canvas.canvas);
+          const tableName = normalizeMatchText(canvas.tableName);
+          if (!canvasName) errors.push(`${canvasPrefix}.canvas 缺失`);
+          if (!tableName) errors.push(`${canvasPrefix}.tableName 缺失`);
+          const canvasKey = `${tableName}\u0000${canvasName}`;
+          if (canvasName && tableName && seenCanvases.has(canvasKey)) errors.push(`${canvasPrefix} 画布名称与归属表重复：${canvas.canvas}`);
+          seenCanvases.add(canvasKey);
+          validateFields(canvas.stableIdentityFields, `${canvasPrefix}.stableIdentityFields`, errors);
+          validateFields(canvas.promptFields, `${canvasPrefix}.promptFields`, errors);
+          const target = targetByName.get(tableName);
+          if (!target) {
+            errors.push(`${canvasPrefix}.tableName 必须属于展示 targets`);
+          } else {
+            const targetFields = new Set(target.fields.map(normalizeMatchText));
+            for (const field of [...(Array.isArray(canvas.stableIdentityFields) ? canvas.stableIdentityFields : []), ...(Array.isArray(canvas.promptFields) ? canvas.promptFields : [])]) {
+              if (!targetFields.has(normalizeMatchText(field))) errors.push(`${canvasPrefix} 引用了未在归属 target 声明的字段：${field}`);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (display?.interactions !== undefined) {
+    if (display?.kind !== 'inline') errors.push(`${prefix}.interactions 仅 inline 展示可用`);
+    if (!Array.isArray(display.interactions) || display.interactions.length === 0) {
+      errors.push(`${prefix}.interactions 至少需要一个交互`);
+    } else {
+      const seen = new Set();
+      for (const [index, interaction] of display.interactions.entries()) {
+        if (!['expand', 'tabs', 'append-input', 'image-generate'].includes(interaction)) errors.push(`${prefix}.interactions[${index}] 无效`);
+        if (seen.has(interaction)) errors.push(`${prefix}.interactions 重复：${interaction}`);
+        seen.add(interaction);
+      }
+    }
+  }
+}
+
 export function validateBundle(bundle, { strict = true, tables = null } = {}) {
   const structural = validateSchema('bundle', bundle);
   const errors = structural.errors.map(error => `Bundle Schema：${error}`);
   if (!bundle || typeof bundle !== 'object' || Array.isArray(bundle)) errors.push('Bundle 必须是对象');
   rejectUnknownKeys(bundle, ['format', 'formatVersion', 'apiVersion', 'manifest', 'files'], 'Bundle', errors);
   if (bundle?.format !== FORMAT) errors.push(`format 必须为 ${FORMAT}`);
-  if (bundle?.formatVersion !== VERSION) errors.push(`formatVersion 必须为 ${VERSION}`);
-  if (bundle?.apiVersion !== API_VERSION) errors.push(`apiVersion 必须为 ${API_VERSION}`);
+  const isV2 = bundle?.formatVersion === VERSION && bundle?.apiVersion === API_VERSION;
+  const isV3 = bundle?.formatVersion === DISPLAY_VERSION && bundle?.apiVersion === DISPLAY_API_VERSION;
+  if (!isV2 && !isV3) errors.push(`仅支持 formatVersion/apiVersion ${VERSION}/${API_VERSION} 或 ${DISPLAY_VERSION}/${DISPLAY_API_VERSION}`);
   if (!isObject(bundle?.manifest)) errors.push('manifest 必须是对象');
   if (!isObject(bundle?.files)) errors.push('files 必须是对象');
-  rejectUnknownKeys(bundle?.manifest, ['id', 'name', 'version', 'author', 'items'], 'manifest', errors);
+  rejectUnknownKeys(bundle?.manifest, ['id', 'name', 'version', 'author', 'items', 'displays'], 'manifest', errors);
   const files = isObject(bundle?.files) ? bundle.files : {};
   const normalizedFiles = new Set();
   for (const [filePath, file] of Object.entries(files)) {
@@ -157,13 +276,16 @@ export function validateBundle(bundle, { strict = true, tables = null } = {}) {
     }
   }
   const items = Array.isArray(bundle?.manifest?.items) ? bundle.manifest.items : [];
+  const displays = Array.isArray(bundle?.manifest?.displays) ? bundle.manifest.displays : [];
   if (strict && !String(bundle?.manifest?.id || '').trim()) errors.push('严格模式要求 manifest.id');
-  if (strict && items.length === 0) errors.push('严格模式要求至少一个 item');
+  if (strict && items.length + displays.length === 0) errors.push('严格模式要求至少一个页面或展示');
+  if (isV2 && items.length === 0) errors.push('v2 严格模式要求至少一个 item');
+  if (!isV3 && displays.length > 0) errors.push('v2 不支持 displays');
   const ids = new Set();
   for (const [index, item] of items.entries()) {
     const prefix = `items[${index}]`;
     if (!isObject(item)) { errors.push(`${prefix} 必须是对象`); continue; }
-    rejectUnknownKeys(item, ['id', 'name', 'target', 'entry', 'assets'], prefix, errors);
+    rejectUnknownKeys(item, ['id', 'name', 'target', 'entry', 'assets', 'integrations', 'imageGeneration'], prefix, errors);
     rejectUnknownKeys(item.target, ['tableName', 'fields'], `${prefix}.target`, errors);
     rejectUnknownKeys(item.entry, ['html', 'css', 'mount'], `${prefix}.entry`, errors);
     const id = String(item?.id || '').trim();
@@ -192,7 +314,59 @@ export function validateBundle(bundle, { strict = true, tables = null } = {}) {
       assetPaths.add(assetPath);
       if (!hasOwn(files, assetPath)) errors.push(`${prefix}.assets[${assetIndex}] 文件不存在`);
     }
+    validateItemCapabilities(item, prefix, errors);
+    if (isV2 && (item?.integrations !== undefined || item?.imageGeneration !== undefined)) {
+      errors.push(`${prefix} 声明宿主能力时必须使用 v3 Bundle`);
+    }
     if (strict && Array.isArray(tables) && !tables.some(table => matchesItemToTable(item, table))) errors.push(`${prefix} 未匹配任何真实表`);
+  }
+  for (const [index, display] of displays.entries()) {
+    const prefix = `displays[${index}]`;
+    if (!isObject(display)) { errors.push(`${prefix} 必须是对象`); continue; }
+    rejectUnknownKeys(display, ['id', 'name', 'kind', 'targets', 'entry', 'assets', 'integrations', 'imageGeneration', 'interactions'], prefix, errors);
+    rejectUnknownKeys(display.entry, ['html', 'css', 'mount'], `${prefix}.entry`, errors);
+    const id = String(display?.id || '').trim();
+    if (!id) errors.push(`${prefix}.id 缺失`); else if (ids.has(id)) errors.push(`${prefix}.id 重复`); else ids.add(id);
+    if (!String(display?.name || '').trim()) errors.push(`${prefix}.name 缺失`);
+    if (!['inline', 'popup', 'barrage'].includes(display?.kind)) errors.push(`${prefix}.kind 无效`);
+    const targets = Array.isArray(display?.targets) ? display.targets : [];
+    if (targets.length === 0) errors.push(`${prefix}.targets 至少需要一个目标表`);
+    const targetNames = new Set();
+    for (const [targetIndex, target] of targets.entries()) {
+      const targetPrefix = `${prefix}.targets[${targetIndex}]`;
+      if (!isObject(target)) { errors.push(`${targetPrefix} 必须是对象`); continue; }
+      rejectUnknownKeys(target, ['tableName', 'fields'], targetPrefix, errors);
+      if (!String(target?.tableName || '').trim()) errors.push(`${targetPrefix}.tableName 缺失`);
+      const targetName = normalizeMatchText(target?.tableName);
+      if (targetName && targetNames.has(targetName)) errors.push(`${prefix}.targets 重复声明表：${target.tableName}`);
+      targetNames.add(targetName);
+      validateFields(target?.fields, `${targetPrefix}.fields`, errors);
+    }
+    validateDisplayCapabilities(display, prefix, errors);
+    if (hasOwn(display?.entry, 'js') || hasOwn(display?.entry, 'scriptMode') || hasOwn(display, 'scriptMode')) errors.push(`${prefix} 不接受 legacy entry.js/scriptMode`);
+    const entries = ['html', 'css', 'mount'].filter(key => display?.entry?.[key]);
+    if (!display?.entry?.mount) errors.push(`${prefix}.entry.mount 缺失`);
+    for (const key of entries) {
+      let entryPath;
+      try { entryPath = normalizePackagePath(display.entry[key]); } catch (error) { errors.push(`${prefix}.entry.${key}: ${error.message}`); continue; }
+      const file = files[entryPath];
+      if (!hasOwn(files, entryPath)) errors.push(`${prefix}.entry.${key} 文件不存在`);
+      if (key === 'mount' && file && !hasMountExport(file)) errors.push(`${prefix}.entry.mount 必须导出 mount(context)`);
+      if (key === 'html' && file && (file.encoding !== 'text' || String(file.mimeType).toLowerCase() !== 'text/html')) errors.push(`${prefix}.entry.html 必须是 text/html 文本`);
+      if (key === 'css' && file && (file.encoding !== 'text' || String(file.mimeType).toLowerCase() !== 'text/css')) errors.push(`${prefix}.entry.css 必须是 text/css 文本`);
+    }
+    if (display?.assets !== undefined && !Array.isArray(display.assets)) errors.push(`${prefix}.assets 必须是数组`);
+    const assetPaths = new Set();
+    for (const [assetIndex, asset] of (Array.isArray(display?.assets) ? display.assets : []).entries()) {
+      let assetPath;
+      try { assetPath = normalizePackagePath(asset); } catch (error) { errors.push(`${prefix}.assets[${assetIndex}]: ${error.message}`); continue; }
+      if (assetPaths.has(assetPath)) errors.push(`${prefix}.assets 重复：${assetPath}`);
+      assetPaths.add(assetPath);
+      if (!hasOwn(files, assetPath)) errors.push(`${prefix}.assets[${assetIndex}] 文件不存在`);
+    }
+    if (strict && Array.isArray(tables) && !targets.every(target => tables.some(table => matchesTargetToTable(target, table)))) {
+      errors.push(`${prefix} 未匹配全部声明真实表`);
+    }
   }
   return { ok: errors.length === 0, errors };
 }
@@ -238,8 +412,30 @@ function canonicalManifest(manifest = {}) {
       name: item.name,
       target: { ...item.target, tableName: item.target?.tableName, fields: item.target?.fields },
       entry: { ...item.entry },
+      ...(item.integrations ? { integrations: structuredClone(item.integrations) } : {}),
+      ...(item.imageGeneration ? { imageGeneration: structuredClone(item.imageGeneration) } : {}),
       assets: Array.isArray(item.assets) ? item.assets : [],
     })),
+    ...(Array.isArray(manifest.displays) && manifest.displays.length > 0
+      ? {
+          displays: manifest.displays.map(display => ({
+            ...display,
+            id: display.id,
+            name: display.name,
+            kind: display.kind,
+            targets: (Array.isArray(display.targets) ? display.targets : []).map(target => ({
+              ...target,
+              tableName: target.tableName,
+              fields: target.fields,
+            })),
+            entry: { ...display.entry },
+            ...(display.integrations ? { integrations: structuredClone(display.integrations) } : {}),
+            ...(display.imageGeneration ? { imageGeneration: structuredClone(display.imageGeneration) } : {}),
+            ...(display.interactions ? { interactions: structuredClone(display.interactions) } : {}),
+            assets: Array.isArray(display.assets) ? display.assets : [],
+          })),
+        }
+      : {}),
   };
 }
 
@@ -733,17 +929,27 @@ export async function buildBundle(projectFile) {
   }
   const files = Object.fromEntries(fileEntries);
   const manifest = canonicalManifest(project.manifest);
-  for (const mountPath of new Set(manifest.items.map(item => item.entry.mount).filter(Boolean))) {
+  const renderables = [...manifest.items, ...(manifest.displays || [])];
+  for (const mountPath of new Set(renderables.map(item => item.entry.mount).filter(Boolean))) {
     const sourcePath = sourcePaths.get(mountPath);
     if (!sourcePath) throw new Error(`entry.mount 未声明在 project.files：${mountPath}`);
     files[mountPath] = { mimeType: 'text/javascript', encoding: 'text', content: await bundleMountModule(sourcePath, root) };
   }
-  for (const cssPath of new Set(manifest.items.map(item => item.entry.css).filter(Boolean))) {
+  for (const cssPath of new Set(renderables.map(item => item.entry.css).filter(Boolean))) {
     const inlined = inlineLocalCssImports(cssPath, files);
     files[cssPath] = { ...files[cssPath], content: rebaseImportedCssReferences(inlined, cssPath, cssPath) };
   }
   const sortedFiles = Object.fromEntries(Object.entries(files).sort(([a], [b]) => compareCodeUnits(a, b)));
-  const bundle = { format: FORMAT, formatVersion: VERSION, apiVersion: API_VERSION, manifest, files: sortedFiles };
+  const usesV3 = (manifest.displays || []).length > 0
+    || manifest.items.some(item => item.integrations || item.imageGeneration);
+  if (usesV3) manifest.displays ||= [];
+  const bundle = {
+    format: FORMAT,
+    formatVersion: usesV3 ? DISPLAY_VERSION : VERSION,
+    apiVersion: usesV3 ? DISPLAY_API_VERSION : API_VERSION,
+    manifest,
+    files: sortedFiles,
+  };
   const result = validateBundle(bundle, { strict: true, tables });
   if (!result.ok) throw new Error(result.errors.join('\n'));
   return bundle;

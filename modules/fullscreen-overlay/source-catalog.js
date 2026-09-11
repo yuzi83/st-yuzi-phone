@@ -3,6 +3,8 @@ import {
     QQ_FULLSCREEN_OVERLAY_SOURCE_ID,
     QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
 } from './sources/qq.js';
+import { buildActiveContentPresetDisplayDirectory } from '../content-presets/display-directory.js';
+import { getContentPresetIndexSnapshot } from '../content-presets/index-state.js';
 
 function normalizeText(value) {
     return String(value ?? '').trim();
@@ -53,14 +55,22 @@ function buildSourceContext(rawData, entry) {
     const content = Array.isArray(sheet?.content) ? sheet.content : [];
     return Object.freeze({
         ...entry,
+        rawData,
         sheet,
         headers: Array.isArray(content[0]) ? content[0] : [],
         rows: content.slice(1),
     });
 }
 
-export function buildOverlaySourceCatalog(rawData, settings = {}, registry = null) {
+function resolveDisplayDirectory(rawData, options) {
+    if (options?.contentPresetDisplayDirectory) return options.contentPresetDisplayDirectory;
+    const popupByTable = options?.popupByTable ?? getContentPresetIndexSnapshot().popupByTable;
+    return buildActiveContentPresetDisplayDirectory(rawData, popupByTable);
+}
+
+export function buildOverlaySourceCatalog(rawData, settings = {}, registry = null, options = {}) {
     const physicalCatalog = buildTableNavigationCatalog(rawData);
+    const displayDirectory = resolveDisplayDirectory(rawData, options);
     const virtualCatalog = registry?.get?.(QQ_FULLSCREEN_OVERLAY_SOURCE_ID)
         ? [{
             sheetKey: QQ_FULLSCREEN_OVERLAY_SOURCE_KEY,
@@ -69,8 +79,11 @@ export function buildOverlaySourceCatalog(rawData, settings = {}, registry = nul
             orderIndex: physicalCatalog.length,
         }]
         : [];
+    const contentPresetVirtualCatalog = Array.isArray(displayDirectory?.virtualSources)
+        ? displayDirectory.virtualSources
+        : [];
     const orderedCatalog = mergeSourceOrder(
-        [...physicalCatalog, ...virtualCatalog],
+        [...physicalCatalog, ...virtualCatalog, ...contentPresetVirtualCatalog],
         settings?.sourceOrder,
     );
     const sourceEnabledBySheetKey = isRecord(settings?.sourceEnabledBySheetKey)
@@ -82,15 +95,33 @@ export function buildOverlaySourceCatalog(rawData, settings = {}, registry = nul
 
     return Object.freeze(orderedCatalog.map((entry, sourceOrderIndex) => {
         const context = buildSourceContext(rawData, entry);
-        const adapter = registry?.match?.(context) || null;
+        const explicitSourceId = normalizeText(entry?.sourceId || entry?.sourceKind);
+        const adapter = (explicitSourceId ? registry?.get?.(explicitSourceId) : null)
+            || registry?.match?.(context)
+            || null;
         const supported = Boolean(adapter);
         const explicitEnabled = sourceEnabledBySheetKey[entry.sheetKey];
         const enabled = supported && (typeof explicitEnabled === 'boolean'
             ? explicitEnabled
             : adapter.defaultEnabled === true);
-        const defaultModelId = normalizeModelId(adapter?.modelId);
+        const displayModels = Array.isArray(displayDirectory?.singleBySheetKey?.get?.(entry.sheetKey))
+            ? displayDirectory.singleBySheetKey.get(entry.sheetKey)
+            : [];
+        const modelLabels = Object.freeze(Object.fromEntries([
+            ...displayModels,
+            ...(entry?.customDisplay ? [entry.customDisplay] : []),
+        ].map(display => [
+            display?.modelId,
+            normalizeText(display?.display?.name || display?.displayId),
+        ]).filter(([modelId, label]) => modelId && label)));
+        const defaultModelId = normalizeModelId(entry?.modelId || adapter?.modelId);
         const modelIds = supported
-            ? normalizeStringList([...(adapter?.modelIds || []), defaultModelId])
+            ? normalizeStringList([
+                ...(entry?.modelIds || []),
+                ...(adapter?.modelIds || []),
+                ...displayModels.map(display => display?.modelId),
+                defaultModelId,
+            ])
             : [];
         const requestedModelId = normalizeModelId(sourceModelBySheetKey[entry.sheetKey]);
         const modelId = modelIds.includes(requestedModelId)
@@ -103,6 +134,10 @@ export function buildOverlaySourceCatalog(rawData, settings = {}, registry = nul
             sourceId: normalizeText(adapter?.id),
             modelId,
             modelIds: Object.freeze(modelIds),
+            customDisplay: displayDirectory?.byModelId?.get?.(modelId)
+                || entry?.customDisplay
+                || null,
+            modelLabels,
             supported,
             disabled: !supported,
             enabled,

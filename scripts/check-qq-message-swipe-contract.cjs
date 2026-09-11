@@ -5,6 +5,7 @@ const path = require('node:path');
 (async () => {
     const {
         resolveMessageQuoteSwipe,
+        bindMessageQuoteSwipeGesture,
     } = await import('../modules/qq-v2/ui/message-swipe.js');
 
     assert.equal(resolveMessageQuoteSwipe({ x: 180, y: 100 }, { x: 120, y: 104 }), 'quote');
@@ -14,6 +15,49 @@ const path = require('node:path');
         'vertical scrolling must not create a quote');
     assert.equal(resolveMessageQuoteSwipe({ x: 180, y: 100 }, { x: 160, y: 104 }), 'ignore',
         'a short horizontal movement must not create a quote');
+
+    class Row extends EventTarget {
+        captured = null;
+        classList = { add() {}, remove() {} };
+        style = { setProperty() {}, removeProperty() {} };
+        setPointerCapture(id) { this.captured = id; }
+        hasPointerCapture(id) { return this.captured === id; }
+        releasePointerCapture() { this.captured = null; }
+    }
+    globalThis.HTMLElement = Row;
+    const row = new Row();
+    let quotes = 0;
+    const unbind = bindMessageQuoteSwipeGesture({ row, onQuote: () => quotes++ });
+    const fire = (type, x = 100, y = 100) => {
+        const event = new Event(type, { cancelable: true });
+        Object.assign(event, { pointerId: 1, pointerType: 'touch', clientX: x, clientY: y });
+        row.dispatchEvent(event);
+        return event;
+    };
+    fire('pointerdown');
+    assert.equal(row.captured, null, 'a tap must not retarget media/voice/transfer child buttons to the row');
+    fire('pointerup');
+    assert.equal(fire('click').defaultPrevented, false);
+    fire('pointerdown');
+    fire('pointermove', 98, 125);
+    assert.equal(row.captured, null, 'vertical scroll must remain native');
+    fire('pointercancel');
+    fire('pointerdown');
+    fire('pointermove', 70);
+    assert.equal(row.captured, 1, 'capture starts only after a left drag');
+    fire('pointerup', 40);
+    assert.equal(quotes, 1);
+    assert.equal(row.captured, null);
+    assert.equal(fire('click').defaultPrevented, true, 'completed quote suppresses its trailing click');
+    assert.equal(fire('click').defaultPrevented, false, 'later media clicks are not swallowed');
+    fire('pointerdown');
+    fire('pointermove', 90);
+    fire('pointercancel');
+    assert.equal(row.captured, null);
+    unbind();
+    fire('pointerdown');
+    fire('pointermove', 40);
+    assert.equal(row.captured, null, 'cleanup removes listeners');
 
     const app = await fs.readFile(path.join(__dirname, '../modules/qq-v2/ui/app.js'), 'utf8');
     const swipe = await fs.readFile(path.join(__dirname, '../modules/qq-v2/ui/message-swipe.js'), 'utf8');

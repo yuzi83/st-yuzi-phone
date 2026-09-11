@@ -189,6 +189,8 @@ function newQueueEntry(table) {
     status: 'pending',
     itemId: null,
     fields: [],
+    display: null,
+    displays: [],
     skipReason: null,
     completedAt: null,
     preview: { status: 'not-run', recordedAt: null, notes: '' },
@@ -236,6 +238,7 @@ export function validateChatSheetsDocument(document) {
 function reconcileState(state, tables, project = null) {
   const previous = new Map(state.queue.map(entry => [entry.sheetKey, entry]));
   const next = [];
+  const removedDisplayIds = new Set();
   let changed = false;
   for (const table of tables) {
     const contract = tableContract(table);
@@ -260,10 +263,17 @@ function reconcileState(state, tables, project = null) {
     next.push({ ...old, ...contract });
   }
   for (const removed of previous.values()) {
-    if (project) removeItem(project, removed.itemId);
+    if (project) {
+      removeItem(project, removed.itemId);
+      for (const display of displayStates(removed)) {
+        removeDisplay(project, display.id);
+        removedDisplayIds.add(display.id);
+      }
+    }
     changed = true;
   }
   state.queue = next;
+  for (const displayId of removedDisplayIds) removeDisplayState(state, displayId);
   if (changed) resetConfirmation(state);
   updatePhase(state);
   return { state, changed };
@@ -280,6 +290,8 @@ function summaryPayload(project, state) {
       status: entry.status,
       itemId: entry.itemId,
       fields: entry.fields,
+      display: entry.display,
+      ...(displayStates(entry).length > 0 ? { displays: displayStates(entry) } : {}),
       skipReason: entry.skipReason,
       preview: entry.preview,
     })),
@@ -396,6 +408,122 @@ function removeItem(project, itemId) {
   project.manifest.items = project.manifest.items.filter(item => item.id !== itemId);
 }
 
+function removeDisplay(project, displayId) {
+  if (!displayId) return;
+  project.manifest.displays = (project.manifest.displays || []).filter(display => display.id !== displayId);
+}
+
+function displayStates(entry) {
+  const byId = new Map();
+  for (const display of [...(Array.isArray(entry.displays) ? entry.displays : []), entry.display].filter(Boolean)) {
+    if (!byId.has(display.id)) byId.set(display.id, display);
+  }
+  return [...byId.values()];
+}
+
+function hasProducedResult(entry) {
+  return Boolean(entry.itemId || displayStates(entry).length > 0);
+}
+
+function removeDisplayState(state, displayId) {
+  for (const entry of state.queue) {
+    if (entry.display?.id === displayId) entry.display = null;
+    if (Array.isArray(entry.displays)) entry.displays = entry.displays.filter(display => display.id !== displayId);
+    if (entry.status !== 'skipped' && !hasProducedResult(entry)) {
+      entry.status = 'pending';
+      entry.completedAt = null;
+      entry.preview = { status: 'not-run', recordedAt: null, notes: '' };
+    }
+  }
+}
+
+function setDisplayState(entry, displayState, { legacyInline = false } = {}) {
+  const displays = displayStates(entry).filter(display => display.id !== displayState.id);
+  displays.push(displayState);
+  entry.displays = displays;
+  if (legacyInline && (!entry.display || entry.display.id === displayState.id)) entry.display = displayState;
+  entry.status = 'completed';
+  entry.skipReason = null;
+  entry.completedAt ||= displayState.completedAt;
+}
+
+function canonicalDisplayTargets(state, table, fields, targets) {
+  const requested = Array.isArray(targets) && targets.length > 0
+    ? targets
+    : [{ tableName: table, fields }];
+  const seen = new Set();
+  return requested.map((target, index) => {
+    if (!target || typeof target !== 'object' || Array.isArray(target)) throw new Error(`targets[${index}] 必须是对象`);
+    const requestedTable = target.tableName ?? target.table;
+    const entry = findQueueEntry(state, requestedTable);
+    if (entry.status === 'skipped') throw new Error(`目标表已跳过：${entry.tableName}`);
+    const key = normalizeMatchText(entry.tableName);
+    if (seen.has(key)) throw new Error(`targets 不能重复声明表：${entry.tableName}`);
+    seen.add(key);
+    return {
+      entry,
+      target: {
+        tableName: entry.tableName,
+        fields: canonicalFields(entry, target.fields),
+      },
+    };
+  });
+}
+
+function canonicalDisplayCapabilities({ integrations, imageGeneration, interactions }, targets, kind) {
+  const result = {};
+  if (integrations !== undefined && integrations !== null) {
+    if (!integrations || typeof integrations !== 'object' || Array.isArray(integrations)) throw new Error('integrations 必须是对象');
+    const allowed = new Set(['theme', 'font']);
+    for (const key of Object.keys(integrations)) if (!allowed.has(key)) throw new Error(`integrations 包含未知字段：${key}`);
+    for (const key of ['theme', 'font']) {
+      if (integrations[key] === undefined) continue;
+      if (integrations[key] !== true) throw new Error(`integrations.${key} 只能为 true`);
+      result.integrations ||= {};
+      result.integrations[key] = true;
+    }
+    if (!result.integrations) throw new Error('integrations 至少需要一个接入项');
+  }
+  if (imageGeneration !== undefined && imageGeneration !== null) {
+    if (kind !== 'inline') throw new Error('仅 inline 展示可以声明生图接口');
+    if (!imageGeneration || typeof imageGeneration !== 'object' || Array.isArray(imageGeneration) || !Array.isArray(imageGeneration.canvases) || imageGeneration.canvases.length === 0) {
+      throw new Error('生图接口至少需要一个 canvas 声明');
+    }
+    const targetByName = new Map(targets.map(value => [normalizeMatchText(value.target.tableName), value]));
+    const canvasNames = new Set();
+    result.imageGeneration = {
+      canvases: imageGeneration.canvases.map((canvas, index) => {
+        if (!canvas || typeof canvas !== 'object' || Array.isArray(canvas)) throw new Error(`canvas[${index}] 必须是对象`);
+        if (canvas.promptSuffix !== undefined && typeof canvas.promptSuffix !== 'string') throw new Error(`canvas[${index}].promptSuffix 必须是字符串`);
+        const canvasName = assertDisplayText(canvas.canvas, `canvas[${index}].canvas`);
+        const target = targetByName.get(normalizeMatchText(canvas.tableName ?? canvas.table));
+        if (!target) throw new Error(`canvas ${canvasName} 的归属表必须在 targets 中声明`);
+        const canvasKey = `${normalizeMatchText(target.target.tableName)}\u0000${normalizeMatchText(canvasName)}`;
+        if (canvasNames.has(canvasKey)) throw new Error(`canvas 名称与归属表重复：${canvasName}`);
+        canvasNames.add(canvasKey);
+        return {
+          tableName: target.target.tableName,
+          stableIdentityFields: canonicalFields(target.entry, canvas.stableIdentityFields),
+          canvas: canvasName,
+          promptFields: canonicalFields(target.entry, canvas.promptFields),
+          ...(canvas.promptSuffix !== undefined ? { promptSuffix: canvas.promptSuffix.trim() } : {}),
+        };
+      }),
+    };
+  }
+  if (interactions !== undefined && interactions !== null) {
+    if (kind !== 'inline') throw new Error('仅 inline 展示可以声明局部交互');
+    if (!Array.isArray(interactions) || interactions.length === 0) throw new Error('局部交互至少需要一项');
+    const allowed = new Set(['expand', 'tabs', 'append-input', 'image-generate']);
+    assertUniqueNormalized(interactions, '局部交互');
+    result.interactions = interactions.map((interaction, index) => {
+      if (typeof interaction !== 'string' || !allowed.has(interaction)) throw new Error(`interaction[${index}] 无效`);
+      return interaction;
+    });
+  }
+  return result;
+}
+
 export async function addProjectItem({
   projectFile,
   table,
@@ -406,6 +534,8 @@ export async function addProjectItem({
   css = null,
   mount,
   assets = [],
+  integrations = null,
+  imageGeneration = null,
   previewStatus = 'not-run',
   previewNotes = '',
   replace = false,
@@ -420,6 +550,11 @@ export async function addProjectItem({
   if (entry.status === 'skipped') throw new Error('该表已跳过；请先用 project:skip-table --resume 恢复制作');
   const itemId = assertProjectId(id);
   const itemFields = canonicalFields(entry, fields);
+  const itemCapabilities = canonicalDisplayCapabilities(
+    { integrations, imageGeneration, interactions: null },
+    [{ entry: { ...entry, headers: itemFields }, target: { tableName: entry.tableName, fields: itemFields } }],
+    'inline',
+  );
   const packagePaths = [mount, html, css, ...assets].filter(Boolean).map(normalizePackagePath);
   if (!mount) throw new Error('--mount 不能为空');
   assertUniqueNormalized(packagePaths, 'item 源码路径');
@@ -438,6 +573,7 @@ export async function addProjectItem({
     name: String(name || entry.tableName).trim(),
     target: { tableName: entry.tableName, fields: itemFields },
     entry: { ...(html ? { html } : {}), ...(css ? { css } : {}), mount },
+    ...itemCapabilities,
     assets: assets.map(normalizePackagePath),
   };
   project.manifest.items.push(item);
@@ -469,6 +605,92 @@ export async function addProjectItem({
   return result;
 }
 
+export async function addProjectDisplay({
+  projectFile,
+  table,
+  id,
+  name = '',
+  kind,
+  fields = [],
+  targets = null,
+  integrations = null,
+  imageGeneration = null,
+  interactions = null,
+  html = null,
+  css = null,
+  mount,
+  assets = [],
+  previewStatus = 'not-run',
+  previewNotes = '',
+  replace = false,
+  dryRun = false,
+} = {}) {
+  const context = await loadWorkflowProject(projectFile);
+  const current = await readCurrentTables(context);
+  const project = structuredClone(context.project);
+  const state = structuredClone(context.state);
+  reconcileState(state, current.tables, project);
+  if (!['inline', 'popup', 'barrage'].includes(kind)) throw new Error(`请先选择弹窗接口：弹幕、弹窗／浮窗或弹窗／插入正文（kind 无效：${kind}）`);
+  const displayId = assertProjectId(id);
+  const displayTargets = canonicalDisplayTargets(state, table, fields, targets);
+  if (kind !== 'inline' && displayTargets.length !== 1) throw new Error('弹幕和弹窗／浮窗只能使用单表；只有弹窗／插入正文可以多表组合');
+  const displayCapabilities = canonicalDisplayCapabilities({ integrations, imageGeneration, interactions }, displayTargets, kind);
+  const packagePaths = [mount, html, css, ...assets].filter(Boolean).map(normalizePackagePath);
+  if (!mount) throw new Error('--mount 不能为空');
+  assertUniqueNormalized(packagePaths, 'display 源码路径');
+  await assertSourceFiles(context, packagePaths);
+  const existingDisplay = (project.manifest.displays || []).find(display => display.id === displayId);
+  if (project.manifest.items.some(item => item.id === displayId)) throw new Error(`展示 id 已被其他制作结果使用：${displayId}`);
+  if (existingDisplay && !replace) throw new Error(`展示 id 已存在：${displayId}；如需重做请显式使用 --replace`);
+  if (!['not-run', 'passed', 'skipped', 'failed'].includes(previewStatus)) throw new Error(`预览状态无效：${previewStatus}`);
+  project.files ||= {};
+  project.mimeTypes ||= {};
+  project.encodings ||= {};
+  project.manifest.displays ||= [];
+  if (existingDisplay) {
+    removeDisplay(project, displayId);
+    removeDisplayState(state, displayId);
+  }
+  const display = {
+    id: displayId,
+    name: String(name || displayTargets[0].target.tableName).trim(),
+    kind,
+    targets: displayTargets.map(value => value.target),
+    entry: { ...(html ? { html } : {}), ...(css ? { css } : {}), mount },
+    ...displayCapabilities,
+    assets: assets.map(normalizePackagePath),
+  };
+  project.manifest.displays.push(display);
+  for (const packagePath of packagePaths) {
+    project.files[packagePath] = packagePath;
+    const metadata = inferFileMetadata(packagePath);
+    project.mimeTypes[packagePath] = metadata.mimeType;
+    project.encodings[packagePath] = metadata.encoding;
+  }
+  const completedAt = nowIso();
+  const preview = {
+    status: previewStatus,
+    recordedAt: previewStatus === 'not-run' ? null : completedAt,
+    notes: String(previewNotes || ''),
+  };
+  for (const { entry, target } of displayTargets) {
+    setDisplayState(entry, {
+      id: displayId,
+      fields: target.fields,
+      completedAt,
+      preview,
+    }, { legacyInline: kind === 'inline' && displayTargets.length === 1 });
+  }
+  state.tables.generatedSha256 = current.sha256;
+  resetConfirmation(state);
+  updatePhase(state);
+  assertSchema('project', project, 'project.json');
+  assertSchema('workflow', state, WORKFLOW_FILE);
+  const result = { ok: true, dryRun, display, states: displayTargets.map(({ entry }) => entry), phase: state.phase };
+  if (!dryRun) await writeProjectPair(context, project, state);
+  return result;
+}
+
 export async function skipProjectTable({ projectFile, table, reason = '', resume = false, dryRun = false } = {}) {
   const context = await loadWorkflowProject(projectFile);
   const current = await readCurrentTables(context);
@@ -480,15 +702,23 @@ export async function skipProjectTable({ projectFile, table, reason = '', resume
     stateEntry.status = 'pending';
     stateEntry.itemId = null;
     stateEntry.fields = [];
+    stateEntry.display = null;
+    stateEntry.displays = [];
     stateEntry.skipReason = null;
     stateEntry.completedAt = null;
     stateEntry.preview = { status: 'not-run', recordedAt: null, notes: '' };
   } else {
     const skipReason = assertDisplayText(reason, '跳过原因');
     removeItem(project, stateEntry.itemId);
+    for (const display of displayStates(stateEntry)) {
+      removeDisplay(project, display.id);
+      removeDisplayState(state, display.id);
+    }
     stateEntry.status = 'skipped';
     stateEntry.itemId = null;
     stateEntry.fields = [];
+    stateEntry.display = null;
+    stateEntry.displays = [];
     stateEntry.skipReason = skipReason;
     stateEntry.completedAt = null;
     stateEntry.preview = { status: 'skipped', recordedAt: nowIso(), notes: '该表由用户明确跳过制作' };
@@ -505,15 +735,15 @@ function validateProjectMappings(project, root, errors) {
   const fileKeys = new Set(Object.keys(project.files || {}));
   for (const key of Object.keys(project.mimeTypes || {})) if (!fileKeys.has(key)) errors.push(`mimeTypes 包含未声明文件：${key}`);
   for (const key of Object.keys(project.encodings || {})) if (!fileKeys.has(key)) errors.push(`encodings 包含未声明文件：${key}`);
-  for (const item of project.manifest.items || []) {
-    for (const [kind, packagePath] of Object.entries(item.entry || {})) {
-      if (!fileKeys.has(packagePath)) errors.push(`${item.id}.entry.${kind} 未声明在 files：${packagePath}`);
-      if (!project.mimeTypes?.[packagePath]) errors.push(`${item.id}.entry.${kind} 缺少 MIME：${packagePath}`);
+  for (const renderable of [...(project.manifest.items || []), ...(project.manifest.displays || [])]) {
+    for (const [kind, packagePath] of Object.entries(renderable.entry || {})) {
+      if (!fileKeys.has(packagePath)) errors.push(`${renderable.id}.entry.${kind} 未声明在 files：${packagePath}`);
+      if (!project.mimeTypes?.[packagePath]) errors.push(`${renderable.id}.entry.${kind} 缺少 MIME：${packagePath}`);
     }
-    for (const asset of item.assets || []) {
-      if (!fileKeys.has(asset)) errors.push(`${item.id}.assets 未声明在 files：${asset}`);
-      if (!project.mimeTypes?.[asset]) errors.push(`${item.id}.assets 缺少 MIME：${asset}`);
-      if (!project.encodings?.[asset]) errors.push(`${item.id}.assets 缺少 encoding：${asset}`);
+    for (const asset of renderable.assets || []) {
+      if (!fileKeys.has(asset)) errors.push(`${renderable.id}.assets 未声明在 files：${asset}`);
+      if (!project.mimeTypes?.[asset]) errors.push(`${renderable.id}.assets 缺少 MIME：${asset}`);
+      if (!project.encodings?.[asset]) errors.push(`${renderable.id}.assets 缺少 encoding：${asset}`);
     }
   }
   return Promise.all(Object.entries(project.files || {}).map(async ([packagePath, source]) => {
@@ -583,7 +813,9 @@ async function checkLoadedWorkflowProject(context, { mode = 'draft', requireConf
     }
     const tableByKey = new Map(current.tables.map(table => [table.sheetKey, table]));
     const itemById = new Map(context.project.manifest.items.map(item => [item.id, item]));
+    const displayById = new Map((context.project.manifest.displays || []).map(display => [display.id, display]));
     const claimedItems = new Set();
+    const claimedDisplayTargets = new Map();
     for (const entry of state.queue) {
       const table = tableByKey.get(entry.sheetKey);
       if (!table && entry.status === 'skipped') continue;
@@ -593,35 +825,66 @@ async function checkLoadedWorkflowProject(context, { mode = 'draft', requireConf
       }
       if (entry.status === 'skipped') {
         if (entry.itemId) errors.push(`已跳过表不能绑定 item：${entry.tableName}`);
+        if (displayStates(entry).length > 0) errors.push(`已跳过表不能绑定正文展示：${entry.tableName}`);
         continue;
       }
       if (entry.status !== 'completed') {
         if (mode === 'release') errors.push(`表尚未完成或跳过：${entry.tableName} (${entry.status})`);
         continue;
       }
-      if (!entry.itemId) {
-        errors.push(`已完成表缺少 itemId：${entry.tableName}`);
-        continue;
-      }
-      const item = itemById.get(entry.itemId);
-      if (!item) {
-        errors.push(`制作状态引用不存在的 item：${entry.itemId}`);
-        continue;
-      }
-      if (claimedItems.has(item.id)) errors.push(`多个表重复绑定 item：${item.id}`);
-      claimedItems.add(item.id);
-      if (normalizeMatchText(item.target.tableName) !== normalizeMatchText(table.tableName)) errors.push(`${item.id} 的表名与 generated JSON 不匹配`);
-      const contractFields = entry.fields.map(normalizeMatchText);
-      const itemFields = item.target.fields.map(normalizeMatchText);
-      if (JSON.stringify(contractFields) !== JSON.stringify(itemFields)) errors.push(`${item.id} 的字段与制作状态不一致`);
       const actualFields = new Set(table.headers.map(normalizeMatchText));
-      for (const field of itemFields) if (!actualFields.has(field)) errors.push(`${item.id} 引用了不存在字段：${field}`);
+      if (entry.itemId) {
+        const item = itemById.get(entry.itemId);
+        if (!item) {
+          errors.push(`制作状态引用不存在的 item：${entry.itemId}`);
+        } else {
+          if (claimedItems.has(item.id)) errors.push(`多个表重复绑定 item：${item.id}`);
+          claimedItems.add(item.id);
+          if (normalizeMatchText(item.target.tableName) !== normalizeMatchText(table.tableName)) errors.push(`${item.id} 的表名与 generated JSON 不匹配`);
+          const contractFields = entry.fields.map(normalizeMatchText);
+          const itemFields = item.target.fields.map(normalizeMatchText);
+          if (JSON.stringify(contractFields) !== JSON.stringify(itemFields)) errors.push(`${item.id} 的字段与制作状态不一致`);
+          for (const field of itemFields) if (!actualFields.has(field)) errors.push(`${item.id} 引用了不存在字段：${field}`);
+        }
+      }
+      for (const stateDisplay of displayStates(entry)) {
+        const display = displayById.get(stateDisplay.id);
+        if (!display) {
+          errors.push(`制作状态引用不存在的展示：${stateDisplay.id}`);
+        } else {
+          const target = display.targets.find(candidate => normalizeMatchText(candidate.tableName) === normalizeMatchText(table.tableName));
+          if (!target) {
+            errors.push(`${display.id} 未声明当前表目标：${entry.tableName}`);
+          } else {
+            const contractFields = stateDisplay.fields.map(normalizeMatchText);
+            const displayFields = target.fields.map(normalizeMatchText);
+            if (JSON.stringify(contractFields) !== JSON.stringify(displayFields)) errors.push(`${display.id} 的字段与制作状态不一致`);
+            for (const field of displayFields) if (!actualFields.has(field)) errors.push(`${display.id} 引用了不存在字段：${field}`);
+            const claimed = claimedDisplayTargets.get(display.id) || new Set();
+            if (claimed.has(entry.sheetKey)) errors.push(`${display.id} 重复绑定当前表：${entry.tableName}`);
+            claimed.add(entry.sheetKey);
+            claimedDisplayTargets.set(display.id, claimed);
+          }
+        }
+      }
+      if (!entry.itemId && displayStates(entry).length === 0) errors.push(`已完成表缺少页面或正文展示：${entry.tableName}`);
     }
     for (const item of context.project.manifest.items) if (!claimedItems.has(item.id)) errors.push(`manifest 包含未绑定当前非跳过表的 item：${item.id}`);
+    for (const display of context.project.manifest.displays || []) {
+      const claimed = claimedDisplayTargets.get(display.id);
+      if (!claimed) {
+        errors.push(`manifest 包含未绑定当前非跳过表的展示：${display.id}`);
+        continue;
+      }
+      for (const target of display.targets) {
+        const entry = state.queue.find(candidate => normalizeMatchText(candidate.tableName) === normalizeMatchText(target.tableName));
+        if (!entry || !claimed.has(entry.sheetKey)) errors.push(`${display.id} 缺少目标表制作状态：${target.tableName}`);
+      }
+    }
   }
   if (mode === 'release') {
     if (!context.project.manifest.id.trim()) errors.push('发布检查要求 manifest.id');
-    if (context.project.manifest.items.length === 0) errors.push('发布检查要求至少一个完整 item');
+    if (context.project.manifest.items.length + (context.project.manifest.displays || []).length === 0) errors.push('发布检查要求至少一个完整页面或正文展示');
     if (state.queue.length === 0) errors.push('发布检查要求非空制作队列');
     if (requireConfirmation) {
       if (!state.confirmation.confirmed) errors.push('发布前需要用户确认完成、跳过和未模拟项汇总');

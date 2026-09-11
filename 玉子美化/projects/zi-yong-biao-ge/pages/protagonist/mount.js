@@ -9,7 +9,8 @@ const FIELDS = Object.freeze({
   special: '特有属性',
 });
 
-const AVATAR_SLOT = 'protagonist-avatar';
+const AVATAR_SLOT = 'protagonist-avatar'; // Read legacy uploads only until a managed image/clear record exists.
+const AVATAR_CANVAS = 'protagonist-avatar';
 const MAX_AVATAR_BYTES = 8 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const ACTION_LABELS = Object.freeze({
@@ -23,16 +24,17 @@ const icon = path => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${pat
 
 const TEMPLATE = `
   <style>
-    .protagonist-page{--bg:#151512;--surface:#23231f;--raised:#2c2c26;--soft:#1d1d1a;--line:#4b4a40;--line-soft:#37372f;--text:#e7e3d9;--text-soft:#c4c0b5;--muted:#9e9b91;--moss:#92a07c;--moss-soft:rgba(146,160,124,.16);position:relative;display:flex;flex-direction:column;height:100%;min-height:inherit;overflow:hidden;container:protagonist/inline-size;color:var(--text);background:var(--bg);font-family:system-ui,"Microsoft YaHei","PingFang SC",sans-serif}
-    .protagonist-page,.protagonist-page *{box-sizing:border-box}.protagonist-page [hidden]{display:none!important}.protagonist-page button{-webkit-tap-highlight-color:transparent}.protagonist-page svg{display:block}.protagonist-icon svg,.protagonist-avatar-clear svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+    .protagonist-page{--bg:#151512;--surface:#23231f;--raised:#2c2c26;--soft:#1d1d1a;--line:#4b4a40;--line-soft:#37372f;--text:#e7e3d9;--text-soft:#c4c0b5;--muted:#9e9b91;--moss:#92a07c;--moss-soft:rgba(146,160,124,.16);position:relative;display:flex;flex-direction:column;height:100%;min-height:inherit;overflow:hidden;container:protagonist/inline-size;color:var(--text);background:var(--bg);font-family:var(--yuzi-content-preset-font-family, var(--yuzi-phone-font-family, system-ui, "Microsoft YaHei", "PingFang SC", sans-serif))}
+    .protagonist-page,.protagonist-page *{box-sizing:border-box}.protagonist-page [hidden]{display:none!important}.protagonist-page button{font-family:inherit;-webkit-tap-highlight-color:transparent}.protagonist-page svg{display:block}.protagonist-icon svg,.protagonist-avatar-clear svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
     .protagonist-nav{flex:0 0 auto;padding-top:62px;background:rgba(29,29,26,.97);border-bottom:1px solid var(--line-soft)}
     .protagonist-nav-row{display:grid;grid-template-columns:clamp(44px,15cqi,60px) minmax(0,1fr) clamp(44px,15cqi,60px);align-items:center;height:54px;padding-inline:10px 12px}.protagonist-leading,.protagonist-trailing,.protagonist-center{display:flex;align-items:center}.protagonist-leading{justify-content:flex-start}.protagonist-trailing{justify-content:flex-end}.protagonist-center{min-width:0;justify-content:center;gap:4px;padding-inline:4px}
-    .protagonist-title,.protagonist-name,.protagonist-section-title,.protagonist-kicker{font-family:"Songti SC","STSong","SimSun",serif;font-weight:600;letter-spacing:0}.protagonist-title{min-width:0;margin:0;overflow:hidden;color:var(--text-soft);font-size:17px;line-height:24px;text-align:center;text-overflow:ellipsis;white-space:nowrap}
+    .protagonist-title,.protagonist-name,.protagonist-section-title,.protagonist-kicker{font-family:var(--yuzi-content-preset-font-family, var(--yuzi-phone-font-family, system-ui, "Microsoft YaHei", "PingFang SC", sans-serif));font-weight:600;letter-spacing:0}.protagonist-title{min-width:0;margin:0;overflow:hidden;color:var(--text-soft);font-size:17px;line-height:24px;text-align:center;text-overflow:ellipsis;white-space:nowrap}
     .protagonist-icon{display:inline-grid;width:32px;height:32px;flex:0 0 32px;padding:4px;place-items:center;color:var(--text);background:transparent;border:0;border-radius:8px;cursor:pointer}.protagonist-icon:hover{background:rgba(231,227,217,.07)}.protagonist-icon:disabled{opacity:.38;cursor:default}.protagonist-icon:disabled:hover{background:transparent}.protagonist-icon:focus-visible,.protagonist-avatar-pick:focus-visible,.protagonist-avatar-clear:focus-visible{outline:2px solid var(--moss);outline-offset:2px}
     .protagonist-content{flex:1 1 auto;min-height:0;overflow-x:hidden;overflow-y:auto;padding:18px 16px 38px;overscroll-behavior:contain;scrollbar-width:none;-ms-overflow-style:none}.protagonist-content::-webkit-scrollbar{display:none;width:0;height:0}
     .protagonist-visuals{display:grid;grid-template-columns:112px minmax(0,1fr);min-height:152px;align-items:center;gap:16px;padding-bottom:19px;border-bottom:1px solid var(--line-soft)}
     .protagonist-avatar-shell{position:relative;width:112px;aspect-ratio:1}.protagonist-avatar-pick{position:relative;display:grid;width:100%;height:100%;padding:0;overflow:hidden;place-items:center;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:8px;cursor:pointer}.protagonist-avatar-pick:hover{border-color:rgba(146,160,124,.72)}.protagonist-avatar-pick.busy{cursor:wait;opacity:.72}.protagonist-avatar-pick img{width:100%;height:100%;object-fit:cover}.protagonist-avatar-plus{font-size:35px;font-weight:200;line-height:1}.protagonist-avatar-clear{position:absolute;top:5px;right:5px;display:grid;width:28px;height:28px;padding:4px;place-items:center;color:var(--text);background:rgba(21,21,18,.82);border:1px solid rgba(231,227,217,.28);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.24);cursor:pointer}.protagonist-avatar-clear svg{width:17px;height:17px}.protagonist-avatar-clear:disabled{opacity:.45;cursor:wait}
-    .protagonist-chart{display:grid;min-width:0;min-height:152px;place-items:center}.protagonist-radar{width:100%;height:152px;overflow:visible}.protagonist-radar-grid{fill:none;stroke:var(--line-soft);stroke-width:1}.protagonist-radar-axis{stroke:var(--line-soft);stroke-width:1}.protagonist-radar-shape{fill:rgba(146,160,124,.2);stroke:var(--moss);stroke-width:1.7;stroke-linejoin:round}.protagonist-radar-dot{fill:var(--moss)}.protagonist-radar-label{fill:var(--text-soft);font:10px system-ui,"Microsoft YaHei","PingFang SC",sans-serif}.protagonist-radar-value{fill:var(--moss);font-weight:600}
+    .protagonist-avatar-generate{position:absolute;right:3px;bottom:3px;display:grid;width:28px;height:28px;padding:6px;place-items:center;color:var(--text);background:transparent;border:0;border-radius:7px;cursor:pointer;filter:drop-shadow(0 1px 2px rgba(0,0,0,.85))}.protagonist-avatar-generate svg{width:16px;height:16px;stroke-width:1.7}.protagonist-avatar-generate:hover{color:var(--moss)}.protagonist-avatar-generate:focus-visible{outline:2px solid var(--moss);outline-offset:1px}.protagonist-avatar-generate:disabled{opacity:.45;cursor:default}.protagonist-avatar-generate.busy{opacity:1;cursor:wait}.protagonist-avatar-generate.busy svg{animation:protagonist-generating 1.8s linear infinite}@keyframes protagonist-generating{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.protagonist-avatar-generate.busy svg{animation:none}}
+    .protagonist-chart{display:grid;min-width:0;min-height:152px;place-items:center}.protagonist-radar{width:100%;height:152px;overflow:visible}.protagonist-radar-grid{fill:none;stroke:var(--line-soft);stroke-width:1}.protagonist-radar-axis{stroke:var(--line-soft);stroke-width:1}.protagonist-radar-shape{fill:rgba(146,160,124,.2);stroke:var(--moss);stroke-width:1.7;stroke-linejoin:round}.protagonist-radar-dot{fill:var(--moss)}.protagonist-radar-label{fill:var(--text-soft);font:10px var(--yuzi-content-preset-font-family, var(--yuzi-phone-font-family, system-ui, "Microsoft YaHei", "PingFang SC", sans-serif))}.protagonist-radar-value{fill:var(--moss);font-weight:600}
     .protagonist-base-bars{display:grid;width:100%;gap:10px}.protagonist-profile{padding-top:20px}.protagonist-heading{margin-bottom:17px}.protagonist-kicker{margin:0 0 4px;color:var(--moss);font-size:12px;line-height:18px}.protagonist-name{margin:0;color:var(--text);font-size:30px;line-height:1.2;overflow-wrap:anywhere}.protagonist-meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.protagonist-tag{max-width:100%;padding:4px 8px;color:var(--muted);background:var(--soft);border:1px solid var(--line-soft);border-radius:8px;font-size:12px;line-height:18px;overflow-wrap:anywhere}.protagonist-tag.identity{color:var(--text-soft)}
     .protagonist-section{padding:17px 0;border-top:1px solid var(--line-soft)}.protagonist-section-title{margin:0 0 8px;color:var(--moss);font-size:13px;line-height:20px}.protagonist-copy,.protagonist-raw{margin:0;color:var(--text-soft);font-size:14px;line-height:1.85;overflow-wrap:anywhere;white-space:pre-wrap}.protagonist-condition{font-size:15px;color:var(--text)}
     .protagonist-bars{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px}.protagonist-bar{min-width:0}.protagonist-bar-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px}.protagonist-bar-name{min-width:0;overflow:hidden;color:var(--text-soft);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}.protagonist-bar-value{flex:0 0 auto;color:var(--moss);font-size:12px;font-variant-numeric:tabular-nums;line-height:18px}.protagonist-bar-track{height:4px;overflow:hidden;background:var(--line-soft);border-radius:2px}.protagonist-bar-fill{display:block;height:100%;background:var(--moss);border-radius:inherit}
@@ -51,6 +53,7 @@ const TEMPLATE = `
         <div class="protagonist-avatar-shell">
           <button id="protagonist-avatar-pick" class="protagonist-avatar-pick" type="button" aria-label="选择人物头像" title="选择人物头像"><span id="protagonist-avatar-plus" class="protagonist-avatar-plus" aria-hidden="true">+</span><img id="protagonist-avatar-image" alt="人物头像" hidden></button>
           <button id="protagonist-avatar-clear" class="protagonist-avatar-clear" type="button" aria-label="删除人物头像" title="删除人物头像" hidden>${icon('M3 6H21 M8 6V4H16V6 M19 6L18 20H6L5 6 M10 10V16 M14 10V16')}</button>
+          <button id="protagonist-avatar-generate" class="protagonist-avatar-generate" type="button" aria-label="生成主角头像" title="生成主角头像" disabled>${icon('M12 3L14.3 9.7L21 12L14.3 14.3L12 21L9.7 14.3L3 12L9.7 9.7Z M20 2V6 M18 4H22')}</button>
           <input id="protagonist-avatar-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
         </div>
         <div class="protagonist-chart"><svg id="protagonist-radar" class="protagonist-radar" viewBox="0 0 260 190" role="img" aria-label="基础属性维度图"></svg><div id="protagonist-base-bars" class="protagonist-base-bars" hidden></div></div>
@@ -185,6 +188,7 @@ export function mount(context) {
   const avatarImage = root.querySelector('#protagonist-avatar-image');
   const avatarPlus = root.querySelector('#protagonist-avatar-plus');
   const avatarClear = root.querySelector('#protagonist-avatar-clear');
+  const avatarGenerate = root.querySelector('#protagonist-avatar-generate');
   const radar = root.querySelector('#protagonist-radar');
   const baseBars = root.querySelector('#protagonist-base-bars');
   const profile = root.querySelector('#protagonist-profile');
@@ -198,6 +202,14 @@ export function mount(context) {
   const toast = root.querySelector('#protagonist-toast');
   const assetApi = context.presetAssets;
   const persistentAssetsAvailable = assetApi && typeof assetApi.getUrl === 'function' && typeof assetApi.save === 'function' && typeof assetApi.delete === 'function';
+  const imageApi = context.actions;
+  const managedImagesAvailable = ['generateImage', 'readImage', 'saveImage', 'deleteImage', 'getImageGenerationState'].every(method => typeof imageApi[method] === 'function');
+  let avatarRow = null;
+  let avatarKey = '';
+  let legacyAvatarKey = '';
+  let imageRevision = 0;
+  let availabilityRevision = 0;
+  let generationAvailable = false;
   let disposed = false;
   let avatarBusy = false;
   let temporaryAvatarUrl = null;
@@ -217,8 +229,10 @@ export function mount(context) {
   const setAvatarBusy = busy => {
     avatarBusy = busy;
     avatarPick.classList.toggle('busy', busy);
-    avatarPick.disabled = busy;
-    avatarClear.disabled = busy;
+    avatarPick.disabled = busy || !avatarKey;
+    avatarClear.disabled = busy || !avatarKey;
+    avatarGenerate.disabled = busy || !generationAvailable || !avatarKey;
+    avatarGenerate.classList.toggle('busy', busy && avatarGenerate.getAttribute('aria-busy') === 'true');
   };
 
   const setAvatar = url => {
@@ -235,56 +249,101 @@ export function mount(context) {
     URL.revokeObjectURL(temporaryAvatarUrl);
     temporaryAvatarUrl = null;
   };
+  const stillCurrent = (key, revision) => !disposed && !context.signal.aborted && key === avatarKey && revision === imageRevision;
+  const imageFailure = result => ({
+    disabled: '当前未开启生图', unavailable: '当前图片功能不可用', busy: '头像正在处理中，请稍候',
+    'invalid-target': '主角标识为空或重复，无法确定头像归属', 'invalid-input': '图片或头像配置无效',
+    stale: '人物或页面已变化，本次未替换头像', failed: '图片处理失败，已保留原图',
+  }[result?.status] || '图片处理未完成，已保留原图');
+
+  const refreshImageAvailability = async () => {
+    const revision = ++availabilityRevision;
+    const key = avatarKey;
+    generationAvailable = false;
+    setAvatarBusy(avatarBusy);
+    if (!managedImagesAvailable || !key) {
+      avatarGenerate.title = !key ? '等待有效的主角资料' : '当前生图接口不可用';
+      return;
+    }
+    try {
+      const state = await imageApi.getImageGenerationState(AVATAR_CANVAS, avatarRow);
+      if (disposed || key !== avatarKey || revision !== availabilityRevision) return;
+      generationAvailable = state.available === true;
+      avatarGenerate.title = generationAvailable ? '生成主角头像' : imageFailure(state);
+    } catch {
+      if (disposed || key !== avatarKey || revision !== availabilityRevision) return;
+      avatarGenerate.title = '当前生图接口不可用';
+    }
+    setAvatarBusy(avatarBusy);
+  };
 
   const loadAvatar = async () => {
-    if (!persistentAssetsAvailable) return;
+    const key = avatarKey;
+    const revision = ++imageRevision;
+    if (!key) return;
     try {
-      const url = await assetApi.getUrl(AVATAR_SLOT);
-      if (!disposed) setAvatar(url);
-    } catch (error) {
-      if (!disposed) showToast(error instanceof Error && error.message ? error.message : '头像读取失败');
-    }
-  };
-
-  const saveAvatar = async file => {
-    if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
-      showToast('请选择 PNG、JPEG、WebP 或 GIF 图片');
-      return;
-    }
-    if (file.size > MAX_AVATAR_BYTES) {
-      showToast('图片不能超过 8 MiB');
-      return;
-    }
-    setAvatarBusy(true);
-    try {
-      releaseTemporaryAvatar();
-      if (persistentAssetsAvailable) {
-        const url = await assetApi.save(AVATAR_SLOT, file);
-        if (!disposed) setAvatar(url);
-      } else {
-        temporaryAvatarUrl = URL.createObjectURL(file);
-        setAvatar(temporaryAvatarUrl);
-        showToast('当前接口尚未接通，本次仅临时显示');
+      if (managedImagesAvailable) {
+        const result = await imageApi.readImage(AVATAR_CANVAS, avatarRow);
+        if (!stillCurrent(key, revision)) return;
+        if (!result.ok) { showToast(imageFailure(result)); return; }
+        if (result.imagePath) { setAvatar(result.imagePath); return; }
+        // A persisted clear is authoritative: never fall back to the old upload slot.
+        if (result.cleared) { setAvatar(null); return; }
       }
-    } catch (error) {
-      if (!disposed) showToast(error instanceof Error && error.message ? error.message : '头像保存失败');
-    } finally {
-      if (!disposed) setAvatarBusy(false);
-    }
+      if (persistentAssetsAvailable && key === legacyAvatarKey) {
+        const url = await assetApi.getUrl(AVATAR_SLOT);
+        if (stillCurrent(key, revision)) setAvatar(url);
+      }
+    } catch { if (stillCurrent(key, revision)) showToast('头像读取失败，已保留当前图片'); }
   };
 
-  const deleteAvatar = async () => {
+  const changeAvatar = async (action, file) => {
+    if (disposed || avatarBusy || !avatarKey) return;
+    if (action === 'generateImage' && (!managedImagesAvailable || !generationAvailable)) return;
+    if (file && (!ACCEPTED_IMAGE_TYPES.has(file.type) || !file.size || file.size > MAX_AVATAR_BYTES)) {
+      showToast('请选择不超过 8 MiB 的 PNG、JPEG、WebP 或 GIF 图片');
+      return;
+    }
+    const key = avatarKey;
+    const revision = ++imageRevision;
+    const row = avatarRow;
+    avatarGenerate.setAttribute('aria-busy', String(action === 'generateImage'));
+    avatarGenerate.setAttribute('aria-label', action === 'generateImage' ? '正在生成主角头像' : '生成主角头像');
     setAvatarBusy(true);
     try {
-      if (persistentAssetsAvailable) await assetApi.delete(AVATAR_SLOT);
-      releaseTemporaryAvatar();
-      if (!disposed) setAvatar(null);
-    } catch (error) {
-      if (!disposed) showToast(error instanceof Error && error.message ? error.message : '头像删除失败');
-    } finally {
-      if (!disposed) setAvatarBusy(false);
+      if (managedImagesAvailable) {
+        const result = await imageApi[action](AVATAR_CANVAS, row, file);
+        if (!stillCurrent(key, revision)) return;
+        if (!result?.ok) { showToast(imageFailure(result)); return; }
+        if (action !== 'deleteImage' && !result.imagePath) { showToast('没有收到有效图片，已保留原图'); return; }
+        setAvatar(action === 'deleteImage' ? null : result.imagePath);
+        releaseTemporaryAvatar();
+      } else if (action === 'saveImage') {
+        const url = persistentAssetsAvailable ? await assetApi.save(AVATAR_SLOT, file) : URL.createObjectURL(file);
+        if (!stillCurrent(key, revision)) { if (!persistentAssetsAvailable) URL.revokeObjectURL(url); return; }
+        setAvatar(url);
+        releaseTemporaryAvatar();
+        if (!persistentAssetsAvailable) { temporaryAvatarUrl = url; showToast('本次头像仅临时显示'); }
+      } else if (action === 'deleteImage') {
+        if (persistentAssetsAvailable) await assetApi.delete(AVATAR_SLOT);
+        if (!stillCurrent(key, revision)) return;
+        setAvatar(null);
+        releaseTemporaryAvatar();
+      }
+    } catch { if (stillCurrent(key, revision)) showToast('图片处理失败，已保留原图'); }
+    finally {
+      if (!disposed) {
+        avatarGenerate.setAttribute('aria-busy', 'false');
+        avatarGenerate.setAttribute('aria-label', '生成主角头像');
+        setAvatarBusy(false);
+        void refreshImageAvailability();
+        if (key !== avatarKey) void loadAvatar();
+      }
     }
   };
+  const saveAvatar = file => changeAvatar('saveImage', file);
+  const deleteAvatar = () => { void changeAvatar('deleteImage'); };
+  const generateAvatar = () => { void changeAvatar('generateImage'); };
 
   const renderMeta = record => {
     const values = [record.gender || '性别未记录', record.age ? `${record.age}岁` : '年龄未记录'];
@@ -304,6 +363,22 @@ export function mount(context) {
     previousButton.disabled = !state.canPrevious;
     nextButton.disabled = !state.canNext;
     const record = recordFromState(state);
+    const row = state.rows?.[0];
+    const mapped = row ? Object.fromEntries(state.headers.map((header, index) => [normalize(header), row[index]])) : null;
+    const id = normalize(mapped?.[FIELDS.name]);
+    const idIndex = state.headers.findIndex(header => normalize(header) === normalize(FIELDS.name));
+    const unique = id && state.rows.filter(values => normalize(values[idIndex]) === id).length === 1;
+    const nextKey = unique ? JSON.stringify([state.sheetKey, id]) : '';
+    avatarRow = mapped;
+    if (!legacyAvatarKey && nextKey) legacyAvatarKey = nextKey;
+    if (nextKey !== avatarKey) {
+      avatarKey = nextKey;
+      ++imageRevision;
+      setAvatar(null);
+      releaseTemporaryAvatar();
+      if (!avatarBusy) void loadAvatar();
+    }
+    void refreshImageAvailability();
     const baseAttributes = parseAttributes(record?.base || '');
     renderRadar(radar, baseAttributes);
     const useBaseBars = baseAttributes.length > 0 && baseAttributes.length < 3;
@@ -358,20 +433,26 @@ export function mount(context) {
   avatarPick.addEventListener('click', handleAvatarPick);
   avatarInput.addEventListener('change', handleAvatarInput);
   avatarClear.addEventListener('click', deleteAvatar);
+  avatarGenerate.addEventListener('click', generateAvatar);
   avatarImage.addEventListener('error', handleAvatarError);
   const unsubscribe = context.subscribe(render);
+  const unsubscribeImage = managedImagesAvailable && typeof imageApi.subscribeImageGeneration === 'function'
+    ? imageApi.subscribeImageGeneration(() => { void refreshImageAvailability(); }) : () => {};
   render();
-  void loadAvatar();
 
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    ++imageRevision;
+    ++availabilityRevision;
+    unsubscribeImage();
     if (toastTimer) clearTimeout(toastTimer);
     releaseTemporaryAvatar();
     page.removeEventListener('click', handlePageClick);
     avatarPick.removeEventListener('click', handleAvatarPick);
     avatarInput.removeEventListener('change', handleAvatarInput);
     avatarClear.removeEventListener('click', deleteAvatar);
+    avatarGenerate.removeEventListener('click', generateAvatar);
     avatarImage.removeEventListener('error', handleAvatarError);
     context.signal.removeEventListener('abort', dispose);
     unsubscribe();

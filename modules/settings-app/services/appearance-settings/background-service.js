@@ -1,6 +1,5 @@
-import { getPhoneSettings, savePhoneSetting } from '../../../settings.js';
+import { savePhoneSetting } from '../../../settings.js';
 import { cacheRemove, CACHE_STORES } from '../../../cache-manager.js';
-import { escapeHtmlAttr } from '../../../utils/dom-escape.js';
 import { Logger } from '../../../error-handler.js';
 import { STORAGE_BUDGETS } from '../../constants.js';
 import { estimateBase64Bytes, pickImageFile } from '../media-upload.js';
@@ -9,8 +8,6 @@ import { showToast } from '../../ui/toast.js';
 const logger = Logger.withScope({ scope: 'settings-app/services/appearance-settings/background-service', feature: 'settings-app' });
 
 export function setupBgUpload(container, options = {}) {
-    const phoneSettings = getPhoneSettings();
-    const preview = container.querySelector('#phone-bg-preview');
     const cachedKey = 'background-image';
     const cleanups = [];
     const safeOptions = options && typeof options === 'object' ? options : {};
@@ -31,10 +28,6 @@ export function setupBgUpload(container, options = {}) {
         addCleanup(() => target.removeEventListener(type, listener, options));
     };
 
-    if (phoneSettings.backgroundImage) {
-        preview.innerHTML = `<img src="${escapeHtmlAttr(phoneSettings.backgroundImage)}" class="phone-bg-thumb">`;
-    }
-
     const uploadBtn = container.querySelector('#phone-upload-bg');
     addListener(uploadBtn, 'click', () => {
         pickImageFile(async (dataUrl) => {
@@ -50,7 +43,6 @@ export function setupBgUpload(container, options = {}) {
                 return;
             }
 
-            preview.innerHTML = `<img src="${escapeHtmlAttr(dataUrl)}" class="phone-bg-thumb">`;
             cacheRemove(CACHE_STORES.images, cachedKey).catch(() => {});
             showToast(container, '背景已更新');
         }, {
@@ -70,7 +62,6 @@ export function setupBgUpload(container, options = {}) {
     const clearBtn = container.querySelector('#phone-clear-bg');
     addListener(clearBtn, 'click', () => {
         savePhoneSetting('backgroundImage', null);
-        preview.innerHTML = '';
         cacheRemove(CACHE_STORES.images, cachedKey).catch(() => {});
         showToast(container, '背景已清除');
     });

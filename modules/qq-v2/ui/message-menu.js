@@ -1,3 +1,4 @@
+import { writeToClipboard } from '../../utils/clipboard.js';
 import { normalizeComposerSubmission } from './composer.js';
 
 function asText(value) {
@@ -25,21 +26,6 @@ function cloneQuote(value) {
     return Object.freeze(quote);
 }
 
-async function writeToClipboard(value) {
-    if (globalThis.navigator?.clipboard?.writeText) return globalThis.navigator.clipboard.writeText(value);
-    const document = globalThis.document;
-    if (!document?.createElement || !document.body) return false;
-    const textarea = document.createElement('textarea');
-    textarea.value = value;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.append(textarea);
-    textarea.select();
-    document.execCommand?.('copy');
-    textarea.remove();
-    return true;
-}
 
 export function quotePreviewText(quote) {
     return quote?.status === 'deleted' ? '原消息已删除' : String(quote?.content ?? '');
@@ -75,8 +61,7 @@ export function createQuoteDrafts() {
 export async function copyMessageText(message, { writeText = writeToClipboard } = {}) {
     const content = messageContent(message);
     if (typeof writeText !== 'function') return false;
-    await writeText(content);
-    return true;
+    return (await writeText(content)) !== false;
 }
 
 export async function submitQuotedTextMessage({

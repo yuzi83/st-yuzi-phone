@@ -1,5 +1,7 @@
 # 玉子美化源码工程格式
 
+> 本文保留基础页面合同；主题、字体、受控生图与新版声明请同时读取 [宿主能力合同](../runtime/host-capabilities.md)。不要依据旧版“无 AI”条目否定已公开的生图动作，也不要把打包版本当成页面 context.apiVersion。
+
 `project.json` 是制作工具的输入，不是宿主可直接导入的 Bundle。制作工具读取真实表文件和项目内源码，将本地模块依赖打包、CSS import 内联后生成 [`Bundle v2`](./bundle-format-v2.md)。
 
 ## 1. 完整结构

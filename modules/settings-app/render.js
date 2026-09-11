@@ -32,6 +32,7 @@ import {
 } from '../image-generation/character-mapping.js';
 import { sharedImageGenerationService } from '../image-generation/runtime.js';
 import { createImageGenerationSettingsService } from '../image-generation/settings-service.js';
+import { contentPresetImageGenerationHost } from '../content-presets/image-generation-host.js';
 import {
     setupBgUpload,
     buildAppearanceAppCatalog,
@@ -78,20 +79,33 @@ function normalizeSettingsMode(mode, contentPresetFullPageRuntimeEnabled) {
     return mode === 'beautify' && !contentPresetFullPageRuntimeEnabled ? 'home' : mode;
 }
 
+function createImageGenerationSettingsRuntime(options = {}) {
+    const imageGenerationHost = options.contentPresetImageGenerationHost || contentPresetImageGenerationHost;
+    return createImageGenerationSettingsService({
+        getPhoneSettings: options.getPhoneSettings || getPhoneSettings,
+        savePhoneSetting: options.savePhoneSetting || savePhoneSetting,
+        tableReader: options.tableReader || getTableDataAsync,
+        characterMapping: options.characterMapping || {
+            buildCharacterMappingModel,
+            composeCharacterImagePrompt,
+        },
+        imageGenerationService: options.imageGenerationService || sharedImageGenerationService,
+        qqV2PresetService: options.qqV2PresetService || qqV2PresetSettingsService,
+        getTableDisplaySources: input => (
+            typeof imageGenerationHost?.getTableDisplaySources === 'function'
+                ? imageGenerationHost.getTableDisplaySources(input)
+                : []
+        ),
+    });
+}
+
 export const __test__settingsGate = Object.freeze({
     normalizeSettingsMode,
     selectContentPresetWorkshop,
+    createImageGenerationSettingsRuntime,
 });
 
-const imageGenerationSettingsService = createImageGenerationSettingsService({
-    tableReader: getTableDataAsync,
-    characterMapping: {
-        buildCharacterMappingModel,
-        composeCharacterImagePrompt,
-    },
-    imageGenerationService: sharedImageGenerationService,
-    qqV2PresetService: qqV2PresetSettingsService,
-});
+const imageGenerationSettingsService = createImageGenerationSettingsRuntime();
 
 const tableContentReplacementSettingsService = createTableContentReplacementSettingsService({
     getPhoneSettings,

@@ -48,13 +48,16 @@ function createFixture(overrides = {}) {
         scrollWrites: [],
         scrollRestoreCalls: [],
         scrollCancelCalls: 0,
+        appearanceBridgeArgs: null,
+        appearanceBridgeDisposeCalls: 0,
+        imageActionsArgs: null,
         updateCallback: null,
         instanceOptions: null,
         instance: null,
         authorDisposeCalls: 0,
     };
     const rawData = { 'sheet-a': { name: '测试表', orderNo: 1, content: [['字段'], ['值']] } };
-    const record = { id: 'preset-a', files: { 'page.html': { content: '<main>ok</main>' }, 'page.js': { content: 'export function mount() {}' } }, items: [{ id: 'item-a', activatable: true, target: { tableName: '测试表', fields: ['字段'] }, entry: { html: 'page.html', mount: 'page.js' } }] };
+    const record = { id: 'preset-a', files: { 'page.html': { content: '<main>ok</main>' }, 'page.js': { content: 'export function mount() {}' } }, items: [{ id: 'item-a', activatable: true, target: { tableName: '测试表', fields: ['字段'] }, entry: { html: 'page.html', mount: 'page.js' }, integrations: { theme: true, font: true }, imageGeneration: { canvases: [{ tableName: '测试表', stableIdentityFields: ['字段'], canvas: '封面', promptFields: ['字段'] }] } }] };
     const deps = {
         isContentPresetFullPageRuntimeEnabled: () => true,
         getContentPresetIndexSnapshot: () => ({ status: 'ready', activeByTable: new Map([['sheet-a', { presetId: 'preset-a', itemId: 'item-a' }]]) }),
@@ -101,6 +104,22 @@ function createFixture(overrides = {}) {
             return rootState.presetAssets;
         },
         createContentPresetActions: () => ({}),
+        contentPresetHostAppearance: { theme: { id: 'theme' }, font: { id: 'font' } },
+        createContentPresetAppearanceBridge: (root, item, appearance) => {
+            rootState.appearanceBridgeArgs = { root, item, appearance };
+            return () => { rootState.appearanceBridgeDisposeCalls += 1; };
+        },
+        contentPresetImageGenerationHost: {
+            createPageActions(options) {
+                rootState.imageActionsArgs = options;
+                return {
+                    generateImage() {},
+                    readImage() {},
+                    getImageGenerationState() {},
+                    subscribeImageGeneration() {},
+                };
+            },
+        },
         createContentPresetRuntimeContextController: options => {
             rootState.contextOptions = options;
             return { context: {}, publish: stateValue => { rootState.publishCalls.push(stateValue); }, dispose: () => { rootState.contextDisposeCalls += 1; } };
@@ -179,6 +198,22 @@ async function main() {
     assert.deepEqual(committed.rootState.presetAssetsCreateArgs, ['preset-a']);
     assert.strictEqual(committed.rootState.contextOptions.presetAssets, committed.rootState.presetAssets, 'mount context 必须注入当前预设图片 API');
     assert.equal(committed.rootState.scrollRestoreCalls.length, 1, 'commit 后必须注册滚动恢复');
+    assert.strictEqual(committed.rootState.appearanceBridgeArgs.root, committedRoot, '页面必须将自己的根节点交给外观桥');
+    assert.deepEqual(committed.rootState.appearanceBridgeArgs.item.integrations, { theme: true, font: true }, '页面外观桥必须只接收作者明确声明的接口');
+    assert.deepEqual(committed.rootState.appearanceBridgeArgs.appearance, { theme: { id: 'theme' }, font: { id: 'font' } }, '页面外观桥必须只读取小手机主设置来源');
+    assert.deepEqual(
+        {
+            presetId: committed.rootState.imageActionsArgs.presetId,
+            itemId: committed.rootState.imageActionsArgs.itemId,
+            sheetKey: committed.rootState.imageActionsArgs.sheetKey,
+        },
+        { presetId: 'preset-a', itemId: 'item-a', sheetKey: 'sheet-a' },
+        '页面生图动作必须绑定当前真实页面应用，而不是作者显示名称',
+    );
+    assert.equal(typeof committed.rootState.contextOptions.actions.generateImage, 'function', '声明画布的页面必须暴露生成图片动作');
+    assert.equal(typeof committed.rootState.contextOptions.actions.readImage, 'function', '声明画布的页面必须暴露回读图片动作');
+    assert.equal(typeof committed.rootState.contextOptions.actions.getImageGenerationState, 'function', '声明画布的页面必须暴露按钮可用状态读取动作');
+    assert.equal(typeof committed.rootState.contextOptions.actions.subscribeImageGeneration, 'function', '声明画布的页面必须暴露按钮状态订阅动作');
     committed.rootState.updateCallback();
     assert.strictEqual(committed.rootState.root, committedRoot, '表更新不得替换 root');
     assert.equal(committed.rootState.importCalls, 1, '表更新不得重新 import');
@@ -190,6 +225,7 @@ async function main() {
     assert.equal(committed.rootState.scrollWrites.length, 1, 'dispose 必须捕获已提交 root 滚动');
     assert.equal(committed.rootState.scrollWrites[0][1], 240);
     assert.equal(committed.rootState.scrollCancelCalls, 1, 'dispose 必须取消滚动恢复');
+    assert.equal(committed.rootState.appearanceBridgeDisposeCalls, 1, '页面销毁必须释放外观设置订阅');
     assert.equal(committed.rootState.assetDisposeCalls, 1);
     assert.equal(committed.rootState.presetAssetsDisposeCalls, 1);
     assert.equal(committed.rootState.moduleDisposeCalls, 1);

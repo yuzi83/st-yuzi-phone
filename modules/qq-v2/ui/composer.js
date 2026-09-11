@@ -159,3 +159,31 @@ export function shouldSubmitComposerKey(event = {}) {
         && event.shiftKey !== true
         && event.isComposing !== true;
 }
+
+/** The composer has one action slot; the existing stop control always wins. */
+export function composerAction({ enabled = false, phase } = {}) {
+    if (phase === 'queued' || phase === 'running') return 'stop';
+    return enabled ? 'send' : null;
+}
+
+/** Submit the optional draft before requesting the existing unanswered batch. */
+export function createComposerBatchSubmitter({ facade, submitDraft, isCurrent = () => true }) {
+    const submitting = new Set();
+    return async (conversationId, value) => {
+        if (submitting.has(conversationId)) return { ok: true, status: 'busy' };
+        submitting.add(conversationId);
+        try {
+            const context = await facade.query.currentContext();
+            if (!context?.ok || !isCurrent()) return { ok: false, status: 'stale' };
+            const scopeId = context.context.scopeId;
+            const draft = normalizeComposerSubmission(value);
+            if (draft.ok && !await submitDraft(conversationId, draft.content)) {
+                return { ok: false, status: 'draft-failed' };
+            }
+            if (!isCurrent()) return { ok: false, status: 'stale' };
+            return await facade.intent.retryRequest({ conversationId, scopeId });
+        } finally {
+            submitting.delete(conversationId);
+        }
+    };
+}

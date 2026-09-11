@@ -64,11 +64,13 @@ async function testGlobalRuntimeStorage() {
     const runtimeSettings = createQQV2GlobalRuntimeSettings({ stateStore });
 
     assert.deepEqual(await runtimeSettings.get('scope-a'), {
+        sendButtonEnabled: false,
         activeApiPresetId: 'legacy-api',
         privateReplyPresetId: 'legacy-reply',
         privateProactivePresetId: 'legacy-proactive',
         groupReplyPresetId: 'builtin-group-reply',
         groupProactivePresetId: 'builtin-group-proactive',
+        assistantReplyPresetId: 'builtin-assistant-reply',
         hostContextTurns: 0,
         conversationHistoryLimit: 0,
         hostContextExtractTag: 'content',
@@ -181,11 +183,13 @@ async function testExistingSharedRuntimeMigration() {
 
     const migrated = await runtimeSettings.get('scope-b');
     assert.deepEqual(migrated, {
+        sendButtonEnabled: false,
         activeApiPresetId: 'existing-api',
         privateReplyPresetId: 'existing-reply',
         privateProactivePresetId: 'existing-proactive',
         groupReplyPresetId: 'builtin-group-reply',
         groupProactivePresetId: 'builtin-group-proactive',
+        assistantReplyPresetId: 'builtin-assistant-reply',
         hostContextTurns: 0,
         conversationHistoryLimit: 0,
         hostContextExtractTag: 'content',

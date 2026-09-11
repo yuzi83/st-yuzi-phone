@@ -1,3 +1,4 @@
+import { createLogsPage } from '../pages/logs.js';
 import { createAppearancePage, renderAppearancePage as renderAppearancePagePage } from '../pages/appearance.js';
 import { createButtonStylePage, renderButtonStylePage as renderButtonStylePagePage } from '../pages/button-style.js';
 import { createHomePage, renderHomePage as renderHomePagePage } from '../pages/home.js';
@@ -18,6 +19,7 @@ import {
     buildButtonStylePageContext,
     buildFullscreenOverlayPageContext,
     buildHomePageContext,
+    buildLogsPageContext,
     buildImageGenerationPageContext,
     buildWorldbookReadingPageContext,
 } from './page-context-builders.js';
@@ -36,6 +38,7 @@ export function createPersonalizationPageRenderers(rendererScope = {}) {
         ? rendererScope.deps
         : rendererScope;
 
+    const logsContext = pageContexts.logs || buildLogsPageContext(deps);
     const homeContext = pageContexts.home || buildHomePageContext(deps);
     const appearanceContext = pageContexts.appearance || buildAppearancePageContext(deps);
     const buttonStyleContext = pageContexts.buttonStyle || buildButtonStylePageContext(deps);
@@ -69,6 +72,7 @@ export function createPersonalizationPageRenderers(rendererScope = {}) {
 
     return {
         pages: {
+            logs: { createPage() { return createLogsPage(logsContext); } },
             home: {
                 createPage() {
                     return createHomePage(homeContext);

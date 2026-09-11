@@ -1,6 +1,6 @@
 {
   "tablesFile": "tables/generated/tables.json",
-  "manifest": { "id": "", "name": "", "version": "1.0.0", "author": "", "items": [] },
+  "manifest": { "id": "", "name": "", "version": "1.0.0", "author": "", "items": [], "displays": [] },
   "files": {},
   "mimeTypes": {},
   "encodings": {}

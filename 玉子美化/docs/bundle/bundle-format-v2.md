@@ -1,5 +1,7 @@
 # 玉子美化 Bundle 格式 v2
 
+> 本文保留基础页面合同；主题、字体、受控生图与新版声明请同时读取 [宿主能力合同](../runtime/host-capabilities.md)。不要依据旧版“无 AI”条目否定已公开的生图动作，也不要把打包版本当成页面 context.apiVersion。
+
 本文档描述可被兼容宿主导入的最终 JSON Bundle。源码工程 `project.json` 不是 Bundle；其格式见 [`source-project-format.md`](./source-project-format.md)。运行时代码接口见 [`Runtime API v1`](../runtime/runtime-api-v1.md)。
 
 ## 1. 固定标识

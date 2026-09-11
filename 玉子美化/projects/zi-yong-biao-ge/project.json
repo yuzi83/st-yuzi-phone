@@ -43,27 +43,6 @@
         "assets": []
       },
       {
-        "id": "protagonist-dossier",
-        "name": "主角卷宗",
-        "target": {
-          "tableName": "主角信息",
-          "fields": [
-            "姓名",
-            "性别",
-            "年龄",
-            "外貌特征",
-            "身份",
-            "近况",
-            "基础属性",
-            "特有属性"
-          ]
-        },
-        "entry": {
-          "mount": "pages/protagonist/mount.js"
-        },
-        "assets": []
-      },
-      {
         "id": "important-characters",
         "name": "重要角色",
         "target": {
@@ -105,6 +84,128 @@
           "mount": "pages/options/mount.js"
         },
         "assets": []
+      },
+      {
+        "id": "protagonist-dossier",
+        "name": "主角卷宗",
+        "target": {
+          "tableName": "主角信息",
+          "fields": [
+            "row_id",
+            "姓名",
+            "性别",
+            "年龄",
+            "外貌特征",
+            "身份",
+            "近况",
+            "基础属性",
+            "特有属性"
+          ]
+        },
+        "entry": {
+          "mount": "pages/protagonist/mount.js"
+        },
+        "integrations": {
+          "font": true
+        },
+        "imageGeneration": {
+          "canvases": [
+            {
+              "tableName": "主角信息",
+              "stableIdentityFields": [
+                "姓名"
+              ],
+              "canvas": "protagonist-avatar",
+              "promptFields": [
+                "性别",
+                "年龄",
+                "外貌特征",
+                "身份"
+              ],
+              "promptSuffix": "单人头像，1∶1正方形构图，头肩特写，人物居中，头顶与两侧适当留白，适合头像框展示。"
+            }
+          ]
+        },
+        "assets": []
+      }
+    ],
+    "displays": [
+      {
+        "id": "story-inline",
+        "name": "剧情随记",
+        "kind": "inline",
+        "targets": [
+          {
+            "tableName": "全局数据表",
+            "fields": [
+              "当前时间",
+              "当前位置",
+              "经过的时间"
+            ]
+          },
+          {
+            "tableName": "纪要表",
+            "fields": [
+              "编码索引",
+              "时间跨度",
+              "概览",
+              "纪要",
+              "重要对话"
+            ]
+          },
+          {
+            "tableName": "主角信息",
+            "fields": [
+              "姓名",
+              "性别",
+              "年龄",
+              "外貌特征",
+              "身份",
+              "近况",
+              "特有属性"
+            ]
+          },
+          {
+            "tableName": "选项表",
+            "fields": [
+              "选项一",
+              "选项二",
+              "选项三",
+              "选项四",
+              "选项五"
+            ]
+          }
+        ],
+        "entry": {
+          "mount": "displays/story-inline/mount.js"
+        },
+        "integrations": {
+          "font": true
+        },
+        "imageGeneration": {
+          "canvases": [
+            {
+              "tableName": "主角信息",
+              "stableIdentityFields": [
+                "姓名"
+              ],
+              "canvas": "protagonist-avatar",
+              "promptFields": [
+                "性别",
+                "年龄",
+                "外貌特征",
+                "身份"
+              ],
+              "promptSuffix": "单人头像，1∶1正方形构图，头肩特写，人物居中，头顶与两侧适当留白，适合头像框展示。"
+            }
+          ]
+        },
+        "interactions": [
+          "tabs",
+          "append-input",
+          "image-generate"
+        ],
+        "assets": []
       }
     ]
   },
@@ -113,20 +214,23 @@
     "pages/global/mount.js": "pages/global/mount.js",
     "pages/protagonist/mount.js": "pages/protagonist/mount.js",
     "pages/important-npc/mount.js": "pages/important-npc/mount.js",
-    "pages/options/mount.js": "pages/options/mount.js"
+    "pages/options/mount.js": "pages/options/mount.js",
+    "displays/story-inline/mount.js": "displays/story-inline/mount.js"
   },
   "mimeTypes": {
     "pages/summary/mount.js": "text/javascript",
     "pages/global/mount.js": "text/javascript",
     "pages/protagonist/mount.js": "text/javascript",
     "pages/important-npc/mount.js": "text/javascript",
-    "pages/options/mount.js": "text/javascript"
+    "pages/options/mount.js": "text/javascript",
+    "displays/story-inline/mount.js": "text/javascript"
   },
   "encodings": {
     "pages/summary/mount.js": "text",
     "pages/global/mount.js": "text",
     "pages/protagonist/mount.js": "text",
     "pages/important-npc/mount.js": "text",
-    "pages/options/mount.js": "text"
+    "pages/options/mount.js": "text",
+    "displays/story-inline/mount.js": "text"
   }
 }

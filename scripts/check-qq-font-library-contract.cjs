@@ -26,6 +26,11 @@ function main() {
         '字体作用域必须明确覆盖 QQ 表单控件字体',
     );
 
+    assert.match(service, /'\.yuzi-phone-fullscreen-overlay-layer'/,
+        'body-level overlay must receive the same active font even while the phone is closed');
+    assert.match(service, /'\.yuzi-phone-fullscreen-overlay-layer \*:not\(svg\)/,
+        'popup fields and barrage content must share the active font without overriding SVG icons');
+
     console.log(`[qq-font-library-contract] passed: ${FONT_LIBRARY_SERVICE}`);
 }
 

@@ -38,3 +38,13 @@ Runtime v1 只提供当前单表冻结快照、订阅、包内资源解析和四
 5. 只有处理 shujuku 建表或外部数据库 API 时，才查 [外部资料](./external/shujuku/README.md)。
 
 酒馆/SillyTavern 资料也采用按需规则：只有用户明确要求酒馆接口、TavernHelper、SillyTavern、酒馆输入框或其他酒馆宿主能力时，才读取 `architecture-notes.md` 与 `sillytavern-api.txt`；普通美化不主动读取，也不主动使用宿主 DOM。用户明确提出后，可以按设计中记录的选择器和行为实现，并保留目标元素不存在时的降级处理。
+
+## 宿主能力制作入口
+
+- [先检查接口，再成组讨论；画框尺寸、提示词与可选补充](./runtime/authoring-workflow.md)
+- [主题、字体、受控生图声明与调用](./runtime/host-capabilities.md)
+- [配套类型](./runtime/host-capabilities.d.ts)
+
+这些资料随制作包交付，普通用户不需要小手机源码。
+
+- [弹窗制作：先选三个弹窗接口，只有插入正文可多表组合](./runtime/popup-authoring-workflow.md)

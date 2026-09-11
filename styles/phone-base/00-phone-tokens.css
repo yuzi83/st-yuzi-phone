@@ -367,13 +367,9 @@
     --yuzi-qq-header-height: 44px;
     --yuzi-qq-header-action-width: 40px;
     --yuzi-qq-header-gap: 10px;
-    --yuzi-qq-readable-text-scale: var(--yuzi-phone-readable-text-scale, 1);
-    --yuzi-qq-title-size: calc(18px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-title-weight: 650;
-    --yuzi-qq-body-size: calc(14px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-body-line-height: 1.45;
-    --yuzi-qq-caption-size: calc(12px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-caption-line-height: 1.35;
+
     --yuzi-qq-page-padding: 16px;
     --yuzi-qq-section-gap: 12px;
     --yuzi-qq-row-gap: 12px;
@@ -395,7 +391,7 @@
     --yuzi-qq-nav-height: 70px;
     --yuzi-qq-nav-padding-inline: 8px;
     --yuzi-qq-nav-padding-block: 8px;
-    --yuzi-qq-nav-label-size: calc(12px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-search-height: 36px;
     --yuzi-qq-search-radius: var(--yuzi-phone-radius-md);
     --yuzi-qq-search-padding-inline: 12px;
@@ -409,13 +405,12 @@
     --yuzi-qq-bubble-padding-block: 10px;
     --yuzi-qq-bubble-padding-inline: 12px;
     --yuzi-qq-bubble-radius: var(--yuzi-phone-radius-xl);
-    --yuzi-qq-time-divider-size: 11px;
+
     --yuzi-qq-composer-gap: 8px;
     --yuzi-qq-composer-padding-block: 8px;
     --yuzi-qq-composer-input-min-height: 36px;
     --yuzi-qq-composer-input-max-lines: 4;
-    --yuzi-qq-composer-input-max-height: calc(112px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-composer-line-height: calc(21px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-tool-size: 34px;
     --yuzi-qq-tool-gap: 4px;
     --yuzi-qq-tool-bar-height: 38px;
@@ -572,61 +567,37 @@
     --yuzi-qq-settings-outline: var(--yuzi-qq-light-settings-outline);
 
     /* Figma 02 type */
-    --yuzi-qq-readable-text-scale: var(--yuzi-phone-readable-text-scale, 1);
-    --yuzi-qq-root-title-size: calc(17px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-root-title-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-root-status-size: calc(10px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-root-status-line-height: calc(15px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-row-title-size: calc(14px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-row-title-line-height: calc(20px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-row-preview-size: calc(11px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-row-preview-line-height: calc(15px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-body-size: calc(14px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-body-line-height: calc(21px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-caption-size: calc(9px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-caption-line-height: calc(13px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-body-weight: 400;
     --yuzi-qq-title-weight: 500;
     --yuzi-qq-root-title-weight: 700;
     --yuzi-qq-row-title-weight: 500;
     --yuzi-qq-nav-label-weight: 400;
     --yuzi-qq-nav-label-active-weight: 500;
-    --yuzi-qq-chat-title-size: calc(16px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-chat-title-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-chat-title-weight: 500;
     --yuzi-qq-composer-weight: 500;
-    --yuzi-qq-contact-title-size: calc(17px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-contact-title-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-contact-title-weight: 500;
-    --yuzi-qq-contact-search-size: calc(14px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-contact-search-line-height: calc(21px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-contact-search-weight: 400;
-    --yuzi-qq-contact-primary-size: calc(16px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-contact-primary-line-height: calc(23px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-contact-primary-weight: 500;
-    --yuzi-qq-contact-index-size: calc(11px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-contact-index-line-height: calc(15px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-contact-index-weight: 400;
-    --yuzi-qq-contact-secondary-size: calc(13px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-contact-secondary-line-height: calc(19px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-contact-secondary-weight: 400;
-    --yuzi-qq-profile-name-size: calc(24px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-profile-name-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-profile-name-weight: 500;
-    --yuzi-qq-profile-copy-size: calc(14px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-profile-copy-line-height: calc(16px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-profile-summary-weight: 400;
     --yuzi-qq-profile-signature-weight: 500;
-    --yuzi-qq-profile-action-size: calc(16px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-profile-action-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-profile-action-weight: 400;
-    --yuzi-qq-editor-title-size: calc(17px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-editor-title-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-editor-title-weight: 500;
-    --yuzi-qq-editor-field-size: calc(16px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-editor-field-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-editor-field-weight: 400;
-    --yuzi-qq-title-size: var(--yuzi-qq-root-title-size);
 
     /* Root page and tab bar */
     --yuzi-qq-max-content-width: 100%;
@@ -647,8 +618,6 @@
     --yuzi-qq-nav-item-height: 49px;
     --yuzi-qq-nav-gap: 14px;
     --yuzi-qq-nav-icon-size: 26px;
-    --yuzi-qq-nav-label-size: calc(11px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-nav-label-line-height: calc(15px * var(--yuzi-qq-readable-text-scale));
 
     /* Continuous message and contact lists */
     --yuzi-qq-list-search-sheet-height: 60px;
@@ -687,7 +656,7 @@
     --yuzi-qq-bubble-padding-block: 9px;
     --yuzi-qq-bubble-padding-inline: 12px;
     --yuzi-qq-bubble-radius: 12px;
-    --yuzi-qq-time-divider-size: calc(10px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-composer-height: 88px;
     --yuzi-qq-composer-padding-block: 8px;
     --yuzi-qq-composer-padding-inline: 12px;
@@ -695,8 +664,7 @@
     --yuzi-qq-composer-input-height: 40px;
     --yuzi-qq-composer-input-min-height: var(--yuzi-qq-composer-input-height);
     --yuzi-qq-composer-input-max-lines: 4;
-    --yuzi-qq-composer-input-max-height: calc(160px * var(--yuzi-qq-readable-text-scale));
-    --yuzi-qq-composer-line-height: var(--yuzi-qq-body-line-height);
+
     --yuzi-qq-composer-input-padding-block: 9px;
     --yuzi-qq-tool-size: 40px;
     --yuzi-qq-tool-icon-size: 24px;
@@ -817,7 +785,6 @@
     --yuzi-qq-tool-bar-height: 24px;
 }
 
-
 /* Figma 02 final role aliases and geometry, sourced from measured nodes. */
 :root {
     --yuzi-qq-screen-width: 402px;
@@ -880,7 +847,7 @@
     --yuzi-qq-tool-bar-height: 24px;
     --yuzi-qq-jump-padding: 8px;
     --yuzi-qq-jump-icon-size: 18px;
-    --yuzi-qq-jump-label-size: calc(14px * var(--yuzi-qq-readable-text-scale));
+
     --yuzi-qq-jump-border-width: 0.5px;
     --yuzi-qq-jump-radius: 50%;
     --yuzi-qq-private-stop-size: 40px;
@@ -915,8 +882,7 @@
     --yuzi-qq-profile-action-padding-bottom: 0;
     --yuzi-qq-settings-root-scroll-padding-top: 0px;
     --yuzi-qq-settings-root-scroll-padding-inline: 16px;
-    --yuzi-qq-settings-root-title-size: var(--yuzi-qq-editor-title-size);
-    --yuzi-qq-settings-root-title-line-height: var(--yuzi-qq-editor-title-line-height);
+
     --yuzi-qq-settings-root-title-weight: var(--yuzi-qq-editor-title-weight);
     --yuzi-qq-settings-root-title-height: var(--yuzi-phone-nav-content-height);
     --yuzi-qq-settings-root-group-width: 100%;
@@ -927,9 +893,7 @@
     --yuzi-qq-settings-root-group-padding-inline-start: var(--yuzi-qq-editor-group-padding-inline);
     --yuzi-qq-settings-root-group-gap: var(--yuzi-qq-form-group-gap);
     --yuzi-qq-settings-root-stack-gap: 16px;
-    --yuzi-qq-settings-row-min-height: var(--yuzi-qq-profile-action-line-height);
-    --yuzi-qq-settings-row-size: var(--yuzi-qq-profile-action-size);
-    --yuzi-qq-settings-row-line-height: var(--yuzi-qq-profile-action-line-height);
+
     --yuzi-qq-settings-row-weight: var(--yuzi-qq-profile-action-weight);
     --yuzi-qq-settings-root-arrow-size: 24px;
     --yuzi-qq-settings-icon-size: 28px;
@@ -940,8 +904,7 @@
     --yuzi-qq-settings-detail-card-radius: 27px;
     --yuzi-qq-settings-detail-card-padding-block: 24px;
     --yuzi-qq-settings-detail-card-padding-inline: 12px;
-    --yuzi-qq-settings-detail-field-label-size: var(--yuzi-qq-editor-field-size);
-    --yuzi-qq-settings-detail-field-label-line-height: var(--yuzi-qq-editor-field-line-height);
+
     --yuzi-qq-settings-detail-field-label-weight: var(--yuzi-qq-editor-field-weight);
 }
 
@@ -956,7 +919,6 @@
     --yuzi-qq-shadow: var(--yuzi-qq-page-shadow-dark);
     --yuzi-qq-message-add-menu-shadow: var(--yuzi-qq-page-shadow-dark);
 }
-
 
 /* Figma 02 production role corrections. */
 :root {
@@ -1039,6 +1001,11 @@
     --yuzi-qq-secondary-row-padding-inline: 16px;
     --yuzi-qq-secondary-control-max-width: 58%;
     --yuzi-qq-time-window-control-min-inline-size: 4.5rem;
+    --yuzi-qq-send-switch-width: 44px;
+    --yuzi-qq-send-switch-height: 26px;
+    --yuzi-qq-send-switch-padding: 3px;
+    --yuzi-qq-send-switch-thumb: 20px;
+    --yuzi-qq-send-switch-duration: 150ms;
     --yuzi-qq-checkbox-size: 18px;
     --yuzi-qq-checkbox-radius: 4px;
     --yuzi-qq-profile-cover-height: 234px;
@@ -1057,4 +1024,58 @@
     --yuzi-qq-settings-detail-card-padding-block: 0px;
     --yuzi-qq-settings-detail-card-padding-inline: 0px;
     --yuzi-qq-settings-detail-group-radius: var(--yuzi-qq-secondary-group-radius);
+}
+
+/* Resolve typography where the phone's live scale is inherited, not only at :root. */
+:root,
+.yuzi-qq-app {
+    --yuzi-qq-readable-text-scale: var(--yuzi-phone-readable-text-scale, 1);
+    --yuzi-qq-body-size: calc(14px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-body-line-height: calc(21px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-caption-size: calc(9px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-caption-line-height: calc(13px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-nav-label-size: calc(11px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-time-divider-size: calc(10px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-composer-input-max-height: calc(160px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-composer-line-height: var(--yuzi-qq-body-line-height);
+    --yuzi-qq-root-title-size: calc(17px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-root-title-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-root-status-size: calc(10px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-root-status-line-height: calc(15px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-row-title-size: calc(14px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-row-title-line-height: calc(20px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-row-preview-size: calc(11px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-row-preview-line-height: calc(15px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-chat-title-size: calc(16px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-chat-title-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-contact-title-size: calc(17px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-contact-title-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-contact-search-size: calc(14px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-contact-search-line-height: calc(21px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-contact-primary-size: calc(16px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-contact-primary-line-height: calc(23px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-contact-index-size: calc(11px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-contact-index-line-height: calc(15px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-contact-secondary-size: calc(13px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-contact-secondary-line-height: calc(19px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-profile-name-size: calc(24px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-profile-name-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-profile-copy-size: calc(14px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-profile-copy-line-height: calc(16px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-profile-action-size: calc(16px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-profile-action-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-editor-title-size: calc(17px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-editor-title-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-editor-field-size: calc(16px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-editor-field-line-height: calc(24px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-nav-label-line-height: calc(15px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-jump-label-size: calc(14px * var(--yuzi-qq-readable-text-scale));
+    --yuzi-qq-settings-root-title-size: var(--yuzi-qq-editor-title-size);
+    --yuzi-qq-settings-root-title-line-height: var(--yuzi-qq-editor-title-line-height);
+    --yuzi-qq-settings-row-min-height: var(--yuzi-qq-profile-action-line-height);
+    --yuzi-qq-settings-row-size: var(--yuzi-qq-profile-action-size);
+    --yuzi-qq-settings-row-line-height: var(--yuzi-qq-profile-action-line-height);
+    --yuzi-qq-settings-detail-field-label-size: var(--yuzi-qq-editor-field-size);
+    --yuzi-qq-settings-detail-field-label-line-height: var(--yuzi-qq-editor-field-line-height);
+    --yuzi-qq-title-size: var(--yuzi-qq-root-title-size);
 }

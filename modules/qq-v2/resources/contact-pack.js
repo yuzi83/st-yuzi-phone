@@ -169,7 +169,7 @@ export function createQQContactPackService(options = {}) {
             const conversations = await repository.listConversations(normalizedScopeId);
             const contacts = await Promise.all(conversations
                 .filter((conversation) => (
-                    conversation?.kind === 'private'
+                    !conversation?.assistantCharacterId && conversation?.kind === 'private'
                     && PRIVATE_CONTACT_STATUSES.has(asText(conversation.status, 32))
                 ))
                 .map((conversation) => exportContact(repository, normalizedScopeId, conversation)));

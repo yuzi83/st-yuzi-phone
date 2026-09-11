@@ -1,6 +1,6 @@
 /**
  * 玉子手机扩展 - TypeScript 类型定义
- * @version 2.2.2
+ * @version 2.3.0
  * @description 提供完整的类型定义，增强代码类型安全
  */
 
@@ -989,6 +989,7 @@ export interface SettingsModule {
 }
 
 export type SettingsPageMode =
+    | 'logs'
     | 'home'
     | 'appearance'
     | 'api_presets'
@@ -1011,6 +1012,7 @@ export interface SettingsAppState {
     imageGenerationScrollTop: number;
     tableContentReplacementScrollTop: number;
     fullscreenOverlayScrollTop: number;
+    logsScrollTop: number;
 }
 
 export type SettingsToastHandler = (host: unknown, message: string, isError?: boolean) => void;

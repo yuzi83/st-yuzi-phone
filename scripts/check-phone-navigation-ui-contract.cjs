@@ -280,12 +280,25 @@ async function main() {
     }
 
     for (const file of [
+        'styles/05-phone-generic-template.css',
         'styles/12-variable-manager.css',
         'styles/phone-base/12-table-update-review.css',
     ]) {
         assert.match(read(file), /@container\s+yuzi-phone-screen\s*\(/,
             `${file} must use the phone inline-size container for compact layout`);
     }
+
+    const [genericCompactLayout] = atRuleBlocks(
+        read('styles/05-phone-generic-template.css'),
+        '@container yuzi-phone-screen (max-width: 640px)',
+    );
+    assert.ok(genericCompactLayout, 'generic table must define its compact layout against the phone container');
+    assertDeclaration(ruleBlock(
+        genericCompactLayout,
+        '.phone-generic-root.phone-generic-template-scope .phone-generic-slot-list-item,',
+    ), 'border', 'none');
+    assert.doesNotMatch(genericCompactLayout, /border-top:\s*1px dashed/,
+        'compact list must not restore an internal dashed divider');
 }
 
 main()

@@ -1,3 +1,5 @@
+import { createPreviewImageActions } from './image-actions.js';
+
 const ACTIONS = Object.freeze(['back', 'previousTable', 'nextTable', 'editCurrentTable']);
 const REASONS = new Set(['table-data', 'navigation-state']);
 const RESULT_STATUSES = new Set(['navigated', 'unavailable', 'stale', 'failed']);
@@ -78,6 +80,7 @@ export function createRuntimeV1({
   root,
   files = {},
   initialState,
+  declaration = null,
   timeoutMs = 10_000,
   onAction = null,
   onLog = null,
@@ -92,6 +95,10 @@ export function createRuntimeV1({
   let destroyed = false;
   let mountGeneration = 0;
   let currentMount = null;
+  const previewImages = new Map();
+  let imageScenario = 'generated';
+  let imageMock = null;
+  const setImageScenario = value => { imageMock?.setScenario(value); imageScenario = value; };
   const subscriptions = new Set();
   const objectUrls = new Map();
   const presetAssetBlobs = new Map();
@@ -271,6 +278,8 @@ export function createRuntimeV1({
     const controller = new AbortController();
     const mountSubscriptions = [];
     const presetAssets = createPresetAssets(controller.signal);
+    imageMock = createPreviewImageActions({ declaration, getState, signal: controller.signal, images: previewImages, onLog: entry => log(entry.level, entry.message, entry.details) });
+    imageMock.setScenario(imageScenario);
     const context = Object.freeze({
       apiVersion: 1,
       root,
@@ -283,7 +292,7 @@ export function createRuntimeV1({
       },
       resolveAsset,
       presetAssets,
-      actions,
+      actions: Object.freeze({ ...actions, ...imageMock.actions }),
     });
     const mount = {
       generation,
@@ -337,6 +346,7 @@ export function createRuntimeV1({
     objectUrls.clear();
     revokePresetAssetUrls();
     presetAssetBlobs.clear();
+    previewImages.clear();
     pendingActions.clear();
     log('info', 'Runtime 已清理');
   };
@@ -349,6 +359,7 @@ export function createRuntimeV1({
     updateState,
     resolveAsset,
     setActionScenario,
+    setImageScenario,
     mountModule,
     unmount,
     destroy,
@@ -381,19 +392,20 @@ async function startFrameBridge() {
   };
   const mountPayload = async payload => {
     await clear();
-    const { bundle, itemId, state, scenarios = {} } = payload;
-    const item = bundle?.manifest?.items?.find(entry => entry.id === itemId);
-    if (!item) {
+    const { bundle, renderableKind = 'item', renderableId, state, scenarios = {} } = payload;
+    const renderable = (renderableKind === 'display' ? bundle?.manifest?.displays : bundle?.manifest?.items)
+      ?.find(entry => entry.id === renderableId);
+    if (!renderable) {
       const placeholder = document.createElement('section');
       placeholder.className = 'frame-placeholder';
-      placeholder.textContent = '当前表没有匹配的美化 item。';
+      placeholder.textContent = '当前表没有匹配的美化页面或展示。';
       root.append(placeholder);
       showStatus('通用占位页', 'warning');
       return;
     }
-    const htmlFile = item.entry.html ? bundle.files[item.entry.html] : null;
-    const cssFile = item.entry.css ? bundle.files[item.entry.css] : null;
-    const mountFile = bundle.files[item.entry.mount];
+    const htmlFile = renderable.entry.html ? bundle.files[renderable.entry.html] : null;
+    const cssFile = renderable.entry.css ? bundle.files[renderable.entry.css] : null;
+    const mountFile = bundle.files[renderable.entry.mount];
     if (htmlFile?.encoding === 'text') root.innerHTML = htmlFile.content;
     if (cssFile?.encoding === 'text') {
       const style = document.createElement('style');
@@ -401,13 +413,14 @@ async function startFrameBridge() {
       style.textContent = cssFile.content;
       document.head.append(style);
     }
-    if (!mountFile || mountFile.encoding !== 'text') throw new Error(`mount 文件不可用：${item.entry.mount}`);
+    if (!mountFile || mountFile.encoding !== 'text') throw new Error(`mount 文件不可用：${renderable.entry.mount}`);
     moduleUrl = URL.createObjectURL(new Blob([mountFile.content], { type: 'text/javascript' }));
     const module = await import(moduleUrl);
     runtime = createRuntimeV1({
       root,
       files: bundle.files,
       initialState: state,
+      declaration: renderable,
       onAction(action, result) {
         post('action-result', { action, result });
         return result;
@@ -416,7 +429,8 @@ async function startFrameBridge() {
     });
     for (const [action, scenario] of Object.entries(scenarios)) runtime.setActionScenario(action, scenario);
     await runtime.mountModule(module);
-    showStatus(`已挂载 ${item.name || item.id}`, 'success');
+    runtime.setImageScenario(payload.imageScenario || 'generated');
+    showStatus(`已挂载 ${renderable.name || renderable.id}`, 'success');
   };
 
   addEventListener('message', async event => {
@@ -428,6 +442,7 @@ async function startFrameBridge() {
         return;
       }
       if (message.type === 'mount') await mountPayload(message.payload);
+      if (message.type === 'image-scenario') runtime?.setImageScenario(message.scenario);
       if (message.type === 'update-state') runtime?.updateState(message.state, { reason: message.reason || 'table-data' });
       if (message.type === 'scenario') runtime?.setActionScenario(message.action, message.scenario);
       if (message.type === 'action') {

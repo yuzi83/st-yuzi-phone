@@ -23,8 +23,8 @@ function main() {
     assert.match(messageNode, /const own = message\.senderType === 'self';/, 'message rendering must distinguish self from the other participant');
     assert.match(messageNode, /interactive:\s*!own/, 'only the other participant avatar should open a profile');
     assert.match(messageNode, /data-qq-profile[\s\S]*conversationId/, 'the other avatar must reuse the current conversation profile target');
-    assert.match(app, /if \(target\.dataset\.qqProfile\) return go\(\{ type: 'profile', conversationId: target\.dataset\.qqProfile \}\);/,
-        'chat avatar clicks must reuse the existing contact profile route');
+    assert.match(app, /type: conversation\?\.assistantCharacterId \? 'conversation-settings' : 'profile'/,
+        '助手头像进入陪聊设置，普通联系人继续进入资料页');
     assert.match(css, /\.yuzi-qq-avatar-button\s*\{[^}]*padding:\s*0;[^}]*appearance:\s*none;/s,
         'interactive avatars must not inherit native button padding or appearance');
 

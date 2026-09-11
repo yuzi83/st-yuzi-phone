@@ -41,14 +41,14 @@ function valueAttr(value) {
     return escapeHtmlAttr(String(value ?? ''));
 }
 
-function modelLabel(modelId) {
-    return MODEL_LABELS[modelId] || modelId || '未知模型';
+function modelLabel(modelId, labels = {}) {
+    return labels?.[modelId] || MODEL_LABELS[modelId] || modelId || '未知模型';
 }
 
-function modelOptionsHtml(modelIds, selectedModelId) {
+function modelOptionsHtml(modelIds, selectedModelId, labels = {}) {
     return asArray(modelIds).map(optionModelId => `
         <option value="${escapeHtmlAttr(optionModelId)}"${selected(selectedModelId === optionModelId)}>
-            ${escapeHtml(modelLabel(optionModelId))}
+            ${escapeHtml(modelLabel(optionModelId, labels))}
         </option>
     `).join('');
 }
@@ -67,7 +67,7 @@ function buildSourceRowHtml(table, index, tableCount) {
             <select class="phone-settings-select phone-fullscreen-overlay-source-model-select"
                 data-fullscreen-overlay-source-model="${escapeHtmlAttr(sheetKey)}"
                 aria-label="${escapeHtmlAttr(tableName)}播放模型"${disabled(modelIds.length <= 1)}>
-                ${modelOptionsHtml(modelIds, selectedModelId)}
+                ${modelOptionsHtml(modelIds, selectedModelId, table?.modelLabels)}
             </select>
         `
         : `

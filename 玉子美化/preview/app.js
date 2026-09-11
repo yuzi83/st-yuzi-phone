@@ -1,5 +1,5 @@
 const elementIds = [
-  'disclaimer', 'build-status', 'reload', 'cleanup', 'item', 'table', 'width', 'scenario', 'device', 'frame',
+  'disclaimer', 'build-status', 'reload', 'cleanup', 'item', 'table', 'width', 'scenario', 'image-scenario', 'device', 'frame',
   'mock-meta', 'mock-notice', 'mock-head', 'mock-body', 'apply', 'reset', 'add-column', 'add-row', 'log', 'clear-log',
 ];
 const elements = Object.fromEntries(elementIds.map(id => [id, document.getElementById(id)]));
@@ -72,6 +72,19 @@ function matchingItem(table) {
   const selected = session.bundle.manifest.items.find(item => item.id === elements.item.value);
   if (selected && sameTableName(selected.target.tableName, table.tableName)) return selected;
   return session.bundle.manifest.items.find(item => sameTableName(item.target.tableName, table.tableName)) || selected || null;
+}
+
+function matchingRenderable(table) {
+  const display = session?.selectedDisplayId
+    ? session.bundle.manifest.displays?.find(entry => entry.id === session.selectedDisplayId)
+    : null;
+  if (display) {
+    return {
+      kind: 'display',
+      entry: display.targets.some(target => sameTableName(target.tableName, table?.tableName)) ? display : null,
+    };
+  }
+  return { kind: 'item', entry: matchingItem(table) };
 }
 
 function createDraft(record) {
@@ -401,7 +414,8 @@ function mountSelection({ preserveDraft = false, log = true } = {}) {
   loadDraft(table.sheetKey, { preserve: preserveDraft });
   renderMockEditor();
   if (!frameReady) return;
-  const item = matchingItem(table);
+  const renderable = matchingRenderable(table);
+  const item = renderable.kind === 'item' ? renderable.entry : null;
   if (item) elements.item.value = item.id;
   const nextVersion = version + 1;
   const state = stateForSelection(nextVersion);
@@ -409,12 +423,14 @@ function mountSelection({ preserveDraft = false, log = true } = {}) {
   post('mount', {
     payload: {
       bundle: session.bundle,
-      itemId: item && sameTableName(item.target.tableName, table.tableName) ? item.id : null,
+      renderableKind: renderable.kind,
+      renderableId: renderable.entry?.id || null,
       state,
       scenarios,
+      imageScenario: elements['image-scenario'].value,
     },
   });
-  if (log) appendLog('info', `挂载 ${item?.id || '占位页'} / ${table.tableName}`, { revision: session.revision });
+  if (log) appendLog('info', `挂载 ${renderable.entry?.id || '占位页'} / ${table.tableName}`, { revision: session.revision });
 }
 
 async function fetchSession({ reload = false, preserveSelection = true, preserveDraft = true } = {}) {
@@ -529,6 +545,7 @@ elements.item.addEventListener('change', () => {
 });
 elements.table.addEventListener('change', () => { void selectTable(elements.table.value); });
 elements.width.addEventListener('change', () => { elements.device.style.setProperty('--device-width', `${elements.width.value}px`); });
+elements['image-scenario'].addEventListener('change', () => post('image-scenario', { scenario: elements['image-scenario'].value }));
 elements.scenario.addEventListener('change', () => {
   for (const action of actions) {
     scenarios[action] = elements.scenario.value;

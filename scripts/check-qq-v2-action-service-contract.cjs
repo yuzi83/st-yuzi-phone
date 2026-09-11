@@ -330,7 +330,66 @@ async function testStickerShortReferenceMapsToStoredResourceId() {
     assert.equal(message.stickerId, 'sticker-uuid-a');
 }
 
+async function testAssistantAcceptsOnlyItsExactSenderName() {
+    const { createQQV2ActionService } = await importModule('modules/qq-v2/protocol/action-service.js');
+    const repository = await createRepository();
+    await repository.ensureScope('assistant-sender');
+    const { conversation, person } = await repository.openAssistant('assistant-sender', { name: '北白川玉子' });
+    const service = createQQV2ActionService({ repository });
+    const send = (senders, target = conversation, scenario = 'private-reply', stickerFirst = false) => {
+        const children = senders.map((sender, index) => {
+            const attributes = { conversation: 'P1', sender, type: 'text' };
+            if (stickerFirst && index === 0) Object.assign(attributes, { type: 'sticker', sticker: 'S11' });
+            return { nodeType: 1, tagName: 'message', children: [],
+                textContent: '你好呀', childNodes: [{ nodeType: 3, textContent: '你好呀' }],
+                attributes: Object.entries(attributes).map(([name, value]) => ({ name, value })),
+                getAttribute: name => attributes[name] ?? null, hasAttribute: name => Object.hasOwn(attributes, name) };
+        });
+        const root = { nodeType: 1, tagName: 'qq', attributes: [], children, childNodes: children };
+        return service.execute({ scopeId: 'assistant-sender', response: '<qq><message/></qq>', scenario,
+            references: { P1: target.conversationId }, personReferences: { N1: target.personId || person.personId },
+            stickers: new Set(['S11']), stickerReferences: { S11: 'test-sticker-11' },
+            parseOptions: { parseDocument: () => ({ documentElement: root, childNodes: [root], getElementsByTagName: () => [] }) } });
+    };
+    await send(['北白川玉子']);
+    const messages = await repository.listMessages('assistant-sender', conversation.conversationId);
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].senderId, person.personId, '完整姓名只解析为当前陪聊人物的内部 ID');
+    await send(['N1']);
+    assert.equal((await repository.listMessages('assistant-sender', conversation.conversationId)).length, 2, '标准 N1 引用继续有效');
+    for (const invalid of ['玉子', '北白川玉子！', '其他人']) {
+        await assert.rejects(send(['北白川玉子', invalid]), { code: 'private_sender_invalid' });
+        assert.equal((await repository.listMessages('assistant-sender', conversation.conversationId)).length, 2,
+            '不匹配姓名使整批回滚，不保留前面的合法消息');
+    }
+    const ordinary = await repository.createPrivateConversation('assistant-sender', { name: '北白川玉子' });
+    await assert.rejects(send(['北白川玉子'], ordinary.conversation), { code: 'private_sender_invalid' });
+    assert.equal((await repository.listMessages('assistant-sender', ordinary.conversation.conversationId)).length, 0,
+        '普通私聊即使同名也不启用姓名兼容');
+    const friend = await repository.createPrivateConversation('assistant-sender', { name: '小绿' });
+    const group = await repository.createGroupConversation('assistant-sender', {
+        name: '普通群聊', memberIds: [ordinary.person.personId, friend.person.personId],
+    });
+    await assert.rejects(send(['北白川玉子'], group.conversation, 'group-reply'), { code: 'group_member_not_found' });
+    assert.equal((await repository.listMessages('assistant-sender', group.conversation.conversationId)).length, 0,
+        '群聊不因成员同名而启用姓名兼容');
+    await repository.saveAssistantCharacter('assistant-sender', person.personId, { formalName: '玉子同学' });
+    await assert.rejects(send(['北白川玉子']), { code: 'private_sender_invalid' });
+    await send(['玉子同学']);
+    assert.equal((await repository.listMessages('assistant-sender', conversation.conversationId)).at(-1).senderId, person.personId,
+        '修改姓名后只匹配当前完整姓名，不保留旧别名');
+    await repository.saveAssistantCharacter('assistant-sender', person.personId, { formalName: '北白川玉子' });
+    await send(['北白川玉子', '北白川玉子', '北白川玉子'], conversation, 'private-reply', true);
+    const batch = (await repository.listMessages('assistant-sender', conversation.conversationId)).slice(-3);
+    assert.deepEqual(batch.map(message => message.type), ['sticker', 'text', 'text'], '复现用户的表情加两段文本回复');
+    assert.ok(batch.every(message => message.senderId === person.personId));
+    assert.equal(batch[0].stickerId, 'test-sticker-11', '姓名兼容不破坏表情短引用转换');
+
+
+}
+
 async function main() {
+    await testAssistantAcceptsOnlyItsExactSenderName();
     await testActionServiceAppliesPendingTransferAtomically();
     await testCreateGroupMapsMemberReferencesAndKeepsFriendBoundary();
     await testGroupOwnerCanCreateNamedMemberAndUseReferenceInSameBatch();

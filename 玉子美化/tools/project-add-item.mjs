@@ -2,8 +2,8 @@ import process from 'node:process';
 import { addProjectItem, parseCliArgs, printCliResult, promptForMissing } from './project-lib.mjs';
 
 const options = parseCliArgs(process.argv.slice(2), {
-  repeatable: ['field', 'asset'],
-  boolean: ['replace', 'dry-run', 'json'],
+  repeatable: ['field', 'asset', 'canvas'],
+  boolean: ['theme', 'font', 'replace', 'dry-run', 'json'],
 });
 options.project ||= options._[0];
 await promptForMissing(options, [
@@ -21,6 +21,17 @@ if (!options.field) {
   }
 }
 if (!Array.isArray(options.field) || options.field.some(value => typeof value !== 'string')) throw new Error('--field 必须至少出现一次');
+const canvases = (options.canvas || []).map((value, index) => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new Error(`--canvas[${index + 1}] 必须是 JSON 对象`);
+  }
+});
+const integrations = {
+  ...(options.theme ? { theme: true } : {}),
+  ...(options.font ? { font: true } : {}),
+};
 const result = await addProjectItem({
   projectFile: options.project,
   table: options.table,
@@ -31,6 +42,8 @@ const result = await addProjectItem({
   css: options.css || null,
   mount: options.mount,
   assets: options.asset || [],
+  integrations: Object.keys(integrations).length > 0 ? integrations : null,
+  imageGeneration: canvases.length > 0 ? { canvases } : null,
   previewStatus: options['preview-status'] || 'not-run',
   previewNotes: options['preview-notes'] || '',
   replace: Boolean(options.replace),

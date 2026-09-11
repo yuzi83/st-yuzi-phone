@@ -63,7 +63,33 @@
         "status": { "enum": ["pending", "in-progress", "completed", "skipped", "invalidated"] },
         "itemId": { "type": ["string", "null"] },
         "fields": { "type": "array", "items": { "$ref": "#/definitions/nonEmptyString" } },
+        "display": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/definitions/displayState" }
+          ]
+        },
+        "displays": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/displayState" }
+        },
         "skipReason": { "type": ["string", "null"] },
+        "completedAt": { "type": ["string", "null"] },
+        "preview": { "$ref": "#/definitions/preview" }
+      }
+    },
+    "displayState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "fields", "completedAt", "preview"],
+      "properties": {
+        "id": { "$ref": "#/definitions/nonEmptyString" },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/nonEmptyString" }
+        },
         "completedAt": { "type": ["string", "null"] },
         "preview": { "$ref": "#/definitions/preview" }
       }

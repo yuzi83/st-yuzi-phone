@@ -62,7 +62,9 @@ function isGroupMuteActive(until, storyTime) {
 function cloneGlobalSettings(settings) {
     const source = asObject(settings);
     return Object.freeze({
+        sendButtonEnabled: source.sendButtonEnabled === true,
         activeApiPresetId: asText(source.activeApiPresetId, 256),
+        assistantReplyPresetId: asText(source.assistantReplyPresetId, 256),
         privateReplyPresetId: asText(source.privateReplyPresetId, 256),
         privateProactivePresetId: asText(source.privateProactivePresetId, 256),
         groupReplyPresetId: asText(source.groupReplyPresetId, 256),
@@ -333,6 +335,8 @@ function cloneConversation(conversation, storyTime = '') {
     return Object.freeze({
         conversationId: asText(source.conversationId || source.id, 256),
         kind,
+        ...(source.assistantCharacterId ? { assistantCharacterId: asText(source.assistantCharacterId, 256),
+            avatarUrl: asText(source.avatarUrl || person.avatarUrl, 2048) } : {}),
         status,
         formalName: kind === 'private' ? asText(source.formalName || person.formalName, 256) : '',
         title: asText(source.title || (kind === 'group' ? group?.name : source.remark || person.formalName), 256),
@@ -640,6 +644,18 @@ export function createQQV2Facade(options = {}) {
                     stickers: Object.freeze(asArray(resources.stickers).map(cloneSticker)),
                 });
             },
+            async assistantCharacters() {
+                try { return { ok: true, characters: await runtime.listAssistantCharacters() }; }
+                catch (error) { return failed(error); }
+            },
+            async assistantConversations() {
+                try {
+                    const { context } = await runtime.getSnapshot();
+                    if (!context?.scopeId) return unavailable('currentScope');
+                    const conversations = await runtime.listConversations({ scopeId: context.scopeId });
+                    return { ok: true, conversations: conversations.filter(item => item.assistantCharacterId).map(item => cloneConversation(item, context.storyTime)) };
+                } catch (error) { return failed(error); }
+            },
             async conversations() {
                 if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
                 if (typeof runtime.listConversations !== 'function') return unavailable('listConversations');
@@ -650,7 +666,7 @@ export function createQQV2Facade(options = {}) {
                 return Object.freeze({
                     ok: true,
                     status: asText(snapshot.phase, 32) || 'ready',
-                    conversations: Object.freeze(asArray(conversations).map((conversation) => (
+                    conversations: Object.freeze(asArray(conversations).filter(item => !item.assistantCharacterId).map((conversation) => (
                         cloneConversation(conversation, context.storyTime)
                     ))),
                 });
@@ -848,6 +864,29 @@ export function createQQV2Facade(options = {}) {
             },
         }),
         intent: Object.freeze({
+            async deleteAssistantCharacter(input = {}) {
+                try {
+                    const { context } = await runtime.getSnapshot();
+                    if (!context?.scopeId) return unavailable('currentScope');
+                    return { ok: true, result: await runtime.deleteAssistantCharacter({ scopeId: context.scopeId, characterId: asText(input.characterId, 256) }) };
+                } catch (error) { return failed(error); }
+            },
+            async saveAssistantCharacter(input = {}) {
+                try {
+                    const { context } = await runtime.getSnapshot();
+                    if (!context?.scopeId) return unavailable('currentScope');
+                    return { ok: true, character: await runtime.saveAssistantCharacter({ scopeId: context.scopeId,
+                        characterId: asText(input.characterId, 256), patch: asObject(input.patch) }) };
+                } catch (error) { return failed(error); }
+            },
+            async openAssistant(input = {}) {
+                try {
+                    const { context } = await runtime.getSnapshot();
+                    if (!context?.scopeId) return unavailable('currentScope');
+                    const result = await runtime.openAssistant({ scopeId: context.scopeId, characterId: input.characterId, name: input.name });
+                    return { ok: true, result: { ...result, conversation: cloneConversation(result.conversation) } };
+                } catch (error) { return failed(error); }
+            },
             async importImageLibraryPack(input = {}) {
                 if (typeof runtime.importImageLibraryPack !== 'function') return unavailable('importImageLibraryPack');
                 const source = String(input.source ?? '');
@@ -1857,6 +1896,9 @@ export function createQQV2Facade(options = {}) {
                     const context = cloneContext(snapshot.context);
                     const conversationId = asText(input.conversationId, 256);
                     if (!context.scopeId) return unavailable('currentScope');
+                    if (input.scopeId && asText(input.scopeId, 512) !== context.scopeId) {
+                        return Object.freeze({ ok: false, status: 'stale', reason: 'scope-changed' });
+                    }
                     if (!conversationId) return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
                     if (!await hasConversation(runtime, context.scopeId, conversationId)) return conversationNotFound();
                     const result = asObject(await runtime.retryManual({

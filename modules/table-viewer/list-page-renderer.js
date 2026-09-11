@@ -146,7 +146,6 @@ function buildGenericListPageViewModel(options = {}) {
     const bottomBarOptions = genericStylePayload.structureOptions?.bottomBar || {};
     const showSearch = toolbarOptions.showSearch !== false;
     const showResultCount = toolbarOptions.showResultCount !== false;
-    const showToolbarHint = toolbarOptions.showHint !== false;
     const showListIndex = listItemOptions.showIndex !== false;
     const showListStatus = listItemOptions.showStatus !== false;
     const showListTime = listItemOptions.showTime !== false;
@@ -233,24 +232,15 @@ function buildGenericListPageViewModel(options = {}) {
         emptyStateTitle = '本楼更新中没有匹配项';
         emptyStateDesc = `当前只显示本楼更新，且没有更新行匹配“${searchQuery}”。`;
     }
-    const toolbarHint = state.lockManageMode
-        ? '锁定管理中：点击右侧标签切换条目锁定状态。'
-        : state.deleteManageMode
-            ? '删除管理中：点击右侧圆圈选择条目，可在标题栏全选、清空或批量删除。'
-            : onlyShowReviewUpdates
-                ? '当前仅显示审核中命中的本楼更新行；搜索和排序会继续叠加生效。'
-                : '点击条目进入详情页；支持搜索、锁定、删除与新增操作。';
 
     return {
         genericStylePayload,
         searchQuery,
         totalRowCount,
         visibleCount,
-        toolbarHint,
         filteredRows: orderedFilteredRows,
         showSearch,
         showResultCount,
-        showToolbarHint,
         showListIndex,
         showListStatus,
         showListTime,

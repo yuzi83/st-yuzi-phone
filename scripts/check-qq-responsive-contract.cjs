@@ -56,7 +56,6 @@ async function main() {
     for (const className of [
         'yuzi-qq-message-root-view',
         'yuzi-qq-contact-root-view',
-        'yuzi-qq-assistant-root-view',
         'yuzi-qq-settings-root-view',
     ]) {
         assert.match(
