@@ -13,7 +13,8 @@
 - `13-content-presets.css`：美化预设运行 shell 与工坊补层
 - `14-table-content-replacement.css`：表格内容词汇替换设置层
 - `15-image-generation.css`：图片生成设置层
-- `16-fullscreen-overlay.css`：全屏浮层运行时与设置页聚合层；必须位于现有 active layers 最后
+- `16-fullscreen-overlay.css`：全屏浮层运行时与设置页聚合层，位于图片生成层之后
+- `17-input-shortcuts.css`：输入快捷键设置页的局部布局；表单颜色、焦点与禁用态沿用 Settings 共享样式
 
 ## fullscreen-overlay 子目录
 - `fullscreen-overlay/00-runtime.css`：宿主 `body` 下 Yuzi 全屏透明层与滚动弹幕动画，以及正文中的 `.yuzi-phone-inline-table-popup-container`（满宽、零间距、无动画）

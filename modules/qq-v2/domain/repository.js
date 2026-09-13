@@ -1773,7 +1773,10 @@ export function createQQV2Repository(options = {}) {
                 .sort((left, right) => left.sequence - right.sequence)
                 .map((message) => messageWithQuote(scope, message));
         },
-        async listMessagePage(scopeId, conversationId, { beforeSequence, limit = 50 } = {}) {
+        async listMessagePage(scopeId, conversationId, { beforeSequence, fromSequence, limit = 50 } = {}) {
+            if (fromSequence !== undefined && (!Number.isSafeInteger(fromSequence) || fromSequence < 0 || beforeSequence !== undefined)) {
+                throw new QQV2DomainError('消息窗口起点无效', 'message_window_invalid');
+            }
             const state = await stateStore.read();
             const scope = getScope(state, scopeId, false);
             const empty = { items: [], hasMore: false, nextBeforeSequence: null };
@@ -1784,7 +1787,11 @@ export function createQQV2Repository(options = {}) {
             const eligible = Object.values(scope.messages)
                 .filter((message) => message.conversationId === conversationId && Number(message.sequence) < before)
                 .sort((left, right) => left.sequence - right.sequence);
-            const items = eligible.slice(-size).map((message) => messageWithQuote(scope, message));
+            let selected = fromSequence === undefined ? eligible.slice(-size)
+                : eligible.filter(message => Number(message.sequence) >= fromSequence);
+            // If the entire visible window was deleted, reveal the latest surviving page.
+            if (fromSequence !== undefined && selected.length === 0) selected = eligible.slice(-50);
+            const items = selected.map((message) => messageWithQuote(scope, message));
             return {
                 items,
                 hasMore: eligible.length > items.length,

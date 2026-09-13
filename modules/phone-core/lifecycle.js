@@ -12,6 +12,7 @@ import { unregisterTableFillStartListener, unregisterTableUpdateListener, initSm
 import { debugCheckAPI } from './data-api.js';
 import {
     consumePhoneRouteRefreshPending,
+    notifyPhoneActivity,
     getPhoneCoreState,
     phoneRuntime,
     resetPhoneCoreState,
@@ -180,12 +181,14 @@ function activatePhoneRuntimeState(state = getPhoneCoreState(), options = {}) {
     state.isPhoneActive = true;
     startStatusClock(state);
     requestPhoneRuntimeActivationRoute(options);
+    notifyPhoneActivity();
 }
 
 function deactivatePhoneRuntimeState(state = getPhoneCoreState()) {
     state.isPhoneActive = false;
     clearStatusClockTimer(state);
     clearShellInteractionTimer(state);
+    notifyPhoneActivity();
 }
 
 function cleanupPhoneRuntimeBindings(state = getPhoneCoreState()) {

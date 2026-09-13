@@ -1,3 +1,4 @@
+import { createMessageWindow, mergeMessagePage, reconcileMessageScrollAnchor } from './message-window.js';
 import { createAssistantUI } from './assistant.js';
 import { pickImageFiles } from '../../settings-app/services/media-upload.js';
 import { createPhoneNavIconElement } from '../../phone-core/navigation-ui.js';
@@ -531,18 +532,6 @@ function conversationDeletionCopy(conversation) {
     });
 }
 
-function mergeMessagePage(previous = EMPTY_PAGE, next = EMPTY_PAGE, { prepend = false } = {}) {
-    const previousItems = asArray(previous?.items);
-    const nextItems = asArray(next?.items);
-    const currentItems = prepend ? [...nextItems, ...previousItems] : [...nextItems];
-    const unique = new Map(currentItems.map((message) => [message.messageId, message]));
-    return Object.freeze({
-        items: Object.freeze([...unique.values()].sort((left, right) => Number(left.sequence) - Number(right.sequence))),
-        hasMore: next?.hasMore === true,
-        nextBeforeSequence: next?.nextBeforeSequence ?? null,
-    });
-}
-
 function replaceMessageInPage(page = EMPTY_PAGE, replacement = {}) {
     const messageId = asText(replacement?.messageId);
     if (!messageId) return page;
@@ -976,6 +965,9 @@ export function createQQApp({
     onError = () => {},
     scopeId = '',
     getSettings = getPhoneSettings,
+    isVisible = () => true,
+    isCurrent = () => true,
+    onDeferredRender = () => {},
 } = {}) {
     if (!facade?.query || !facade?.intent) throw new TypeError('QQ App needs an injected Facade');
 
@@ -998,7 +990,11 @@ export function createQQApp({
     const composerAutoHeight = createComposerAutoHeightController();
     const messageSelection = createMessageSelection();
     let messageSelectionConversationId = '';
-    const pages = new Map();
+    const pages = createMessageWindow({
+        query: input => facade.query.messages(input),
+        canRead: id => !disposed && isCurrent() && isVisible() && page?.type === 'chat' && page.conversationId === id,
+        onDeferred: () => { if (!disposed && isCurrent() && !isVisible()) onDeferredRender(); },
+    });
     const conversationSnapshots = new Map();
     const jumpCounts = new Map();
     const renderLeaseSessions = new Map();
@@ -1094,7 +1090,7 @@ export function createQQApp({
         }
     };
 
-    const isActive = (token) => !disposed && token === renderEpoch;
+    const isActive = (token) => !disposed && isCurrent() && isVisible() && token === renderEpoch;
 
     const leaseSessionFor = (token = renderEpoch) => renderLeaseSessions.get(token);
 
@@ -1381,7 +1377,7 @@ export function createQQApp({
         messageSelection.select(id, targetMessageId);
         clearOverlay();
         closeEmojiPanel();
-        void render();
+        void render().catch(report);
         return true;
     };
 
@@ -1403,17 +1399,9 @@ export function createQQApp({
         return true;
     };
 
-    const loadMessages = async (conversationId, { beforeSequence, prepend = false } = {}) => {
-        const previous = getMessageState(conversationId);
-        const result = await facade.query.messages({
-            conversationId,
-            ...(Number.isInteger(beforeSequence) ? { beforeSequence } : {}),
-            limit: 50,
-        });
-        const next = result?.ok ? result.page : EMPTY_PAGE;
-        const state = mergeMessagePage(previous, next, { prepend });
-        pages.set(conversationId, state);
-        return state;
+    const loadMessages = (conversationId, options = {}) => {
+        const stream = viewport?.querySelector('[data-qq-message-stream="' + conversationId + '"]');
+        return pages.load(conversationId, { retain: !!stream && !isScrollContainerNearBottom(stream), ...options });
     };
 
     const makeHeader = (title, {
@@ -1654,7 +1642,7 @@ export function createQQApp({
     const go = (next) => {
         closeEmojiPanel();
         page = { ...next, returnTo: page ? { ...page } : null };
-        void render();
+        void render().catch(report);
     };
 
     const back = () => {
@@ -1690,13 +1678,15 @@ export function createQQApp({
         if (!conversationId) return;
         conversationSnapshots.set(conversationId, target);
         jumpCounts.delete(conversationId);
+        pages.reset(conversationId);
+        viewSnapshotCache.take('page:chat:' + conversationId)?.holder?.replaceChildren?.();
         go({ type: 'chat', conversationId });
         const opened = await facade.intent.openConversation({ conversationId: target.conversationId });
         if (!opened?.ok) {
             report(new Error(opened?.error?.message || '无法打开会话'));
             if (page?.type === 'chat' && page.conversationId === conversationId) {
                 page = page.returnTo || null;
-                void render();
+                void render().catch(report);
             }
             return;
         }
@@ -2270,7 +2260,7 @@ export function createQQApp({
             event.preventDefault();
             event.stopPropagation();
             messageSelection.toggle(conversationId, message.messageId);
-            void render();
+            void render().catch(report);
         });
         item.addEventListener('contextmenu', (event) => {
             if (isMessageSelectionMode(conversationId)) {
@@ -2287,7 +2277,7 @@ export function createQQApp({
                 row: item,
                 onQuote: () => {
                     quoteDrafts.select(conversationId, message);
-                    void render();
+                    void render().catch(report);
                 },
             });
         }
@@ -2564,10 +2554,10 @@ export function createQQApp({
             const state = getMessageState(conversation.conversationId);
             if (!state.hasMore || stream.dataset.loading === 'true') return;
             stream.dataset.loading = 'true';
+            const token = renderEpoch;
             void loadMessages(conversation.conversationId, {
-                beforeSequence: state.nextBeforeSequence,
                 prepend: true,
-            }).then(() => render())
+            }).then(result => result && isActive(token) ? render({ refreshMessages: false }) : undefined)
                 .catch(report)
                 .finally(() => { stream.dataset.loading = 'false'; });
         });
@@ -2651,7 +2641,7 @@ export function createQQApp({
         input.addEventListener('keydown', (event) => {
             if (!shouldSubmitComposerKey(event)) return;
             event.preventDefault();
-            void submitComposer(conversation.conversationId, input.value);
+            void submitComposer(conversation.conversationId, input.value).catch(report);
         });
         const inputRow = createElement('div', `yuzi-qq-composer-input-row yuzi-qq-${chatKind}-composer-input-row`);
         inputRow.append(input);
@@ -2690,7 +2680,7 @@ export function createQQApp({
                     className: 'yuzi-qq-quote-preview',
                     onClose: () => {
                         quoteDrafts.clear(conversation.conversationId);
-                        void render();
+                        void render().catch(report);
                     },
                 }));
             }
@@ -2740,8 +2730,7 @@ export function createQQApp({
                 report(new Error(result?.error?.message || '更新注入条目失败'));
                 return;
             }
-            await loadMessages(conversationId);
-            await render();
+            if (await loadMessages(conversationId)) await render({ refreshMessages: false });
         });
         primaryRow.append(status);
         if (!conversation.assistantCharacterId) primaryRow.append(injection);
@@ -2758,13 +2747,13 @@ export function createQQApp({
         exit.dataset.qqExitMessageSelection = conversationId;
         exit.addEventListener('click', () => {
             exitMessageSelection(conversationId);
-            void render();
+            void render().catch(report);
         });
         const selectAll = actionButton('全选', 'check-double');
         selectAll.dataset.qqSelectAllMessages = conversationId;
         selectAll.addEventListener('click', () => {
             messageSelection.selectAll(conversationId, selectableMessages(conversationId));
-            void render();
+            void render().catch(report);
         });
         const remove = actionButton('删除', 'trash', 'is-danger');
         remove.dataset.qqDeleteSelected = conversationId;
@@ -2816,7 +2805,7 @@ export function createQQApp({
             getCurrentContext(),
             facade.query.currentProfile?.(),
             facade.query.globalSettings?.(),
-            refreshMessages ? loadMessages(conversationId) : Promise.resolve(previousState),
+            refreshMessages ? loadMessages(conversationId, { retain: !atBottom }) : Promise.resolve(previousState),
         ]);
         const chatKind = conversation?.kind === 'group' ? 'group' : 'private';
         const main = createElement('main', `yuzi-qq-view yuzi-qq-chat-view yuzi-qq-${chatKind}-chat-view`);
@@ -3687,7 +3676,11 @@ export function createQQApp({
     };
 
     const render = async ({ preserveEmoji = false, refreshMessages = true } = {}) => {
+        if (disposed || !isCurrent()) return;
+        if (!isVisible()) { onDeferredRender(); return; }
         const scrollSnapshot = viewScrollState.capture();
+        let previousScrollKeys = scrollSnapshot?.registrationKey === 'private-chat'
+            ? [...viewport.querySelectorAll('[data-qq-scroll-key]')].map(node => node.dataset.qqScrollKey) : [];
         composerAutoHeight.cancel();
         disposeImageLibraryLazyLoading();
         const token = ++renderEpoch;
@@ -3703,7 +3696,10 @@ export function createQQApp({
         if (!preserveEmoji) closeEmojiPanel({ preserveScroll: false });
         const targetViewKey = requestedViewKey();
         const immediateSnapshot = prepareImmediateView(targetViewKey, scrollSnapshot);
-        const nextScrollSnapshot = immediateSnapshot.scrollSnapshot || (page?.type === 'chat' ? {
+        if (immediateSnapshot.scrollSnapshot?.registrationKey === 'private-chat') {
+            previousScrollKeys = [...viewport.querySelectorAll('[data-qq-scroll-key]')].map(node => node.dataset.qqScrollKey);
+        }
+        let nextScrollSnapshot = immediateSnapshot.scrollSnapshot || (page?.type === 'chat' ? {
             scopeKey: currentScopeKey(),
             viewKey: targetViewKey,
             registrationKey: 'private-chat',
@@ -3726,6 +3722,10 @@ export function createQQApp({
                     holder: detachViewport(),
                     scrollSnapshot,
                 });
+            }
+            if (nextScrollSnapshot?.registrationKey === 'private-chat') {
+                nextScrollSnapshot = reconcileMessageScrollAnchor(nextScrollSnapshot, previousScrollKeys,
+                    [...content.querySelectorAll('[data-qq-scroll-key]')].map(node => node.dataset.qqScrollKey));
             }
             viewport.replaceChildren(content);
             if (!page) viewport.append(makeNav());
@@ -3774,8 +3774,7 @@ export function createQQApp({
         }
         drafts.delete(conversationId);
         mentionDrafts.delete(asText(conversationId));
-        await loadMessages(conversationId);
-        await render();
+        if (await loadMessages(conversationId)) await render({ refreshMessages: false });
         return true;
     };
 
@@ -4117,7 +4116,7 @@ export function createQQApp({
     const sendNarrativeMessage = async (conversationId, type, content) => {
         const result = await submitNarrativeMessage({ facade, conversationId, type, content });
         if (!result?.ok) throw new Error(result?.error?.message || '发送失败');
-        await loadMessages(conversationId);
+        return loadMessages(conversationId);
     };
 
     const openNarrativeDialog = (conversationId, type) => {
@@ -4143,9 +4142,8 @@ export function createQQApp({
         confirm.addEventListener('click', async () => {
             confirm.disabled = true;
             try {
-                await sendNarrativeMessage(conversationId, type, input.value);
-                clearOverlay();
-                await render();
+                const updated = await sendNarrativeMessage(conversationId, type, input.value);
+                if (updated) { clearOverlay(); await render({ refreshMessages: false }); }
             } catch (errorValue) {
                 error.textContent = errorValue.message || '发送失败，请重试';
                 toggle();
@@ -4228,8 +4226,7 @@ export function createQQApp({
                 return;
             }
             clearOverlay();
-            await loadMessages(conversationId);
-            await render();
+            if (await loadMessages(conversationId)) await render({ refreshMessages: false });
         });
         if (recipient) content.append(recipient);
         content.append(amount, currency, customCurrency, note, error);
@@ -4258,8 +4255,7 @@ export function createQQApp({
             }
             messageSelectionConversationId = '';
             clearOverlay();
-            await loadMessages(conversationId);
-            await render();
+            if (await loadMessages(conversationId)) await render({ refreshMessages: false });
         });
         showDialog({ title: '删除消息', content, actions: [cancel, confirm], className: 'yuzi-qq-delete-message-dialog' });
     };
@@ -4291,7 +4287,7 @@ export function createQQApp({
             quote.addEventListener('click', () => {
                 quoteDrafts.select(conversationId, message);
                 clearOverlay();
-                void render();
+                void render().catch(report);
             });
             menu.append(quote);
         }
@@ -4321,8 +4317,7 @@ export function createQQApp({
                 const result = await facade.intent.editMessage({ conversationId, messageId: message.messageId, content: input.value });
                 if (!result?.ok) throw new Error(result?.error?.message || '保存失败');
                 clearOverlay();
-                await loadMessages(conversationId);
-                await render();
+                if (await loadMessages(conversationId)) await render({ refreshMessages: false });
             } catch (failure) {
                 error.textContent = failure.message || '保存失败';
                 input.disabled = false;
@@ -4351,8 +4346,7 @@ export function createQQApp({
             drafts.set(conversationId, draft ? draft + '\n' + original.content : original.content);
         }
         clearOverlay();
-        await loadMessages(conversationId);
-        await render();
+        if (await loadMessages(conversationId)) await render({ refreshMessages: false });
     };
 
     const openMessageQuickMenu = (conversationId, message) => {
@@ -4373,8 +4367,7 @@ export function createQQApp({
                 });
                 if (!result?.ok) throw new Error(result?.error?.message || '删除失败');
                 if (overlay === layer) clearOverlay();
-                await loadMessages(conversationId);
-                await render();
+                if (await loadMessages(conversationId)) await render({ refreshMessages: false });
             } catch (error) {
                 menu.querySelectorAll('button').forEach((button) => { button.disabled = false; });
                 report(error);
@@ -4454,8 +4447,7 @@ export function createQQApp({
                 return;
             }
             clearOverlay();
-            await loadMessages(conversationId);
-            await render();
+            if (await loadMessages(conversationId)) await render({ refreshMessages: false });
         };
         returnButton.addEventListener('click', () => void handle('return', returnButton));
         accept.addEventListener('click', () => void handle('accept', accept));
@@ -5123,8 +5115,7 @@ export function createQQApp({
             });
             if (!result?.ok) report(new Error(result?.error?.message || '发送失败'));
             else {
-                await loadMessages(conversationId);
-                await render({ preserveEmoji: true });
+                if (await loadMessages(conversationId)) await render({ preserveEmoji: true, refreshMessages: false });
             }
             return;
         }
@@ -5194,16 +5185,27 @@ export function createQQApp({
             viewport = createElement('div', 'yuzi-qq-viewport');
             viewport.addEventListener('pointerdown', handleEmojiPanelPointerDown);
             viewport.addEventListener('keydown', handleEmojiPanelKeyDown);
-            viewport.addEventListener('click', (event) => { void handleClick(event); });
-            viewport.addEventListener('submit', (event) => { void handleSubmit(event); });
+            viewport.addEventListener('click', (event) => { void handleClick(event).catch(report); });
+            viewport.addEventListener('submit', (event) => { void handleSubmit(event).catch(report); });
             viewport.addEventListener('change', handleChange);
             viewport.addEventListener('scroll', handleConversationListScroll, true);
             window.addEventListener('yuzi-phone-resize-start', handlePhoneResizeStart);
             root.replaceChildren(viewport);
-            void render();
+            void render().catch(report);
             return this;
         },
         refresh: () => render(),
+        suspend() {
+            renderEpoch += 1;
+            const pendingMessages = pages.invalidate();
+            composerAutoHeight.cancel();
+            disposeImageLibraryLazyLoading();
+            const interrupted = renderLeaseSessions.size > 0;
+            for (const sessions of renderLeaseSessions.values()) {
+                void Promise.all([sessions.media.abort(), sessions.background.abort(), sessions.avatars.abort(), sessions.stickers.abort()]);
+            }
+            if (interrupted || pendingMessages) onDeferredRender();
+        },
         reset() {
             tab = 'messages';
             page = null;
@@ -5224,6 +5226,7 @@ export function createQQApp({
         destroy() {
             closeOpenedChat();
             disposed = true;
+            pages.clear();
             renderEpoch += 1;
             composerAutoHeight.dispose();
             closeTransientUi();

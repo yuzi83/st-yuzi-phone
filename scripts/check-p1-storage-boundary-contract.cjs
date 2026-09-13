@@ -4,11 +4,6 @@ const path = require('path');
 const ROOT = process.cwd();
 const MODULES_DIR = path.join(ROOT, 'modules');
 
-const ALLOWED_STORAGE_FILES = new Set([
-    'modules/storage-manager/core.js',
-    'modules/storage-manager/manager.js',
-]);
-
 const ALLOWED_INDEXED_DB_FILES = new Set([
     'modules/settings/appearance-asset-repository.js',
     'modules/cache-manager.js',
@@ -27,11 +22,6 @@ const REQUIRED_CACHE_FILES = {
     cacheManager: 'modules/cache-manager.js',
     backgroundService: 'modules/settings-app/services/appearance-settings/background-service.js',
     iconUploadService: 'modules/settings-app/services/appearance-settings/icon-upload-service.js',
-};
-
-const REQUIRED_STORAGE_MANAGER_FILES = {
-    core: 'modules/storage-manager/core.js',
-    manager: 'modules/storage-manager/manager.js',
 };
 
 const REQUIRED_APPEARANCE_PACK_REPOSITORY = 'modules/settings-app/services/appearance-settings/appearance-pack-repository.js';
@@ -113,8 +103,8 @@ function main() {
         check(
             results,
             item.relativePath,
-            '裸 localStorage/sessionStorage 只能出现在 storage-manager 或明确 legacy migration 读路径',
-            ALLOWED_STORAGE_FILES.has(item.relativePath),
+            '生产模块不得直接使用 localStorage/sessionStorage，持久数据使用专用 repository',
+            false,
             `${item.matches.length} references`
         );
     }
@@ -129,22 +119,6 @@ function main() {
             `${item.matches.length} references`
         );
     }
-
-    const core = read(REQUIRED_STORAGE_MANAGER_FILES.core);
-    const manager = read(REQUIRED_STORAGE_MANAGER_FILES.manager);
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.core, 'storage-manager core 定义统一 STORE_PREFIX', has(core, "export const STORE_PREFIX = 'yzp:v2';"));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.core, 'storage-manager core 通过 INDEX_KEY 管理索引事实源', has(core, 'export const INDEX_KEY = `${STORE_PREFIX}:index`;'));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.core, 'storage-manager core 写入前估算 payload size', has(core, 'export function estimateSize(value)'));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.core, 'storage-manager core 保存索引失败时识别 QUOTA_EXCEEDED', has(core, 'StorageErrorType.QUOTA_EXCEEDED'));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.core, 'storage-manager core 配额失败后执行 pruneExpired()', has(core, 'pruneExpired(index);'));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.core, 'storage-manager core 配额失败后执行 evictByLRU()', has(core, 'evictByLRU(index, { maxEntries: 300, maxBytes: 256 * 1024 });'));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.core, 'storage-manager core 读取 raw 时更新 lastAccessAt', has(core, 'meta.lastAccessAt = nowTs();'));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.manager, 'storage-manager manager set() 使用 loadIndex()', has(manager, 'const index = loadIndex();'));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.manager, 'storage-manager manager set() 统一通过 writeRaw()', has(manager, 'writeRaw(storageKey, payload, index);'));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.manager, 'storage-manager manager 索引失败时回滚 payload', has(manager, 'const rollbackWrittenPayload = () => {'));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.manager, 'storage-manager manager get() 过期数据会删除 payload 与索引', has(manager, 'expiresAt > 0 && expiresAt <= nowTs()'));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.manager, 'storage-manager manager 暴露 clearNamespace()', has(manager, 'clearNamespace,'));
-    check(results, REQUIRED_STORAGE_MANAGER_FILES.manager, 'storage-manager manager 不直接暴露 localStorage 对象', !has(manager, 'localStorage,'));
 
     const settingsFacade = read(REQUIRED_SETTING_FILES.settingsFacade);
     const settingsPersistence = read(REQUIRED_SETTING_FILES.settingsPersistence);

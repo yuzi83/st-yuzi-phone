@@ -1,3 +1,4 @@
+import { createInputShortcutsSettingsService } from '../input-shortcuts/settings-service.js';
 // modules/settings-app/render.js
 /**
  * 玉子的手机 - 设置 App 渲染入口
@@ -308,6 +309,7 @@ export function renderSettings(container) {
         qqV2PresetService: qqV2PresetSettingsService,
         tableContentReplacement: tableContentReplacementSettingsService,
         fullscreenOverlay: fullscreenOverlaySettingsService,
+        inputShortcuts: createInputShortcutsSettingsService({ getPhoneSettings, savePhoneSetting }),
     };
 
     /** @type {import('../../types').SettingsPageRenderers} */

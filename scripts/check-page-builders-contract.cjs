@@ -9,7 +9,6 @@ const FILES = {
     appearance: 'modules/settings-app/layout/page-builders/appearance-builders.js',
     editor: 'modules/settings-app/layout/page-builders/editor-builders.js',
     frame: 'modules/settings-app/layout/frame.js',
-    pageShell: 'modules/settings-app/ui/page-shell.js',
     home: 'modules/settings-app/pages/home.js',
     api: 'modules/settings-app/pages/api-presets.js',
     prompt: 'modules/settings-app/pages/ai-instruction-presets.js',
@@ -43,7 +42,6 @@ function main() {
     check(results, 'appearance', '外观 builder 存在', contents.appearance.includes('export function buildAppearancePageHtml('));
     check(results, 'editor', '美化工坊 builder 存在', contents.editor.includes('export function buildBeautifyTemplatePageHtml('));
     check(results, 'frame', '设置 frame 从 page-builder facade 导入', contents.frame.includes("from './page-builders.js';"));
-    check(results, 'pageShell', '共享 page-shell 暴露 snapshot', contents.pageShell.includes('export function createPageShellSnapshot('));
     check(results, 'home', '首页使用 settings home builder', contents.home.includes('buildSettingsHomePageHtml('));
     check(results, 'api', 'API 页面使用 Facade 预设服务', contents.api.includes('qqV2PresetService'));
     check(results, 'api', 'API 页面下拉与新建按钮分离', contents.api.includes('phone-api-preset-select') && contents.api.includes('phone-api-preset-new-btn'));

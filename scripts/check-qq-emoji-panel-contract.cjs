@@ -43,7 +43,7 @@ const path = require('node:path');
 
     assert.match(source, /data-qq-sticker/, 'QQ app must keep sticker panel controls');
     assert.match(source, /target\.dataset\.qqSticker[\s\S]{0,700}facade\.intent\.sendMessage/, 'sticker selection must use the existing single-message contract');
-    assert.match(source, /target\.dataset\.qqSticker[\s\S]{0,900}render\(\{ preserveEmoji: true \}\)/,
+    assert.match(source, /target\.dataset\.qqSticker[\s\S]{0,900}render\(\{ preserveEmoji: true(?:, refreshMessages: false)? \}\)/,
         'successful sticker sends must re-render without closing the emoji panel');
     assert.doesNotMatch(source, /composerSendPlan|pendingAttachments/, 'Q49-1 forbids pending attachment batches');
     const panelStart = source.indexOf('const renderEmojiPanel = async');

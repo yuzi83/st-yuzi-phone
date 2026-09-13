@@ -672,6 +672,9 @@ export function createQQV2Facade(options = {}) {
                 });
             },
             async messages(input = {}) {
+                if (Object.hasOwn(input, 'fromSequence') && (!Number.isSafeInteger(input.fromSequence) || input.fromSequence < 0 || Object.hasOwn(input, 'beforeSequence'))) {
+                    return Object.freeze({ ok: false, status: 'invalid', reason: 'message-window-invalid' });
+                }
                 if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
                 if (typeof runtime.getConversation !== 'function') return unavailable('getConversation');
                 if (typeof runtime.listMessages !== 'function') return unavailable('listMessages');
@@ -692,6 +695,7 @@ export function createQQV2Facade(options = {}) {
                     scopeId: context.scopeId,
                     conversationId,
                     ...(Number.isInteger(beforeSequence) && beforeSequence >= 0 ? { beforeSequence } : {}),
+                    ...(input.fromSequence !== undefined ? { fromSequence: input.fromSequence } : {}),
                     ...(Number.isInteger(limit) && limit > 0 ? { limit } : {}),
                 });
                 return Object.freeze({

@@ -99,7 +99,6 @@ function buildApiPresetsPageHtml(pageState) {
             <div class="phone-ai-preset-toolbar">
                 <label class="phone-ai-preset-segment-field"><span>名称</span><input id="phone-api-preset-name" class="phone-settings-input" maxlength="120" value="${escapeHtmlAttr(draft.name)}" ${editorDisabled}></label>
                 <label class="phone-ai-preset-segment-field"><span>API 地址</span><input id="phone-api-preset-endpoint" class="phone-settings-input" maxlength="2048" value="${escapeHtmlAttr(draft.endpoint)}" placeholder="https://api.example.com/v1" ${editorDisabled}></label>
-                <div class="phone-settings-note">支持 OpenAI 兼容接口；本机示例：<code>http://127.0.0.1:端口/v1</code>，局域网示例：<code>http://192.168.1.50:端口/v1</code>。局域网 HTTP 仅限受信任网络。</div>
                 <label class="phone-ai-preset-segment-field"><span>API 密钥${draft.hasApiKey ? '（留空保持已有密钥）' : ''}</span><input id="phone-api-preset-key" type="password" class="phone-settings-input" autocomplete="off" ${editorDisabled}></label>
                 <label class="phone-ai-preset-segment-field"><span>手写模型</span><input id="phone-api-preset-model" class="phone-settings-input" maxlength="256" value="${escapeHtmlAttr(draft.model)}" ${editorDisabled}></label>
                 ${models.length ? `<label class="phone-ai-preset-segment-field"><span>模型列表</span><select id="phone-api-preset-model-list" class="phone-settings-select" ${editorDisabled}>${buildModelOptions(models, draft.model)}</select></label>` : ''}

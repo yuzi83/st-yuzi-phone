@@ -1,3 +1,4 @@
+import { createInputShortcutsPage } from '../pages/input-shortcuts.js';
 import { createLogsPage } from '../pages/logs.js';
 import { createAppearancePage, renderAppearancePage as renderAppearancePagePage } from '../pages/appearance.js';
 import { createButtonStylePage, renderButtonStylePage as renderButtonStylePagePage } from '../pages/button-style.js';
@@ -20,6 +21,7 @@ import {
     buildFullscreenOverlayPageContext,
     buildHomePageContext,
     buildLogsPageContext,
+    buildInputShortcutsPageContext,
     buildImageGenerationPageContext,
     buildWorldbookReadingPageContext,
 } from './page-context-builders.js';
@@ -38,6 +40,7 @@ export function createPersonalizationPageRenderers(rendererScope = {}) {
         ? rendererScope.deps
         : rendererScope;
 
+    const inputShortcutsContext = pageContexts.inputShortcuts || buildInputShortcutsPageContext(deps);
     const logsContext = pageContexts.logs || buildLogsPageContext(deps);
     const homeContext = pageContexts.home || buildHomePageContext(deps);
     const appearanceContext = pageContexts.appearance || buildAppearancePageContext(deps);
@@ -72,6 +75,7 @@ export function createPersonalizationPageRenderers(rendererScope = {}) {
 
     return {
         pages: {
+            input_shortcuts: { createPage() { return createInputShortcutsPage(inputShortcutsContext); } },
             logs: { createPage() { return createLogsPage(logsContext); } },
             home: {
                 createPage() {

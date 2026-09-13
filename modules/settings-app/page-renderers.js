@@ -139,6 +139,9 @@ function validateSettingsRendererDeps(deps = {}) {
             'readConfig',
         ]);
     }
+    if (deps.inputShortcuts !== undefined) {
+        assertFunctionDeps('inputShortcuts', deps.inputShortcuts, ['readConfig', 'saveRule', 'setEnabled', 'setRuleEnabled', 'removeRule']);
+    }
     if (deps.fullscreenOverlay !== undefined) {
         assertObjectDep('fullscreenOverlay', deps.fullscreenOverlay);
         assertFunctionDeps('scroll', deps.scroll, [

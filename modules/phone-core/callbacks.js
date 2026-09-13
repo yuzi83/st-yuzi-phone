@@ -449,7 +449,10 @@ export function initSmartRefreshListener() {
     const registered = registerTableUpdateListener((newData) => {
         const state = getPhoneCoreState();
         if (state.isPhoneActive === false) {
-            markPhoneRouteRefreshPending('table-update', state);
+            // QQ owns its own data and visibility refresh; a table event must not rebuild its page stack.
+            if (state.currentRoute !== 'qq' && !String(state.currentRoute).startsWith('qq:')) {
+                markPhoneRouteRefreshPending('table-update', state);
+            }
             return;
         }
 

@@ -42,6 +42,19 @@ function createInitialState() {
 }
 
 const state = createInitialState();
+const activitySubscribers = new Set();
+
+export function subscribePhoneActivity(callback) {
+    activitySubscribers.add(callback);
+    return () => activitySubscribers.delete(callback);
+}
+
+// Called after activation has invalidated any superseded route token.
+export function notifyPhoneActivity() {
+    for (const callback of [...activitySubscribers]) {
+        try { callback(state.isPhoneActive); } catch { /* One page cannot break shell activation. */ }
+    }
+}
 
 export function getPhoneCoreState() {
     return state;
@@ -67,6 +80,7 @@ export function consumePhoneRouteRefreshPending(targetState = state) {
 }
 
 export function resetPhoneCoreState() {
+    activitySubscribers.clear();
     const next = createInitialState();
     state.currentRoute = next.currentRoute;
     state.routeHistory = next.routeHistory;

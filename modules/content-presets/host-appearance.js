@@ -1,5 +1,5 @@
 import { getPhoneSettings, subscribePhoneSettingsUpdates } from '../settings.js';
-import { getAppearanceFontLibraryViewModel } from '../settings-app/services/appearance-settings/font-library-service.js';
+import { getAppearanceFontFamily } from '../settings-app/services/appearance-settings/font-library-service.js';
 
 const NOOP = () => {};
 
@@ -18,10 +18,10 @@ function themeState(getSettings) {
     });
 }
 
-function fontState(getFontLibraryViewModel) {
-    const viewModel = readSafely(getFontLibraryViewModel, null);
+function fontState(getFontFamily) {
+    const family = readSafely(getFontFamily, '');
     return Object.freeze({
-        family: String(viewModel?.activeFont?.cssFamily ?? '').trim(),
+        family: String(family ?? '').trim(),
     });
 }
 
@@ -48,12 +48,12 @@ function createReadonlySource(readState, subscribeSettings) {
  */
 export function createContentPresetHostAppearance(options = {}) {
     const getSettings = options.getPhoneSettings || getPhoneSettings;
-    const getFontLibraryViewModel = options.getAppearanceFontLibraryViewModel || getAppearanceFontLibraryViewModel;
+    const getFontFamily = options.getAppearanceFontFamily || getAppearanceFontFamily;
     const subscribeSettings = options.subscribeSettings || subscribePhoneSettingsUpdates;
 
     return Object.freeze({
         theme: createReadonlySource(() => themeState(getSettings), subscribeSettings),
-        font: createReadonlySource(() => fontState(getFontLibraryViewModel), subscribeSettings),
+        font: createReadonlySource(() => fontState(getFontFamily), subscribeSettings),
     });
 }
 

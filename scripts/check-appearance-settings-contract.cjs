@@ -45,7 +45,10 @@ function check(results, fileKey, description, ok) {
     results.push({ file: FILES[fileKey], description, ok });
 }
 
-function main() {
+async function main() {
+    const { pathToFileURL } = require('node:url');
+    const facade = await import(pathToFileURL(path.join(ROOT, FILES.facade)).href);
+    const hasFacadeFunction = name => typeof facade[name] === 'function';
     const contents = Object.fromEntries(
         Object.entries(FILES).map(([key, relativePath]) => [key, read(relativePath)])
     );
@@ -56,36 +59,36 @@ function main() {
     const scoreMatchIndex = contents.resourcePack.indexOf("'name-score'");
     const sequentialFillIndex = contents.resourcePack.indexOf("'sequential-fill'");
 
-    check(results, 'facade', '继续暴露 setupBgUpload()', has(contents.facade, 'export function setupBgUpload('));
-    check(results, 'facade', '继续暴露 renderIconUploadList()', has(contents.facade, 'export function renderIconUploadList('));
-    check(results, 'facade', '继续暴露 setupAppearanceToggles()', has(contents.facade, 'export function setupAppearanceToggles('));
-    check(results, 'facade', '继续暴露 renderHiddenTableAppsList()', has(contents.facade, 'export function renderHiddenTableAppsList('));
-    check(results, 'facade', '继续暴露 setupIconLayoutSettings()', has(contents.facade, 'export function setupIconLayoutSettings('));
-    check(results, 'facade', '继续暴露 getLayoutValue()', has(contents.facade, 'export function getLayoutValue('));
-    check(results, 'facade', '暴露外观资源包导入服务', has(contents.facade, 'export function importAppearanceResourcePackFromData('));
-    check(results, 'facade', '暴露外观资源包导出服务', has(contents.facade, 'export function exportAppearanceResourcePack('));
-    check(results, 'facade', '暴露美化包仓库 facade 服务', has(contents.facade, 'export async function listAppearancePacks(')
-        && has(contents.facade, 'export async function getAppearancePack(')
-        && has(contents.facade, 'export async function saveAppearancePack(')
-        && has(contents.facade, 'export async function deleteAppearancePack(')
-        && has(contents.facade, 'export async function getAppearancePackRepositoryStats(')
-        && has(contents.facade, 'export async function importAppearancePackToRepository(')
-        && has(contents.facade, 'export async function applyAppearancePackFromRepository(')
-        && has(contents.facade, 'export async function deleteAppearancePackFromRepository('));
+    check(results, 'facade', '继续暴露 setupBgUpload()', hasFacadeFunction('setupBgUpload'));
+    check(results, 'facade', '继续暴露 renderIconUploadList()', hasFacadeFunction('renderIconUploadList'));
+    check(results, 'facade', '继续暴露 setupAppearanceToggles()', hasFacadeFunction('setupAppearanceToggles'));
+    check(results, 'facade', '继续暴露 renderHiddenTableAppsList()', hasFacadeFunction('renderHiddenTableAppsList'));
+    check(results, 'facade', '继续暴露 setupIconLayoutSettings()', hasFacadeFunction('setupIconLayoutSettings'));
+    check(results, 'facade', '继续暴露 getLayoutValue()', hasFacadeFunction('getLayoutValue'));
+    check(results, 'facade', '暴露外观资源包导入服务', hasFacadeFunction('importAppearanceResourcePackFromData'));
+    check(results, 'facade', '暴露外观资源包导出服务', hasFacadeFunction('exportAppearanceResourcePack'));
+    check(results, 'facade', '暴露美化包仓库 facade 服务', hasFacadeFunction('listAppearancePacks')
+        && hasFacadeFunction('getAppearancePack')
+        && hasFacadeFunction('saveAppearancePack')
+        && hasFacadeFunction('deleteAppearancePack')
+        && hasFacadeFunction('getAppearancePackRepositoryStats')
+        && hasFacadeFunction('importAppearancePackToRepository')
+        && hasFacadeFunction('applyAppearancePackFromRepository')
+        && hasFacadeFunction('deleteAppearancePackFromRepository'));
     check(results, 'facade', '删除仓库包只清来源绑定图标并保留当前背景', has(contents.facade, 'buildPackIconOriginCleanup(settings, targetPackId)')
         && has(contents.facade, "if (activeCleared) patch.appearanceActivePackId = '';")
         && has(contents.facade, 'appIcons: iconCleanup.appIcons')
         && has(contents.facade, 'appIconOrigins: iconCleanup.appIconOrigins')
         && !has(contents.facade, "backgroundImage: ''"));
-    check(results, 'facade', '保留旧资源清理兼容 alias', has(contents.facade, 'export function clearAppearanceResourcePoolIcons('));
-    check(results, 'facade', '暴露字体库视图和操作服务', has(contents.facade, 'export function getAppearanceFontLibraryViewModel(')
-        && has(contents.facade, 'export function importAppearanceFontFile(')
-        && has(contents.facade, 'export function importAppearanceFontCssUrl(')
-        && has(contents.facade, 'export function selectAppearanceFont(')
-        && has(contents.facade, 'export function deleteAppearanceFont(')
-        && has(contents.facade, 'export function applyAppearanceFontLibrary('));
-    check(results, 'facade', '暴露首页 App 名称颜色服务', has(contents.facade, 'export function getHomeAppLabelColorModeValue(')
-        && has(contents.facade, 'export function setupHomeAppLabelColorSettings('));
+    check(results, 'facade', '保留旧资源清理兼容 alias', hasFacadeFunction('clearAppearanceResourcePoolIcons'));
+    check(results, 'facade', '暴露字体库视图和操作服务', hasFacadeFunction('getAppearanceFontLibraryViewModel')
+        && hasFacadeFunction('importAppearanceFontFile')
+        && hasFacadeFunction('importAppearanceFontCssUrl')
+        && hasFacadeFunction('selectAppearanceFont')
+        && hasFacadeFunction('deleteAppearanceFont')
+        && hasFacadeFunction('applyAppearanceFontLibrary'));
+    check(results, 'facade', '暴露首页 App 名称颜色服务', hasFacadeFunction('getHomeAppLabelColorModeValue')
+        && hasFacadeFunction('setupHomeAppLabelColorSettings'));
 
     const importArrayIndex = contents.fontLibrary.indexOf('const userFontImports = library.userFonts.map(buildFontImportCss).filter(Boolean);');
     const builtinArrayIndex = contents.fontLibrary.indexOf('buildBuiltinFontFaceCss(activeFont),');
@@ -514,4 +517,4 @@ function main() {
     }
 }
 
-main();
+main().catch(error => { console.error(error); process.exitCode = 1; });

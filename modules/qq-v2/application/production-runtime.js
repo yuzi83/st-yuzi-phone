@@ -1806,10 +1806,10 @@ export function createQQV2ProductionRuntime(options = {}) {
                 };
             });
         },
-        async listMessages({ scopeId, conversationId, beforeSequence, limit = 50 }) {
+        async listMessages({ scopeId, conversationId, beforeSequence, fromSequence, limit = 50 }) {
             const empty = { items: [], hasMore: false, nextBeforeSequence: null };
             return queryExistingScope(scopeId, empty, async (normalizedScopeId) => {
-                return repository.listMessagePage(normalizedScopeId, conversationId, { beforeSequence, limit });
+                return repository.listMessagePage(normalizedScopeId, conversationId, { beforeSequence, fromSequence, limit });
             });
         },
         async getPerson({ scopeId, personId }) {

@@ -6,6 +6,7 @@ import {
 import { escapeHtml, escapeHtmlAttr } from '../../utils/dom-escape.js';
 
 export const SETTINGS_ENTRY_META = {
+    input_shortcuts: { glyph: '键', title: '输入快捷键', description: '自定义酒馆输入框快捷键', tone: 'is-button' },
     logs: { glyph: '志', title: '日志', description: '当前聊天的 QQ 失败记录', tone: 'is-api' },
     appearance: {
         glyph: '界',

@@ -18,7 +18,7 @@ function createSettingsHarness() {
 
     return {
         getPhoneSettings() { return settings; },
-        getAppearanceFontLibraryViewModel() { return { activeFont }; },
+        getAppearanceFontFamily() { return activeFont.cssFamily; },
         subscribeSettings(listener) {
             listeners.add(listener);
             return () => listeners.delete(listener);
@@ -67,7 +67,7 @@ function testSubscribesAndStopsWithoutDom(factory) {
 function testSafeFallbackForMissingOrBrokenHost(factory) {
     const appearance = factory({
         getPhoneSettings() { throw new Error('host unavailable'); },
-        getAppearanceFontLibraryViewModel() { throw new Error('font unavailable'); },
+        getAppearanceFontFamily() { throw new Error('font unavailable'); },
         subscribeSettings() { throw new Error('events unavailable'); },
     });
 

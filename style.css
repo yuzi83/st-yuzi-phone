@@ -42,3 +42,6 @@
 
 /* 10) fullscreen overlay runtime / settings */
 @import url('./styles/16-fullscreen-overlay.css');
+
+/* 11) input shortcut settings */
+@import url('./styles/17-input-shortcuts.css');

@@ -50,7 +50,7 @@ async function testConversationReadsAndMessagePages() {
         assert.equal(reads, 1, '群详情连同成员只读一次状态');
 
         const conversationId = alice.conversation.conversationId;
-        const inputs = Array.from({ length: 123 }, (_, i) => ({
+        const inputs = Array.from({ length: 273 }, (_, i) => ({
             senderId: '__self__', senderType: 'self', type: 'text', content: '消息' + i, storyTime: '',
         }));
         const inserted = await repository.appendMessages(scopeId, conversationId, inputs);
@@ -74,6 +74,13 @@ async function testConversationReadsAndMessagePages() {
             const size = Math.max(1, Math.min(200, Number(limit) || 50));
             assert.deepEqual(page.items, all.slice(-size));
         }
+        reads = 0;
+        const window = await runtime.listMessages({ scopeId, conversationId, fromSequence: all[1].sequence });
+        assert.deepEqual(window.items, all.slice(1), '展开窗口超过200条也不能被分页上限截断');
+        assert.equal(reads, 1, '窗口刷新只读一次根状态，不逐页重读');
+        assert.equal(window.hasMore, true);
+        await assert.rejects(repository.listMessagePage(scopeId, conversationId, { fromSequence: -1 }));
+        await assert.rejects(repository.listMessagePage(scopeId, conversationId, { fromSequence: 1, beforeSequence: 3 }));
         const empty = { items: [], hasMore: false, nextBeforeSequence: null };
         assert.deepEqual(await runtime.listMessages({ scopeId, conversationId, beforeSequence: 0 }), empty);
         assert.deepEqual(await runtime.listMessages({ scopeId, conversationId: 'missing' }), empty);
@@ -83,6 +90,15 @@ async function testConversationReadsAndMessagePages() {
         assert.equal(page.items[0].quote.content, '');
         assert.equal((await repository.listMessages(scopeId, conversationId)).length, all.length - 1,
             '完整业务历史不受 UI 分页限制');
+        const cutoff = all.at(-10).sequence;
+        await repository.deleteMessages(scopeId, conversationId, all.filter(message => message.sequence >= cutoff).map(message => message.messageId));
+        const survivors = await repository.listMessages(scopeId, conversationId);
+        reads = 0;
+        const fallback = await runtime.listMessages({ scopeId, conversationId, fromSequence: cutoff });
+        assert.deepEqual(fallback.items, survivors.slice(-50), '整个窗口删除后回退到剩余最新页');
+        assert.equal(reads, 1, '删除回退也不能额外读一次状态');
+        await repository.deleteMessages(scopeId, conversationId, survivors.map(message => message.messageId));
+        assert.deepEqual(await runtime.listMessages({ scopeId, conversationId, fromSequence: cutoff }), empty);
     } finally {
         runtime.destroy();
     }

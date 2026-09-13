@@ -1,6 +1,5 @@
 import { escapeHtml, escapeHtmlAttr } from '../../../utils/dom-escape.js';
 import {
-    buildSettingsHeroHtml,
     buildSettingsPageFrame,
     buildSettingsSectionHtml,
 } from '../primitives.js';
@@ -98,14 +97,14 @@ function buildRunningRulesSummaryHtml({ config = {}, resolvedTableRules = [] } =
     const totalRuleCount = groups.reduce((total, group) => total + group.rules.length, 0);
     const bodyHtml = groups.length > 0
         ? groups.map(buildRunningRuleGroupHtml).join('')
-        : '<p class="phone-table-content-replacement-running-empty">当前没有正在运行的替换规则。</p>';
+        : '<p class="phone-table-content-replacement-running-empty">暂无已生效规则。</p>';
 
     return `
         <section class="phone-table-content-replacement-running-summary">
             <div class="phone-table-content-replacement-running-summary-head">
                 <div>
-                    <h2 class="phone-table-content-replacement-running-summary-title">当前运行规则</h2>
-                    <p class="phone-table-content-replacement-running-summary-meta">共 ${totalRuleCount} 条；仅显示已保存且已启用的规则。</p>
+                    <h2 class="phone-table-content-replacement-running-summary-title">已生效规则</h2>
+                    <p class="phone-table-content-replacement-running-summary-meta">${totalRuleCount}条</p>
                 </div>
             </div>
             <div class="phone-table-content-replacement-running-groups">${bodyHtml}</div>
@@ -168,7 +167,7 @@ function buildRulesEditorHtml({ rules = [], scope = 'global', mappingId = '', er
             disabled,
             error: errorByIndex.get(index),
         })).join('')
-        : '<div class="phone-settings-note phone-table-content-replacement-empty-rules">还没有替换规则，点击“添加规则”开始设置。</div>';
+        : '<div class="phone-settings-note phone-table-content-replacement-empty-rules">暂无规则。</div>';
     const addAction = scope === 'table' ? 'add-table-rule' : 'add-global-rule';
     const scopeAttr = scope === 'table'
         ? ` data-area-scope="table" data-mapping-id="${escapeHtmlAttr(mappingId)}"`
@@ -231,9 +230,8 @@ function buildTableAreaHtml({ area = {}, table = null, errors = {}, busy = false
                 <div class="phone-table-content-replacement-area-heading">
                     <div class="phone-table-content-replacement-area-title-row">
                         <h3 class="phone-table-content-replacement-area-title">${escapeHtml(title)}</h3>
-                        ${unavailable ? '<span class="phone-settings-badge is-warning">当前不可用</span>' : '<span class="phone-settings-badge is-success">可用</span>'}
+                        ${unavailable ? '<span class="phone-settings-badge is-warning">当前不可用</span>' : ''}
                     </div>
-                    <p class="phone-table-content-replacement-area-meta">按稳定表格映射保存 · sheetKey：${escapeHtml(asId(area.sheetKey) || '未绑定')}</p>
                 </div>
                 <div class="phone-table-content-replacement-area-actions">
                     ${buildAreaSwitchHtml({
@@ -242,10 +240,10 @@ function buildTableAreaHtml({ area = {}, table = null, errors = {}, busy = false
                         scope: 'table',
                         mappingId,
                     })}
-                    <button type="button" class="phone-settings-btn phone-settings-btn-danger" data-action="delete-table" data-mapping-id="${escapeHtmlAttr(mappingId)}"${isDisabled(busy)}>删除表格区域</button>
+                    <button type="button" class="phone-settings-btn phone-settings-btn-danger" data-action="delete-table" data-mapping-id="${escapeHtmlAttr(mappingId)}"${isDisabled(busy)}>移除配置</button>
                 </div>
             </div>
-            ${unavailable ? '<div class="phone-settings-note phone-table-content-replacement-unavailable-note">表格当前不存在或数据库暂不可用；规则会保留，表格恢复后继续使用。</div>' : ''}
+            ${unavailable ? '<div class="phone-settings-note phone-table-content-replacement-unavailable-note">表格暂不可用，规则保留，恢复后继续生效。</div>' : ''}
             ${buildRulesEditorHtml({ rules: area.rules, scope: 'table', mappingId, errors: errorList, disabled })}
             <div class="phone-settings-action phone-table-content-replacement-save-action">
                 <button type="button" class="phone-settings-btn phone-settings-btn-primary" data-action="save-table" data-mapping-id="${escapeHtmlAttr(mappingId)}"${isDisabled(busy)}>保存并应用</button>
@@ -287,7 +285,7 @@ export function buildTableContentReplacementPageHtml(viewModel = {}) {
             errors: errors.mappings?.[area.mappingId] || {},
             busy,
         })).join('')
-        : '<div class="phone-settings-note">还没有单表替换区域。可以为某一张表单独添加规则。</div>';
+        : '<div class="phone-settings-note">暂无单表配置。</div>';
     const statusHtml = status === 'loading'
         ? '<div class="phone-settings-note">正在读取表格目录…</div>'
         : status === 'error'
@@ -301,13 +299,9 @@ export function buildTableContentReplacementPageHtml(viewModel = {}) {
     const globalBodyHtml = `
         <article class="phone-table-content-replacement-area phone-table-content-replacement-global-area">
             <div class="phone-table-content-replacement-area-head">
-                <div class="phone-table-content-replacement-area-heading">
-                    <h3 class="phone-table-content-replacement-area-title">全局替换</h3>
-                    <p class="phone-table-content-replacement-area-meta">作用于当前与以后可用的普通用户数据表。</p>
-                </div>
                 ${buildAreaSwitchHtml({ id: 'phone-table-content-replacement-global-enabled', enabled: global.enabled === true, scope: 'global', disabled: busy })}
             </div>
-            <p class="phone-table-content-replacement-helper">第一版使用普通文字替换，支持符号、空格、换行和替换为空；输入内容只会先保存在页面草稿中。</p>
+            <p class="phone-table-content-replacement-helper">按普通文字匹配；修改后需点击「保存并应用」。</p>
             ${globalErrorHtml}
             ${buildRulesEditorHtml({ rules: global.rules, scope: 'global', errors: globalErrors, disabled: busy })}
             <div class="phone-settings-action phone-table-content-replacement-save-action">
@@ -317,13 +311,13 @@ export function buildTableContentReplacementPageHtml(viewModel = {}) {
     `;
     const addTableHtml = `
         <div class="phone-table-content-replacement-add-table">
-            <label for="phone-table-content-replacement-table-select">选择要配置的表格</label>
+            <label for="phone-table-content-replacement-table-select">选择表格</label>
             <div class="phone-table-content-replacement-add-table-controls">
                 <select id="phone-table-content-replacement-table-select" class="phone-settings-select phone-table-content-replacement-table-select"${isDisabled(selectDisabled)}>
                     <option value="">${selectDisabled ? '没有可添加的表格' : '请选择一张表'}</option>
                     ${buildTableOptionsHtml(availableTables)}
                 </select>
-                <button type="button" class="phone-settings-btn" data-action="add-table"${isDisabled(selectDisabled || busy)}>添加表格区域</button>
+                <button type="button" class="phone-settings-btn" data-action="add-table"${isDisabled(selectDisabled || busy)}>添加表格</button>
             </div>
         </div>
     `;
@@ -336,29 +330,19 @@ export function buildTableContentReplacementPageHtml(viewModel = {}) {
         ${buildSettingsSectionHtml({
             id: 'phone-table-content-replacement-global-section',
             title: '全局替换',
-            desc: '一组规则覆盖所有普通用户数据表；单表规则会在全局规则之后执行。',
+            desc: '适用于当前及后续可用的普通数据表，先于单表规则执行。',
             bodyHtml: globalBodyHtml,
         })}
         ${buildSettingsSectionHtml({
             id: 'phone-table-content-replacement-table-section',
             title: '单表替换',
-            desc: '为指定表格配置独立规则；表格暂时不存在时，规则仍会按表名与稳定映射保留。',
+            desc: '仅作用于指定表格。',
             actionsHtml: addTableHtml,
             bodyHtml: `<div class="phone-table-content-replacement-table-areas">${tableAreasHtml}</div>`,
         })}`;
 
     return buildSettingsPageFrame({
         title: '表格内容词汇替换',
-        heroHtml: buildSettingsHeroHtml({
-            eyebrow: '表格内容词汇替换',
-            title: '表格内容词汇替换',
-            description: '把表格中的普通文字稳定地替换成你希望的词汇。低优先级后台处理会安静等待表格更新信号。',
-            chips: [
-                { text: '普通文字', tone: 'soft' },
-                { text: '按区域保存', tone: 'soft' },
-                { text: '静默后台', tone: 'soft' },
-            ],
-        }),
         bodyClass: 'phone-app-body phone-settings-scroll phone-settings-open phone-table-content-replacement-page',
         bodyHtml,
     });

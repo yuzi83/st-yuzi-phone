@@ -123,11 +123,9 @@ function testStyleEntryContract() {
         imageGenerationIndex + 1,
         'style.css 必须在现有最后一层之后导入全屏浮层层',
     );
-    assert.strictEqual(
-        fullscreenOverlayIndex,
-        rootImports.length - 1,
-        '全屏浮层必须是 style.css 当前最后一个聚合层',
-    );
+    const inputShortcutsIndex = rootImports.indexOf('./styles/17-input-shortcuts.css');
+    assert.strictEqual(inputShortcutsIndex, fullscreenOverlayIndex + 1, '输入快捷键设置层位于全屏浮层之后');
+    assert.strictEqual(inputShortcutsIndex, rootImports.length - 1, '输入快捷键是当前最后一个设置层');
 
     assertContains(
         stylesReadme,

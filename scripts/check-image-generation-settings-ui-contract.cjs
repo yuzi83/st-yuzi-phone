@@ -317,6 +317,18 @@ async function testSettingsHomeAndImageGenerationPageExposeConfirmedControls() {
 
     assert.match(pageHtml, />生图设置</u);
     assert.match(pageHtml, /智慧姬/u);
+    for (const text of ['生图模式跟随智慧姬设置。', '使用所选 API 和生图预设转换提示词，再交给智慧姬。', '转换 API 预设', '多个人名用分号分隔（; 或；）。', '按映射顺序匹配，命中即停；字段按表格列顺序拼接。', '超时仅停止等待，不会取消后台生图。']) {
+        assert.ok(pageHtml.includes(text), text);
+    }
+    assert.doesNotMatch(pageHtml, /小手机负责整理提示词|中间模型 API 预设|启用转换时，AI 输出/);
+    const emptyHtml = buildImageGenerationPageHtml({ tableDisplaySources: [{ sheetKey: 'sheet_test', tableName: '测试表', enabled: true }] });
+    assert.match(emptyHtml, /未配置映射，也可用人名和描述生图。/u);
+    assert.match(emptyHtml, /输入人名或描述后预览。/u);
+    assert.match(emptyHtml, /控制各表格的生图按钮是否显示。/u);
+    assert.match(emptyHtml, /data-sheet-key="sheet_test"/u);
+    assert.match(emptyHtml, /user\/images\/yuzi-phone-generated\//u, '空白配置也必须显示本地保存路径');
+    const source = read('modules/settings-app/pages/image-generation.js');
+    assert.doesNotMatch(source, /输入人物名字或图片描述后，这里会显示中文提示词。/u, '首次渲染与动态更新采用同一简短提示');
     assert.match(pageHtml, /测试图片和之后的 QQ 生图会保存到：user\/images\/yuzi-phone-generated\//u);
     assert.match(pageHtml, /id="phone-image-generation-enabled"[^>]*checked/u);
     assert.match(pageHtml, /id="phone-image-generation-test-names"/u);

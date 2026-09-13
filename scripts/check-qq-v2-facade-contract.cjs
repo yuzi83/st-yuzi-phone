@@ -429,6 +429,15 @@ async function main() {
             storyTime: '2042-05-20 09:30',
         }],
     ], 'Handling an incoming transfer must not start a manual AI request');
+    const beforeWindowCalls = calls.length;
+    await facade.query.messages({ conversationId: 'private-1', fromSequence: 10 });
+    assert.ok(calls.slice(beforeWindowCalls).some(([method, input]) => method === 'listMessages' && input.fromSequence === 10), '窗口起点必须透传到runtime');
+    for (const input of [{ fromSequence: -1 }, { fromSequence: null }, { fromSequence: '10' }, { fromSequence: 1.5 }, { fromSequence: 10, beforeSequence: 20 }]) {
+        const beforeInvalid = calls.length;
+        const result = await facade.query.messages({ conversationId: 'private-1', ...input });
+        assert.equal(result.ok, false);
+        assert.equal(calls.length, beforeInvalid, '非法窗口参数不能触发底层查询');
+    }
 }
 
 main().then(() => console.log('[qq-v2-facade-contract] passed')).catch((error) => {

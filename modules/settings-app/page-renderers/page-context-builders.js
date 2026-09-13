@@ -11,6 +11,7 @@ const SETTINGS_RENDERER_SERVICE_KEYS = [
     'imageGeneration',
     'tableContentReplacement',
     'fullscreenOverlay',
+    'inputShortcuts',
 ];
 
 function ensureObject(value) {
@@ -40,6 +41,7 @@ export function createSettingsRendererServices(deps = {}) {
         imageGeneration: ensureObject(deps.imageGeneration),
         tableContentReplacement: ensureObject(deps.tableContentReplacement),
         fullscreenOverlay: ensureObject(deps.fullscreenOverlay),
+        inputShortcuts: ensureObject(deps.inputShortcuts),
     };
 }
 
@@ -193,6 +195,11 @@ function buildApiPresetsPageContextFromServices(services) {
     };
 }
 
+export function buildInputShortcutsPageContext(deps = {}) {
+    const services = getSettingsRendererServices(deps);
+    return { ...services.common, showToast: services.feedback.showToast, inputShortcutsSettingsService: services.inputShortcuts };
+}
+
 export function buildLogsPageContext(deps = {}) { return buildLogsPageContextFromServices(getSettingsRendererServices(deps)); }
 export function buildHomePageContext(deps = {}) { return buildHomePageContextFromServices(getSettingsRendererServices(deps)); }
 export function buildAppearancePageContext(deps = {}) { return buildAppearancePageContextFromServices(getSettingsRendererServices(deps)); }
@@ -210,6 +217,7 @@ export function createSettingsPageContexts(deps = {}) {
     return {
         home: buildHomePageContextFromServices(services),
         logs: buildLogsPageContextFromServices(services),
+        inputShortcuts: buildInputShortcutsPageContext(services),
         appearance: buildAppearancePageContextFromServices(services),
         buttonStyle: buildButtonStylePageContextFromServices(services),
         worldbookReading: buildWorldbookReadingPageContextFromServices(services),

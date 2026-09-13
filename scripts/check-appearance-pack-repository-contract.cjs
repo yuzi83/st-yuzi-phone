@@ -40,7 +40,9 @@ function check(results, file, description, ok) {
     results.push({ file, description, ok });
 }
 
-function main() {
+async function main() {
+    const { pathToFileURL } = require('node:url');
+    const facadeExports = await import(pathToFileURL(path.join(ROOT, FILES.facade)).href);
     const results = [];
     check(results, FILES.repository, '外观包 IndexedDB repository 文件存在', exists(FILES.repository));
     if (!exists(FILES.repository)) {
@@ -97,10 +99,10 @@ function main() {
     check(results, FILES.repository, 'saveAppearancePack 保存成功不返回完整 pack 大对象', !has(saveSection, 'pack: entry.pack')
         && !has(saveSection, 'pack: null'));
 
-    check(results, FILES.facade, 'facade 暴露仓库导入、列表、应用、删除业务语义', has(facade, 'export async function listAppearancePacks()')
-        && has(facade, 'export async function importAppearancePackToRepository(fileText, meta = {})')
-        && has(facade, 'export async function applyAppearancePackFromRepository(id)')
-        && has(facade, 'export async function deleteAppearancePackFromRepository(id)'));
+    check(results, FILES.facade, 'facade 暴露仓库导入、列表、应用、删除业务语义', typeof facadeExports.listAppearancePacks === 'function'
+        && typeof facadeExports.importAppearancePackToRepository === 'function'
+        && typeof facadeExports.applyAppearancePackFromRepository === 'function'
+        && typeof facadeExports.deleteAppearancePackFromRepository === 'function');
     check(results, FILES.facade, 'facade 应用仓库包时写入 activePackId', has(facade, 'applyAppearanceResourcePackImpl(entryResult.pack, { activePackId: entryResult.meta?.id || id })'));
     check(results, FILES.facade, 'facade 删除仓库包先原子保存激活标记与来源图标清理，失败时不删除仓库包', has(facadeDeleteSection, 'buildPackIconOriginCleanup(settings, targetPackId)')
         && has(facadeDeleteSection, 'const settingsBackup = {')
@@ -172,4 +174,4 @@ function main() {
     }
 }
 
-main();
+main().catch(error => { console.error(error); process.exitCode = 1; });

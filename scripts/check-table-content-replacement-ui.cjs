@@ -80,9 +80,28 @@ async function main() {
     assert.ok((html.match(/class="phone-settings-textarea/g) || []).length >= 4, '规则 textarea 必须复用设置页全局表单主题 class');
     assert.ok(html.includes('class="phone-settings-select phone-table-content-replacement-table-select"'), '表格选择框必须复用设置页全局 select 主题 class');
     assert.ok(html.includes('data-action="add-table"'), '必须提供添加表格入口');
-    assert.ok(html.includes('普通文字替换'), '页面必须明确说明第一版是普通文字替换');
+    assert.ok(html.includes('按普通文字匹配；修改后需点击「保存并应用」。'), '页面必须说明匹配方式和生效操作');
     assert.ok(!html.includes('总开关'), '不得渲染整个功能总开关');
 
+    assert.ok(runningSummary.includes('已生效规则') && runningSummary.includes('>2条</p>'));
+    assert.ok(!runningSummary.includes('你好'), '草稿内容不得混入已生效规则');
+    assert.doesNotMatch(html, /sheetKey：|按稳定表格映射|phone-settings-hero|phone-settings-chip|静默后台|>可用<|第一版使用/);
+    assert.doesNotMatch(html, /<h3[^>]*>全局替换<\/h3>/, '删除编辑区重复标题');
+    assert.match(html, /先于单表规则执行/);
+    assert.match(html, /data-action="delete-table"[^>]*>移除配置<\/button>/);
+    assert.match(html, /data-action="add-table"[^>]*>添加表格<\/button>/);
+    assert.match(html, /data-mapping-id="m1"/, '真实表绑定不受文案精简影响');
+    const empty = buildTableContentReplacementPageHtml({ status: 'ready' });
+    for (const text of ['暂无已生效规则。', '暂无规则。', '暂无单表配置。']) assert.ok(empty.includes(text), text);
+    const unavailable = buildTableContentReplacementPageHtml({
+        status: 'ready', config: { tableRules: [{ mappingId: 'missing', sheetKey: 'lost', tableNameSnapshot: '缺失表', rules: [] }] },
+    });
+    assert.match(unavailable, /当前不可用/);
+    assert.match(unavailable, /表格暂不可用，规则保留，恢复后继续生效。/);
+    const pageSource = fs.readFileSync(path.resolve(__dirname, '..', 'modules/settings-app/pages/table-content-replacement.js'), 'utf8');
+    assert.match(pageSource, /确认删除匹配文本？/);
+    assert.match(pageSource, /保存后会删除匹配到的文字/);
+    assert.match(pageSource, /不会回滚已经写入表格的数据/);
     console.log('[通过] 表格内容词汇替换设置页面渲染 seam');
 }
 

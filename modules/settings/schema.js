@@ -1,3 +1,4 @@
+import { normalizeInputShortcutsSettings } from '../input-shortcuts/config.js';
 import { normalizeFullscreenOverlaySettings } from '../fullscreen-overlay/settings.js';
 import { Logger } from '../error-handler.js';
 import { normalizeTableContentReplacementSettings } from '../table-content-replacement/config.js';
@@ -117,6 +118,7 @@ export const APPEARANCE_FONT_LIBRARY_LIMITS = Object.freeze({
 });
 
 export const defaultSettings = {
+    inputShortcuts: normalizeInputShortcutsSettings(),
     fullscreenOverlay: normalizeFullscreenOverlaySettings(),
     enabled: true,
     floatingToggleEnabled: true,
@@ -677,6 +679,7 @@ export function validateSetting(key, value) {
         return { valid: true, value: undefined, removed: true };
     }
 
+    if (key === 'inputShortcuts') return { valid: true, value: normalizeInputShortcutsSettings(value) };
     if (key === 'fullscreenOverlay') return { valid: true, value: normalizeFullscreenOverlaySettings(value) };
 
     const rule = validationRules[key];
@@ -772,6 +775,7 @@ export function validateSetting(key, value) {
 export function validateSettings(settings) {
     const validated = {
         ...defaultSettings,
+        inputShortcuts: normalizeInputShortcutsSettings(),
         fullscreenOverlay: normalizeFullscreenOverlaySettings(),
         imageGeneration: normalizeImageGenerationSettings(defaultSettings.imageGeneration),
         tableContentReplacement: normalizeTableContentReplacementSettings(defaultSettings.tableContentReplacement),

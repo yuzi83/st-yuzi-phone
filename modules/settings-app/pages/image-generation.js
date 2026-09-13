@@ -379,10 +379,10 @@ function buildApiPresetOptions(presets, selectedPresetId) {
     const list = asArray(presets);
     const selectedPreset = list.find((preset) => presetIdOf(preset) === selectedId) || null;
     const staleOption = selectedId && !selectedPreset
-        ? `<option value="${escapeHtmlAttr(selectedId)}" selected disabled>当前中间模型 API 预设不可用</option>`
+        ? `<option value="${escapeHtmlAttr(selectedId)}" selected disabled>当前转换 API 预设不可用</option>`
         : '';
     return [
-        `<option value="" ${selectedId ? '' : 'selected'}>请选择中间模型 API 预设</option>`,
+        `<option value="" ${selectedId ? '' : 'selected'}>请选择转换 API 预设</option>`,
         staleOption,
         ...list.map((preset) => {
             const presetId = presetIdOf(preset);
@@ -448,7 +448,7 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
         : sharedResources.error || (presetServiceAvailable ? '生图预设读取中或暂不可用' : '生图预设接口尚未接入');
     const engineSection = buildSettingsSectionHtml({
         title: '智慧姬',
-        desc: '小手机负责整理提示词、保存图片与显示结果；实际生图模式跟随智慧姬当前设置。测试图片和之后的 QQ 生图会保存到：user/images/yuzi-phone-generated/',
+        desc: '生图模式跟随智慧姬设置。测试图片和之后的 QQ 生图会保存到：user/images/yuzi-phone-generated/',
         bodyHtml: `
             <label class="phone-appearance-check-item">
                 <span class="phone-appearance-check-main">启用 QQ 生图按钮</span>
@@ -459,7 +459,7 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
     const tableDisplaySection = tableDisplaySources.length
         ? buildSettingsSectionHtml({
             title: '表格美化生图',
-            desc: '这些是当前已应用、并且已声明生图画布的表格美化。关闭后，该表格里的生图按钮不会显示；重新开启即可恢复。',
+            desc: '控制各表格的生图按钮是否显示。',
             bodyHtml: tableDisplaySources.map((source) => `
                 <label class="phone-appearance-check-item">
                     <span class="phone-appearance-check-main">${escapeHtml(source.tableName)}</span>
@@ -473,7 +473,7 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
         : '';
     const translationSection = buildSettingsSectionHtml({
         title: '中文提示词转换',
-        desc: '开启后，先使用选中的 QQ API 预设读取生图预设，把当前中文提示词交给中间 AI；转换结果会原样继续发送给智慧姬。',
+        desc: '使用所选 API 和生图预设转换提示词，再交给智慧姬。',
         extraClass: 'phone-image-generation-translation-section',
         bodyHtml: `
             <div class="phone-image-generation-translation-controls">
@@ -495,7 +495,7 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
                     </select>
                 </label>
                 <label class="phone-settings-field-inline phone-image-generation-preset-field">
-                    <span>中间模型 API 预设</span>
+                    <span>转换 API 预设</span>
                     <select id="phone-image-generation-api-preset-select" class="phone-settings-select"
                         ${presetServiceAvailable && !presetBusy ? '' : 'disabled'}>
                         ${buildApiPresetOptions(apiPresets, config.promptTranslationApiPresetId)}
@@ -539,7 +539,7 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
     });
     const testSection = buildSettingsSectionHtml({
         title: '测试生图',
-        desc: '人物名字支持使用半角或全角分号分隔；中文提示词会按照当前角色资料映射生成。启用转换时，AI 输出会继续交给智慧姬。',
+        desc: '多个人名用分号分隔（; 或；）。',
         bodyHtml: `
             <label class="phone-settings-field-inline">
                 <span>人物名字</span>
@@ -555,7 +555,7 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
                 id: 'phone-image-generation-prompt-preview',
                 label: '中文提示词',
                 value: testInput.finalPrompt,
-                placeholder: '输入人物名字或图片描述后，这里会显示中文提示词。',
+                placeholder: '输入人名或描述后预览。',
             })}
             ${testInput.aiOutput
                 ? buildPromptPreviewRowHtml({
@@ -577,13 +577,13 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
     });
     const mappingsSection = buildSettingsSectionHtml({
         title: '角色资料映射',
-        desc: '按映射顺序查找人物；命中第一条后停止。提示词字段始终按原表格列顺序拼接。',
+        desc: '按映射顺序匹配，命中即停；字段按表格列顺序拼接。',
         actionsHtml: '<button type="button" class="phone-settings-btn" id="phone-image-generation-add-mapping">添加映射</button>',
         bodyHtml: `
             <div id="phone-image-generation-mappings">
                 ${mappings.length
                     ? mappings.map((mapping, index) => buildMappingCardHtml(viewModel, mapping, index, mappings.length)).join('')
-                    : '<div class="phone-empty-msg">尚未配置角色资料表，仍可只使用名字和图片描述生图。</div>'}
+                    : '<div class="phone-empty-msg">未配置映射，也可用人名和描述生图。</div>'}
             </div>
             <div class="phone-settings-action phone-settings-action-wrap">
                 <button type="button" class="phone-settings-btn phone-settings-btn-danger"
@@ -593,7 +593,7 @@ export function buildImageGenerationPageHtml(viewModel = {}) {
     });
     const requestSection = buildSettingsSectionHtml({
         title: '请求设置',
-        desc: '超时只表示小手机停止等待，不代表智慧姬后台任务已经取消。',
+        desc: '超时仅停止等待，不会取消后台生图。',
         bodyHtml: `
             <label class="phone-settings-field-inline">
                 <span>等待超时（秒）</span>
@@ -975,7 +975,7 @@ function createImageGenerationPageSession(ctx) {
         const target = ctx.container.querySelector('#phone-image-generation-prompt-preview');
         if (target) {
             target.textContent = state.testInput.finalPrompt
-                || '输入人物名字或图片描述后，这里会显示中文提示词。';
+                || '输入人名或描述后预览。';
         }
     };
     const setAiOutput = (output) => {

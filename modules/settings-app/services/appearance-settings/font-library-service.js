@@ -277,6 +277,11 @@ export function getAppearanceBuiltinFonts() {
     return BUILTIN_FONTS.map((font) => ({ ...font, builtin: true }));
 }
 
+// 运行时只读路径：复用字体校验与解析，不构建管理页数据或复制字体列表。
+export function getAppearanceFontFamily() {
+    return resolveActiveFont().cssFamily;
+}
+
 export function getAppearanceFontLibraryViewModel() {
     const library = getNormalizedFontLibrary();
     const activeFont = resolveActiveFont(library);

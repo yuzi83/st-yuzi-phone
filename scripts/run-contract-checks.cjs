@@ -48,10 +48,11 @@ function printResult(result) {
     }
 }
 
-function main() {
+function runContractChecks({ requireChecks = false } = {}) {
     const scripts = listCheckScripts();
     if (scripts.length === 0) {
         console.log('[run-contract-checks] 未找到任何 check-*.cjs 脚本');
+        if (requireChecks) process.exitCode = 1;
         return;
     }
 
@@ -72,4 +73,5 @@ function main() {
     }
 }
 
-main();
+module.exports = { runContractChecks };
+if (require.main === module) runContractChecks();

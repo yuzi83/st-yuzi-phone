@@ -230,14 +230,6 @@ async function main() {
             'buildPhoneNavBar(',
             'buildPhoneNavTitleSwitcher(',
         ],
-        'modules/content-presets/shell.js': [
-            "from '../phone-core/navigation-ui.js'",
-            'buildPhoneBackButton(',
-            'buildPhoneNavBar(',
-            'buildPhoneNavTitleSwitcher(',
-            "buildPhoneSwitchButton('previous'",
-            "buildPhoneSwitchButton('next'",
-        ],
         'modules/qq-v2/ui/app.js': [
             "from '../../phone-core/navigation-ui.js'",
             "createPhoneNavIconElement('back')",

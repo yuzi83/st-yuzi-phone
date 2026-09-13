@@ -6,7 +6,7 @@ import { isTheaterRoute, normalizeTheaterSceneId } from '../phone-theater/config
 import { registerRoutePageCleanup, removeRoutePage } from './route-page-lifecycle.js';
 import { clearRouteHistory } from './routing.js';
 import { bindPhoneScrollGuards, hardenPhoneInteractionDefaults, logRouteScrollDebugSnapshot } from './scroll-guards.js';
-import { getPhoneCoreState, markPhoneRouteRefreshPending, phoneRuntime } from './state.js';
+import { getPhoneCoreState, markPhoneRouteRefreshPending, phoneRuntime, subscribePhoneActivity } from './state.js';
 
 const logger = Logger.withScope({ scope: 'phone-core/route-renderer', feature: 'route' });
 const EXIT_ANIM_MS = 220;
@@ -202,6 +202,8 @@ async function loadRouteRenderer(route, renderToken, deps = {}, opts = {}) {
                             createApp: qqDependencies.createQQApp,
                             shell,
                             isCurrent: () => !disposed && isActiveRouteRender(renderToken),
+                            isVisible: () => getPhoneCoreState().isPhoneActive !== false,
+                            subscribeActivity: subscribePhoneActivity,
                         });
                         if (disposed) {
                             lifecycle.destroy();

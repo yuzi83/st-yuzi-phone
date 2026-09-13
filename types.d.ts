@@ -795,6 +795,7 @@ export interface PhoneSettings {
     imageGeneration: ImageGenerationSettings;
     tableContentReplacement: TableContentReplacementSettings;
     fullscreenOverlay: FullscreenOverlaySettings;
+    inputShortcuts: InputShortcutsSettings;
 }
 
 /**
@@ -999,7 +1000,8 @@ export type SettingsPageMode =
     | 'image_generation'
     | 'ai_instruction_presets'
     | 'table_content_replacement'
-    | 'fullscreen_overlay';
+    | 'fullscreen_overlay'
+    | 'input_shortcuts';
 
 export interface SettingsAppState {
     mode: SettingsPageMode;
@@ -1012,6 +1014,7 @@ export interface SettingsAppState {
     imageGenerationScrollTop: number;
     tableContentReplacementScrollTop: number;
     fullscreenOverlayScrollTop: number;
+    inputShortcutsScrollTop: number;
     logsScrollTop: number;
 }
 
@@ -1381,6 +1384,41 @@ export interface SettingsTableContentReplacementService {
     readConfig: () => TableContentReplacementSettings;
 }
 
+export interface InputShortcutChord {
+    key: string;
+    ctrl?: boolean;
+    alt?: boolean;
+    shift?: boolean;
+    meta?: boolean;
+}
+
+export interface InputShortcutRule {
+    id: string;
+    enabled: boolean;
+    shortcut: InputShortcutChord;
+    action: 'insert' | 'wrap';
+    text: string;
+    left: string;
+    right: string;
+}
+
+export interface InputShortcutsSettings {
+    enabled: boolean;
+    rules: InputShortcutRule[];
+}
+
+export type InputShortcutSaveResult =
+    | { ok: true; config: InputShortcutsSettings }
+    | { ok: false; error: string };
+
+export interface SettingsInputShortcutsService {
+    readConfig(): InputShortcutsSettings;
+    saveRule(value: Partial<Omit<InputShortcutRule, 'shortcut'>> & { shortcut?: InputShortcutChord | null }): InputShortcutSaveResult;
+    setEnabled(enabled: boolean): InputShortcutSaveResult;
+    setRuleEnabled(id: string, enabled: boolean): InputShortcutSaveResult;
+    removeRule(id: string): InputShortcutSaveResult;
+}
+
 export interface SettingsPageRendererGroupedDeps {
     common?: SettingsPageRendererCommonDeps;
     navigation?: SettingsPageRendererNavigationDeps;
@@ -1394,6 +1432,7 @@ export interface SettingsPageRendererGroupedDeps {
     imageGeneration?: SettingsImageGenerationService;
     tableContentReplacement?: SettingsTableContentReplacementService;
     fullscreenOverlay?: SettingsFullscreenOverlayService;
+    inputShortcuts?: SettingsInputShortcutsService;
 }
 
 export interface SettingsPageInstance {

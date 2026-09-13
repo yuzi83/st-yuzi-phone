@@ -504,7 +504,7 @@ async function testBuilderExposesRequiredControlsAndSharedSettingsShell() {
 
 async function testPageAndRendererExposeLifecycleAndScrollSafeSeams() {
     const pageSource = read('modules/settings-app/pages/fullscreen-overlay.js');
-    const rendererSource = read('modules/settings-app/page-renderers/fullscreen-overlay-renderers.js');
+    const rendererSource = read('modules/settings-app/page-renderers/personalization-renderers.js');
 
     assert.match(pageSource, /export function createFullscreenOverlayPage/u);
     assert.match(pageSource, /mount\(\)/u);
@@ -527,8 +527,8 @@ async function testPageAndRendererExposeLifecycleAndScrollSafeSeams() {
     );
 
     const {
-        createFullscreenOverlayPageRenderers,
-    } = await importModule('modules/settings-app/page-renderers/fullscreen-overlay-renderers.js');
+        createPersonalizationPageRenderers,
+    } = await importModule('modules/settings-app/page-renderers/personalization-renderers.js');
     const context = {
         container: {},
         state: {},
@@ -545,7 +545,7 @@ async function testPageAndRendererExposeLifecycleAndScrollSafeSeams() {
             },
         },
     };
-    const renderers = createFullscreenOverlayPageRenderers({
+    const renderers = createPersonalizationPageRenderers({
         pageContexts: { fullscreenOverlay: context },
     });
     const page = renderers.pages.fullscreen_overlay.createPage();
@@ -572,11 +572,43 @@ async function testSettingsCssUsesScopedThemeTokensForDarkInputsAndOptions() {
     );
 }
 
+async function testConciseCopyPreservesControlsAndParameterHelp() {
+    const { buildFullscreenOverlayPageHtml } = await importModule('modules/settings-app/layout/page-builders/fullscreen-overlay-builders.js');
+    const { normalizeFullscreenOverlaySettings } = await importModule('modules/fullscreen-overlay/settings.js');
+    const { MAX_FULLSCREEN_OVERLAY_PALETTE_SIZE } = await importModule('modules/settings-app/ui/color-control.js');
+    for (const selectedModelId of ['scrolling-barrage', 'table-popup', 'inline-table-popup']) {
+        for (const eyeDropperSupported of [false, true]) {
+            const config = normalizeFullscreenOverlaySettings({ enabled: false });
+            const html = buildFullscreenOverlayPageHtml({ status: 'ready', config, selectedModelId, eyeDropperSupported,
+                tables: [{ sheetKey: 'internal-source-key', tableName: '纪要表', availability: 'available', enabled: true, modelIds: ['table-popup', 'inline-table-popup'], modelId: 'table-popup' },
+                    { sheetKey: 'unavailable-source', tableName: '旧表', availability: 'format_mismatch', enabled: false }],
+            });
+            assert.doesNotMatch(html, /phone-settings-hero|phone-settings-chip|phone-fullscreen-overlay-source-meta|吸管可以|全局播放模型|已适配、已勾选/);
+            for (const text of ['播放开关', '播放来源', '播放参数', '编辑类型', '测试与清空', '关闭后停止播放与测试；关闭手机不会停止播放。', '仅切换参数编辑，来源的播放方式在上方选择。', '需先开启播放。']) assert.ok(html.includes(text), text);
+            assert.match(html, /data-fullscreen-overlay-source="internal-source-key"/, '真实来源绑定保留');
+            assert.match(html, /格式不匹配/, '异常状态保留');
+            assert.match(html, /id="phone-fullscreen-overlay-test"[^>]*disabled/);
+            assert.match(html, /id="phone-fullscreen-overlay-clear"/);
+            assert.strictEqual(html.includes('不支持吸管，可用选色器或 HEX。'), !eyeDropperSupported);
+            if (selectedModelId === 'scrolling-barrage') {
+                assert.ok(html.includes(`随机取色，最多 ${MAX_FULLSCREEN_OVERLAY_PALETTE_SIZE} 种。`));
+                assert.match(html, /循环播放，新内容到达后替换。/);
+                assert.match(html, /title="数字越小移动越快/);
+                assert.match(html, /title="只改变弹幕文字透明度/);
+            } else {
+                assert.match(html, /文字颜色自动适配。/);
+                assert.match(html, /title="只调整弹窗背景透明度/);
+            }
+        }
+    }
+}
+
 async function main() {
     await testSettingsServiceBuildsPhysicalTableCatalogAndPersistsThroughFacade();
     await testDefaultSourceCatalogKeepsDisplayNameAndDefaultLiveSelection();
     await testColorControlNormalizesPaletteAndKeepsValueOnEyeDropperFailure();
     await testBuilderExposesRequiredControlsAndSharedSettingsShell();
+    await testConciseCopyPreservesControlsAndParameterHelp();
     await testPageAndRendererExposeLifecycleAndScrollSafeSeams();
     await testSettingsCssUsesScopedThemeTokensForDarkInputsAndOptions();
     console.log('[fullscreen-overlay-settings-ui] passed');

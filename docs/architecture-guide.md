@@ -613,6 +613,16 @@ CSS 层读取这些 data attributes 和 CSS 变量，见 [`styles/05-phone-gener
 4. 页面定义通过 [`createPage()`](../modules/settings-app/page-renderers/preset-renderers.js:24) / [`createPage()`](../modules/settings-app/page-renderers/editor-renderers.js:19) / [`createPage()`](../modules/settings-app/page-renderers/personalization-renderers.js:43) 返回页面对象。
 5. 页面对象可提供 [`mount()`](../modules/settings-app/render.js:119)、[`update()`](../modules/settings-app/render.js:119)、[`dispose()`](../modules/settings-app/render.js:119) 三类生命周期入口。
 
+#### 设置 → 输入快捷键
+
+- `input_shortcuts` 通过 Settings personalization 页面注册接入；[`pages/input-shortcuts.js`](../modules/settings-app/pages/input-shortcuts.js) 只负责规则草稿、按键录制与页面交互，复用 `buildSettingsPageFrame()`、section、`pageRuntime` 和 `createScrollPreserver()`。新增、动作切换、启停、保存、删除均经共享滚动保持入口，不直接回到顶部。
+- [`config.js`](../modules/input-shortcuts/config.js) 统一录制、运行匹配和持久化的键位表示；[`settings-service.js`](../modules/input-shortcuts/settings-service.js) 通过 `getPhoneSettings()` / `savePhoneSetting()` 保存全局 `inputShortcuts`。默认总开关关闭、规则列表为空；所有角色共用。编辑草稿只在保存时生效，开关更新不会顺带提交其他草稿；拒绝重复绑定，不设置键位黑名单或占用提示。
+- [`integration/input-shortcuts.js`](../modules/integration/input-shortcuts.js) 由入口拥有，订阅设置变化并协调 [`runtime.js`](../modules/input-shortcuts/runtime.js)。手机隐藏后继续响应；功能关闭解除键盘监听，扩展禁用、初始化失败和 destroy 清理运行监听与设置订阅，重新启用可恢复且不重复注册。无轮询、后台请求或表格扫描。
+- 运行时只处理当前获得焦点、可写的酒馆 `#send_textarea`；支持光标插入／选区替换和自定义左右内容包裹，包裹保留内部选区，无选区时光标居中。只填原文并派发 `input`，不发送、不执行命令或展开宏；忽略组字输入，长按不重复插入。匹配成功才尝试拦截原按键动作，不承诺覆盖系统或浏览器保留快捷键。
+- 录制只在当前规则的录制按钮内处理键盘事件；失焦、重绘与页面销毁均取消录制，不在文档上额外挂录制监听。支持单键、组合键及独立修饰键。
+- [`17-input-shortcuts.css`](../styles/17-input-shortcuts.css) 只补局部布局；textarea、select、option 继续使用 `phone-settings-*` 共享主题表面，避免宿主深色样式造成同色前景／背景。
+- 自动检查：`check-input-shortcuts-behavior.cjs`、`check-input-shortcuts-settings.cjs`、`check-input-shortcuts-ui.cjs` 随 `npm run check` / `check:ci` 运行。`node scripts/test-input-shortcuts-browser.cjs` 额外使用独立临时 Chromium/Edge 配置检查真实 DOM、滚动保持、控件颜色、录制与清理；可用 `YUZI_TEST_BROWSER` 指定浏览器，不使用用户的浏览器配置或聊天数据。
+
 #### 设置 → 日志
 
 - [`pages/logs.js`](../modules/settings-app/pages/logs.js) 复用 Settings 的页面注册、`buildSettingsPageFrame()`、section、按钮、page runtime 与滚动保持器；原始返回、问题说明、处理建议和技术详情四个区域统一使用默认收起的原生 `details`；复制和展开不重建页面，实时更新保留已有卡片与展开状态。样式在 `.phone-settings-page .yuzi-failure-logs` 内消费 `--yuzi-settings-*`，不跟随宿主酒馆主题的文字或背景色。
@@ -674,7 +684,7 @@ CSS 层读取这些 data attributes 和 CSS 变量，见 [`styles/05-phone-gener
 
 #### 6.3.6 Appearance 外观资源与字体库
 
-Appearance 页面服务统一由 [`appearance-settings.js`](../modules/settings-app/services/appearance-settings.js:1) 聚合，不允许页面直接绕过 facade import 子服务。当前外观页新增两类持久设置：
+Appearance 页面服务统一由 [`appearance-settings.js`](../modules/settings-app/services/appearance-settings.js:1) 聚合，不允许页面直接绕过 facade import 子服务。纯透传能力使用 ES module 直接重导出，保留统一入口；只有资源包应用、删除及保存失败回滚等组合行为留在聚合层。当前外观页包含以下持久设置：
 
 - [`appearanceResourcePool`](../modules/settings/schema.js:124)：legacy compatibility 字段，仅用于旧设置归一化与旧数据清理；当前外观包导入导出业务不得再读取或写入资源池内容，导入成功后会清空为 `wallpapers: []` 与 `icons: []`。
 - [`appearanceFontLibrary`](../modules/settings/schema.js:128)：保存当前启用字体 id 和用户导入字体列表，内置字体 id 由 [`font-library-service.js`](../modules/settings-app/services/appearance-settings/font-library-service.js:1) 与 schema 白名单共同约束。
@@ -720,6 +730,8 @@ Appearance 页面服务统一由 [`appearance-settings.js`](../modules/settings-
 4. [`openImageCropDialog()`](../modules/settings-app/services/media-upload/crop.js:245) 支持 `showCropFullImageButton?: boolean` 与 `cropFullImageButtonText?: string`；`showCropFullImageButton` 默认启用，点击 `全图` 将裁剪框设置为整张图片归一化区域 `{ x: 0, y: 0, w: 1, h: 1 }`。
 5. 上传链路的异步节点必须检查生命周期：FileReader 读取后、裁剪弹窗返回后、压缩 canvas 返回后，都要通过 `runtime/pageRuntime.isDisposed()` 短路；页面销毁后继续压缩、弹窗或触发保存回调，都是状态污染。
 
+
+字体库运行时只读当前 family 时使用 `getAppearanceFontFamily()`，复用原有字体校验与解析；内容预设外观桥不再构建字体管理页 ViewModel、容量统计或 JSON 深复制用户字体列表。管理页仍使用原 ViewModel，字体加载、订阅、存储与作者公开 CSS 变量保持不变。
 
 字体库链路：
 
@@ -1382,28 +1394,9 @@ graph TD
 - Fallback 命令挂在 [`yuziPhoneCommands`](../modules/slash-commands/host-adapter.js:3)，它是降级入口，不是主协议。
 - 注销时通过 [`unregisterSlashCommands()`](../modules/slash-commands.js:101) 清理宿主命令、fallback 命令、registered commands 和 handler map。
 
-### 7.2 localStorage Storage Manager
+### 7.2 持久存储入口
 
-[`createStorageManager()`](../modules/storage-manager/manager.js:16) 是 localStorage 包装层，适合保存小型、可过期、可淘汰的数据。它使用固定前缀 [`STORE_PREFIX`](../modules/storage-manager/core.js:3) 和索引 key [`INDEX_KEY`](../modules/storage-manager/core.js:4)，实际数据 key 由 [`toStorageKey()`](../modules/storage-manager/core.js:78) 生成。
-
-核心能力：
-
-- [`set()`](../modules/storage-manager/manager.js:30)：写入 `{ v, expiresAt }` payload，更新索引并执行 LRU 淘汰。
-- [`get()`](../modules/storage-manager/manager.js:114)：读取 payload，处理过期、坏 JSON 和索引刷新。
-- [`remove()`](../modules/storage-manager/manager.js:158)：删除指定 namespace/key。
-- [`clearNamespace()`](../modules/storage-manager/manager.js:178)：清理某个 namespace。
-- [`maintenance()`](../modules/storage-manager/manager.js:22)：清理过期项并按容量淘汰。
-- [`estimate()`](../modules/storage-manager/manager.js:194)：返回当前估算容量和条目数。
-- [`getSessionStorageNamespace()`](../modules/storage-manager/manager.js:214)：生成当前运行会话 namespace。
-
-索引结构由 [`loadIndex()`](../modules/storage-manager/core.js:82) 和 [`saveIndex()`](../modules/storage-manager/core.js:111) 管理，容量策略来自 [`DEFAULT_OPTIONS`](../modules/storage-manager/core.js:6)：默认 `maxEntries` 为 600、`maxBytes` 为 512KB、`defaultTTL` 为 14 天。
-
-维护规则：
-
-- localStorage 管理器只适合小型结构化数据；图片、模板快照、较大媒体应优先走 IndexedDB cache 或设置系统明确预算。
-- 新增 namespace 必须稳定命名，避免把用户数据和会话临时数据混在同一 namespace。
-- 写入路径必须考虑 `QuotaExceededError`，不能把“写入失败返回 false”包装成业务成功。
-- 清理策略以 TTL 和 LRU 为核心；不要新增无索引的裸 localStorage key，否则容量估算和维护会失效。
+生产数据通过 settings 或各业务专用 IndexedDB repository 持久化，临时可淘汰资源使用 cache-manager。未接入生产调用的通用 localStorage 管理器已移除，不迁移、不清理浏览器中已有的历史键；禁止业务模块新增裸 localStorage/sessionStorage 访问。
 
 ### 7.3 IndexedDB Cache Manager
 
@@ -1497,6 +1490,16 @@ graph TD
 - Facade 高频通知由 QQ route lifecycle 合并为“一个进行中刷新 + 一个最新待刷新”。保存动作仍以运行时状态为事实源，但同一波通知不得并发重建多份页面。
 - 小手机 resize start 只关闭临时交互层并恢复当前视图锚点，不得为了响应 CSS 尺寸变化重建业务页面。
 
+#### 消息窗口与隐藏恢复
+
+- [`message-window.js`](../modules/qq-v2/ui/message-window.js) 集中拥有每个会话本次浏览的消息窗口、历史游标与串行读取。首次从列表打开会话读取最新 50 条并丢弃该会话的旧视图快照；从资料等子页返回仍保留本次窗口。上翻每次扩展 50 条，成功后只重画已有结果，不再紧接着读取最新页。
+- 已展开历史或正在阅读非底部消息时，普通事实刷新使用 [`facade.query.messages({ conversationId, fromSequence })`](../modules/qq-v2/application/facade.js) 读取窗口起点至最新消息；Facade → Runtime → Repository 只透传这一只读语义，不改数据库结构。起点必须为非负安全整数，不能与 beforeSequence 混用；普通分页仍保留 50 默认/200 上限，窗口刷新不受该分页上限截断。
+- 窗口刷新替换而非盲目合并旧缓存，保证编辑、删除、撤回与引用变化以仓库为准。整个窗口被删除时在同次仓库读取中回退到剩余最新 50 条。UI 窗口不限制 AI 历史、世界书、全选删除或完整业务读取。
+- 同会话重复触顶复用进行中的翻页，翻页与刷新串行；失败不改已有数据和游标。隐藏、重新打开会话或销毁使旧请求失效，旧结果不能覆盖新浏览窗口。阅读锚点复用共享滚动机制，已删除的锚点按可见滚动 key 就近回退；DOM 只参与滚动定位，不作为消息事实源。
+- Phone Core 通过 subscribePhoneActivity 通知实际活动状态，激活通知在需要的路由 token 失效之后发出。QQ route lifecycle 保留原 App，隐藏时合并待刷新状态；没有变化则恢复原视图，有变化则只补一轮最新事实刷新，后续新事件继续走一个进行中加一个待刷新机制。无关 table-update 不得给隐藏的 QQ 标记整路由重建；宿主聊天切换和显式路由失效仍服从原有生命周期。
+- 隐藏同时失效 UI render epoch、未完成消息读取和未提交媒体租约，停止未开始的图片显示任务与输入框测量；当前画面仍持有的租约保留。已发出的读取允许结束但不提交迟到画面；消息保存、AI 请求、主动消息与世界书等后台业务不暂停。初始 route page 尚未提交 DOM 不等于手机隐藏，不能因 isConnected=false 永久停在骨架。
+- 行为回归入口：check-qq-message-window-behavior.cjs、check-qq-window-visibility-behavior.cjs、check-qq-hidden-refresh-behavior.cjs，以及现有 QQ 查询、Facade、路由、滚动与租约检查。浏览器中的真实布局和滚动由人工验收。
+
 ## 8. 样式组织规则
 
 样式入口：
@@ -1554,7 +1557,7 @@ graph TD
 - 新增样式：是否有明确作用域根，是否避免扩大宿主覆盖规则。
 - 新增 AI 输出格式：是否同步解析器、提示词、表格字段、UI 展示。
 - 新增 Slash 命令：是否登记 [`SLASH_COMMAND_DEFINITIONS`](../modules/slash-commands/command-registration.js:6)，并通过 [`registerPhoneSlashCommandHandlers()`](../modules/bootstrap/command-registry.js:224) 注入业务 handler。
-- 新增缓存：是否选择正确存储层，settings、localStorage manager、IndexedDB cache 的事实源边界是否清楚。
+- 新增缓存：是否选择正确存储层，settings、专用 IndexedDB repository、IndexedDB cache 的事实源边界是否清楚。
 - 新增或修改持久 IndexedDB 用户资产仓库：是否有专用 repository、容量限制、页面层禁用裸 IndexedDB，并确认 [`check-p1-storage-boundary-contract.cjs`](../scripts/check-p1-storage-boundary-contract.cjs:1) 与对应业务契约脚本，例如 [`check-appearance-pack-repository-contract.cjs`](../scripts/check-appearance-pack-repository-contract.cjs:1)，已在 `npm run check` 中通过。
 - 新增窗口交互：是否使用 [`getWindowInteractionRuntime()`](../modules/window/runtime.js:8)，并确认销毁后可重建。
 - 新增发布前改动：是否执行 [`npm run lint`](../package.json:13)、[`npm run check`](../package.json:11)、[`npm run check:ci`](../package.json:12)、[`npm run build`](../package.json:8)，并确认 [`manifest.json`](../manifest.json:6) 指向的 `dist/yuzi-phone.bundle.js` 与 `dist/yuzi-phone.bundle.css` 已由构建产物更新。源码、样式、版本字段或 loader 变化后，`dist/` 如有差异必须纳入交付。
@@ -1562,6 +1565,8 @@ graph TD
 - 新增或修改表格模板事实源：是否优先修改 [`tables/sources/`](../tables/sources) 下的 Markdown 文件，并通过 [`npm run tables:check`](../package.json:17) 与 [`npm run tables:build`](../package.json:18) 生成 [`tables/generated/`](../tables/generated) 产物；不要手工修改 generated JSON 伪装成事实源。
 - 当前正式表源是 [`tables/sources/小剧场2.1`](../tables/sources/小剧场2.1) 与 [`tables/sources/纪要`](../tables/sources/纪要)；[`tables/sources/恋爱特化参考`](../tables/sources/恋爱特化参考) 是参考源，必须保留在 source contract 中，但不要把参考源误写成运行时正式表。
 - 新增或修改脚本版 loader、版本字段、发布链路或表源清单时，必须确认 [`check-script-loader-contract.cjs`](../scripts/check-script-loader-contract.cjs:1)、[`check-extension-version-contract.cjs`](../scripts/check-extension-version-contract.cjs:1)、[`check-release-chain-contract.cjs`](../scripts/check-release-chain-contract.cjs:1)、[`check-table-sources-contract.cjs`](../scripts/check-table-sources-contract.cjs:1) 都在 `npm run check` / `npm run check:ci` 中通过。
+
+检查执行入口共享 `scripts/run-contract-checks.cjs` 的扫描、执行与汇总流程；CI 入口只额外要求至少存在一项检查。任何失败都使检查失败，不再维护允许历史失败的清单。
 
 ## 10. 当前文档边界
 

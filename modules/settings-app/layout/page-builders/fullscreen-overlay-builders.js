@@ -1,6 +1,5 @@
 import { escapeHtml, escapeHtmlAttr } from '../../../utils/dom-escape.js';
 import {
-    buildSettingsHeroHtml,
     buildSettingsPageFrame,
     buildSettingsSectionHtml,
 } from '../primitives.js';
@@ -84,7 +83,6 @@ function buildSourceRowHtml(table, index, tableCount) {
                     data-fullscreen-overlay-source="${escapeHtmlAttr(sheetKey)}"${disabled(!isAvailable)}${checked(table?.enabled)}>
                 <span class="phone-fullscreen-overlay-source-copy">
                     <span class="phone-fullscreen-overlay-source-name">${escapeHtml(tableName)}</span>
-                    <span class="phone-fullscreen-overlay-source-meta">${escapeHtml(sheetKey)}</span>
                 </span>
             </label>
             <div class="phone-fullscreen-overlay-source-side">
@@ -171,7 +169,7 @@ function buildBarrageModelHtml(barrage) {
         <label class="phone-fullscreen-overlay-master-switch" for="phone-fullscreen-overlay-eternal">
             <span>
                 <strong>永恒弹幕</strong>
-                <small>当前内容完整发射一轮后持续循环；新内容到达时会自动接管，不阻塞后续表格。</small>
+                <small>循环播放，新内容到达后替换。</small>
             </span>
             <input type="checkbox"
                 id="phone-fullscreen-overlay-eternal"
@@ -363,24 +361,11 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
         : {};
     const tables = asArray(viewModel.tables);
     const eyeDropperSupported = viewModel.eyeDropperSupported === true;
-    const enabledCount = tables.filter(table => table?.enabled === true).length;
-    const availableCount = tables.filter(table => table?.availability === 'available').length;
     const palette = asArray(barrage.palette);
     const selectedModelId = [TABLE_POPUP_MODEL_ID, INLINE_TABLE_POPUP_MODEL_ID].includes(viewModel.selectedModelId)
         ? viewModel.selectedModelId : SCROLLING_BARRAGE_MODEL_ID;
     const editingPopup = selectedModelId !== SCROLLING_BARRAGE_MODEL_ID;
     const popup = config.models?.[selectedModelId] || {};
-
-    const heroHtml = buildSettingsHeroHtml({
-        eyebrow: '弹幕、浮窗与正文卡片',
-        title: '弹幕设置',
-        description: '按来源顺序展示内容；直播表支持弹幕；物理表可选浮窗或插入正文，QQ 仅浮窗。',
-        chips: [
-            { text: config.enabled === true ? '自动播放已开启' : '自动播放已关闭', tone: config.enabled === true ? 'info' : 'neutral' },
-            { text: `${enabledCount}/${availableCount} 个可用来源`, tone: 'soft' },
-            { text: `正在编辑：${modelLabel(selectedModelId)}`, tone: 'neutral' },
-        ],
-    });
 
     let bodyHtml = '';
     if (viewModel.status === 'loading') {
@@ -393,13 +378,13 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
             : '<div class="phone-settings-note">当前数据库没有可显示的物理表格。</div>';
         bodyHtml = `
             ${buildSettingsSectionHtml({
-                title: '运行状态',
-                desc: '关闭总开关会停止全部内容、监听和测试；仅关闭小手机窗口不会停止已开启的功能。',
+                title: '播放开关',
+                desc: '关闭后停止播放与测试；关闭手机不会停止播放。',
                 bodyHtml: `
                     <label class="phone-fullscreen-overlay-master-switch" for="phone-fullscreen-overlay-enabled">
                         <span>
                             <strong>启用弹幕与卡片</strong>
-                            <small>只响应已适配、已勾选且真正发生变化的表格来源。</small>
+                            <small>自动播放已勾选来源的更新内容。</small>
                         </span>
                         <input type="checkbox"
                             id="phone-fullscreen-overlay-enabled"
@@ -409,17 +394,17 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
             })}
 
             ${buildSettingsSectionHtml({
-                title: '表格来源与顺序',
-                desc: '物理表可选浮窗或插入正文，直播表还可选滚动弹幕，QQ 仅浮窗。多个来源严格按此顺序依次交接。',
+                title: '播放来源',
+                desc: '选择播放方式，按列表顺序播放。',
                 bodyHtml: `<div class="phone-fullscreen-overlay-source-list">${sourceRows}</div>`,
             })}
 
             ${buildSettingsSectionHtml({
-                title: '全局播放模型',
-                desc: '这里仅切换正在编辑的模型参数；每张表实际使用的模型由上方来源行单独选择。',
+                title: '播放参数',
+                desc: '仅切换参数编辑，来源的播放方式在上方选择。',
                 bodyHtml: `
                     <label class="phone-settings-field-inline" for="phone-fullscreen-overlay-playback-model">
-                        <span>播放模型</span>
+                        <span>编辑类型</span>
                         <select id="phone-fullscreen-overlay-playback-model" class="phone-settings-select">
                             <option value="${SCROLLING_BARRAGE_MODEL_ID}"${selected(selectedModelId === SCROLLING_BARRAGE_MODEL_ID)}>横向滚动弹幕</option>
                             <option value="${TABLE_POPUP_MODEL_ID}"${selected(selectedModelId === TABLE_POPUP_MODEL_ID)}>普通表格浮窗</option>
@@ -435,7 +420,7 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
             ${editingPopup
                 ? buildSettingsSectionHtml({
                     title: '弹窗背景色',
-                    desc: '普通表格弹窗使用单一背景色；文字颜色会自动保持对比度。',
+                    desc: '文字颜色自动适配。',
                     bodyHtml: `
                         <div class="phone-fullscreen-overlay-color-list">
                             ${buildFullscreenOverlaySingleColorHtml(
@@ -443,14 +428,12 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
                                 { eyeDropperSupported },
                             )}
                         </div>
-                        <p class="phone-settings-desc">${eyeDropperSupported
-                            ? '吸管可以从当前用户界面或屏幕中取色；取消取色不会改变原值。'
-                            : '当前浏览器不支持吸管取色，仍可使用颜色选择器或 HEX 输入。'}</p>
+                        ${eyeDropperSupported ? '' : '<p class="phone-settings-desc">不支持吸管，可用选色器或 HEX。</p>'}
                     `,
                 })
                 : buildSettingsSectionHtml({
                     title: '弹幕调色板',
-                    desc: `每条弹幕发射时等概率随机取色，并尽量避免连续同色。允许重复颜色，最多 ${MAX_FULLSCREEN_OVERLAY_PALETTE_SIZE} 种。`,
+                    desc: `随机取色，最多 ${MAX_FULLSCREEN_OVERLAY_PALETTE_SIZE} 种。`,
                     actionsHtml: `
                         <div class="phone-settings-action phone-settings-action-wrap">
                             <button type="button" class="phone-settings-btn" id="phone-fullscreen-overlay-add-color"
@@ -462,15 +445,13 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
                         <div class="phone-fullscreen-overlay-color-list">
                             ${buildFullscreenOverlayColorRowsHtml(palette, { eyeDropperSupported })}
                         </div>
-                        <p class="phone-settings-desc">${eyeDropperSupported
-                            ? '吸管可以从当前用户界面或屏幕中取色；取消取色不会改变原值。'
-                            : '当前浏览器不支持吸管取色，仍可使用颜色选择器或 HEX 输入。'}</p>
+                        ${eyeDropperSupported ? '' : '<p class="phone-settings-desc">不支持吸管，可用选色器或 HEX。</p>'}
                     `,
                 })}
 
             ${buildSettingsSectionHtml({
-                title: '立即操作',
-                desc: '测试会读取所有已勾选来源；弹幕读取完整弹幕串，弹窗每张表只读取第一条可展示行。总开关关闭时完全停止，不能测试。',
+                title: '测试与清空',
+                desc: '测试已勾选来源：弹幕播放完整内容，弹窗每表取首条。需先开启播放。',
                 bodyHtml: `
                     <div class="phone-fullscreen-overlay-action-grid">
                         <button type="button" class="phone-settings-btn phone-fullscreen-overlay-primary-action"
@@ -485,7 +466,6 @@ export function buildFullscreenOverlayPageHtml(viewModel = {}) {
 
     return buildSettingsPageFrame({
         title: '弹幕设置',
-        heroHtml,
         bodyClass: 'phone-app-body phone-settings-scroll phone-settings-open phone-fullscreen-overlay-settings-page',
         bodyHtml,
     });

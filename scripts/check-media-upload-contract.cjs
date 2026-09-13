@@ -35,7 +35,10 @@ function check(results, fileKey, description, ok) {
     results.push({ file: FILES[fileKey], description, ok });
 }
 
-function main() {
+async function main() {
+    const { pathToFileURL } = require('node:url');
+    const appearance = await import(pathToFileURL(path.join(ROOT, FILES.appearance)).href);
+    const background = await import(pathToFileURL(path.join(ROOT, FILES.backgroundService)).href);
     const contents = Object.fromEntries(
         Object.entries(FILES).map(([key, relativePath]) => [key, read(relativePath)])
     );
@@ -106,8 +109,16 @@ function main() {
 
     check(results, 'appearance', 'appearance-settings façade 继续组合 background/icon upload service', has(contents.appearance, 'createIconUploadService({')
         && has(contents.appearance, 'getAppearancePack: getAppearancePackImpl,'));
-    check(results, 'appearance', 'appearance-settings façade 转发 setupBgUpload options', has(contents.appearance, 'return setupBgUploadImpl(container, options);'));
-    check(results, 'appearance', 'appearance-settings façade 转发 renderIconUploadList options', has(contents.appearance, 'return renderIconUploadListImpl(listEl, options);'));
+    check(results, 'appearance', '背景上传直接重导出原函数，保留完整 options', appearance.setupBgUpload === background.setupBgUpload);
+    let runtimeRead = false;
+    const list = { innerHTML: '' };
+    const disposeIcons = appearance.renderIconUploadList(list, {
+        items: [],
+        get runtime() { runtimeRead = true; return {}; },
+    });
+    check(results, 'appearance', '图标入口实际接收 runtime 与空 items，返回清理函数', runtimeRead
+        && list.innerHTML.includes('无数据') && typeof disposeIcons === 'function');
+    if (typeof disposeIcons === 'function') disposeIcons();
     check(results, 'backgroundService', 'background-service 继续从 media-upload façade 导入上传能力', has(contents.backgroundService, "from '../media-upload.js';"));
     check(results, 'backgroundService', 'background-service 接收上传 runtime options', has(contents.backgroundService, 'export function setupBgUpload(container, options = {})'));
     check(results, 'backgroundService', 'background-service 将 runtime 传给 pickImageFile()', has(contents.backgroundService, 'runtime,\n            maxSizeMB: 12'));
@@ -144,4 +155,4 @@ function main() {
     }
 }
 
-main();
+main().catch(error => { console.error(error); process.exitCode = 1; });

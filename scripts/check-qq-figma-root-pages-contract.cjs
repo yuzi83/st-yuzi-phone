@@ -64,7 +64,7 @@ async function main() {
     assert.match(stickerBranch, /facade\.intent\.sendMessage/, 'selecting an emoji sends an independent message immediately');
     assert.match(stickerBranch, /stickerId:\s*target\.dataset\.qqSticker/,
         'sticker messages must preserve the selected Facade stickerId');
-    assert.match(stickerBranch, /render\(\{ preserveEmoji: true \}\)/,
+    assert.match(stickerBranch, /render\(\{ preserveEmoji: true(?:, refreshMessages: false)? \}\)/,
         'an emoji send preserves the emoji layer for consecutive selections');
     assert.match(css, /\.yuzi-qq-search\s*\{[\s\S]*?justify-content:\s*center;/,
         'Figma root searches center the icon and label as one visual unit');

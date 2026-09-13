@@ -18,6 +18,7 @@ export function buildSettingsHomePageHtml({
         'ai_instruction_presets',
         'table_content_replacement',
         'fullscreen_overlay',
+        'input_shortcuts',
         'logs',
     ];
     const remainingEntries = entries.slice(2);

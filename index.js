@@ -13,11 +13,13 @@ import { onPhoneActivated, onPhoneDeactivated, destroyPhoneRuntime } from './mod
 import {
     initializePhoneSettings,
     getPhoneSettings,
+    subscribePhoneSettingsUpdates,
     resetPhoneSettingsToDefault,
     migrateLegacyPhoneSettings,
     flushPhoneSettingsSave,
     savePhoneSettingsPatch,
 } from './modules/settings.js';
+import { createInputShortcutsHost } from './modules/integration/input-shortcuts.js';
 import { createPhoneSettingsPanel, destroyPhoneSettingsPanel } from './modules/settings-panel.js';
 import { EventManager } from './modules/utils/event-manager.js';
 import { cleanupIntegration } from './modules/integration/cleanup.js';
@@ -75,6 +77,9 @@ import {
 // 全局事件管理器 - 用于统一管理事件监听器的清理
 const EXTENSION_VERSION = '2.3.0';
 const globalEventManager = new EventManager();
+const inputShortcutsHost = createInputShortcutsHost({
+    document: globalThis.document, getPhoneSettings, subscribePhoneSettingsUpdates,
+});
 const logger = Logger.withScope({ scope: 'index' });
 const INSTANCE_KEY = '__YUZI_PHONE_INSTANCE__';
 const INSTANCE_SOURCE = 'extension';
@@ -374,9 +379,11 @@ function setPhoneEnabledWithUI(enabled) {
             onToggle: togglePhone,
         });
         startPhoneBackgroundServices('settings-enabled');
+        inputShortcutsHost.start();
         return result;
     }
 
+    inputShortcutsHost.stop();
     stopPhoneBackgroundServices('settings-disabled');
     cancelPendingHomeRefresh('settings-disabled');
     destroyPhoneRuntime();
@@ -494,7 +501,9 @@ async function doInitialize() {
 
     if (settings?.enabled !== false) {
         startPhoneBackgroundServices('initialize-enabled');
+        inputShortcutsHost.start();
     } else {
+        inputShortcutsHost.stop();
         stopPhoneBackgroundServices('initialize-disabled');
     }
 
@@ -554,6 +563,7 @@ async function doInitialize() {
             await ensureInitialized();
         } catch (error) {
             setOwnedInstanceStatus('failed', { lastError: error?.message || String(error) });
+            inputShortcutsHost.stop();
             stopPhoneBackgroundServices('initialize-failed');
             destroyQQV2Runtime();
             releaseSingletonGuard();
@@ -608,6 +618,7 @@ export function destroy() {
     cancelPendingHomeRefresh('destroy');
 
     try {
+        inputShortcutsHost.stop();
         stopPhoneBackgroundServices('extension-destroy');
         logger.info({
             feature: 'lifecycle',

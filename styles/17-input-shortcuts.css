@@ -1,0 +1,20 @@
+/* 只补布局，表单颜色与交互状态沿用 Settings 的共享主题表面。 */
+.phone-settings-page .yuzi-input-shortcuts { color: var(--yuzi-settings-text-primary); }
+.phone-settings-page .yuzi-input-shortcut-toolbar,
+.phone-settings-page .yuzi-input-shortcut-toggle,
+.phone-settings-page .yuzi-input-shortcut-actions { display: flex; align-items: center; gap: 10px; }
+.phone-settings-page .yuzi-input-shortcut-toolbar { justify-content: space-between; flex-wrap: wrap; }
+.phone-settings-page .yuzi-input-shortcut-toolbar > span,
+.phone-settings-page .yuzi-input-shortcut-empty { color: var(--yuzi-settings-text-secondary); font-size: 12px; }
+.phone-settings-page .yuzi-input-shortcut-empty { padding: 16px 4px; text-align: center; }
+.phone-settings-page .yuzi-input-shortcut-fields { display: grid; gap: 16px; }
+.phone-settings-page .yuzi-input-shortcut-binding,
+.phone-settings-page .yuzi-input-shortcut-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.phone-settings-page .yuzi-input-shortcut-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; font-size: 12px; }
+.phone-settings-page .yuzi-input-shortcut-field > :is(textarea, select, button) { width: 100%; min-width: 0; box-sizing: border-box; margin: 0; }
+.phone-settings-page .yuzi-input-shortcut-key { min-height: 40px; white-space: normal; overflow-wrap: anywhere; }
+.phone-settings-page .yuzi-input-shortcut-key[aria-pressed="true"] { outline: 2px solid var(--yuzi-settings-accent); outline-offset: 2px; }
+.phone-settings-page .yuzi-input-shortcut-actions { justify-content: flex-end; }
+.phone-settings-page .yuzi-input-shortcut-toggle { cursor: pointer; white-space: nowrap; font-size: 12px; }
+
+.phone-settings-page .yuzi-input-shortcut-actions [data-rule-status] { margin-right: auto; font-size: 12px; color: var(--yuzi-settings-text-secondary); }

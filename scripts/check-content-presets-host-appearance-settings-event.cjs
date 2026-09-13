@@ -22,7 +22,7 @@ async function main() {
         let family = 'Alpha';
         const appearance = createContentPresetHostAppearance({
             getPhoneSettings: () => ({ phoneThemeMode: mode }),
-            getAppearanceFontLibraryViewModel: () => ({ activeFont: { cssFamily: family } }),
+            getAppearanceFontFamily: () => family,
         });
         const themeStates = [];
         const fontStates = [];
