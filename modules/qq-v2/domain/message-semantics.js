@@ -16,6 +16,8 @@ function trimmedText(value) {
 }
 
 function durationSuffix(message) {
+    const voicedMs = Number(message?.voice?.durationMs);
+    if (Number.isFinite(voicedMs) && voicedMs > 0) return `（${Math.max(1, Math.round(voicedMs / 1000))}秒）`;
     const duration = Number(message?.media?.duration ?? message?.duration);
     return Number.isFinite(duration) && duration > 0 ? `（${duration}秒）` : '';
 }

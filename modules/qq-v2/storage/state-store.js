@@ -67,12 +67,24 @@ function visitMediaRecords(state, visitor) {
 
     Object.entries(state?.scopes || {}).forEach(([scopeId, scope]) => {
         const assets = scope?.assets;
-        if (!assets || typeof assets !== 'object' || Array.isArray(assets)) return;
-        Object.entries(assets).forEach(([assetId, asset]) => {
-            if (asset && typeof asset === 'object' && !Array.isArray(asset)) {
-                visitor(asset, `scope:${scopeId}:asset:${assetId}`);
-            }
-        });
+        if (assets && typeof assets === 'object' && !Array.isArray(assets)) {
+            Object.entries(assets).forEach(([assetId, asset]) => {
+                if (asset && typeof asset === 'object' && !Array.isArray(asset)) {
+                    visitor(asset, `scope:${scopeId}:asset:${assetId}`);
+                }
+            });
+        }
+
+        // Synthesized voice audio lives beside the scope assets so the same
+        // atomic write persists it and the same sweep releases orphaned blobs.
+        const voiceAssets = scope?.voiceAssets;
+        if (voiceAssets && typeof voiceAssets === 'object' && !Array.isArray(voiceAssets)) {
+            Object.entries(voiceAssets).forEach(([assetId, asset]) => {
+                if (asset && typeof asset === 'object' && !Array.isArray(asset)) {
+                    visitor(asset, `scope:${scopeId}:voice:${assetId}`);
+                }
+            });
+        }
     });
 }
 

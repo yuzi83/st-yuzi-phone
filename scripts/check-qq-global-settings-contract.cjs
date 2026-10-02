@@ -84,6 +84,17 @@ async function testGlobalRuntimeStorage() {
             keywords: ['Legacy', 'dawn'],
         },
         proactive: { enabled: true, everyTurns: 4, privateWeight: 50 },
+        voice: {
+            enabled: false,
+            baseUrl: 'https://api.fish.audio/v1',
+            model: 's2.1-pro-free',
+            defaultVoiceId: '',
+            speakSelf: false,
+            emotionTags: true,
+            directFetch: true,
+            apiKeySaved: false,
+            timeoutMs: 120000,
+        },
     }, 'the first shared read migrates the current scope without losing selections or explicit zeroes');
     const migratedFromOtherScope = await runtimeSettings.get('scope-b');
     assert.equal(migratedFromOtherScope.activeApiPresetId, 'legacy-api',
@@ -203,6 +214,17 @@ async function testExistingSharedRuntimeMigration() {
             keywords: ['scope-b'],
         },
         proactive: { enabled: false, everyTurns: 8, privateWeight: 50 },
+        voice: {
+            enabled: false,
+            baseUrl: 'https://api.fish.audio/v1',
+            model: 's2.1-pro-free',
+            defaultVoiceId: '',
+            speakSelf: false,
+            emotionTags: true,
+            directFetch: true,
+            apiKeySaved: false,
+            timeoutMs: 120000,
+        },
     }, 'missing fields in an existing shared record migrate from the current scope and legacy enabled key');
     assert.equal(migrated.worldbook.bookName, undefined);
     assert.deepEqual(await runtimeSettings.get('scope-a'), migrated,
@@ -348,6 +370,7 @@ async function main() {
         { kind: 'context', title: '\u4e0a\u4e0b\u6587' },
         { kind: 'worldbook', title: '\u4e16\u754c\u4e66\u6ce8\u5165' },
         { kind: 'image-library', title: '\u56fe\u7247\u8d44\u6599' },
+        { kind: 'voice', title: '\u8bed\u97f3' },
     ]);
     assert.doesNotMatch(JSON.stringify(initial.groups), /theme/i, 'QQ settings keep using the global phone theme');
     assert.equal(initial.settings.groupReplyPresetId, 'group-reply-a', 'read model exposes the group reply preset');

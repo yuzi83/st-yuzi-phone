@@ -73,7 +73,60 @@ function normalizeQQProfile(value, defaultMessageTextColor = 'black') {
         gender: asText(profile.gender, 120),
         birthday: asText(profile.birthday, 120),
         profileBackgroundAssetId: asText(profile.profileBackgroundAssetId, 256),
+        voiceId: asText(profile.voiceId, 256),
     };
+}
+
+/** Voice audio metadata kept on the message; the blob itself lives in the scope voice table. */
+function normalizeMessageVoice(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+    const assetId = asText(source?.assetId, 256);
+    if (!assetId) return null;
+    const size = Number(source?.size);
+    const durationMs = Number(source?.durationMs);
+    const generatedAt = Number(source?.generatedAt);
+    return {
+        assetId,
+        mimeType: asText(source?.mimeType, 64),
+        size: Number.isFinite(size) && size > 0 ? Math.trunc(size) : 0,
+        durationMs: Number.isFinite(durationMs) && durationMs > 0 ? Math.trunc(durationMs) : 0,
+        voiceId: asText(source?.voiceId, 256),
+        generatedAt: Number.isFinite(generatedAt) && generatedAt > 0 ? Math.trunc(generatedAt) : 0,
+    };
+}
+
+function normalizeVoiceAsset(value, scopeId = '') {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+    const assetId = asText(source?.assetId, 256);
+    if (!assetId) return null;
+    return {
+        assetId,
+        scopeId: asText(source?.scopeId, 512) || scopeId,
+        conversationId: asText(source?.conversationId, 256),
+        messageId: asText(source?.messageId, 256),
+        kind: 'voice',
+        mimeType: asText(source?.mimeType, 64),
+        size: Math.max(0, Math.trunc(Number(source?.size) || 0)),
+        durationMs: Math.max(0, Math.trunc(Number(source?.durationMs) || 0)),
+        voiceId: asText(source?.voiceId, 256),
+        model: asText(source?.model, 120),
+        createdAt: Math.max(0, Math.trunc(Number(source?.createdAt) || 0)),
+        mediaKey: asText(source?.mediaKey, 256),
+        ...(source?.blob instanceof Blob ? { blob: source.blob } : {}),
+    };
+}
+
+function normalizeVoiceAssetTable(value, scopeId = '') {
+    const table = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const result = {};
+    Object.entries(table).forEach(([assetId, record]) => {
+        const asset = normalizeVoiceAsset(
+            { ...(record && typeof record === 'object' ? record : {}), assetId: asText(record?.assetId, 256) || assetId },
+            scopeId,
+        );
+        if (asset) result[asset.assetId] = asset;
+    });
+    return result;
 }
 
 function normalizeHostMetadata(value, scopeId = '') {
@@ -118,6 +171,7 @@ function emptyScope(scopeId) {
         groups: {},
         messages: {},
         assets: {},
+        voiceAssets: {},
         proactiveProgress: {
             counter: 0,
             lastStoryMessageKey: '',
@@ -308,7 +362,11 @@ function ensureScopeQQV2State(scope) {
         message.generatedAt = Number.isFinite(generatedAt) && generatedAt > 0
             ? Math.trunc(generatedAt)
             : 0;
+        const voice = normalizeMessageVoice(message.voice);
+        if (voice) message.voice = voice;
+        else delete message.voice;
     });
+    scope.voiceAssets = pruneVoiceAssets(scope);
     scope.settingsVersion = SCOPE_SETTINGS_VERSION;
 }
 
@@ -494,6 +552,7 @@ function normalizeImportedPrivateContact(input, index) {
         signature: asText(source.signature, 1000),
         gender: asText(source.gender, 120),
         birthday: asText(source.birthday, 120),
+        voiceId: asText(source.voiceId, 256),
         avatar: normalizeImportedContactAsset(source.avatar, 'avatar', '头像'),
         profileBackground: normalizeImportedContactAsset(source.profileBackground, 'profile-background', '资料背景'),
         chatBackground: normalizeImportedContactAsset(source.chatBackground, 'background', '聊天背景'),
@@ -526,7 +585,9 @@ function deleteUnactivatedPrivateContact(scope, conversation, person) {
         .forEach((message) => {
             releasableAssetIds.add(message.assetId);
             releasableAssetIds.add(message.senderAvatarAssetId);
+            const voiceAssetId = asText(message.voice?.assetId, 256);
             delete scope.messages[message.messageId];
+            removeVoiceAssetIfUnreferenced(scope, voiceAssetId);
         });
     Object.values(scope.assets)
         .filter((asset) => asset.conversationId === conversationId)
@@ -805,6 +866,36 @@ function removeAssetIfUnreferenced(scope, assetId) {
     }
 }
 
+function voiceAssetStillReferenced(scope, assetId) {
+    const id = asText(assetId, 256);
+    if (!id) return false;
+    return Object.values(scope.messages || {}).some((message) => asText(message.voice?.assetId, 256) === id);
+}
+
+function removeVoiceAssetIfUnreferenced(scope, assetId) {
+    const id = asText(assetId, 256);
+    if (id && scope.voiceAssets[id] && !voiceAssetStillReferenced(scope, id)) {
+        delete scope.voiceAssets[id];
+    }
+}
+
+/**
+ * Voice audio is only ever reachable through the message that owns it, so any
+ * record without a referencing message is garbage. Pruning here keeps a missed
+ * delete path from leaking a blob forever.
+ */
+function pruneVoiceAssets(scope) {
+    const referenced = new Set(Object.values(scope.messages || {})
+        .map((message) => asText(message.voice?.assetId, 256))
+        .filter(Boolean));
+    const table = normalizeVoiceAssetTable(scope.voiceAssets, scope.scopeId);
+    const result = {};
+    Object.entries(table).forEach(([assetId, asset]) => {
+        if (referenced.has(assetId)) result[assetId] = asset;
+    });
+    return result;
+}
+
 function returnPendingGroupTransfers(scope, conversationId, recipientIds, storyTime) {
     const recipients = recipientIds ? new Set(recipientIds) : null;
     Object.values(scope.messages).forEach((message) => {
@@ -986,6 +1077,9 @@ function deleteConversationState(state, scopeId, conversationId) {
     const generatedImagePaths = [...new Set(deletedMessages
         .map((message) => asText(message.generatedImagePath, 2048))
         .filter(Boolean))];
+    const voiceAssetIds = [...new Set(deletedMessages
+        .map((message) => asText(message.voice?.assetId, 256))
+        .filter(Boolean))];
     deletedMessages.forEach((message) => delete scope.messages[message.messageId]);
     Object.values(scope.assets).filter((asset) => asset.conversationId === conversationId).forEach((asset) => delete scope.assets[asset.assetId]);
     if (retainPrivateContact || retainActiveGroup) {
@@ -1015,6 +1109,7 @@ function deleteConversationState(state, scopeId, conversationId) {
         });
     }
     releasedAssetIds.forEach((assetId) => removeAssetIfUnreferenced(scope, assetId));
+    voiceAssetIds.forEach((assetId) => removeVoiceAssetIfUnreferenced(scope, assetId));
     return {
         deletedConversationId: conversationId,
         mode,
@@ -1537,6 +1632,7 @@ export function createQQV2Repository(options = {}) {
                 if (Object.hasOwn(profile, 'profileBackgroundAssetId')) {
                     current.profileBackgroundAssetId = requireProfileAsset(state, scope, profile.profileBackgroundAssetId, 'profile-background');
                 }
+                if (Object.hasOwn(profile, 'voiceId')) current.voiceId = asText(profile.voiceId, 256);
                 if (previousAvatarAssetId !== current.avatarAssetId) {
                     syncSenderAvatar(scope, SELF_ID, current.avatarAssetId);
                     removeAssetIfUnreferenced(scope, previousAvatarAssetId);
@@ -1587,6 +1683,7 @@ export function createQQV2Repository(options = {}) {
                 if (Object.hasOwn(profile, 'profileBackgroundAssetId')) {
                     person.profileBackgroundAssetId = requireProfileAsset(state, scope, profile.profileBackgroundAssetId, 'profile-background');
                 }
+                if (Object.hasOwn(profile, 'voiceId')) person.voiceId = asText(profile.voiceId, 256);
                 if (Object.hasOwn(profile, 'backgroundAssetId')) {
                     conversation.backgroundAssetId = requireProfileAsset(state, scope, profile.backgroundAssetId, 'background', conversation.conversationId);
                 }
@@ -1601,6 +1698,18 @@ export function createQQV2Repository(options = {}) {
                     removeAssetIfUnreferenced(scope, previousProfileBackgroundAssetId);
                 }
                 return copy({ person, conversation });
+            });
+        },
+        /**
+         * Voice binding without a private conversation: group members and other
+         * people records that never became a friend still need their own voice.
+         */
+        async updatePersonVoice(scopeId, personId, voiceId, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
+                const scope = getScope(state, scopeId, false);
+                const person = getPerson(scope, personId);
+                person.voiceId = asText(voiceId, 256);
+                return copy({ person });
             });
         },
         async updateGroupProfile(scopeId, conversationId, profile = {}) {
@@ -1655,6 +1764,7 @@ export function createQQV2Repository(options = {}) {
                         signature: contact.signature,
                         gender: contact.gender,
                         birthday: contact.birthday,
+                        voiceId: contact.voiceId || '',
                         profileBackgroundAssetId: '',
                     };
                     const conversation = {
@@ -1893,6 +2003,80 @@ export function createQQV2Repository(options = {}) {
                 };
             });
         },
+        /**
+         * Persist synthesized audio for one voice message. The blob is hoisted
+         * into the IndexedDB media store by the state store, and the message
+         * keeps only the metadata the bubble needs.
+         */
+        async saveMessageVoice(scopeId, conversationId, messageId, voice = {}, operationOptions = {}) {
+            return transactScoped(scopeId, operationOptions, (state) => {
+                const scope = getScope(state, scopeId, false);
+                const conversation = getConversation(scope, conversationId);
+                const normalizedMessageId = requireText(messageId, 'QQ 消息 ID', 256);
+                const message = scope.messages[normalizedMessageId];
+                if (!message || message.conversationId !== conversation.conversationId) {
+                    throw new QQV2DomainError(t("QQ 消息不存在"), 'message_not_found');
+                }
+                if (message.type !== 'voice') {
+                    throw new QQV2DomainError(t("只有语音消息可以保存语音"), 'message_type_invalid');
+                }
+                const blob = voice.blob instanceof Blob ? voice.blob : null;
+                if (!blob) throw new QQV2DomainError(t("语音音频必须使用 Blob 保存"), 'voice_blob_required');
+                const generatedAt = Number(voice.generatedAt);
+                if (!Number.isFinite(generatedAt) || generatedAt <= 0) {
+                    throw new QQV2DomainError(t("语音生成时间无效"), 'voice_generated_at_invalid');
+                }
+                const mimeType = requireText(voice.mimeType, '语音音频类型', 64);
+                const durationMs = Number(voice.durationMs);
+                const size = Math.max(0, Math.trunc(Number(voice.size) || blob.size || 0));
+                const previousAssetId = asText(message.voice?.assetId, 256);
+                const assetId = createId('voice');
+                scope.voiceAssets[assetId] = {
+                    assetId,
+                    scopeId: scope.scopeId,
+                    conversationId: conversation.conversationId,
+                    messageId: message.messageId,
+                    kind: 'voice',
+                    blob,
+                    mimeType,
+                    size,
+                    durationMs: Number.isFinite(durationMs) && durationMs > 0 ? Math.trunc(durationMs) : 0,
+                    voiceId: asText(voice.voiceId, 256),
+                    model: asText(voice.model, 120),
+                    createdAt: Math.trunc(generatedAt),
+                };
+                message.voice = normalizeMessageVoice({
+                    assetId,
+                    mimeType,
+                    size,
+                    durationMs,
+                    voiceId: voice.voiceId,
+                    generatedAt,
+                });
+                removeVoiceAssetIfUnreferenced(scope, previousAssetId);
+                return { message: messageWithQuote(scope, message), voiceAssetId: assetId };
+            });
+        },
+        async getVoiceAsset(scopeId, assetId) {
+            const state = await stateStore.read();
+            const scope = getScope(state, scopeId, false);
+            const asset = scope.voiceAssets[asText(assetId, 256)];
+            if (!asset) return null;
+            const blob = asset.blob instanceof Blob ? asset.blob : await stateStore.readMedia(asset.mediaKey);
+            return {
+                asset: {
+                    assetId: asset.assetId,
+                    kind: 'voice',
+                    mimeType: asset.mimeType,
+                    size: asset.size,
+                    durationMs: asset.durationMs,
+                    voiceId: asset.voiceId,
+                    conversationId: asset.conversationId,
+                    messageId: asset.messageId,
+                },
+                blob: blob instanceof Blob ? blob : null,
+            };
+        },
         async editMessage(scopeId, conversationId, messageId, content, operationOptions = {}) {
             return transactScoped(scopeId, operationOptions, (state) => {
                 const scope = getScope(state, scopeId, false);
@@ -1907,8 +2091,16 @@ export function createQQV2Repository(options = {}) {
                 if (typeof content !== 'string' || (message.type !== 'transfer' && !content.trim())) {
                     throw new QQV2DomainError(t("消息内容不能为空"), 'message_content_required');
                 }
+                const previousVoiceAssetId = asText(message.voice?.assetId, 256);
+                const previousContent = message.content;
                 if (message.type === 'transfer') message.transfer.note = content;
                 else message.content = content;
+                // Recorded audio belongs to the old wording; playing it after an
+                // edit would contradict the bubble, so drop it instead.
+                if (previousVoiceAssetId && message.content !== previousContent) {
+                    delete message.voice;
+                    removeVoiceAssetIfUnreferenced(scope, previousVoiceAssetId);
+                }
                 return { message: messageWithQuote(scope, message) };
             });
         },
@@ -1941,6 +2133,9 @@ export function createQQV2Repository(options = {}) {
                 const generatedImagePaths = [...new Set(deletedMessages
                     .map((message) => asText(message.generatedImagePath, 2048))
                     .filter(Boolean))];
+                const voiceAssetIds = [...new Set(deletedMessages
+                    .map((message) => asText(message.voice?.assetId, 256))
+                    .filter(Boolean))];
                 deletedMessageIds.forEach((messageId) => {
                     delete scope.messages[messageId];
                 });
@@ -1949,6 +2144,7 @@ export function createQQV2Repository(options = {}) {
                 }
                 updateConversationAfterMessageRemoval(scope, conversation);
                 releasedAssetIds.forEach((assetId) => removeAssetIfUnreferenced(scope, assetId));
+                voiceAssetIds.forEach((assetId) => removeVoiceAssetIfUnreferenced(scope, assetId));
                 return {
                     deletedMessageIds,
                     ...(recalledMessage ? { recalledMessage } : {}),

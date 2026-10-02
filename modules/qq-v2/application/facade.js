@@ -82,6 +82,38 @@ function cloneGlobalSettings(settings) {
         hostContextExcludeTags: Object.freeze(normalizeQQV2TagNames(source.hostContextExcludeTags)),
         worldbook: cloneWorldbookSettings(source.worldbook),
         proactive: cloneProactiveSettings(source.proactive),
+        voice: cloneVoiceSettings(source.voice),
+    });
+}
+
+function cloneVoiceSettings(settings) {
+    const source = asObject(settings);
+    const timeoutMs = Number(source.timeoutMs);
+    return Object.freeze({
+        enabled: source.enabled === true,
+        baseUrl: asText(source.baseUrl, 2048),
+        model: asText(source.model, 120),
+        defaultVoiceId: asText(source.defaultVoiceId, 256),
+        speakSelf: source.speakSelf === true,
+        emotionTags: source.emotionTags !== false,
+        directFetch: source.directFetch !== false,
+        apiKeySaved: source.apiKeySaved === true,
+        timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.trunc(timeoutMs) : 120000,
+    });
+}
+
+/** Voice audio metadata exposed to the UI; the blob itself is fetched separately. */
+function cloneMessageVoice(value) {
+    const source = asObject(value);
+    const assetId = asText(source.assetId, 256);
+    if (!assetId) return null;
+    return Object.freeze({
+        assetId,
+        mimeType: asText(source.mimeType, 64),
+        size: Math.max(0, Math.trunc(asNumber(source.size))),
+        durationMs: Math.max(0, Math.trunc(asNumber(source.durationMs))),
+        voiceId: asText(source.voiceId, 256),
+        generatedAt: Math.max(0, Math.trunc(asNumber(source.generatedAt))),
     });
 }
 
@@ -414,6 +446,7 @@ function cloneMessage(message) {
         assetId: asText(source.assetId, 256),
         generatedImagePath: asText(source.generatedImagePath, 2048),
         generatedAt: Math.max(0, Math.trunc(asNumber(source.generatedAt))),
+        voice: cloneMessageVoice(source.voice),
         selectedForInjection: source.selectedForInjection === true,
     });
 }
@@ -448,6 +481,7 @@ function clonePerson(person) {
         gender: asText(source.gender, 120),
         birthday: asText(source.birthday, 120),
         profileBackgroundAssetId: asText(source.profileBackgroundAssetId, 256),
+        voiceId: asText(source.voiceId, 256),
     });
 }
 function cloneProfile(profile) {
@@ -461,6 +495,7 @@ function cloneProfile(profile) {
         gender: asText(source.gender, 120),
         birthday: asText(source.birthday, 120),
         profileBackgroundAssetId: asText(source.profileBackgroundAssetId, 256),
+        voiceId: asText(source.voiceId, 256),
     });
 }
 
@@ -787,6 +822,38 @@ export function createQQV2Facade(options = {}) {
                         ok: true,
                         status: asText(snapshot.phase, 32) || 'ready',
                         media: cloneMedia(result),
+                        render,
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async voiceRender(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.acquireVoiceRender !== 'function') return unavailable('acquireVoiceRender');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    const assetId = asText(input.assetId, 256);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    if (!assetId) return Object.freeze({ ok: false, status: 'invalid', reason: 'asset-required' });
+                    const result = asObject(await runtime.acquireVoiceRender({
+                        scopeId: context.scopeId,
+                        assetId,
+                    }));
+                    const render = cloneMediaRender(result);
+                    if (!render.leaseId || !render.url) {
+                        return Object.freeze({ ok: false, status: 'not-found', reason: 'voice-not-found' });
+                    }
+                    return Object.freeze({
+                        ok: true,
+                        status: asText(snapshot.phase, 32) || 'ready',
+                        voice: Object.freeze({
+                            assetId: asText(result.assetId, 256),
+                            mimeType: asText(result.mimeType, 64),
+                            size: Math.max(0, Math.trunc(asNumber(result.size))),
+                            durationMs: Math.max(0, Math.trunc(asNumber(result.durationMs))),
+                        }),
                         render,
                     });
                 } catch (error) {
@@ -1838,6 +1905,143 @@ export function createQQV2Facade(options = {}) {
                             message: cloneMessage(result.message),
                             previousImagePath: asText(result.previousImagePath, 2048),
                         }),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async synthesizeVoice(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.getConversation !== 'function') return unavailable('getConversation');
+                if (typeof runtime.synthesizeVoice !== 'function') return unavailable('synthesizeVoice');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    const conversationId = asText(input.conversationId, 256);
+                    const messageId = asText(input.messageId, 256);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    if (!conversationId) {
+                        return Object.freeze({ ok: false, status: 'invalid', reason: 'conversation-required' });
+                    }
+                    if (!messageId) {
+                        return Object.freeze({ ok: false, status: 'invalid', reason: 'message-required' });
+                    }
+                    if (!await hasConversation(runtime, context.scopeId, conversationId)) {
+                        return conversationNotFound();
+                    }
+                    const result = asObject(await runtime.synthesizeVoice({
+                        scopeId: context.scopeId,
+                        conversationId,
+                        messageId,
+                    }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        result: Object.freeze({
+                            message: cloneMessage(result.message),
+                            durationMs: Math.max(0, Math.trunc(asNumber(result.durationMs))),
+                            voiceId: asText(result.voiceId, 256),
+                        }),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async releaseVoiceRender(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.releaseVoiceRender !== 'function') return unavailable('releaseVoiceRender');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    const leaseId = asText(input.leaseId, 256);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    if (!leaseId) return Object.freeze({ ok: false, status: 'invalid', reason: 'voice-render-required' });
+                    const released = await runtime.releaseVoiceRender({ scopeId: context.scopeId, leaseId });
+                    return Object.freeze({ ok: true, status: 'accepted', released: released === true });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async previewVoice(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.previewVoice !== 'function') return unavailable('previewVoice');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    const text = typeof input.text === 'string' ? input.text : '';
+                    const voiceId = asText(input.voiceId, 256);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    if (!text.trim()) return Object.freeze({ ok: false, status: 'invalid', reason: 'text-required' });
+                    if (!voiceId) return Object.freeze({ ok: false, status: 'invalid', reason: 'voice-required' });
+                    const result = asObject(await runtime.previewVoice({
+                        scopeId: context.scopeId,
+                        text,
+                        voiceId,
+                    }));
+                    const render = cloneMediaRender(result);
+                    if (!render.leaseId || !render.url) {
+                        return Object.freeze({ ok: false, status: 'failed', reason: 'voice-preview-failed' });
+                    }
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        render,
+                        voice: Object.freeze({
+                            mimeType: asText(result.mimeType, 64),
+                            byteLength: Math.max(0, Math.trunc(asNumber(result.byteLength))),
+                            durationMs: Math.max(0, Math.trunc(asNumber(result.durationMs))),
+                        }),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async releaseVoicePreview(input = {}) {
+                if (typeof runtime.releaseVoicePreview !== 'function') return unavailable('releaseVoicePreview');
+                try {
+                    const leaseId = asText(input.leaseId, 256);
+                    if (!leaseId) {
+                        return Object.freeze({ ok: false, status: 'invalid', reason: 'voice-preview-required' });
+                    }
+                    const released = await runtime.releaseVoicePreview({ leaseId });
+                    return Object.freeze({ ok: true, status: 'accepted', released: released === true });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async setVoiceApiKey(input = {}) {
+                if (typeof runtime.setVoiceApiKey !== 'function') return unavailable('setVoiceApiKey');
+                try {
+                    const result = asObject(await runtime.setVoiceApiKey({
+                        apiKey: typeof input.apiKey === 'string' ? input.apiKey : '',
+                    }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        hasApiKey: result.hasApiKey === true,
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async updatePersonVoice(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.updatePersonVoice !== 'function') return unavailable('updatePersonVoice');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    const personId = asText(input.personId, 256);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    if (!personId) return Object.freeze({ ok: false, status: 'invalid', reason: 'person-required' });
+                    const result = asObject(await runtime.updatePersonVoice({
+                        scopeId: context.scopeId,
+                        personId,
+                        voiceId: asText(input.voiceId, 256),
+                    }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        person: clonePerson(result.person),
                     });
                 } catch (error) {
                     return failed(error);

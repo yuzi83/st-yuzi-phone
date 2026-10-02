@@ -5,6 +5,11 @@ import {
     normalizeQQV2TagNames,
     parseQQV2TagInput,
 } from '../domain/story-context-tags.js';
+import {
+    QQ_VOICE_SETTINGS_DEFAULTS,
+    applyQQVoiceSettingsPatch,
+    normalizeQQVoiceSettings,
+} from '../voice/settings.js';
 
 const STORAGE_KEY = 'qq-v2.runtime-settings';
 const LEGACY_WORLDBOOK_ENABLED_KEY = 'worldbookInjectionEnabled';
@@ -26,6 +31,7 @@ const GLOBAL_RUNTIME_DEFAULTS = Object.freeze({
     hostContextExtractTag: 'content',
     hostContextExcludeTags: Object.freeze([]),
     proactive: Object.freeze({ enabled: false, everyTurns: 5, privateWeight: 50 }),
+    voice: QQ_VOICE_SETTINGS_DEFAULTS,
     worldbook: Object.freeze({
         enabled: false,
         timeWindow: Object.freeze({ mode: 'relative', value: 1, unit: 'month' }),
@@ -135,6 +141,7 @@ function normalizeSettings(value) {
                 GLOBAL_RUNTIME_DEFAULTS.proactive.privateWeight,
             ))),
         },
+        voice: normalizeQQVoiceSettings(source.voice),
     };
 }
 
@@ -309,6 +316,9 @@ function applyPatch(current, patch) {
             throw new RangeError(t("私聊主动回复占比必须是 0 到 100 的整数"));
         }
         next.proactive.privateWeight = privateWeight;
+    }
+    if (Object.hasOwn(source, 'voice')) {
+        next.voice = applyQQVoiceSettingsPatch(next.voice, source.voice);
     }
     return next;
 }

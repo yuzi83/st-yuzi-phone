@@ -327,3 +327,17 @@ Figma 原始底栏顺序不直接复用。生产 QQ 固定为 消息、联系人
 设置首页“发送键”开关使用 `--yuzi-qq-send-switch-width`（44px）、`--yuzi-qq-send-switch-height`（26px）、`--yuzi-qq-send-switch-padding`（3px）、`--yuzi-qq-send-switch-thumb`（20px）和 `--yuzi-qq-send-switch-duration`（150ms）。开关未选中消费 `--yuzi-qq-muted`，选中消费 `--yuzi-qq-accent`，滑块消费 `--yuzi-qq-on-accent`；减少动态效果时停用滑动过渡。
 
 输入框的纸飞机与终止键互斥显示，共用 `--yuzi-qq-private-stop-size`、`--yuzi-qq-private-stop-icon-size` 和 `--yuzi-qq-radius-8`，不增加第二个按钮位置。纸飞机使用 `--yuzi-qq-accent`，终止键仍使用 `--yuzi-qq-danger`，禁用状态消费 `--yuzi-qq-disabled-opacity`。
+
+### QQ 语音气泡与语音合成设置
+
+语音气泡是「播放按钮 + 原文折叠按钮 + 原文」三件套，外层仍使用 `.yuzi-qq-voice-message`（气泡底、圆角、内边距沿用 `.yuzi-qq-message-bubble` 同组声明），最小宽度消费 `--yuzi-qq-private-voice-min-width`，摘要行间距消费 `--yuzi-qq-private-voice-summary-gap`。
+
+| selector | 作用 | 消费 token |
+| --- | --- | --- |
+| `.yuzi-qq-voice-play` | 整行播放/生成按钮，透明底、继承气泡文字色 | `--yuzi-qq-private-voice-summary-gap`、`--yuzi-qq-disabled-opacity` |
+| `.yuzi-qq-voice-state` | 未生成（“点击生成”）与生成中文案 | `--yuzi-qq-muted`、`--yuzi-qq-caption-size`、`--yuzi-qq-caption-line-height` |
+| `.yuzi-qq-voice-transcript-toggle` / `.yuzi-qq-voice-transcript-icon` | 展开原文的箭头入口 | `--yuzi-qq-private-voice-action-gap`、`--yuzi-qq-private-voice-transcript-size`、`--yuzi-qq-muted` |
+| `.yuzi-qq-voice-tag`（`.is-custom`） | FAS2 情感标签 chip | `--yuzi-qq-private-voice-tag-padding-inline`、`--yuzi-qq-private-voice-tag-padding-block`、`--yuzi-qq-private-voice-tag-radius`、`--yuzi-qq-subtle`、`--yuzi-qq-muted`、`--yuzi-qq-icon` |
+| `.yuzi-qq-group-member-voice-row` | 群成员编辑页的音色 ID 行 | `--yuzi-qq-inline-gap` |
+
+展开态挂在气泡外层的 `.is-expanded`（沿用既有 `.yuzi-qq-voice-original` 规则），播放态与生成态分别是 `.is-playing` 与 `.is-loading`；播放中的图标切换与旋转不使用新增过渡 token，低动态下同样成立。语音合成设置页复用「设置分组列表与公共弹层」一节的 `.phone-ios-*` 类名，只新增语义数据行，不新起样式体系。

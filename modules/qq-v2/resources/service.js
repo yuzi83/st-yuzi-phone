@@ -2,6 +2,7 @@ import { createAssistantPromptPreset } from '../prompt/assistant-preset.js';
 import { createChatPromptPresets } from '../prompt/chat-presets.js';
 import { normalizeQQV2OpenAIBaseUrl } from '../api-endpoint-policy.js';
 import { createQQV2ApiKeyStore } from './api-key-store.js';
+import { QQ_VOICE_API_KEY_ID } from '../voice/settings.js';
 
 const API_PRESETS_STORAGE_KEY = 'qq-v2.resources.api-presets';
 const PROMPT_PRESETS_STORAGE_KEY = 'qq-v2.resources.prompt-presets-v3';
@@ -38,6 +39,7 @@ conversation、sender、type 和消息内容必填。type 只能是 text、voice
 - sticker 只用于 sticker，且必须是 {{可用表情}} 中真实存在的 ID；正文写表情的自然语言说明。
 - amount、recipient、note 只用于 transfer，其中 amount 与 recipient 必填；正文写自然语言说明。
 - text 写 QQ 文字；voice 写语音文字内容；image、video 写自然语言描述。不要提供 URL、时长或媒体地址。
+- voice 正文可以放 FAS2 声音控制标签（英文方括号，例如 [happy]、[sad]、[angry]、[sigh]、[whispering]、[shouting]、[long pause]），放在它影响的词前面，每条语音最多 10 个；场景没有依据就不要加。
 
 示例：
 <qq>
@@ -101,6 +103,7 @@ const QQ_PRIVATE_REPLY_XML_PROTOCOL = String.raw`
 conversation、sender、type 和消息内容必填。type 只能是 text、voice、image、video、sticker、transfer。
 - 私聊消息不得添加 quote、mentions 或 all 属性。
 - text 写真实 QQ 文字；voice 写角色实际说出的语音文字；image、video 写简短自然的画面描述，不提供 URL、时长或媒体地址。
+- voice 正文可以放 FAS2 声音控制标签（英文方括号，例如 [happy]、[sad]、[angry]、[sigh]、[whispering]、[shouting]、[long pause]），放在它影响的词前面，每条语音最多 10 个；场景没有依据就不要加。
 - sticker 只用于 sticker，且必须填写 {{可用表情}} 中真实存在的 S1、S2……短编号；正文写该表情的自然语言说明。
 - amount、recipient、note 只用于 transfer，其中 amount 与 recipient 必填，recipient 只能是 __self__；正文写自然语言说明。
 - 每种消息只使用上方列出的对应属性，不添加其他属性。
@@ -132,6 +135,7 @@ const QQ_PRIVATE_PROACTIVE_XML_PROTOCOL = String.raw`
 conversation、sender、type 和消息内容必填。type 只能是 text、voice、image、video、sticker、transfer。
 - 私聊消息不得添加 quote、mentions 或 all 属性。
 - text 写真实 QQ 文字；voice 写角色实际说出的语音文字；image、video 写简短自然的画面描述，不提供 URL、时长或媒体地址。
+- voice 正文可以放 FAS2 声音控制标签（英文方括号，例如 [happy]、[sad]、[angry]、[sigh]、[whispering]、[shouting]、[long pause]），放在它影响的词前面，每条语音最多 10 个；场景没有依据就不要加。
 - sticker 只用于 sticker，且必须填写 {{可用表情}} 中真实存在的 S1、S2……短编号；正文写该表情的自然语言说明。
 - amount、recipient、note 只用于 transfer，其中 amount 与 recipient 必填，recipient 只能是 __self__；正文写自然语言说明。
 - 每种消息只使用上方列出的对应属性，不添加其他属性。
@@ -460,6 +464,16 @@ export function createQQV2ResourceService(options = {}) {
         return stored && typeof stored === 'object' && Array.isArray(stored.presets)
             ? { presets: [...stored.presets] }
             : { presets: [] };
+    };
+
+    const readVoiceApiKey = async () => {
+        try {
+            return await apiKeys.get(QQ_VOICE_API_KEY_ID);
+        } catch (error) {
+            // A missing key is a normal state, not a broken account setting.
+            if (error?.code === 'api_key_reentry_required') return '';
+            throw error;
+        }
     };
 
     const readPromptState = async () => {
@@ -830,6 +844,25 @@ export function createQQV2ResourceService(options = {}) {
             state.presets.splice(index, 1);
             await storage.set(API_PRESETS_STORAGE_KEY, state);
             await apiKeys.delete(id);
+            return true;
+        },
+        /**
+         * The voice API key never enters a preset record or an exportable
+         * settings blob; it lives beside the API preset secrets.
+         */
+        async getVoiceApiKey() {
+            return readVoiceApiKey();
+        },
+        async hasVoiceApiKey() {
+            return Boolean(await readVoiceApiKey());
+        },
+        async setVoiceApiKey(apiKey) {
+            const value = String(apiKey ?? '').trim();
+            if (!value) {
+                await apiKeys.delete(QQ_VOICE_API_KEY_ID);
+                return false;
+            }
+            await apiKeys.set(QQ_VOICE_API_KEY_ID, value);
             return true;
         },
     });

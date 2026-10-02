@@ -4234,6 +4234,75 @@
     white-space: pre-wrap;
 }
 
+.yuzi-qq-voice-play {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--yuzi-qq-private-voice-summary-gap);
+    inline-size: 100%;
+    padding: 0;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    background: transparent;
+    cursor: pointer;
+}
+
+.yuzi-qq-voice-play:disabled {
+    cursor: default;
+    opacity: var(--yuzi-qq-disabled-opacity);
+}
+
+.yuzi-qq-voice-state {
+    color: var(--yuzi-qq-muted);
+    font-size: var(--yuzi-qq-caption-size);
+    line-height: var(--yuzi-qq-caption-line-height);
+}
+
+.yuzi-qq-voice-message.is-playing .yuzi-qq-voice-state {
+    color: inherit;
+}
+
+.yuzi-qq-voice-transcript-toggle {
+    align-self: flex-end;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--yuzi-qq-private-voice-action-gap);
+    padding: 0;
+    border: 0;
+    color: var(--yuzi-qq-muted);
+    font: inherit;
+    background: transparent;
+    cursor: pointer;
+}
+
+.yuzi-qq-voice-message.is-expanded .yuzi-qq-voice-transcript-icon {
+    transform: rotate(180deg);
+}
+
+.yuzi-qq-voice-tag {
+    display: inline-block;
+    padding: var(--yuzi-qq-private-voice-tag-padding-block) var(--yuzi-qq-private-voice-tag-padding-inline);
+    border-radius: var(--yuzi-qq-private-voice-tag-radius);
+    color: var(--yuzi-qq-muted);
+    font-size: var(--yuzi-qq-caption-size);
+    line-height: var(--yuzi-qq-caption-line-height);
+    background: var(--yuzi-qq-subtle);
+}
+
+.yuzi-qq-voice-tag.is-custom {
+    color: var(--yuzi-qq-icon);
+}
+
+.yuzi-qq-voice-transcript-icon {
+    font-size: var(--yuzi-qq-private-voice-transcript-size);
+}
+
+.yuzi-qq-group-member-voice-row {
+    margin-block-start: var(--yuzi-qq-inline-gap);
+}
+
 .yuzi-qq-narrative-card,
 .yuzi-qq-transfer-card {
     display: grid;

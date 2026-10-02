@@ -868,6 +868,11 @@
     --yuzi-qq-private-jump-tail-bottom: -2px;
     --yuzi-qq-private-voice-min-width: 92px;
     --yuzi-qq-private-voice-summary-gap: 18px;
+    --yuzi-qq-private-voice-action-gap: 8px;
+    --yuzi-qq-private-voice-tag-padding-inline: 6px;
+    --yuzi-qq-private-voice-tag-padding-block: 1px;
+    --yuzi-qq-private-voice-tag-radius: 6px;
+    --yuzi-qq-private-voice-transcript-size: 16px;
     --yuzi-qq-private-card-min-width: 210px;
     --yuzi-qq-private-card-icon-size: 38px;
     --yuzi-qq-private-card-icon-font-size: 18px;
