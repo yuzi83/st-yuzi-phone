@@ -509,7 +509,17 @@ async function testVoiceUiWiring() {
     assert.match(app, /data-qq-voice-pick-profile/, 'the contact voice row can pick from the library');
     assert.match(app, /data-qq-voice-pick-member/, 'the group member voice row can pick from the library');
     assert.match(app, /facade\.query\.voiceLibrary\(\)/, 'the settings page reads the voice library');
+    assert.match(app, /const voiceEntryLabel = \(entry\) => asText\(entry\?\.name\) \|\| asText\(entry\?\.voiceId\);/,
+        'the voice library shows the voice name, not the id');
+    assert.doesNotMatch(app, /yuzi-qq-voice-library-id/, 'the library list must not render the voice id');
+    assert.doesNotMatch(app, /voice-entry-caption/, 'the entry action sheet must not caption the voice id');
+    assert.doesNotMatch(app, /sub: asText\(entry\.voiceId\)/, 'the picker must not render the voice id as a subtitle');
     assert.match(app, /facade\.intent\.importFishVoiceSettings\(/, 'the UI imports FISH settings through the facade');
+    assert.match(app, /qqSettingsGroupHeader\(t\("角色音色"\)\)/, 'the settings page groups per-character voices');
+    assert.match(app, /voiceRoleRow\(binding, libraryEntries\)/, 'each character gets its own voice row');
+    assert.match(app, /'data-qq-voice-role': asText\(binding\?\.personId\)/, 'the role row carries the person id');
+    assert.match(app, /facade\.intent\.saveVoiceRole\(\{/, 'picking a role voice saves through the facade');
+    assert.match(app, /voiceRoleFooter\(\)/, 'the role group explains the name-based memory');
     assert.match(app, /const qqSettingsNativeControl = \(tagName, name, type = '', value = ''\) => \{[\s\S]*control\.name = name;/,
         'grouped controls carry the native input name so the settings form can read them');
     assert.match(app, /enabled: form\.elements\.enabled\?\.checked === true/,
@@ -899,7 +909,9 @@ async function testVoiceLibraryAndImportThroughRuntime() {
     assert.equal(settings.settings.voice.apiKeySaved, true);
     assert.equal((await repository.getPerson(scopeId, created.person.personId)).voiceId, 'fa-lin');
     assert.deepEqual(
-        (await facade.query.voiceBindings()).bindings.map((binding) => [binding.name, binding.voiceId]),
+        (await facade.query.voiceBindings()).bindings
+            .filter((binding) => binding.voiceId)
+            .map((binding) => [binding.name, binding.voiceId]),
         [['林知夏', 'fa-lin']],
     );
 
@@ -982,6 +994,94 @@ async function testAssistantVoiceSynthesis() {
     assert.equal(disabled.error.code, 'voice_disabled');
 }
 
+async function testVoiceRoleBindings() {
+    const synthesizedVoiceIds = [];
+    const { facade, repository, scopeId, stateStore } = await createVoiceTestRuntime({
+        synthesizeVoiceAudio: async ({ text, voiceId }) => {
+            synthesizedVoiceIds.push({ text, voiceId });
+            return { blob: audio('role-voice'), mimeType: 'audio/mpeg', byteLength: 9, voiceId };
+        },
+    });
+
+    await facade.intent.setVoiceApiKey({ apiKey: 'k-1' });
+    await facade.intent.updateGlobalSettings({ scopeId, settings: { voice: { enabled: true } } });
+    const { conversation, person } = await repository.createPrivateConversation(scopeId, { name: '林知夏' });
+
+    // 角色列表：当前用户 + 每个联系人，未配置时显示未配置（effective 为空）。
+    const before = await facade.query.voiceBindings();
+    const selfRow = before.bindings.find((binding) => binding.isSelf);
+    const contactRow = before.bindings.find((binding) => binding.personId === person.personId);
+    assert.ok(selfRow, 'the current user appears in the role list');
+    assert.equal(contactRow.name, '林知夏');
+    assert.equal(contactRow.effectiveVoiceId, '');
+
+    // 通过角色面板配音色：写共享角色表 + 同步当前聊天的同名角色。
+    const saved = await facade.intent.saveVoiceRole({ personId: person.personId, name: '林知夏', voiceId: 'fa-lin' });
+    assert.equal(saved.ok, true);
+    assert.equal(saved.personUpdated, true);
+    assert.equal((await repository.getPerson(scopeId, person.personId)).voiceId, 'fa-lin');
+    assert.deepEqual(
+        (await facade.query.voiceRoles()).roles.map((role) => [role.name, role.voiceId]),
+        [['林知夏', 'fa-lin']],
+    );
+    assert.equal(
+        (await facade.query.voiceBindings()).bindings.find((binding) => binding.personId === person.personId).effectiveVoiceId,
+        'fa-lin',
+    );
+
+    // 新聊天（新作用域）里的同名角色靠角色表自动生效。
+    const secondScope = 'st:character:alice:chat-b';
+    const state = await stateStore.read();
+    state.scopes[secondScope] = JSON.parse(JSON.stringify(state.scopes[scopeId]));
+    await stateStore.transact((draft) => {
+        draft.scopes[secondScope] = JSON.parse(JSON.stringify(draft.scopes[scopeId]));
+        Object.values(draft.scopes[secondScope].people).forEach((item) => { item.voiceId = ''; });
+    });
+    const bindingsInNewScope = await facade.query.voiceBindings();
+    assert.equal(bindingsInNewScope.bindings.find((binding) => binding.name === '林知夏').roleVoiceId, 'fa-lin');
+
+    const [message] = await repository.appendMessages(scopeId, conversation.conversationId, [{
+        senderId: person.personId,
+        senderType: 'person',
+        type: 'voice',
+        content: '你好',
+        storyTime: '',
+    }]);
+    // 本地没有绑定时也要能用角色表合成：清掉本地值再来一次。
+    await facade.intent.updatePersonVoice({ personId: person.personId, voiceId: '' });
+    const synthesized = await facade.intent.synthesizeVoice({ conversationId: conversation.conversationId, messageId: message.messageId });
+    assert.equal(synthesized.ok, true, JSON.stringify(synthesized));
+    assert.equal(synthesizedVoiceIds.at(-1).voiceId, 'fa-lin', 'the shared role binding covers synthesis');
+
+    // 单聊资料里的音色优先级更高。
+    await facade.intent.updatePersonVoice({ personId: person.personId, voiceId: 'fa-local' });
+    await facade.intent.synthesizeVoice({
+        conversationId: conversation.conversationId,
+        messageId: (await repository.saveMessageVoice(scopeId, conversation.conversationId, message.messageId, {
+            blob: audio('x'), mimeType: 'audio/mpeg', durationMs: 1000, generatedAt: Date.now(),
+        }), message.messageId),
+    });
+    assert.equal(synthesizedVoiceIds.at(-1).voiceId, 'fa-local');
+
+    // 清除绑定后回落到默认音色。
+    await facade.intent.saveVoiceRole({ personId: person.personId, name: '林知夏', voiceId: '' });
+    assert.deepEqual((await facade.query.voiceRoles()).roles, []);
+    assert.equal((await repository.getPerson(scopeId, person.personId)).voiceId, '');
+    await facade.intent.updateGlobalSettings({ scopeId, settings: { voice: { defaultVoiceId: 'fa-default' } } });
+    await facade.intent.synthesizeVoice({ conversationId: conversation.conversationId, messageId: message.messageId });
+    assert.equal(synthesizedVoiceIds.at(-1).voiceId, 'fa-default');
+
+    // FISH 导入的角色绑定也会进角色表。
+    assert.equal((await facade.query.voiceRoles()).roles.length, 0);
+    await facade.intent.importVoicePack({
+        source: { type: 'fish_dialogue_voice_preset', name: 'p', defaultVoice: '', voices: { 陈锋: 'fa-chen' } },
+    });
+    assert.deepEqual(
+        (await facade.query.voiceRoles()).roles.map((role) => [role.name, role.voiceId]),
+        [['陈锋', 'fa-chen']],
+    );
+}
+
 async function main() {
     await testFishClient();
     await testEmotionTags();
@@ -994,6 +1094,7 @@ async function main() {
     await testVoiceLibraryParsing();
     await testVoiceLibraryAndImportThroughRuntime();
     await testAssistantVoiceSynthesis();
+    await testVoiceRoleBindings();
     await testVoiceTaskController();
     await testVoicePlaybackController();
     await testVoiceUiWiring();

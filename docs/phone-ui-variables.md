@@ -342,4 +342,6 @@ Figma 原始底栏顺序不直接复用。生产 QQ 固定为 消息、联系人
 
 展开态挂在气泡外层的 `.is-expanded`（沿用既有 `.yuzi-qq-voice-original` 规则），播放态与生成态分别是 `.is-playing` 与 `.is-loading`；播放中的图标切换与旋转不使用新增过渡 token，低动态下同样成立。语音合成设置页复用「设置分组列表与公共弹层」一节的 `.phone-ios-*` 类名，只新增语义数据行，不新起样式体系。
 
-语音设置页的「一键导入」「音色库」条目复用 `.phone-ios-row.is-tappable` + `.phone-ios-row-label` + `.phone-ios-row-chevron`（`.yuzi-qq-settings-action-row`），音色库条目额外在标题下方挂 `.phone-ios-row-sub.yuzi-qq-voice-library-id` 显示音色 ID；三者都不新增颜色或尺寸常量。音色选择与音色编辑弹层走公共 `showSettingsOptionSheet()` / `showSettingsSheet()` / `showSettingsActionSheet()`，不新建弹层体系。
+语音设置页的「一键导入」「音色库」条目复用 `.phone-ios-row.is-tappable` + `.phone-ios-row-label` + `.phone-ios-row-chevron`（`.yuzi-qq-settings-action-row`）；音色库列表只显示音色名称，音色 ID 与分类只出现在编辑弹层，三者都不新增颜色或尺寸常量。音色选择与音色编辑弹层走公共 `showSettingsOptionSheet()` / `showSettingsSheet()` / `showSettingsActionSheet()`，不新建弹层体系。
+
+「角色音色」分组同样复用行与值槽（`.phone-ios-row` + `.phone-ios-row-label` + `.phone-ios-row-value` + `.phone-ios-row-chevron`，`.yuzi-qq-voice-role-row`），陪聊人物在名称后挂 `.phone-ios-badge`（`.yuzi-qq-voice-role-badge`），分组说明使用 `.phone-ios-group-footer`（`.yuzi-qq-voice-role-footer`）；右侧只显示生效音色的名称，未配置时显示「未配置」。

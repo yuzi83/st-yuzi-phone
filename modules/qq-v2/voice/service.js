@@ -10,16 +10,16 @@ function asText(value, maxLength = 0) {
 }
 
 /**
- * Decide whose voice reads one message. Audio is only produced for a person who
- * has a binding, or from the shared default when nobody does.
+ * Decide whose voice reads one message. Precedence: the person's own binding,
+ * then the shared role binding remembered by name, then the default voice.
  */
-export function resolveQQVoiceId({ settings, personVoiceId = '', senderType = '' } = {}) {
+export function resolveQQVoiceId({ settings, personVoiceId = '', roleVoiceId = '', senderType = '' } = {}) {
     const defaultVoiceId = asText(settings?.defaultVoiceId, 256);
     if (senderType === 'self') {
         if (settings?.speakSelf !== true) return '';
-        return asText(personVoiceId, 256) || defaultVoiceId;
+        return asText(personVoiceId, 256) || asText(roleVoiceId, 256) || defaultVoiceId;
     }
-    return asText(personVoiceId, 256) || defaultVoiceId;
+    return asText(personVoiceId, 256) || asText(roleVoiceId, 256) || defaultVoiceId;
 }
 
 /**

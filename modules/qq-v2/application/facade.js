@@ -115,6 +115,21 @@ function cloneAssistantCharacter(character) {
     });
 }
 
+function cloneVoiceImportResult(result) {
+    const source = asObject(result);
+    return Object.freeze({
+        format: asText(source.format, 64),
+        libraryAdded: Math.max(0, Math.trunc(asNumber(asObject(source.library).added))),
+        libraryUpdated: Math.max(0, Math.trunc(asNumber(asObject(source.library).updated))),
+        rolesAdded: Math.max(0, Math.trunc(asNumber(asObject(source.roles).added))),
+        rolesUpdated: Math.max(0, Math.trunc(asNumber(asObject(source.roles).updated))),
+        settingsApplied: Boolean(source.settings),
+        bindingsApplied: Math.max(0, Math.trunc(asNumber(asObject(source.bindings).applied))),
+        bindingsSkipped: Object.freeze(asArray(asObject(source.bindings).skipped).map((name) => asText(name, 120))),
+        apiKeyImported: source.apiKeyImported === true,
+    });
+}
+
 function cloneVoiceSettings(settings) {
     const source = asObject(settings);
     const timeoutMs = Number(source.timeoutMs);
@@ -1003,10 +1018,33 @@ export function createQQV2Facade(options = {}) {
                     return Object.freeze({
                         ok: true,
                         status: 'ready',
-                        bindings: Object.freeze(asArray(result.bindings).map((binding) => Object.freeze({
-                            personId: asText(asObject(binding).personId, 256),
-                            name: asText(asObject(binding).name, 120),
-                            voiceId: asText(asObject(binding).voiceId, 256),
+                        bindings: Object.freeze(asArray(result.bindings).map((binding) => {
+                            const source = asObject(binding);
+                            return Object.freeze({
+                                personId: asText(source.personId, 256),
+                                name: asText(source.name, 120),
+                                voiceId: asText(source.voiceId, 256),
+                                roleVoiceId: asText(source.roleVoiceId, 256),
+                                effectiveVoiceId: asText(source.effectiveVoiceId, 256),
+                                isSelf: source.isSelf === true,
+                                isAssistant: source.isAssistant === true,
+                            });
+                        })),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async voiceRoles() {
+                if (typeof runtime.listVoiceRoles !== 'function') return unavailable('listVoiceRoles');
+                try {
+                    const roles = await runtime.listVoiceRoles();
+                    return Object.freeze({
+                        ok: true,
+                        status: 'ready',
+                        roles: Object.freeze(asArray(roles).map((role) => Object.freeze({
+                            name: asText(asObject(role).name, 120),
+                            voiceId: asText(asObject(role).voiceId, 256),
                         }))),
                     });
                 } catch (error) {
@@ -2136,16 +2174,37 @@ export function createQQV2Facade(options = {}) {
                     return Object.freeze({
                         ok: true,
                         status: 'accepted',
-                        result: Object.freeze({
-                            format: asText(result.format, 64),
-                            libraryAdded: Math.max(0, Math.trunc(asNumber(asObject(result.library).added))),
-                            libraryUpdated: Math.max(0, Math.trunc(asNumber(asObject(result.library).updated))),
-                            settingsApplied: Boolean(result.settings),
-                            bindingsApplied: Math.max(0, Math.trunc(asNumber(asObject(result.bindings).applied))),
-                            bindingsSkipped: Object.freeze(asArray(asObject(result.bindings).skipped).map((name) => asText(name, 120))),
-                            apiKeyImported: result.apiKeyImported === true,
+                        result: cloneVoiceImportResult(result),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            /** 角色音色：按角色名记住音色，并同步当前聊天里的同名角色。 */
+            async saveVoiceRole(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.saveVoiceRole !== 'function') return unavailable('saveVoiceRole');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    const name = asText(input.name, 120);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    if (!name) return Object.freeze({ ok: false, status: 'invalid', reason: 'name-required' });
+                    const result = asObject(await runtime.saveVoiceRole({
+                        scopeId: context.scopeId,
+                        name,
+                        voiceId: asText(input.voiceId, 256),
+                        personId: asText(input.personId, 256),
+                    }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        role: Object.freeze({
+                            name: asText(asObject(result.role).name, 120),
+                            voiceId: asText(asObject(result.role).voiceId, 256),
                         }),
-                });
+                        personUpdated: result.personUpdated === true,
+                    });
                 } catch (error) {
                     return failed(error);
                 }
@@ -2167,15 +2226,7 @@ export function createQQV2Facade(options = {}) {
                     return Object.freeze({
                         ok: true,
                         status: 'accepted',
-                        result: Object.freeze({
-                            format: asText(result.format, 64),
-                            libraryAdded: Math.max(0, Math.trunc(asNumber(asObject(result.library).added))),
-                            libraryUpdated: Math.max(0, Math.trunc(asNumber(asObject(result.library).updated))),
-                            settingsApplied: Boolean(result.settings),
-                            bindingsApplied: Math.max(0, Math.trunc(asNumber(asObject(result.bindings).applied))),
-                            bindingsSkipped: Object.freeze(asArray(asObject(result.bindings).skipped).map((name) => asText(name, 120))),
-                            apiKeyImported: result.apiKeyImported === true,
-                        }),
+                        result: cloneVoiceImportResult(result),
                     });
                 } catch (error) {
                     return failed(error);

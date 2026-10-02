@@ -4451,6 +4451,8 @@ export function createQQApp({
             const voice = settings.voice;
             const libraryResult = await facade.query.voiceLibrary().catch(() => null);
             const libraryEntries = libraryResult?.ok ? asArray(libraryResult.entries) : [];
+            const bindingsResult = await facade.query.voiceBindings().catch(() => null);
+            const voiceBindings = bindingsResult?.ok ? asArray(bindingsResult.bindings) : [];
             const enabledToggle = qqSettingsSwitch(t("启用语音合成"), 'enabled', voice.enabled);
             const baseField = qqSettingsText(t("服务地址"), 'baseUrl', voice.baseUrl || 'https://api.fish.audio', {
                 placeholder: 'https://api.fish.audio',
@@ -4507,16 +4509,10 @@ export function createQQApp({
             previewRow.append(previewLabel, previewText, previewVoice, previewActions, previewStatus);
 
             // 音色库：一行一条，点开可以设为默认、编辑或删除。
-            const libraryRows = libraryEntries.map((entry) => {
-                const row = qqSettingsActionRow(
-                    voiceEntryLabel(entry),
-                    { 'data-qq-voice-entry': asText(entry.entryId), title: asText(entry.voiceId) },
-                );
-                const sub = createElement('span', 'phone-ios-row-sub yuzi-qq-voice-library-id');
-                sub.textContent = asText(entry.voiceId);
-                row.querySelector('.phone-ios-row-label')?.after(sub);
-                return row;
-            });
+            const libraryRows = libraryEntries.map((entry) => qqSettingsActionRow(
+                voiceEntryLabel(entry),
+                { 'data-qq-voice-entry': asText(entry.entryId) },
+            ));
             const addEntryRow = qqSettingsActionRow(t("新增音色"), 'data-qq-voice-entry-add');
 
             form.append(
@@ -4528,6 +4524,13 @@ export function createQQApp({
                 ),
                 qqSettingsGroupHeader(t("语音合成")),
                 qqSettingsCard(enabledToggle, baseField, modelField, defaultVoiceField, defaultVoicePick),
+                qqSettingsGroupHeader(t("角色音色")),
+                qqSettingsCard(
+                    ...(voiceBindings.length > 0
+                        ? voiceBindings.map((binding) => voiceRoleRow(binding, libraryEntries))
+                        : [qqSettingsActionRow(t("当前聊天还没有角色"), { 'data-qq-voice-role-empty': '1' })]),
+                ),
+                voiceRoleFooter(),
                 qqSettingsGroupHeader(t("音色库")),
                 qqSettingsCard(...(libraryRows.length > 0 ? libraryRows : [qqSettingsActionRow(t("音色库还是空的"), { 'data-qq-voice-library-empty': '1' })]), addEntryRow),
                 qqSettingsGroupHeader(t("行为")),
@@ -5835,11 +5838,8 @@ export function createQQApp({
         }
     };
 
-    const voiceEntryLabel = (entry) => {
-        const category = QQ_VOICE_CATEGORIES[asText(entry?.category)];
-        const parts = [asText(entry?.note), category ? t(category) : ''].filter(Boolean);
-        return parts.length ? `${asText(entry?.name)}（${parts.join(' / ')}）` : asText(entry?.name);
-    };
+    /** 列表只显示名称：音色 ID 与分类只在编辑弹层里出现，避免列表噪声。 */
+    const voiceEntryLabel = (entry) => asText(entry?.name) || asText(entry?.voiceId);
 
     /** 手写音色 ID：音色库为空或用户想临时用一个 ID 时使用。 */
     const promptVoiceId = ({ title = t("音色 ID"), currentValue = '', onSelect } = {}) => {
@@ -5872,10 +5872,10 @@ export function createQQApp({
         });
     };
 
-    /** 选音色：优先音色库列表，库为空时直接手写。 */
-    const pickVoiceId = async ({ title = t("选择音色"), currentValue = '', onSelect } = {}) => {
+    /** 选音色：优先音色库列表，库为空时直接手写；allowClear 时多一个「清除绑定」。 */
+    const pickVoiceId = async ({ title = t("选择音色"), currentValue = '', allowClear = false, onSelect } = {}) => {
         const entries = await loadVoiceLibraryEntries();
-        if (entries.length === 0) {
+        if (entries.length === 0 && !allowClear) {
             promptVoiceId({ title, currentValue, onSelect });
             return;
         }
@@ -5890,18 +5890,24 @@ export function createQQApp({
                     options: entries.map((entry) => ({
                         value: entry.voiceId,
                         label: voiceEntryLabel(entry),
-                        sub: asText(entry.voiceId),
                         selected: asText(entry.voiceId) === asText(currentValue),
                     })),
                 },
                 {
                     header: t("其他"),
-                    options: [{ value: '__manual__', label: t("手动输入音色 ID") }],
+                    options: [
+                        { value: '__manual__', label: t("手动输入音色 ID") },
+                        ...(allowClear ? [{ value: '__clear__', label: t("清除绑定"), disabled: !asText(currentValue) }] : []),
+                    ],
                 },
             ],
             onSelect: (value) => {
                 if (value === '__manual__') {
                     promptVoiceId({ title, currentValue, onSelect });
+                    return;
+                }
+                if (value === '__clear__') {
+                    void onSelect?.('');
                     return;
                 }
                 void onSelect?.(value);
@@ -5987,7 +5993,6 @@ export function createQQApp({
         const context = await getCurrentContext();
         showSettingsActionSheet({
             title: voiceEntryLabel(entry),
-            captionHtml: `<span class="yuzi-qq-voice-entry-caption">${escapeHtml(asText(entry.voiceId))}</span>`,
             className: 'yuzi-qq-settings-layer yuzi-qq-voice-entry-action-sheet',
             runtime: layerRuntime,
             actions: [
@@ -6050,6 +6055,52 @@ export function createQQApp({
         const result = await facade.intent.importVoicePack({ source: pack });
         if (!result?.ok) throw new Error(result?.error?.message || t("导入失败"));
         return result.result;
+    };
+
+    /** 角色音色：一行一个角色，显示最终生效的音色名称。 */
+    const voiceRoleRow = (binding, libraryEntries) => {
+        const row = createButton('', 'phone-ios-row is-tappable yuzi-qq-settings-row yuzi-qq-voice-role-row', {
+            'data-qq-voice-role': asText(binding?.personId),
+            'data-qq-voice-role-name': asText(binding?.name),
+            'data-qq-voice-role-voice': asText(binding?.effectiveVoiceId),
+        });
+        const labelEl = createElement('span', 'phone-ios-row-label');
+        labelEl.textContent = asText(binding?.name);
+        row.append(labelEl);
+        if (binding?.isAssistant) {
+            const badge = createElement('span', 'phone-ios-badge yuzi-qq-voice-role-badge');
+            badge.textContent = t("陪聊");
+            row.append(badge);
+        }
+        const valueEl = createElement('span', 'phone-ios-row-value');
+        const valueText = createElement('span', 'phone-ios-row-value-text');
+        const effective = asText(binding?.effectiveVoiceId);
+        const matched = libraryEntries.find((entry) => asText(entry.voiceId) === effective);
+        valueText.textContent = effective ? (matched ? voiceEntryLabel(matched) : effective) : t("未配置");
+        const chevron = createElement('span', 'phone-ios-row-chevron');
+        chevron.textContent = '›';
+        valueEl.append(valueText, chevron);
+        row.append(valueEl);
+        return row;
+    };
+
+    /** 角色音色不改表单字段，点开就选，选完直接写回。 */
+    const saveVoiceRoleForRow = async (target, voiceId) => {
+        const result = await facade.intent.saveVoiceRole({
+            personId: asText(target.dataset.qqVoiceRole),
+            name: asText(target.dataset.qqVoiceRoleName),
+            voiceId: asText(voiceId),
+        });
+        if (!result?.ok) throw new Error(result?.error?.message || t("保存失败"));
+        shell.showToast?.(asText(voiceId) ? t("音色已保存") : t("已清除绑定"), false);
+        await render();
+    };
+
+    /** 角色音色分组的说明：讲清「按角色名记住」这件事。 */
+    const voiceRoleFooter = () => {
+        const footer = createElement('p', 'phone-ios-group-footer yuzi-qq-voice-role-footer');
+        footer.textContent = t("选中的音色会按角色名记住，新聊天里的同名角色自动套用；单聊资料里的音色 ID 优先级更高。");
+        return footer;
     };
 
     const describeVoiceImport = (result) => t`音色库 +${result?.libraryAdded ?? 0}（更新 ${result?.libraryUpdated ?? 0}）、角色绑定 ${result?.bindingsApplied ?? 0} 条`;
@@ -6644,6 +6695,15 @@ export function createQQApp({
         }
         if (target.dataset.qqVoiceExport) {
             await exportVoicePack();
+            return;
+        }
+        if (target.dataset.qqVoiceRole) {
+            await pickVoiceId({
+                title: asText(target.dataset.qqVoiceRoleName) || t("角色音色"),
+                currentValue: asText(target.dataset.qqVoiceRoleVoice),
+                allowClear: true,
+                onSelect: (voiceId) => saveVoiceRoleForRow(target, voiceId),
+            });
             return;
         }
     };

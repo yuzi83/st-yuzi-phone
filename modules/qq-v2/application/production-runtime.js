@@ -60,6 +60,7 @@ import {
     resolveQQVoiceId,
 } from '../voice/service.js';
 import {
+    findQQVoiceRole,
     normalizeQQVoiceSpeakerName,
     parseQQVoiceImportSource,
 } from '../voice/library.js';
@@ -941,6 +942,7 @@ export function createQQV2ProductionRuntime(options = {}) {
         const result = {
             format: parsed.format,
             library: null,
+            roles: null,
             settings: null,
             bindings: { applied: 0, skipped: [] },
             apiKeyImported: false,
@@ -957,6 +959,9 @@ export function createQQV2ProductionRuntime(options = {}) {
             );
         }
         if (applyBindings && parsed.bindings.length > 0) {
+            // 先记进共享角色表：新聊天里的同名角色会自动套用同一音色。
+            const roleMerge = await resources.mergeVoiceRoles(parsed.bindings);
+            result.roles = { added: roleMerge.added, updated: roleMerge.updated };
             const scope = await repository.getScope(normalizedScopeId);
             const byName = new Map(Object.values(asObject(scope?.people))
                 .map((person) => [normalizeQQVoiceSpeakerName(person?.formalName), person]));
@@ -2623,9 +2628,14 @@ export function createQQV2ProductionRuntime(options = {}) {
             const isSelf = message.senderId === SELF_ID;
             const scope = savedScope;
             const person = isSelf ? null : await repository.getPerson(normalizedScopeId, message.senderId);
+            const roleName = isSelf
+                ? asText(currentContext(host, null)?.user?.name, 120)
+                : asText(person?.formalName, 120);
+            const role = roleName ? await resources.getVoiceRole(roleName) : null;
             const voiceId = resolveQQVoiceId({
                 settings,
                 personVoiceId: isSelf ? scope?.selfProfile?.voiceId : person?.voiceId,
+                roleVoiceId: role?.voiceId || '',
                 senderType: message.senderType,
             });
             if (!voiceId) {
@@ -2807,17 +2817,56 @@ export function createQQV2ProductionRuntime(options = {}) {
             return result;
         },
         listVoiceLibrary: () => resources.listVoiceEntries(),
+        listVoiceRoles: () => resources.listVoiceRoles(),
+        /**
+         * 角色音色面板的数据：列出当前聊天里的每个角色（含当前用户与陪聊），
+         * 各自给出本地绑定、共享角色绑定与最终生效值。
+         */
         async listVoiceBindings({ scopeId } = {}) {
             const scope = await repository.getScope(asText(scopeId, 512));
-            return {
-                bindings: Object.values(asObject(scope?.people))
-                    .map((person) => ({
-                        personId: asText(person?.personId, 256),
-                        name: asText(person?.formalName, 120),
-                        voiceId: asText(person?.voiceId, 256),
-                    }))
-                    .filter((binding) => binding.personId && binding.voiceId),
+            const roles = await resources.listVoiceRoles();
+            const defaultVoiceId = asText(
+                (await resolveRuntimeSettings(asText(scopeId, 512), scope, {}))?.voice?.defaultVoiceId,
+                256,
+            );
+            const describe = (personId, name, localVoiceId, extra = {}) => {
+                const local = asText(localVoiceId, 256);
+                const roleVoiceId = asText(findQQVoiceRole(roles, name)?.voiceId, 256);
+                return {
+                    personId: asText(personId, 256),
+                    name: asText(name, 120),
+                    voiceId: local,
+                    roleVoiceId,
+                    effectiveVoiceId: local || roleVoiceId || defaultVoiceId,
+                    ...extra,
+                };
             };
+            const selfName = asText(currentContext(host, null)?.user?.name, 120);
+            return {
+                bindings: [
+                    describe(SELF_ID, selfName, scope?.selfProfile?.voiceId, { isSelf: true }),
+                    ...Object.values(asObject(scope?.people)).map((person) => describe(
+                        person?.personId,
+                        person?.formalName,
+                        person?.voiceId,
+                        { isAssistant: Boolean(person?.assistantCharacterId) },
+                    )),
+                ].filter((binding) => binding.name),
+            };
+        },
+        /** 保存角色音色：写入共享角色绑定，并同步当前聊天里的同名角色。 */
+        async saveVoiceRole({ scopeId, name, voiceId, personId } = {}) {
+            const scopeSession = captureReadyScopeSession(scopeId);
+            const normalizedScopeId = await ensureScope(scopeId, null, { scopeSession });
+            const role = await resources.saveVoiceRole({ name, voiceId });
+            const normalizedPersonId = asText(personId, 256);
+            if (normalizedPersonId === SELF_ID) {
+                await repository.updateCurrentProfile(normalizedScopeId, { voiceId: asText(voiceId, 256) }, { scopeSession });
+            } else if (normalizedPersonId) {
+                await repository.updatePersonVoice(normalizedScopeId, normalizedPersonId, asText(voiceId, 256), { scopeSession });
+            }
+            await notifySubscribers(normalizedScopeId);
+            return { role, personUpdated: Boolean(normalizedPersonId) };
         },
         saveVoiceEntry: ({ entry } = {}) => resources.saveVoiceEntry(asObject(entry)),
         deleteVoiceEntry: ({ entryId } = {}) => resources.deleteVoiceEntry(asText(entryId, 256)),

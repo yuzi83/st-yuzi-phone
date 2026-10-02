@@ -5,15 +5,19 @@ import { createQQV2ApiKeyStore } from './api-key-store.js';
 import { QQ_VOICE_API_KEY_ID } from '../voice/settings.js';
 import {
     QQ_VOICE_LIBRARY_STORAGE_KEY,
+    findQQVoiceRole,
     mergeQQVoiceLibrary,
+    mergeQQVoiceRoles,
     normalizeQQVoiceEntry,
     normalizeQQVoiceLibrary,
+    normalizeQQVoiceRoles,
 } from '../voice/library.js';
 
 const API_PRESETS_STORAGE_KEY = 'qq-v2.resources.api-presets';
 const PROMPT_PRESETS_STORAGE_KEY = 'qq-v2.resources.prompt-presets-v3';
 const STICKERS_STORAGE_KEY = 'qq-v2.resources.stickers';
 const IMAGE_GENERATION_PRESETS_STORAGE_KEY = 'qq-v2.resources.image-generation-presets';
+const VOICE_ROLES_STORAGE_KEY = 'qq-v2.resources.voice-roles';
 const PROMPT_MESSAGE_ROLES = new Set(['system', 'user', 'assistant']);
 const IMAGE_GENERATION_PRESET_KEYS = new Set(['entries']);
 const IMAGE_GENERATION_ENTRY_KEYS = new Set([
@@ -907,6 +911,37 @@ export function createQQV2ResourceService(options = {}) {
             await storage.set(QQ_VOICE_LIBRARY_STORAGE_KEY, { entries: merged.entries });
             return Object.freeze({
                 entries: Object.freeze(merged.entries.map((entry) => Object.freeze({ ...entry }))),
+                added: merged.added,
+                updated: merged.updated,
+            });
+        },
+        async listVoiceRoles() {
+            const state = normalizeQQVoiceRoles(await storage.get(VOICE_ROLES_STORAGE_KEY));
+            return Object.freeze(state.roles.map((role) => Object.freeze({ ...role })));
+        },
+        async getVoiceRole(name) {
+            const state = normalizeQQVoiceRoles(await storage.get(VOICE_ROLES_STORAGE_KEY));
+            const role = findQQVoiceRole(state, name);
+            return role ? Object.freeze({ ...role }) : null;
+        },
+        /** 空 voiceId 视为解除该角色的绑定。 */
+        async saveVoiceRole(input = {}) {
+            const name = String(input?.name ?? '').trim();
+            if (!name) throw resourceError('voice_role_name_required', '角色名不能为空');
+            const state = normalizeQQVoiceRoles(await storage.get(VOICE_ROLES_STORAGE_KEY));
+            const key = name.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLocaleLowerCase();
+            const roles = state.roles.filter((role) => role.name.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLocaleLowerCase() !== key);
+            const voiceId = String(input?.voiceId ?? '').trim().slice(0, 256);
+            if (voiceId) roles.push({ name, voiceId });
+            await storage.set(VOICE_ROLES_STORAGE_KEY, { roles });
+            return Object.freeze({ name, voiceId });
+        },
+        async mergeVoiceRoles(roles) {
+            const state = normalizeQQVoiceRoles(await storage.get(VOICE_ROLES_STORAGE_KEY));
+            const merged = mergeQQVoiceRoles(state, roles);
+            await storage.set(VOICE_ROLES_STORAGE_KEY, { roles: merged.roles });
+            return Object.freeze({
+                roles: Object.freeze(merged.roles.map((role) => Object.freeze({ ...role }))),
                 added: merged.added,
                 updated: merged.updated,
             });

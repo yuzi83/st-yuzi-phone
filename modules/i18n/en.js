@@ -2021,5 +2021,12 @@ export default {
     "语音音频超过 25 MB 限制": "The voice audio exceeds the 25 MB limit",
     "请先填写语音 API Key": "Enter the voice API key first",
     "请先填写默认音色 ID 或为该联系人绑定音色": "Enter a default voice ID first, or bind a voice to this contact",
-    "返回内容不是音频：请检查服务地址与模型": "The response is not audio: check the service URL and model"
+    "返回内容不是音频：请检查服务地址与模型": "The response is not audio: check the service URL and model",
+    "角色音色": "Character voices",
+    "当前聊天还没有角色": "This chat has no characters yet",
+    "未配置": "Not set",
+    "陪聊": "Companion",
+    "清除绑定": "Clear the binding",
+    "已清除绑定": "Binding cleared",
+    "选中的音色会按角色名记住，新聊天里的同名角色自动套用；单聊资料里的音色 ID 优先级更高。": "The chosen voice is remembered by character name and reused by same-named characters in new chats; a voice ID set in the contact profile wins over it."
 };

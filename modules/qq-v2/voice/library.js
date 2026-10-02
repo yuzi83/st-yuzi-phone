@@ -94,10 +94,54 @@ export function mergeQQVoiceLibrary(current, incoming) {
     return { entries, added, updated };
 }
 
-export function voiceEntryLabel(entry) {
-    const category = QQ_VOICE_CATEGORIES[asText(entry?.category, 8)];
-    const parts = [asText(entry?.note, 120), category].filter(Boolean);
-    return parts.length ? `${asText(entry?.name, 120)}（${parts.join(' / ')}）` : asText(entry?.name, 120);
+/** 角色音色：按角色名（归一化后）记住一个音色，跨聊天生效。 */
+export function normalizeQQVoiceRole(value) {
+    const source = asObject(value);
+    const name = asText(source.name, 120);
+    const voiceId = asText(source.voiceId, 256);
+    if (!name || !voiceId) return null;
+    return { name, voiceId };
+}
+
+export function normalizeQQVoiceRoles(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const raw = Array.isArray(value) ? value : asArray(source.roles);
+    const byName = new Map();
+    raw.forEach((item) => {
+        const role = normalizeQQVoiceRole(item);
+        if (!role) return;
+        byName.set(normalizeQQVoiceSpeakerName(role.name), role);
+    });
+    return { roles: [...byName.values()] };
+}
+
+export function findQQVoiceRole(roles, name) {
+    const key = normalizeQQVoiceSpeakerName(name);
+    if (!key) return null;
+    return normalizeQQVoiceRoles(roles).roles
+        .find((role) => normalizeQQVoiceSpeakerName(role.name) === key) || null;
+}
+
+export function mergeQQVoiceRoles(current, incoming) {
+    const base = normalizeQQVoiceRoles(current);
+    const byName = new Map(base.roles.map((role) => [normalizeQQVoiceSpeakerName(role.name), { ...role }]));
+    const roles = [...byName.values()];
+    let added = 0;
+    let updated = 0;
+    normalizeQQVoiceRoles({ roles: incoming }).roles.forEach((role) => {
+        const key = normalizeQQVoiceSpeakerName(role.name);
+        const existing = byName.get(key);
+        if (!existing) {
+            byName.set(key, role);
+            roles.push(role);
+            added += 1;
+            return;
+        }
+        existing.voiceId = role.voiceId;
+        existing.name = role.name;
+        updated += 1;
+    });
+    return { roles, added, updated };
 }
 
 /** FISH 的角色绑定支持字符串、`{default, forms}` 与按语言的对象。 */
