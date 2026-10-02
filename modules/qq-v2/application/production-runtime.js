@@ -59,6 +59,10 @@ import {
     prepareQQVoiceText,
     resolveQQVoiceId,
 } from '../voice/service.js';
+import {
+    normalizeQQVoiceSpeakerName,
+    parseQQVoiceImportSource,
+} from '../voice/library.js';
 
 const SELF_ID = '__self__';
 const DEFAULT_WORLDBOOK_INJECTION_COUNT = 30;
@@ -896,6 +900,8 @@ export function createQQV2ProductionRuntime(options = {}) {
             const scope = state.scopes?.[normalizedScopeId];
             if (!scope) throw new Error('QQ scope disappeared while saving settings');
             scope.settings = { ...defaultGlobalSettings(), ...asObject(scope.settings) };
+            // 语音设置只保存在共享设置里；这里顺手清掉旧版本写进来的快照。
+            delete scope.settings.voice;
             Object.assign(scope.settings, normalizedPatch);
         });
         const settings = cloneGlobalSettings((await repository.getScope(normalizedScopeId))?.settings);
@@ -917,6 +923,63 @@ export function createQQV2ProductionRuntime(options = {}) {
             },
             proactive: asObject(shared.proactive),
         };
+    };
+
+    /**
+     * 一键导入的统一实现：音色库合并、语音设置补丁、按名字匹配的角色音色绑定。
+     * 名字匹配只认当前作用域里已有的人物，匹配不到的名字会回报给 UI。
+     */
+    const performVoicePackImport = async (payload = {}) => {
+        const source = payload.source ?? payload.pack?.source ?? payload.pack ?? payload;
+        const parsed = parseQQVoiceImportSource(source);
+        const requestedScopeId = asText(payload.scopeId || payload.pack?.scopeId, 512) || currentScopeId();
+        const scopeSession = captureReadyScopeSession(requestedScopeId);
+        const normalizedScopeId = await ensureScope(requestedScopeId, null, { scopeSession });
+        const applySettings = payload.applySettings !== false;
+        const applyLibrary = payload.applyLibrary !== false;
+        const applyBindings = payload.applyBindings !== false;
+        const result = {
+            format: parsed.format,
+            library: null,
+            settings: null,
+            bindings: { applied: 0, skipped: [] },
+            apiKeyImported: false,
+        };
+
+        if (applyLibrary && parsed.entries.length > 0) {
+            result.library = await resources.mergeVoiceEntries(parsed.entries);
+        }
+        if (applySettings && Object.keys(parsed.settings).length > 0) {
+            result.settings = await updateSharedRuntimeSettings(
+                normalizedScopeId,
+                { voice: parsed.settings },
+                { scopeSession },
+            );
+        }
+        if (applyBindings && parsed.bindings.length > 0) {
+            const scope = await repository.getScope(normalizedScopeId);
+            const byName = new Map(Object.values(asObject(scope?.people))
+                .map((person) => [normalizeQQVoiceSpeakerName(person?.formalName), person]));
+            const appliedVoiceIds = new Set();
+            for (const binding of parsed.bindings) {
+                const key = normalizeQQVoiceSpeakerName(binding.name);
+                const person = byName.get(key);
+                if (!person || appliedVoiceIds.has(person.personId)) {
+                    if (!person) result.bindings.skipped.push(binding.name);
+                    continue;
+                }
+                await repository.updatePersonVoice(normalizedScopeId, person.personId, binding.voiceId, { scopeSession });
+                appliedVoiceIds.add(person.personId);
+                result.bindings.applied += 1;
+            }
+        }
+        const apiKey = asText(payload.apiKey || payload.pack?.apiKey, 8192);
+        if (applySettings && apiKey) {
+            await writeVoiceApiKey(apiKey);
+            result.apiKeyImported = true;
+        }
+        await notifySubscribers(normalizedScopeId);
+        return result;
     };
 
     const updateSharedRuntimeSettings = async (scopeId, patch, { scopeSession = null } = {}) => {
@@ -2234,6 +2297,13 @@ export function createQQV2ProductionRuntime(options = {}) {
                     ...(hasOwn(proactive, 'privateWeight') ? { privateWeight: proactive.privateWeight } : {}),
                 };
             }
+            // 语音设置跨聊天共享，必须和 proactive 一样走共享设置；写进
+            // scope.settings 会被共享默认值盖掉，表现为开关和地址改不动。
+            if (hasOwn(source, 'voice')) {
+                sharedPatch.voice = asObject(source.voice);
+                // 已经进共享补丁，不能再落进按作用域的标量补丁。
+                delete scalarPatch.voice;
+            }
             if (hasOwn(source, 'worldbook')) {
                 requireWorldbookMutationResult(await runActiveWorldbookMutation(normalizedScopeId, (scopeSession) => projectionService.setGlobalSettings({
                     scopeId: normalizedScopeId,
@@ -2735,6 +2805,54 @@ export function createQQV2ProductionRuntime(options = {}) {
             );
             await notifySubscribers(normalizedScopeId);
             return result;
+        },
+        listVoiceLibrary: () => resources.listVoiceEntries(),
+        async listVoiceBindings({ scopeId } = {}) {
+            const scope = await repository.getScope(asText(scopeId, 512));
+            return {
+                bindings: Object.values(asObject(scope?.people))
+                    .map((person) => ({
+                        personId: asText(person?.personId, 256),
+                        name: asText(person?.formalName, 120),
+                        voiceId: asText(person?.voiceId, 256),
+                    }))
+                    .filter((binding) => binding.personId && binding.voiceId),
+            };
+        },
+        saveVoiceEntry: ({ entry } = {}) => resources.saveVoiceEntry(asObject(entry)),
+        deleteVoiceEntry: ({ entryId } = {}) => resources.deleteVoiceEntry(asText(entryId, 256)),
+        /** 只读预览 FISH 侧能导入什么，绝不把 API Key 交给 UI。 */
+        async readFishVoicePack() {
+            const context = safeRead(() => host.readRawContext?.(), null);
+            const fish = asObject(context?.extensionSettings?.fish_dialogue_v1);
+            const pack = parseQQVoiceImportSource(fish);
+            const available = Boolean(fish && Object.keys(fish).length > 0);
+            return {
+                available,
+                format: pack.format,
+                libraryCount: pack.entries.length,
+                bindingCount: pack.bindings.length,
+                settings: pack.settings,
+                hasApiKey: Boolean(asText(fish.savedApiKey, 8192)),
+            };
+        },
+        /** 一键导入：音色库、语音设置、角色音色绑定一起落地。 */
+        importVoicePack: (payload = {}) => performVoicePackImport(payload),
+        /** 直接读取本机 FISH 扩展设置完成导入；API Key 由运行时自己取，不过 facade。 */
+        async importFishVoiceSettings({ applySettings = true, applyLibrary = true, applyBindings = true, includeApiKey = false, scopeId } = {}) {
+            const context = safeRead(() => host.readRawContext?.(), null);
+            const fish = asObject(context?.extensionSettings?.fish_dialogue_v1);
+            if (!fish || Object.keys(fish).length === 0) {
+                throw voiceSynthesisError(t("没有找到 FISH 对话音声的设置"), 'voice_pack_unavailable');
+            }
+            return performVoicePackImport({
+                source: fish,
+                scopeId,
+                apiKey: includeApiKey ? asText(fish.savedApiKey, 8192) : '',
+                applySettings,
+                applyLibrary,
+                applyBindings,
+            });
         },
         async retryManual({ scopeId, conversationId }) {
             assertConversationWritable(scopeId, conversationId);

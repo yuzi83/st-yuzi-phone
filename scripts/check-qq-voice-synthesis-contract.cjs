@@ -502,6 +502,25 @@ async function testVoiceUiWiring() {
     assert.match(app, /facade\.query\.voiceRender\(\{ assetId \}\)/, 'playback resolves audio through the facade');
     assert.match(app, /facade\.intent\.releaseVoiceRender\(\{ leaseId \}\)/, 'playback releases its render lease');
     assert.match(app, /kind === 'voice'/, 'the settings detail page renders the voice group');
+    assert.match(app, /qqSettingsActionRow\(t\("从 FISH 对话音声导入"\), 'data-qq-voice-import-fish'\)/,
+        'the settings page exposes the one-click FISH import');
+    assert.match(app, /data-qq-voice-entry-add/, 'the settings page can add a library entry');
+    assert.match(app, /data-qq-voice-pick-default/, 'the default voice can be picked from the library');
+    assert.match(app, /data-qq-voice-pick-profile/, 'the contact voice row can pick from the library');
+    assert.match(app, /data-qq-voice-pick-member/, 'the group member voice row can pick from the library');
+    assert.match(app, /facade\.query\.voiceLibrary\(\)/, 'the settings page reads the voice library');
+    assert.match(app, /facade\.intent\.importFishVoiceSettings\(/, 'the UI imports FISH settings through the facade');
+    assert.match(app, /const qqSettingsNativeControl = \(tagName, name, type = '', value = ''\) => \{[\s\S]*control\.name = name;/,
+        'grouped controls carry the native input name so the settings form can read them');
+    assert.match(app, /enabled: form\.elements\.enabled\?\.checked === true/,
+        'the settings save path reads the voice enable switch from the form');
+    assert.match(app, /baseUrl: value\('baseUrl'\)/,
+        'the settings save path reads the service URL from the form');
+
+    const assistant = fs.readFileSync(path.join(ROOT, 'modules/qq-v2/ui/assistant.js'), 'utf8');
+    assert.match(assistant, /voiceInput\.value = character\.voiceId \|\| ''/, '陪聊设置 exposes the voice id field');
+    assert.match(assistant, /await save\(id, \{ voiceId/, '陪聊设置 saves the voice id on the character');
+    assert.match(assistant, /pickVoiceId\(\{/, '陪聊设置 can pick a voice from the library');
 
     ['yuzi-qq-voice-play', 'yuzi-qq-voice-state', 'yuzi-qq-voice-transcript-toggle', 'yuzi-qq-voice-tag'].forEach((selector) => {
         assert.match(css, new RegExp(`\\.${selector}`), `12-qq-app.css must style .${selector}`);
@@ -597,6 +616,372 @@ async function testVoiceSettingsPage() {
     assert.equal(invalid.status, 'invalid');
 }
 
+/**
+ * 设置页保存必须落到共享运行设置：曾经 voice 被写进 scope.settings，
+ * 读取时又被共享默认值覆盖，表现为开关和地址改不动。
+ */
+async function testVoiceSettingsThroughRealRuntime() {
+    const { webcrypto } = await import('node:crypto');
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+
+    const scopeId = 'st:character:alice:chat-a';
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope: () => ({
+                scopeId,
+                chatId: 'chat-a',
+                chatFile: 'chat-a',
+                hostType: 'character',
+                hostId: 'alice',
+            }),
+            readUserIdentity: () => ({ name: '旅行者', avatar: 'user.webp' }),
+            readStoryTime: () => '2042-05-20 09:30',
+            readStoryMessages: () => [],
+            readRawContext: () => ({ getRequestHeaders: async () => ({ 'X-CSRF-Token': 'token' }) }),
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        backend: {
+            async generate() { throw new Error('this contract never generates'); },
+            async loadModels() { return []; },
+        },
+        worldbookGateway: {
+            async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; },
+            async loadBook() { return { entries: {} }; },
+            async saveBook() {},
+        },
+    });
+
+    await runtime.initialize();
+    const facade = runtime.getFacade();
+    assert.equal((await facade.query.bootstrap()).globalSettings.voice.enabled, false);
+
+    const saved = await facade.intent.updateGlobalSettings({
+        scopeId,
+        settings: {
+            voice: {
+                enabled: true,
+                baseUrl: 'http://127.0.0.1:9000/v1',
+                model: 's2.1-pro-free',
+                defaultVoiceId: 'voice-lib-1',
+                speakSelf: true,
+                emotionTags: false,
+                directFetch: false,
+                timeoutMs: 45000,
+            },
+        },
+    });
+    assert.equal(saved.ok, true);
+    assert.equal(saved.settings.voice.enabled, true, 'the switch must survive one save');
+    assert.equal(saved.settings.voice.baseUrl, 'http://127.0.0.1:9000/v1', 'the service URL must survive one save');
+    assert.equal(saved.settings.voice.defaultVoiceId, 'voice-lib-1');
+    assert.equal(saved.settings.voice.speakSelf, true);
+    assert.equal(saved.settings.voice.emotionTags, false);
+    assert.equal(saved.settings.voice.directFetch, false);
+    assert.equal(saved.settings.voice.timeoutMs, 45000);
+
+    const reloaded = await facade.query.globalSettings();
+    assert.equal(reloaded.settings.voice.enabled, true);
+    assert.equal(reloaded.settings.voice.baseUrl, 'http://127.0.0.1:9000/v1');
+
+    const state = await stateStore.read();
+    const shared = state.sharedResources['qq-v2.runtime-settings'];
+    assert.equal(shared.voice.enabled, true, 'voice lives in the shared runtime settings');
+    assert.equal(asObjectOrNull(state.scopes[scopeId]?.settings?.voice), null,
+        'voice must not be duplicated into per-scope settings');
+
+    const single = await facade.intent.updateGlobalSettings({
+        scopeId,
+        settings: { voice: { defaultVoiceId: 'voice-lib-2' } },
+    });
+    assert.equal(single.settings.voice.defaultVoiceId, 'voice-lib-2');
+    assert.equal(single.settings.voice.enabled, true, 'a single-field save keeps the other voice fields');
+
+    const invalid = await facade.intent.updateGlobalSettings({
+        scopeId,
+        settings: { voice: { timeoutMs: 1 } },
+    });
+    assert.equal(invalid.ok, false, 'an out-of-range timeout is rejected');
+    assert.equal((await facade.query.globalSettings()).settings.voice.timeoutMs, 45000);
+}
+
+function asObjectOrNull(value) {
+    return value && typeof value === 'object' ? value : null;
+}
+
+async function testVoiceLibraryParsing() {
+    const library = await importModule('modules/qq-v2/voice/library.js');
+    const {
+        mergeQQVoiceLibrary,
+        normalizeQQVoiceEntry,
+        normalizeQQVoiceSpeakerName,
+        parseQQVoiceImportSource,
+    } = library;
+
+    assert.equal(normalizeQQVoiceEntry({ voiceId: '' }), null);
+    const normalized = normalizeQQVoiceEntry({ voiceId: 'v1' });
+    assert.equal(normalized.voiceId, 'v1');
+    assert.equal(normalized.name, 'v1', 'a nameless entry falls back to its voice id');
+    assert.equal(normalized.category, '');
+    assert.equal(normalized.note, '');
+    assert.match(normalized.entryId, /^voice-entry-/);
+    assert.equal(normalizeQQVoiceEntry({ voiceId: 'v1', name: '小林', category: 'ja', note: '少女' }).category, 'ja');
+    assert.equal(normalizeQQVoiceEntry({ voiceId: 'v1', category: 'xx' }).category, '');
+
+    const merged = mergeQQVoiceLibrary(
+        { entries: [{ voiceId: 'v1', name: '旧名', category: 'zh' }] },
+        [{ voiceId: 'v1', name: '新名', category: 'ja' }, { voiceId: 'v2', name: '第二个' }],
+    );
+    assert.equal(merged.entries.length, 2);
+    assert.equal(merged.added, 1);
+    assert.equal(merged.updated, 1);
+    assert.equal(merged.entries.find((entry) => entry.voiceId === 'v1').name, '新名');
+    assert.equal(merged.entries.filter((entry) => entry.voiceId === 'v1').length, 1, 'duplicate voice ids collapse');
+
+    assert.equal(normalizeQQVoiceSpeakerName(' 林 知 夏 '), normalizeQQVoiceSpeakerName('林 知 夏'));
+    assert.equal(normalizeQQVoiceSpeakerName('ＡＢＣ'), normalizeQQVoiceSpeakerName('abc'));
+
+    const qqPack = parseQQVoiceImportSource({
+        type: 'yuzi_qq_voice_pack',
+        version: 1,
+        settings: { enabled: true, baseUrl: 'http://127.0.0.1:9000/v1', model: 's2.1-pro', defaultVoiceId: 'v9' },
+        library: [{ name: '小林', voiceId: 'v1', category: 'zh' }],
+        bindings: [{ name: '林知夏', voiceId: 'v1' }],
+    });
+    assert.equal(qqPack.format, 'qq-pack');
+    assert.equal(qqPack.entries.length, 1);
+    assert.equal(qqPack.bindings.length, 1);
+    assert.equal(qqPack.settings.defaultVoiceId, 'v9');
+    assert.equal(qqPack.settings.baseUrl, 'http://127.0.0.1:9000/v1');
+
+    const fishLibrary = parseQQVoiceImportSource({
+        type: 'fish_dialogue_voice_library',
+        version: 1,
+        voices: [{ id: 'fa-1', name: '玉子', category: 'ja', sub: '元气' }],
+    });
+    assert.equal(fishLibrary.format, 'fish-library');
+    assert.deepEqual(
+        fishLibrary.entries.map((entry) => [entry.voiceId, entry.name, entry.category, entry.note]),
+        [['fa-1', '玉子', 'ja', '元气']],
+    );
+
+    const fishPreset = parseQQVoiceImportSource({
+        type: 'fish_dialogue_voice_preset',
+        name: '默认预设',
+        defaultVoice: 'fa-default',
+        voices: {
+            林知夏: 'fa-lin',
+            陈锋: { default: 'fa-chen', forms: { 暴走: 'fa-chen-rage' } },
+        },
+    });
+    assert.equal(fishPreset.format, 'fish-preset');
+    assert.equal(fishPreset.settings.defaultVoiceId, 'fa-default');
+    assert.deepEqual(
+        fishPreset.bindings.map((binding) => [binding.name, binding.voiceId]).sort(),
+        [['林知夏', 'fa-lin'], ['陈锋', 'fa-chen'], ['陈锋(暴走)', 'fa-chen-rage']].sort(),
+    );
+
+    const fishSettings = parseQQVoiceImportSource({
+        baseUrl: 'https://api.fish.audio',
+        model: 's2.1-pro-free',
+        defaultVoice: 'fa-default',
+        voiceLibrary: [{ id: 'fa-2', name: '旁白', category: 'zh' }],
+        voices: { 玉子: 'fa-tamako' },
+    });
+    assert.equal(fishSettings.format, 'fish-settings');
+    assert.equal(fishSettings.entries.length, 1);
+    assert.equal(fishSettings.bindings.length, 1);
+    assert.equal(fishSettings.settings.baseUrl, 'https://api.fish.audio');
+
+    assert.equal(parseQQVoiceImportSource([{ id: 'x', name: 'X' }]).format, 'entries');
+    assert.equal(parseQQVoiceImportSource({ nothing: true }).format, '');
+    assert.equal(parseQQVoiceImportSource(null).entries.length, 0);
+}
+
+/** 建一个带假语音服务的真实运行时，供设置、音色库、导入与合成链路复用。 */
+async function createVoiceTestRuntime({ extensionSettings = null, synthesizeVoiceAudio = null } = {}) {
+    const { webcrypto } = await import('node:crypto');
+    const { createMemoryQQV2StateStore } = await importModule('modules/qq-v2/storage/state-store.js');
+    const { createQQV2Repository } = await importModule('modules/qq-v2/domain/repository.js');
+    const { createQQV2ProductionRuntime } = await importModule('modules/qq-v2/application/production-runtime.js');
+
+    const scopeId = 'st:character:alice:chat-a';
+    const stateStore = createMemoryQQV2StateStore();
+    const repository = createQQV2Repository({ stateStore });
+    const rawContext = {
+        getRequestHeaders: async () => ({ 'X-CSRF-Token': 'token' }),
+        ...(extensionSettings ? { extensionSettings } : {}),
+    };
+    const runtime = createQQV2ProductionRuntime({
+        host: {
+            readScope: () => ({ scopeId, chatId: 'chat-a', chatFile: 'chat-a', hostType: 'character', hostId: 'alice' }),
+            readUserIdentity: () => ({ name: '旅行者', avatar: 'user.webp' }),
+            readStoryTime: () => '2042-05-20 09:30',
+            readStoryMessages: () => [],
+            readRawContext: () => rawContext,
+        },
+        stateStore,
+        repository,
+        cryptoApi: webcrypto,
+        backend: {
+            async generate() { throw new Error('this contract never generates'); },
+            async loadModels() { return []; },
+        },
+        worldbookGateway: {
+            async getCurrentCharacterBookNames() { return { primary: '', additional: [] }; },
+            async loadBook() { return { entries: {} }; },
+            async saveBook() {},
+        },
+        ...(synthesizeVoiceAudio ? { synthesizeVoiceAudio, measureVoiceDuration: async () => 3000 } : {}),
+    });
+    await runtime.initialize();
+    return { runtime, facade: runtime.getFacade(), stateStore, repository, scopeId };
+}
+
+async function testVoiceLibraryAndImportThroughRuntime() {
+    const { facade, repository, scopeId } = await createVoiceTestRuntime({
+        extensionSettings: {
+            fish_dialogue_v1: {
+                baseUrl: 'https://api.fish.audio',
+                model: 's2.1-pro',
+                defaultVoice: 'fa-default',
+                savedApiKey: 'fish-key-1',
+                voiceLibrary: [{ id: 'fa-1', name: '玉子', category: 'ja' }],
+                voices: { 林知夏: 'fa-lin', 不存在的角色: 'fa-nobody' },
+            },
+        },
+    });
+
+    assert.deepEqual((await facade.query.voiceLibrary()).entries, []);
+    const saved = await facade.intent.saveVoiceEntry({ entry: { name: '小林', voiceId: 'v1', category: 'zh', note: '少女' } });
+    assert.equal(saved.ok, true);
+    assert.equal(saved.entry.name, '小林');
+    const listed = await facade.query.voiceLibrary();
+    assert.equal(listed.entries.length, 1);
+    assert.equal(listed.entries[0].voiceId, 'v1');
+
+    // 同音色 ID 再存一次是改名，不是新增。
+    const renamed = await facade.intent.saveVoiceEntry({
+        entry: { entryId: saved.entry.entryId, name: '小林（改）', voiceId: 'v1' },
+    });
+    assert.equal(renamed.entry.name, '小林（改）');
+    assert.equal((await facade.query.voiceLibrary()).entries.length, 1);
+    const deleted = await facade.intent.deleteVoiceEntry({ entryId: saved.entry.entryId });
+    assert.equal(deleted.deleted, true);
+    assert.deepEqual((await facade.query.voiceLibrary()).entries, []);
+
+    // 预览 FISH 侧可导入的内容：不返回 Key 明文，只回报是否存在。
+    const preview = await facade.query.fishVoicePack();
+    assert.equal(preview.available, true);
+    assert.equal(preview.libraryCount, 1);
+    assert.equal(preview.bindingCount, 2);
+    assert.equal(preview.hasApiKey, true);
+    assert.equal(JSON.stringify(preview).includes('fish-key-1'), false, 'the API key never reaches the UI');
+
+    const created = await repository.createPrivateConversation(scopeId, { name: '林知夏' });
+    const imported = await facade.intent.importFishVoiceSettings({ includeApiKey: true });
+    assert.equal(imported.ok, true);
+    assert.equal(imported.result.libraryAdded, 1);
+    assert.equal(imported.result.settingsApplied, true);
+    assert.equal(imported.result.bindingsApplied, 1);
+    assert.deepEqual([...imported.result.bindingsSkipped], ['不存在的角色']);
+    assert.equal(imported.result.apiKeyImported, true);
+
+    const settings = await facade.query.globalSettings();
+    assert.equal(settings.settings.voice.enabled, false, 'FISH 没有 enabled 字段时保持 QQ 自己的开关');
+    assert.equal(settings.settings.voice.model, 's2.1-pro');
+    assert.equal(settings.settings.voice.defaultVoiceId, 'fa-default');
+    assert.equal(settings.settings.voice.apiKeySaved, true);
+    assert.equal((await repository.getPerson(scopeId, created.person.personId)).voiceId, 'fa-lin');
+    assert.deepEqual(
+        (await facade.query.voiceBindings()).bindings.map((binding) => [binding.name, binding.voiceId]),
+        [['林知夏', 'fa-lin']],
+    );
+
+    // JSON 配置包导入：音色库合并 + 设置补丁 + 绑定。
+    const packImport = await facade.intent.importVoicePack({
+        source: {
+            type: 'yuzi_qq_voice_pack',
+            version: 1,
+            settings: { enabled: true, baseUrl: 'http://127.0.0.1:9000/v1', model: 's2.1-pro-free' },
+            library: [{ name: '小林', voiceId: 'v1', category: 'zh' }],
+            bindings: [{ name: '林知夏', voiceId: 'v1' }],
+        },
+    });
+    assert.equal(packImport.result.libraryAdded, 1);
+    assert.equal(packImport.result.bindingsApplied, 1);
+    assert.equal((await facade.query.globalSettings()).settings.voice.enabled, true);
+    assert.equal((await repository.getPerson(scopeId, created.person.personId)).voiceId, 'v1');
+}
+
+async function testAssistantVoiceSynthesis() {
+    const synthesizedVoiceIds = [];
+    const { facade, repository, scopeId } = await createVoiceTestRuntime({
+        synthesizeVoiceAudio: async ({ text, voiceId }) => {
+            synthesizedVoiceIds.push({ text, voiceId });
+            return { blob: audio('assistant-voice'), mimeType: 'audio/mpeg', byteLength: 14, voiceId };
+        },
+    });
+
+    // 陪聊人物：建人、配音色、发一条语音消息，再真正走一次合成。
+    const opened = await facade.intent.openAssistant({ name: '玉子' });
+    assert.equal(opened.ok, true);
+    const characterId = opened.result.conversation.assistantCharacterId;
+    const savedCharacter = await facade.intent.saveAssistantCharacter({ characterId, patch: { voiceId: 'fa-tamako' } });
+    assert.equal(savedCharacter.ok, true);
+    const characters = await facade.query.assistantCharacters();
+    assert.equal(characters.characters.find((item) => item.characterId === characterId).voiceId, 'fa-tamako');
+    assert.equal((await repository.getPerson(scopeId, characterId)).voiceId, 'fa-tamako',
+        'the assistant voice binding reaches the person record used for synthesis');
+
+    await facade.intent.setVoiceApiKey({ apiKey: 'k-1' });
+    await facade.intent.updateGlobalSettings({ scopeId, settings: { voice: { enabled: true } } });
+    const conversationId = opened.result.conversation.conversationId;
+    const [message] = await repository.appendMessages(scopeId, conversationId, [{
+        senderId: characterId,
+        senderType: 'person',
+        type: 'voice',
+        content: '[happy]今晚见',
+        storyTime: '',
+    }]);
+
+    const result = await facade.intent.synthesizeVoice({ conversationId, messageId: message.messageId });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(synthesizedVoiceIds.length, 1);
+    assert.deepEqual(synthesizedVoiceIds[0], { text: '[happy]今晚见', voiceId: 'fa-tamako' });
+    assert.equal(result.result.message.voice.durationMs, 3000);
+    assert.equal(result.result.message.voice.voiceId, 'fa-tamako');
+
+    // 陪聊没配音色时回落到默认音色。
+    const other = await facade.intent.openAssistant({ name: '第二个人' });
+    const otherId = other.result.conversation.assistantCharacterId;
+    await facade.intent.updateGlobalSettings({ scopeId, settings: { voice: { defaultVoiceId: 'fa-default' } } });
+    const [second] = await repository.appendMessages(scopeId, other.result.conversation.conversationId, [{
+        senderId: otherId,
+        senderType: 'person',
+        type: 'voice',
+        content: '你好',
+        storyTime: '',
+    }]);
+    const fallback = await facade.intent.synthesizeVoice({
+        conversationId: other.result.conversation.conversationId,
+        messageId: second.messageId,
+    });
+    assert.equal(fallback.ok, true);
+    assert.equal(synthesizedVoiceIds.at(-1).voiceId, 'fa-default');
+
+    // 关掉开关后拒绝合成。
+    await facade.intent.updateGlobalSettings({ scopeId, settings: { voice: { enabled: false } } });
+    const disabled = await facade.intent.synthesizeVoice({ conversationId, messageId: message.messageId });
+    assert.equal(disabled.ok, false);
+    assert.equal(disabled.error.code, 'voice_disabled');
+}
+
 async function main() {
     await testFishClient();
     await testEmotionTags();
@@ -605,10 +990,14 @@ async function main() {
     await testVoiceBindings();
     await testFacadeBoundary();
     await testVoiceSettingsPage();
+    await testVoiceSettingsThroughRealRuntime();
+    await testVoiceLibraryParsing();
+    await testVoiceLibraryAndImportThroughRuntime();
+    await testAssistantVoiceSynthesis();
     await testVoiceTaskController();
     await testVoicePlaybackController();
     await testVoiceUiWiring();
-    console.log('QQ 语音合成契约通过：Fish 请求、情感标签、设置归一、素材生命周期、音色绑定、Facade 边界、设置页映射、任务与播放控制器、UI 接线');
+    console.log('QQ 语音合成契约通过：Fish 请求、情感标签、设置归一、素材生命周期、音色绑定、Facade 边界、设置页映射、真实运行时保存、音色库与一键导入、陪聊配音、任务与播放控制器、UI 接线');
 }
 
 main().catch((error) => {

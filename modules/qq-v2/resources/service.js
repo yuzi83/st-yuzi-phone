@@ -3,6 +3,12 @@ import { createChatPromptPresets } from '../prompt/chat-presets.js';
 import { normalizeQQV2OpenAIBaseUrl } from '../api-endpoint-policy.js';
 import { createQQV2ApiKeyStore } from './api-key-store.js';
 import { QQ_VOICE_API_KEY_ID } from '../voice/settings.js';
+import {
+    QQ_VOICE_LIBRARY_STORAGE_KEY,
+    mergeQQVoiceLibrary,
+    normalizeQQVoiceEntry,
+    normalizeQQVoiceLibrary,
+} from '../voice/library.js';
 
 const API_PRESETS_STORAGE_KEY = 'qq-v2.resources.api-presets';
 const PROMPT_PRESETS_STORAGE_KEY = 'qq-v2.resources.prompt-presets-v3';
@@ -864,6 +870,46 @@ export function createQQV2ResourceService(options = {}) {
             }
             await apiKeys.set(QQ_VOICE_API_KEY_ID, value);
             return true;
+        },
+        async listVoiceEntries() {
+            const library = normalizeQQVoiceLibrary(await storage.get(QQ_VOICE_LIBRARY_STORAGE_KEY));
+            return Object.freeze(library.entries.map((entry) => Object.freeze({ ...entry })));
+        },
+        async saveVoiceEntry(input = {}) {
+            const library = normalizeQQVoiceLibrary(await storage.get(QQ_VOICE_LIBRARY_STORAGE_KEY));
+            const entry = normalizeQQVoiceEntry(input);
+            if (!entry) throw resourceError('voice_entry_invalid', '音色 ID 不能为空');
+            const requestedId = String(input?.entryId ?? '').trim();
+            const index = requestedId ? library.entries.findIndex((item) => item.entryId === requestedId) : -1;
+            if (requestedId && index === -1) throw resourceError('voice_entry_not_found', '音色不存在');
+            const duplicate = library.entries.findIndex((item) => item.voiceId === entry.voiceId && item.entryId !== requestedId);
+            if (duplicate !== -1) {
+                library.entries[duplicate] = { ...library.entries[duplicate], name: entry.name, category: entry.category, note: entry.note };
+                await storage.set(QQ_VOICE_LIBRARY_STORAGE_KEY, library);
+                return Object.freeze({ ...library.entries[duplicate] });
+            }
+            if (index === -1) library.entries.push(entry);
+            else library.entries[index] = { ...entry, entryId: library.entries[index].entryId };
+            await storage.set(QQ_VOICE_LIBRARY_STORAGE_KEY, library);
+            return Object.freeze({ ...(index === -1 ? entry : library.entries[index]) });
+        },
+        async deleteVoiceEntry(entryId) {
+            const id = String(entryId ?? '').trim();
+            const library = normalizeQQVoiceLibrary(await storage.get(QQ_VOICE_LIBRARY_STORAGE_KEY));
+            const next = library.entries.filter((entry) => entry.entryId !== id);
+            if (next.length === library.entries.length) return false;
+            await storage.set(QQ_VOICE_LIBRARY_STORAGE_KEY, { entries: next });
+            return true;
+        },
+        async mergeVoiceEntries(entries) {
+            const library = normalizeQQVoiceLibrary(await storage.get(QQ_VOICE_LIBRARY_STORAGE_KEY));
+            const merged = mergeQQVoiceLibrary(library, entries);
+            await storage.set(QQ_VOICE_LIBRARY_STORAGE_KEY, { entries: merged.entries });
+            return Object.freeze({
+                entries: Object.freeze(merged.entries.map((entry) => Object.freeze({ ...entry }))),
+                added: merged.added,
+                updated: merged.updated,
+            });
         },
     });
 }

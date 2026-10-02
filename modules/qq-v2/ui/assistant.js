@@ -4,7 +4,7 @@ import { pickImageFiles } from '../../settings-app/services/media-upload.js';
 // 只拥有人物选择与人设编辑；会话列表、消息、媒体和请求仍由 QQ App 拥有。
 export function createAssistantUI({ facade, createElement: el, createButton: button, avatar,
     showDialog, clearOverlay, openChat, render, makeSecondaryPage, settingField,
-    pickBackground, clearBackground, pickLibraryAsset, isCurrent, report }) {
+    pickBackground, clearBackground, pickLibraryAsset, pickVoiceId, isCurrent, report }) {
     const drafts = new Map();
     const check = result => {
         if (!result?.ok) throw new Error(result?.error?.message || t("操作失败，请重试"));
@@ -173,6 +173,43 @@ export function createAssistantUI({ facade, createElement: el, createButton: but
             }
         });
         messageTextColor.append(messageTextColorLabel, messageTextColorSelect);
+        // 陪聊人物也要能单独配音色：输入框 + 音色库选择 + 手动输入。
+        const voiceRow = el('label', 'yuzi-qq-field yuzi-qq-field-row yuzi-qq-field-group is-control-stacked');
+        const voiceLabel = el('span', 'yuzi-qq-field-label');
+        voiceLabel.textContent = t("音色 ID");
+        const voiceInput = el('input', 'yuzi-qq-field-control yuzi-qq-field-input');
+        voiceInput.value = character.voiceId || '';
+        voiceInput.maxLength = 256;
+        voiceInput.placeholder = t("留空使用默认音色");
+        voiceInput.addEventListener('change', async () => {
+            try {
+                await save(id, { voiceId: voiceInput.value });
+                status.textContent = '';
+            } catch (error) {
+                status.textContent = error.message;
+            }
+        });
+        const voicePick = button(t("选择音色"), 'yuzi-qq-secondary-button yuzi-qq-voice-pick');
+        voicePick.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (typeof pickVoiceId !== 'function') return;
+            void pickVoiceId({
+                title: t("音色 ID"),
+                currentValue: voiceInput.value,
+                onSelect: async (voiceId) => {
+                    voiceInput.value = voiceId;
+                    try {
+                        await save(id, { voiceId });
+                        status.textContent = '';
+                    } catch (error) {
+                        status.textContent = error.message;
+                    }
+                },
+            });
+        });
+        const voiceActions = el('span', 'yuzi-qq-assistant-voice-actions');
+        voiceActions.append(voicePick);
+        voiceRow.append(voiceLabel, voiceInput, voiceActions);
         const avatarFrame = appearanceRow(t("头像框"), 'avatarFrameAssetId', 'avatar-frame');
         const bubble = appearanceRow(t("气泡"), 'bubbleAssetId', 'bubble');
         const persona = el('label', 'yuzi-qq-field yuzi-qq-assistant-persona');
@@ -194,7 +231,7 @@ export function createAssistantUI({ facade, createElement: el, createButton: but
             const reset = button(t("恢复默认人设"), 'yuzi-qq-secondary-button');
             reset.addEventListener('click', () => { textarea.value = character.defaultPersona; draft.value = textarea.value; status.textContent = t("已填回默认人设，点击保存后生效"); }); actions.append(reset);
         }
-        card.append(name, avatarRow, background, avatarFrame, bubble, messageTextColor, persona, actions, status);
+        card.append(name, avatarRow, background, avatarFrame, bubble, messageTextColor, voiceRow, persona, actions, status);
         content.append(card); return main;
     };
     return {

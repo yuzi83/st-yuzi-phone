@@ -16,10 +16,11 @@ export function assistantCharacterLibrary(state) {
     resources.assistantCharacters ||= {};
     resources.assistantCharacters[TAMAKO_CHARACTER_ID] ||= {
         characterId: TAMAKO_CHARACTER_ID, formalName: '北白川玉子', persona: TAMAKO_PERSONA,
-        avatarAssetId: '', avatarUrl: TAMAKO_AVATAR_URL, messageTextColor: 'black', isBuiltIn: true,
+        avatarAssetId: '', avatarUrl: TAMAKO_AVATAR_URL, messageTextColor: 'black', voiceId: '', isBuiltIn: true,
     };
     Object.values(resources.assistantCharacters).forEach((character) => {
         character.messageTextColor = normalizeMessageTextColor(character.messageTextColor, 'black');
+        character.voiceId = typeof character.voiceId === 'string' ? character.voiceId.trim().slice(0, 256) : '';
     });
     return resources.assistantCharacters;
 }
@@ -28,6 +29,7 @@ export function assistantCharacterView(character) {
     return {
         ...character,
         messageTextColor: normalizeMessageTextColor(character.messageTextColor, 'black'),
+        voiceId: typeof character.voiceId === 'string' ? character.voiceId.trim().slice(0, 256) : '',
         defaultPersona: character.isBuiltIn ? TAMAKO_PERSONA : '',
     };
 }

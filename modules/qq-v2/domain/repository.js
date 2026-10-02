@@ -1240,6 +1240,8 @@ export function createQQV2Repository(options = {}) {
                 if (Object.hasOwn(patch, 'messageTextColor')) {
                     character.messageTextColor = requireMessageTextColor(patch.messageTextColor);
                 }
+                // 陪聊人物的音色跟联系人一样，是人物级绑定，随人物同步到各作用域。
+                if (Object.hasOwn(patch, 'voiceId')) character.voiceId = asText(patch.voiceId, 256);
                 for (const target of Object.values(state.scopes)) {
                     const person = target.people?.[characterId];
                     if (person?.assistantCharacterId !== characterId) continue;
@@ -1265,6 +1267,7 @@ export function createQQV2Repository(options = {}) {
                         avatarAssetId: chooseImageLibraryAssetId(state, 'avatar', random),
                         avatarUrl: '',
                         messageTextColor: 'black',
+                        voiceId: '',
                         isBuiltIn: false,
                     };
                     library[characterId] = character;

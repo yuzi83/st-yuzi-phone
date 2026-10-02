@@ -86,6 +86,35 @@ function cloneGlobalSettings(settings) {
     });
 }
 
+/** 音色库条目：UI 只拿到名称与音色 ID，不需要存储细节。 */
+function cloneVoiceEntry(entry) {
+    const source = asObject(entry);
+    return Object.freeze({
+        entryId: asText(source.entryId, 256),
+        name: asText(source.name, 120),
+        voiceId: asText(source.voiceId, 256),
+        category: asText(source.category, 8),
+        note: asText(source.note, 120),
+    });
+}
+
+function cloneAssistantCharacter(character) {
+    const source = asObject(character);
+    return Object.freeze({
+        characterId: asText(source.characterId, 256),
+        formalName: asText(source.formalName, 120),
+        persona: String(source.persona ?? ''),
+        avatarAssetId: asText(source.avatarAssetId, 256),
+        ...(source.avatarFrameAssetId ? { avatarFrameAssetId: asText(source.avatarFrameAssetId, 256) } : {}),
+        ...(source.bubbleAssetId ? { bubbleAssetId: asText(source.bubbleAssetId, 256) } : {}),
+        avatarUrl: asText(source.avatarUrl, 1024),
+        messageTextColor: asText(source.messageTextColor, 32) || 'black',
+        voiceId: asText(source.voiceId, 256),
+        defaultPersona: String(source.defaultPersona ?? ''),
+        isBuiltIn: source.isBuiltIn === true,
+    });
+}
+
 function cloneVoiceSettings(settings) {
     const source = asObject(settings);
     const timeoutMs = Number(source.timeoutMs);
@@ -694,7 +723,10 @@ export function createQQV2Facade(options = {}) {
                 });
             },
             async assistantCharacters() {
-                try { return { ok: true, characters: await runtime.listAssistantCharacters() }; }
+                try {
+                    const characters = await runtime.listAssistantCharacters();
+                    return { ok: true, characters: asArray(characters).map(cloneAssistantCharacter) };
+                }
                 catch (error) { return failed(error); }
             },
             async assistantConversations() {
@@ -946,6 +978,63 @@ export function createQQV2Facade(options = {}) {
                     status: asText(snapshot.phase, 32) || 'ready',
                     proactive: cloneProactiveSettings(proactive),
                 });
+            },
+            async voiceLibrary() {
+                if (typeof runtime.listVoiceLibrary !== 'function') return unavailable('listVoiceLibrary');
+                try {
+                    const entries = await runtime.listVoiceLibrary();
+                    return Object.freeze({
+                        ok: true,
+                        status: 'ready',
+                        entries: Object.freeze(asArray(entries).map(cloneVoiceEntry)),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async voiceBindings() {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.listVoiceBindings !== 'function') return unavailable('listVoiceBindings');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    const result = asObject(await runtime.listVoiceBindings({ scopeId: context.scopeId }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'ready',
+                        bindings: Object.freeze(asArray(result.bindings).map((binding) => Object.freeze({
+                            personId: asText(asObject(binding).personId, 256),
+                            name: asText(asObject(binding).name, 120),
+                            voiceId: asText(asObject(binding).voiceId, 256),
+                        }))),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async fishVoicePack() {
+                if (typeof runtime.readFishVoicePack !== 'function') return unavailable('readFishVoicePack');
+                try {
+                    const result = asObject(await runtime.readFishVoicePack());
+                    return Object.freeze({
+                        ok: true,
+                        status: 'ready',
+                        available: result.available === true,
+                        format: asText(result.format, 64),
+                        libraryCount: Math.max(0, Math.trunc(asNumber(result.libraryCount))),
+                        bindingCount: Math.max(0, Math.trunc(asNumber(result.bindingCount))),
+                        hasApiKey: result.hasApiKey === true,
+                        settings: Object.freeze({
+                            enabled: asObject(result.settings).enabled,
+                            baseUrl: asText(asObject(result.settings).baseUrl, 2048),
+                            model: asText(asObject(result.settings).model, 120),
+                            defaultVoiceId: asText(asObject(result.settings).defaultVoiceId, 256),
+                        }),
+                    });
+                } catch (error) {
+                    return failed(error);
+                }
             },
         }),
         intent: Object.freeze({
@@ -2005,6 +2094,89 @@ export function createQQV2Facade(options = {}) {
                     }
                     const released = await runtime.releaseVoicePreview({ leaseId });
                     return Object.freeze({ ok: true, status: 'accepted', released: released === true });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async saveVoiceEntry(input = {}) {
+                if (typeof runtime.saveVoiceEntry !== 'function') return unavailable('saveVoiceEntry');
+                try {
+                    const entry = await runtime.saveVoiceEntry({ entry: asObject(input.entry) });
+                    return Object.freeze({ ok: true, status: 'accepted', entry: cloneVoiceEntry(entry) });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async deleteVoiceEntry(input = {}) {
+                if (typeof runtime.deleteVoiceEntry !== 'function') return unavailable('deleteVoiceEntry');
+                try {
+                    const entryId = asText(input.entryId, 256);
+                    if (!entryId) return Object.freeze({ ok: false, status: 'invalid', reason: 'entry-required' });
+                    const deleted = await runtime.deleteVoiceEntry({ entryId });
+                    return Object.freeze({ ok: true, status: 'accepted', deleted: deleted === true });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async importVoicePack(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.importVoicePack !== 'function') return unavailable('importVoicePack');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    const result = asObject(await runtime.importVoicePack({
+                        source: input.source,
+                        apiKey: typeof input.apiKey === 'string' ? input.apiKey : '',
+                        applySettings: input.applySettings !== false,
+                        applyLibrary: input.applyLibrary !== false,
+                        applyBindings: input.applyBindings !== false,
+                        scopeId: context.scopeId,
+                    }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        result: Object.freeze({
+                            format: asText(result.format, 64),
+                            libraryAdded: Math.max(0, Math.trunc(asNumber(asObject(result.library).added))),
+                            libraryUpdated: Math.max(0, Math.trunc(asNumber(asObject(result.library).updated))),
+                            settingsApplied: Boolean(result.settings),
+                            bindingsApplied: Math.max(0, Math.trunc(asNumber(asObject(result.bindings).applied))),
+                            bindingsSkipped: Object.freeze(asArray(asObject(result.bindings).skipped).map((name) => asText(name, 120))),
+                            apiKeyImported: result.apiKeyImported === true,
+                        }),
+                });
+                } catch (error) {
+                    return failed(error);
+                }
+            },
+            async importFishVoiceSettings(input = {}) {
+                if (typeof runtime.getSnapshot !== 'function') return unavailable('getSnapshot');
+                if (typeof runtime.importFishVoiceSettings !== 'function') return unavailable('importFishVoiceSettings');
+                try {
+                    const snapshot = asObject(await runtime.getSnapshot());
+                    const context = cloneContext(snapshot.context);
+                    if (!context.scopeId) return unavailable('currentScope');
+                    const result = asObject(await runtime.importFishVoiceSettings({
+                        includeApiKey: input.includeApiKey === true,
+                        applySettings: input.applySettings !== false,
+                        applyLibrary: input.applyLibrary !== false,
+                        applyBindings: input.applyBindings !== false,
+                        scopeId: context.scopeId,
+                    }));
+                    return Object.freeze({
+                        ok: true,
+                        status: 'accepted',
+                        result: Object.freeze({
+                            format: asText(result.format, 64),
+                            libraryAdded: Math.max(0, Math.trunc(asNumber(asObject(result.library).added))),
+                            libraryUpdated: Math.max(0, Math.trunc(asNumber(asObject(result.library).updated))),
+                            settingsApplied: Boolean(result.settings),
+                            bindingsApplied: Math.max(0, Math.trunc(asNumber(asObject(result.bindings).applied))),
+                            bindingsSkipped: Object.freeze(asArray(asObject(result.bindings).skipped).map((name) => asText(name, 120))),
+                            apiKeyImported: result.apiKeyImported === true,
+                        }),
+                    });
                 } catch (error) {
                     return failed(error);
                 }
